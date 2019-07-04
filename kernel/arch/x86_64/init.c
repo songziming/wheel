@@ -1,4 +1,6 @@
-void sys_init_bsp() {
+#include <wheel.h>
+
+__INIT __NORETURN void sys_init_bsp() {
     char * v = (char *) 0xb8000;
     char * s = "hello, world!";
     for (int i = 0; s[i]; ++i) {
@@ -9,6 +11,6 @@ void sys_init_bsp() {
     while (1) {}
 }
 
-void sys_init_ap() {
-    //
+__INIT __NORETURN void sys_init_ap() {
+    while (1) {}
 }

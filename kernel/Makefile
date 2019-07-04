@@ -21,9 +21,9 @@ else
 endif
 
 DEPGEN   =  -MT $@ -MMD -MP -MF $(basename $@).t
-LFLAGS  :=  -nostdlib -lgcc -T arch/$(ARCH)/layout.ld -Wl,-Map=$(MAPFILE),--gc-sections
+LFLAGS  :=  -nostdlib -lgcc -T h/arch/$(ARCH)/layout.ld -Wl,-Map=$(MAPFILE),--gc-sections
 
-include arch/$(ARCH)/config.mk
+include h/arch/$(ARCH)/config.mk
 
 build:  $(BINFILE) $(SYMFILE)
 
