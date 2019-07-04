@@ -5,7 +5,7 @@ BINFILE :=  $(OUTDIR)/wheel.bin
 MAPFILE :=  $(OUTDIR)/wheel.map
 SYMFILE :=  $(OUTDIR)/wheel.sym
 
-SUBDIRS :=  arch/$(ARCH)
+SUBDIRS :=  arch/$(ARCH) misc
 SRCLIST :=  $(foreach d,$(SUBDIRS),$(shell find $(d) -type f -name '*.S' -o -name '*.c'))
 OBJLIST :=  $(patsubst %,$(OUTDIR)/%.o,$(SRCLIST))
 DEPLIST :=  $(patsubst %.c.o,%.c.d,$(filter %.c.o,$(OBJLIST)))
