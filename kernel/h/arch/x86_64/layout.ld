@@ -55,6 +55,7 @@ SECTIONS {
         *(.bss)
         *(.bss.*)
         *(COMMON)
+        *(.allot)
         _bss_end = .;
     } :kernel
 
