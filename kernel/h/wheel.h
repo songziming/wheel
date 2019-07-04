@@ -9,5 +9,7 @@
 
 #include <misc/ctype.h>
 #include <misc/string.h>
+#include <misc/vsprintf.h>
+#include <misc/debug.h>
 
 #endif // WHEEL_H
