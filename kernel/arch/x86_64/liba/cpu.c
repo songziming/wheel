@@ -61,3 +61,27 @@ __INIT void regist_strtbl(void * tbl, usize len) {
     // strtbl_addr = (char *) tbl;
     // strtbl_size = len;
 }
+
+//------------------------------------------------------------------------------
+// multi-processor support
+
+           int    cpu_installed = 0;
+__INITDATA int    cpu_activated = 0;
+           u64    percpu_base   = 0;    // cpu0's offset to its percpu area
+           u64    percpu_size   = 0;    // length of one per-cpu area
+
+int cpu_count() {
+    return cpu_installed;
+}
+
+int cpu_index() {
+    return (int) ((read_gsbase() - percpu_base) / percpu_size);
+}
+
+void * calc_percpu_addr(u32 cpu, void * ptr) {
+    return (void *) ((char *) ptr + percpu_base + percpu_size * cpu);
+}
+
+void * calc_thiscpu_addr(void * ptr) {
+    return (void *) ((char *) ptr + read_gsbase());
+}

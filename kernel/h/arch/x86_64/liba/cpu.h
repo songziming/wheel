@@ -176,4 +176,22 @@ extern void dbg_write_text(const char * s, usize len);
 extern __INIT void regist_symtbl(void * tbl, usize len);
 extern __INIT void regist_strtbl(void * tbl, usize len);
 
+//------------------------------------------------------------------------------
+// multi-processor support
+
+extern            int    cpu_installed;
+extern __INITDATA int    cpu_activated;
+extern            u64    percpu_base;
+extern            u64    percpu_size;
+
+extern int    cpu_count();
+extern int    cpu_index();
+extern void * calc_percpu_addr(u32 cpu, void * ptr);
+extern void * calc_thiscpu_addr(void * ptr);
+
+#define percpu_ptr(i, var)  ((TYPE(&var)) calc_percpu_addr(i, &var))
+#define thiscpu_ptr(var)    ((TYPE(&var)) calc_thiscpu_addr(&var))
+#define percpu_var(i, var)  (* percpu_ptr(i, var))
+#define thiscpu_var(var)    (* thiscpu_ptr(var))
+
 #endif // ARCH_X86_64_LIBA_CPU_H
