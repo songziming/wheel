@@ -39,7 +39,28 @@ static __INIT void parse_madt(madt_t * tbl) {
     }
 }
 
+//------------------------------------------------------------------------------
+// parse physical memory map
 
+// defined in `layout.ld`
+extern u8 _percpu_addr;
+extern u8 _percpu_end;
+
+static __INIT void parse_mmap(u8 * mmap_buf, u32 mmap_len) {
+    // reserve space for percpu sections
+    u8 * kernel_end = (u8 *) ROUND_UP(allot_permanent(0), 64);
+    percpu_base = (u64) (kernel_end - &_percpu_addr);
+    percpu_size = ROUND_UP((u64) (&_percpu_end - &_percpu_addr), 64);
+    for (int i = 0; i < cpu_installed; ++i) {
+        memcpy(kernel_end, &_percpu_addr, percpu_size);
+        kernel_end += percpu_size;
+    }
+
+    // page array comes right after percpu area
+    kernel_end = (u8 *) ROUND_UP((u64) kernel_end + cpu_installed * percpu_size, 16);
+    page_array = (page_t *) kernel_end;
+    page_count = 0;
+}
 
 //------------------------------------------------------------------------------
 // pre-kernel initialization
@@ -87,7 +108,9 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     gdt_init();
     idt_init();
 
-    // TODO: init page allocator and percpu-var support
+    // init page allocator and percpu-var support
+    page_lib_init();
+    parse_mmap(mmap_buff, mbi->mmap_length);
 
     // init tss and interrupt, both require percpu-var
     tss_init();

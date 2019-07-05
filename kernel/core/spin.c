@@ -28,5 +28,10 @@ void irq_spin_give(spin_t * lock, u32 key) {
 }
 
 // lock preemption while holding the spinlock
-void task_spin_take() {}
-void task_spin_give() {}
+void task_spin_take() {
+    //
+}
+
+void task_spin_give() {
+    //
+}
