@@ -179,10 +179,10 @@ extern __INIT void regist_strtbl(void * tbl, usize len);
 //------------------------------------------------------------------------------
 // multi-processor support
 
-extern            int    cpu_installed;
-extern __INITDATA int    cpu_activated;
-extern            u64    percpu_base;
-extern            u64    percpu_size;
+extern            int cpu_installed;
+extern __INITDATA int cpu_activated;
+extern            u64 percpu_base;
+extern            u64 percpu_size;
 
 extern int    cpu_count();
 extern int    cpu_index();
@@ -193,5 +193,27 @@ extern void * calc_thiscpu_addr(void * ptr);
 #define thiscpu_ptr(var)    ((TYPE(&var)) calc_thiscpu_addr(&var))
 #define percpu_var(i, var)  (* percpu_ptr(i, var))
 #define thiscpu_var(var)    (* thiscpu_ptr(var))
+
+//------------------------------------------------------------------------------
+// essential cpu features
+
+extern __INIT void cpu_init();
+extern __INIT void gdt_init();  // requires: allot
+extern __INIT void idt_init();
+extern __INIT void tss_init();  // requires: percpu-var
+
+//------------------------------------------------------------------------------
+// exception and interrupt
+
+extern __PERCPU int    int_depth;
+extern __PERCPU int    int_rsp;
+extern          void * isr_tbl[256];
+
+extern void int_disable();
+extern void int_enable ();
+extern u32  int_lock   ();
+extern void int_unlock (u32 key);
+
+extern __INIT void int_init();  // requires: percpu-var
 
 #endif // ARCH_X86_64_LIBA_CPU_H

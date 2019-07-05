@@ -22,7 +22,9 @@ extern void loapic_emit_ipi(int cpu, int vec);
 extern __INIT void loapic_override(u64 addr);
 extern __INIT void loapic_dev_add (madt_loapic_t * tbl);
 extern __INIT void loapic_set_nmi (madt_loapic_mni_t * tbl);
-extern __INIT void loapic_dev_init();
+
+
+extern __INIT void loapic_dev_init();   // requires: interrupt
 extern __INIT void loapic_emit_init(int cpu);
 extern __INIT void loapic_emit_sipi(int cpu, int vec);
 

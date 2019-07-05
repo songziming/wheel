@@ -209,18 +209,17 @@ __INIT void loapic_dev_init() {
 
     // set default isr functions
     if (0 == loapic_tmr_hz) {
-        // isr_tbl[VECNUM_RESCHED ] = loapic_resched_proc;
-        // isr_tbl[VECNUM_FLUSHMMU] = loapic_flushmmu_proc;
-        // isr_tbl[VECNUM_SPURIOUS] = loapic_svr_proc;
-        // isr_tbl[VECNUM_TIMER   ] = loapic_timer_proc;
+        isr_tbl[VECNUM_RESCHED ] = loapic_resched_proc;
+        isr_tbl[VECNUM_FLUSHMMU] = loapic_flushmmu_proc;
+        isr_tbl[VECNUM_SPURIOUS] = loapic_svr_proc;
+        isr_tbl[VECNUM_TIMER   ] = loapic_timer_proc;
         loapic_tmr_hz = calibrate_freq();
     }
 
     // start the timer
-    // TODO: set system frequency in conf header
     write32(loapic_base + LOAPIC_TIMER, LOAPIC_PERIODIC | VECNUM_TIMER);
     write32(loapic_base + LOAPIC_CFG, 0x0b);
-    write32(loapic_base + LOAPIC_ICR, loapic_tmr_hz / 1000);
+    write32(loapic_base + LOAPIC_ICR, loapic_tmr_hz / CFG_SYS_CLOCK_RATE);
 }
 
 // send init IPI to the target cpu

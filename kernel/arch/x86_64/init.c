@@ -62,14 +62,45 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     u8 * mmap_buff = (u8 *) allot_temporary(mbi->mmap_length);
     memcpy(mmap_buff, phys_to_virt(mbi->mmap_addr), mbi->mmap_length);
 
+    // copy and regist kernel symbol table
+    u8 * shdrs = (u8 *) phys_to_virt(mbi->elf.addr);
+    for (u32 i = 1; i < mbi->elf.num; ++i) {
+        elf64_shdr_t * sym = (elf64_shdr_t *) (shdrs + mbi->elf.size * i);
+        elf64_shdr_t * str = (elf64_shdr_t *) (shdrs + mbi->elf.size * sym->sh_link);
+        if ((SHT_SYMTAB == sym->sh_type) && (SHT_STRTAB == str->sh_type)) {
+            u8 * symtbl = (u8 *) allot_permanent(sym->sh_size);
+            u8 * strtbl = (u8 *) allot_permanent(str->sh_size);
+            memcpy(symtbl, phys_to_virt(sym->sh_addr), sym->sh_size);
+            memcpy(strtbl, phys_to_virt(str->sh_addr), str->sh_size);
+            regist_symtbl(symtbl, sym->sh_size);
+            regist_strtbl(strtbl, str->sh_size);
+            break;
+        }
+    }
+
     // get multi-processor info
     acpi_tbl_init();
     parse_madt(acpi_madt);
 
-    dbg_print("we got %d cpu(s) installed.\n", cpu_installed);
+    // prepare essential cpu features
+    cpu_init();
+    gdt_init();
+    idt_init();
+
+    // TODO: init page allocator and percpu-var support
+
+    // init tss and interrupt, both require percpu-var
+    tss_init();
+    int_init();
+
+    // init interrupt controller
+    ioapic_all_init();
+    loapic_dev_init();
 
     char * s = (char *) phys_to_virt(mbi->boot_loader_name);
-    dbg_print("loaded by: %s.\n", s);
+    dbg_print("bootloaded name: %s.\n", s);
+    dbg_print("processor count: %d.\n", cpu_installed);
+    dbg_trace_here();
 
     while (1) {}
 }
