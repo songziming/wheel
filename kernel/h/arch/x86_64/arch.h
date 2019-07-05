@@ -24,6 +24,7 @@
 #include "liba/cpu.h"
 #include "liba/multiboot.h"
 #include "liba/acpi.h"
+#include "liba/atomic.h"
 
 #include "liba/ioapic.h"
 #include "liba/loapic.h"

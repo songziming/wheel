@@ -5,6 +5,8 @@
 #include <arch.h>
 #include <config.h>
 
+#include <core/spin.h>
+
 #include <mem/allot.h>
 
 #include <misc/ctype.h>
