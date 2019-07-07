@@ -60,6 +60,40 @@ static __INIT void parse_mmap(u8 * mmap_buf, u32 mmap_len) {
     kernel_end = (u8 *) ROUND_UP((u64) kernel_end + cpu_installed * percpu_size, 16);
     page_array = (page_t *) kernel_end;
     page_count = 0;
+
+    // walk through the memory layout table, fill invalid entries of page array
+    mb_mmap_item_t * map_end = (mb_mmap_item_t *) (mmap_buf + mmap_len);
+    for (mb_mmap_item_t * item = (mb_mmap_item_t *) mmap_buf; item < map_end;) {
+        pfn_t start = (item->addr + PAGE_SIZE - 1) >> PAGE_SHIFT;
+        pfn_t end   = (item->addr + item->len)     >> PAGE_SHIFT;
+        if ((start < end) && (MB_MEMORY_AVAILABLE == item->type)) {
+            for (; page_count < start; ++page_count) {
+                page_array[page_count].type = PT_INVALID;
+            }
+            for (; page_count < end; ++page_count) {
+                page_array[page_count].type = PT_KERNEL;
+            }
+        }
+        item = (mb_mmap_item_t *) ((u64) item + item->size + sizeof(item->size));
+    }
+
+    // walk through the table again, add usable ranges to page frame allocator
+    u64 p_end = ROUND_UP(virt_to_phys(&page_array[page_count]), PAGE_SIZE);
+    for (mb_mmap_item_t * item = (mb_mmap_item_t *) mmap_buf; item < map_end;) {
+        u64 start = ROUND_UP(item->addr, PAGE_SIZE);
+        u64 end   = ROUND_DOWN(item->addr + item->len, PAGE_SIZE);
+        if ((start < end) && (MB_MEMORY_AVAILABLE == item->type)) {
+            if (start < KERNEL_LMA) {
+                dbg_print("+ ram 0x%08llx-0x%08llx.\n", start, MIN(KERNEL_LMA, end));
+                page_range_add(start, MIN(KERNEL_LMA, end));
+            }
+            if (p_end < end) {
+                dbg_print("+ ram 0x%08llx-0x%08llx.\n", MAX(start, p_end), end);
+                page_range_add(MAX(start, p_end), end);
+            }
+        }
+        item = (mb_mmap_item_t *) ((u64) item + item->size + sizeof(item->size));
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -111,6 +145,7 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     // init page allocator and percpu-var support
     page_lib_init();
     parse_mmap(mmap_buff, mbi->mmap_length);
+    write_gsbase(percpu_base);
 
     // init tss and interrupt, both require percpu-var
     tss_init();
@@ -120,10 +155,11 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     ioapic_all_init();
     loapic_dev_init();
 
-    char * s = (char *) phys_to_virt(mbi->boot_loader_name);
-    dbg_print("bootloaded name: %s.\n", s);
     dbg_print("processor count: %d.\n", cpu_installed);
     dbg_trace_here();
+
+    dbg_print("raising exception.\n");
+    ASM("ud2");
 
     while (1) {}
 }

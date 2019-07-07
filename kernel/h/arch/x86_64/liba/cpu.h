@@ -154,11 +154,11 @@ static inline u64 read_kgsbase() {
     return read_msr(0xc0000102U);
 }
 
-static inline void write_fsbase (u64 val) {
+static inline void write_fsbase(u64 val) {
     write_msr(0xc0000100U, val);
 }
 
-static inline void write_gsbase (u64 val) {
+static inline void write_gsbase(u64 val) {
     write_msr(0xc0000101U, val);
 }
 

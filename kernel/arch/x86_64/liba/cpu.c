@@ -260,12 +260,18 @@ void int_unlock(u32 key) {
 }
 
 static void exp_default(int vec) {
-    dbg_print("EXP#%x!\n", vec);
+    static const char * exp[] = {
+        "DE", "DB", "NMI","BP", "OF", "BR", "UD", "NM",
+        "DF", "??", "TS", "NP", "SS", "GP", "PF", "??",
+        "MF", "AC", "MC", "XF", "??", "??", "??", "??",
+        "??", "??", "??", "??", "??", "??", "SX", "??"
+    };
+    dbg_print("#%s vec=0x%02x.\n", exp[vec], vec);
     while (1) {}
 }
 
 static void int_default(int vec) {
-    dbg_print("INT#%x!\n", vec);
+    dbg_print("INT vec=0x%02x.\n", vec);
     while (1) {}
 }
 
