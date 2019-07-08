@@ -144,12 +144,12 @@ static   idt_ent_t idt[256];
 __PERCPU tss_t     tss;
 
 // defined in cpu.S
-extern void int_0_entry  ();
-extern void int_1_entry  ();
+extern void load_gdtr(tbl_ptr_t * ptr);
+extern void load_idtr(tbl_ptr_t * ptr);
+extern void load_tr  (u16 sel);
+
+extern void irq_entries  ();
 extern void syscall_entry();
-extern void load_gdtr    (tbl_ptr_t * ptr);
-extern void load_idtr    (tbl_ptr_t * ptr);
-extern void load_tr      (u16 sel);
 
 __INIT void cpu_init() {
     if (0 == cpu_activated) {
@@ -193,9 +193,8 @@ __INIT void gdt_init() {
 
 __INIT void idt_init() {
     if (0 == cpu_activated) {
-        u64 entry = (u64) int_0_entry;
-        u64 step  = (u64) int_1_entry - (u64) int_0_entry;
-        for (int i = 0; i < 256; ++i, entry += step) {
+        u64 entry = (u64) irq_entries;
+        for (int i = 0; i < 256; ++i, entry += 16) {
             idt[i].attr        = 0x8e00;  // dpl = 0
             idt[i].selector    = 0x08;
             idt[i].offset_low  =  entry        & 0xffff;
@@ -260,18 +259,18 @@ void int_unlock(u32 key) {
 }
 
 static void exp_default(int vec) {
-    static const char * exp[] = {
+    static const char * mnemonics[] = {
         "DE", "DB", "NMI","BP", "OF", "BR", "UD", "NM",
         "DF", "??", "TS", "NP", "SS", "GP", "PF", "??",
         "MF", "AC", "MC", "XF", "??", "??", "??", "??",
         "??", "??", "??", "??", "??", "??", "SX", "??"
     };
-    dbg_print("#%s vec=0x%02x.\n", exp[vec], vec);
+    dbg_print("Exception #%s vector=0x%02x.\n", mnemonics[vec], vec);
     while (1) {}
 }
 
 static void int_default(int vec) {
-    dbg_print("INT vec=0x%02x.\n", vec);
+    dbg_print("Interrupt vector=0x%02x.\n", vec);
     while (1) {}
 }
 
