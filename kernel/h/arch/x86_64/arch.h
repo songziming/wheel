@@ -2,7 +2,7 @@
 #define ARCH_X86_64_ARCH_H
 
 // MMU configuration
-#define PAGE_SIZE       4096                    // we use 4K pages
+#define PAGE_SIZE       0x1000U                 // we use 4K pages
 #define PAGE_SHIFT      12                      // 4K = 2^12
 
 // kernel image address

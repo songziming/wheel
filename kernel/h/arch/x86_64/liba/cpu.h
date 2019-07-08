@@ -205,6 +205,15 @@ extern __INIT void tss_init();  // requires: percpu-var
 //------------------------------------------------------------------------------
 // exception and interrupt
 
+// register frame saved on stack during interrupt and exception
+typedef struct int_frame {
+    u64 r15;    u64 r14;    u64 r13;    u64 r12;
+    u64 r11;    u64 r10;    u64 r9;     u64 r8;
+    u64 rbp;    u64 rsi;    u64 rdi;    u64 rdx;
+    u64 rcx;    u64 rbx;    u64 rax;    u64 errcode;
+    u64 rip;    u64 cs;     u64 rflags; u64 rsp;    u64 ss;
+} __PACKED int_frame_t;
+
 extern __PERCPU int    int_depth;
 extern __PERCPU int    int_rsp;
 extern          void * isr_tbl[256];
@@ -215,5 +224,17 @@ extern u32  int_lock   ();
 extern void int_unlock (u32 key);
 
 extern __INIT void int_init();  // requires: percpu-var
+
+//------------------------------------------------------------------------------
+// task support
+
+// rsp and rsp0 are not redundant, since interrupts are reentrant
+typedef struct regs {
+    int_frame_t * rsp;      // current int stack frame
+    u64           rsp0;     // value saved in tss->rsp0
+    u64           cr3;      // current page table
+} __PACKED __ALIGNED(16) regs_t;
+
+extern void regs_init (regs_t * regs);
 
 #endif // ARCH_X86_64_LIBA_CPU_H

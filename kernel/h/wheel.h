@@ -9,6 +9,7 @@
 
 #include <mem/allot.h>
 #include <mem/page.h>
+#include <mem/pool.h>
 
 #include <misc/ctype.h>
 #include <misc/string.h>
