@@ -18,7 +18,7 @@ extern void pool_init   (pool_t * pool, usize obj_size);
 extern void pool_destroy(pool_t * pool);
 extern void pool_shrink (pool_t * pool);
 
-extern void * pool_obj_alloc(pool_t * pool);
-extern void   pool_obj_free (pool_t * pool, void * obj);
+extern void * pool_alloc(pool_t * pool);
+extern void   pool_free (pool_t * pool, void * obj);
 
 #endif // MEM_POOL_H

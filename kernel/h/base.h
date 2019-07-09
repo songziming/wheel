@@ -59,6 +59,8 @@ typedef u64                     cpuset_t;       // limite: at most 64 cpus
 #define CTZ32(x)                __builtin_ctz(x)
 #define CLZ64(x)                __builtin_clzll(x)
 #define CTZ64(x)                __builtin_ctzll(x)
+#define CLZL(x)                 __builtin_clzl(x)
+#define CTZL(x)                 __builtin_ctzl(x)
 #define MAX(x, y)               (((x) > (y)) ? (x) : (y))
 #define MIN(x, y)               (((x) < (y)) ? (x) : (y))
 

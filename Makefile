@@ -38,3 +38,6 @@ iso: build
 
 run: iso
 	@ qemu-system-x86_64 -smp 4 -m 64 -vga vmware -serial stdio -gdb tcp::4444 -cdrom $(ISOFILE)
+
+loc:
+	@ find . -type f -name "*.S" -o -name "*.c" -o -name "*.h" | xargs wc -l

@@ -10,9 +10,6 @@ static pfn_t slab_alloc(int blk_order, int obj_size) {
     u8  * addr = (u8 *) phys_to_virt((usize) slab << PAGE_SHIFT);
 
     if (NO_PAGE == slab) {
-        // TODO: we need to throw this exception out
-        // so the outer level function could release unneeded pages
-        panic("out of memory!\n");
         return NO_PAGE;
     }
 
@@ -70,17 +67,18 @@ static void slab_obj_free(pfn_t slab, void * obj) {
 // create and destroy pool object
 
 void pool_init(pool_t * pool, usize obj_size) {
-    obj_size = ROUND_UP(obj_size, 8);
+    obj_size = ROUND_UP(obj_size, sizeof(usize));
 
+    // find the smallest block order that holds at least 8 objects
     int blk_order = 0;
     for (; blk_order < ORDER_COUNT; ++blk_order) {
-        if ((8U * obj_size) <= (PAGE_SIZE << blk_order)) {
+        if ((8 * obj_size) <= (PAGE_SIZE << blk_order)) {
             break;
         }
     }
 
     if (blk_order == ORDER_COUNT) {
-        panic("pool obj-size too large!\n");
+        panic("pool obj_size too large!\n");
     }
 
     // initialize member variables
@@ -108,13 +106,16 @@ void pool_shrink(pool_t * pool) {
 //------------------------------------------------------------------------------
 // pool level object alloc and free
 
-void * pool_obj_alloc(pool_t * pool) {
+void * pool_alloc(pool_t * pool) {
     raw_spin_take(&pool->lock);
 
     if (pglist_is_empty(&pool->partial)) {
         if (pglist_is_empty(&pool->full)) {
             // create a new slab, and push to the partial tail
             pfn_t slab = slab_alloc(pool->blk_order, pool->obj_size);
+            if (NO_PAGE == slab) {
+                return NULL;
+            }
             pglist_push_tail(&pool->partial, slab);
         } else {
             // pop a slab out from full list, and push to the partial tail
@@ -137,7 +138,7 @@ void * pool_obj_alloc(pool_t * pool) {
     return obj;
 }
 
-void pool_obj_free(pool_t * pool, void * obj) {
+void pool_free(pool_t * pool, void * obj) {
     raw_spin_take(&pool->lock);
 
     pfn_t slab = parent_block((pfn_t) (virt_to_phys(obj) >> PAGE_SHIFT));

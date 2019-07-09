@@ -155,6 +155,9 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     ioapic_all_init();
     loapic_dev_init();
 
+    // init kernel memory allocator
+    kmem_lib_init();
+
     dbg_print("processor count: %d.\n", cpu_installed);
     dbg_trace_here();
 
