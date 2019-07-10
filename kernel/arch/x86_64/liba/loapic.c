@@ -76,7 +76,8 @@ static u32  loapic_tmr_hz = 0;  // how many cycles in a second
 //------------------------------------------------------------------------------
 // local apic interrupt service routines
 
-// extern void tick_advance();
+// defined in core/tick.c
+extern void tick_advance();
 
 static void loapic_resched_proc(int vec) {
     assert(vec == VECNUM_RESCHED);
@@ -97,7 +98,7 @@ static void loapic_svr_proc(int vec) {
 
 static void loapic_timer_proc(int vec) {
     assert(vec == VECNUM_TIMER);
-    // tick_advance();
+    tick_advance();
     loapic_send_eoi();
 }
 

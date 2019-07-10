@@ -11,7 +11,7 @@ static __PERCPU ready_q_t ready_q;
 
 __PERCPU u32      no_preempt;
 __PERCPU task_t * tid_prev;
-__PERCPU task_t * tid_next;        // protected by ready_q.lock
+__PERCPU task_t * tid_next;         // also protected by ready_q.lock
 
 //------------------------------------------------------------------------------
 // helper function
@@ -67,7 +67,7 @@ static int find_lowest_cpu(task_t * tid) {
 
 // ready queue is already locked
 static task_t * find_highest_task(ready_q_t * rdy) {
-    dbg_assert(0 != rdy->priorities);
+    assert(0 != rdy->priorities);
     int pri = CTZ32(rdy->priorities);
     return PARENT(rdy->tasks[pri].head, task_t, dl_sched);
 }
@@ -149,13 +149,12 @@ u32 sched_cont(task_t * tid, u32 bits) {
 
 // disable task preemption
 void preempt_lock() {
-    thiscpu32_inc(&no_preempt);
+    atomic32_inc(thiscpu_ptr(no_preempt));
 }
 
-// re-enable task preemption
-// caller should invoke `task_switch`
+// re-enable task preemption, caller needs to call `task_switch` after this
 void preempt_unlock() {
-    thiscpu32_dec(&no_preempt);
+    atomic32_dec(thiscpu_ptr(no_preempt));
 }
 
 // this function might be called during tick_advance
@@ -176,7 +175,7 @@ void sched_yield() {
     thiscpu_var(tid_next) = tid;
 
     irq_spin_give(&rdy->lock, key);
-    task_switch();
+    // task_switch();
 }
 
 // this function is called during clock interrupt

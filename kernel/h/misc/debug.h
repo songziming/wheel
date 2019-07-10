@@ -13,7 +13,7 @@ extern void dbg_print(const char * msg, ...);
 extern void dbg_dump();
 
 #define panic(...) ({                           \
-    dbg_print("[panic]" __VA_ARGS__);           \
+    dbg_print("[panic] " __VA_ARGS__);          \
     if (NULL != dbg_trace_hook) {               \
         dbg_trace_hook();                       \
     }                                           \

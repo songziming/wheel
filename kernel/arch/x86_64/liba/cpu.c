@@ -287,3 +287,35 @@ __INIT void int_init() {
         isr_tbl[i] = int_default;
     }
 }
+
+//------------------------------------------------------------------------------
+// task support
+
+// real entry of task, defined in cpu.S
+extern void task_entry();
+
+void regs_init(regs_t * regs, usize sp, void * proc,
+               void * a1, void * a2, void * a3, void * a4) {
+    assert(0 != regs);
+    assert(0 != sp);
+    assert(0 != proc);
+
+    // stack pointer must be 8-byte aligned
+    sp &= ~7UL;
+
+    regs->rsp  = (int_frame_t *) ((u64) sp - sizeof(int_frame_t));
+    regs->rsp0 = (u64) sp;
+    regs->cr3  = 0UL;
+
+    memset(regs->rsp, 0, sizeof(int_frame_t));
+    regs->rsp->cs     = 0x08UL;             // kernel code segment
+    regs->rsp->ss     = 0x10UL;             // kernel data segment
+    regs->rsp->rflags = 0x0200UL;           // interrupt enabled
+    regs->rsp->rip    = (u64) task_entry;   // entry address
+    regs->rsp->rsp    = (u64) sp;           // stack top
+    regs->rsp->rax    = (u64) proc;         // pass entry function through rax
+    regs->rsp->rdi    = (u64) a1;
+    regs->rsp->rsi    = (u64) a2;
+    regs->rsp->rdx    = (u64) a3;
+    regs->rsp->rcx    = (u64) a4;
+}

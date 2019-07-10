@@ -157,12 +157,16 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
 
     // init kernel memory allocator
     kmem_lib_init();
+    sched_lib_init();
 
     dbg_print("processor count: %d.\n", cpu_installed);
     dbg_trace_here();
 
-    dbg_print("raising exception.\n");
-    ASM("ud2");
+    // dbg_print("raising exception.\n");
+    // ASM("ud2");
+
+    // assert(0);
+    ASM("sti");
 
     while (1) {}
 }

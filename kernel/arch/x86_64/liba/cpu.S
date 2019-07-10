@@ -11,6 +11,7 @@ GLOBAL_FUNC(irq_entries)
 GLOBAL_FUNC(exception_stub)
 GLOBAL_FUNC(interrupt_stub)
 GLOBAL_FUNC(syscall_entry)
+GLOBAL_FUNC(task_entry)
 
 EXTERN_DATA(isr_tbl)
 EXTERN_DATA(int_depth)
@@ -109,10 +110,19 @@ irq_entries:
     vector = vector + 1
     .endr
 
+// stack layout:
+// High |    SS    |
+//      |   RSP    |
+//      |  RFLAGS  |
+//      |    CS    | <-- %rsp + 0x18
+//      |   RIP    |
+//      | ERR CODE |
+// Low  |   RAX    | <-- %rsp
+
 // common exception handling logic
 // no reentrancy, no task switching
 exception_stub:
-    testl   $3, 0x10(%rsp)          // check RPL field of selector CS
+    testl   $3, 0x18(%rsp)          // check RPL field of selector CS
     jz      1f                      // skip swapgs if comming from kernel mode
     swapgs                          // swap gsbase if comming from user mode
 1:
@@ -130,7 +140,7 @@ exception_stub:
     movq    %rbp, %rsp
 
     restore_all_regs                // restore all saved registers
-    testl   $3, 0x08(%rsp)          // check RPL field of selector CS
+    testl   $3, 0x10(%rsp)          // check RPL field of selector CS
     jz      2f                      // skip swapgs if returning to kernel mode
     swapgs                          // swap gsbase if returning to user mode
 2:
@@ -140,7 +150,7 @@ exception_stub:
 // common interrupt handling logic
 // reentrant and supports task switching
 interrupt_stub:
-    testl   $3, 0x10(%rsp)          // check RPL field of selector CS
+    testl   $3, 0x18(%rsp)          // check RPL field of selector CS
     jz      1f                      // skip swapgs if comming from kernel mode
     swapgs                          // swap gsbase if comming from user mode
 1:
@@ -156,7 +166,7 @@ interrupt_stub:
     // TODO: save current rsp to tcb?
     // current rsp already saved in rsi and rbp
     // we can save it in our C callback
-    movq    %gs:(int_rsp), %rsp     // switch to the interrupt stack
+    // movq    %gs:(int_rsp), %rsp     // switch to the interrupt stack
 2:
     pushq   $0                      // dummy return address
     pushq   $0                      // dummy rbp value
@@ -195,3 +205,9 @@ syscall_entry:
     //
     swapgs
     sysretq
+
+//------------------------------------------------------------------------------
+// entry of task
+
+task_entry:
+    ret

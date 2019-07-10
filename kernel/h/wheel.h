@@ -6,6 +6,9 @@
 #include <config.h>
 
 #include <core/spin.h>
+#include <core/task.h>
+#include <core/tick.h>
+#include <core/sched.h>
 
 #include <mem/allot.h>
 #include <mem/page.h>
@@ -18,5 +21,7 @@
 
 #include <misc/elf64.h>
 #include <misc/debug.h>
+
+#include <misc/list.h>
 
 #endif // WHEEL_H

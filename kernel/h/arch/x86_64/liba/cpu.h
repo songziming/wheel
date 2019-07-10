@@ -235,6 +235,7 @@ typedef struct regs {
     u64           cr3;      // current page table
 } __PACKED __ALIGNED(16) regs_t;
 
-extern void regs_init (regs_t * regs);
+extern void regs_init(regs_t * regs, usize sp, void * proc,
+                      void * a1, void * a2, void * a3, void * a4);
 
 #endif // ARCH_X86_64_LIBA_CPU_H
