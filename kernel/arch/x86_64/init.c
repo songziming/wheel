@@ -97,6 +97,8 @@ static __INIT void parse_mmap(u8 * mmap_buf, u32 mmap_len) {
 //------------------------------------------------------------------------------
 // pre-kernel initialization
 
+static void root_proc();
+
 __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     // init serial and console device
     serial_dev_init();
@@ -160,19 +162,29 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     dbg_print("processor count: %d.\n", cpu_count());
     dbg_trace_here();
 
+    atomic32_inc((u32 *) &cpu_activated);
+
     // we need a temporary tcb to hold rsp
-    task_t dummy;
+    task_t dummy = { .priority = PRIORITY_IDLE + 1 };
     thiscpu_var(tid_prev) = &dummy;
     thiscpu_var(tid_next) = &dummy;
 
-    // ASM("ud2");
+    task_t * root = task_create("root", PRIORITY_NONRT, root_proc, 0,0,0,0);
+    task_resume(root);
 
-    dbg_print("starting loapic timer interrupt.\n");
-    ASM("sti");
-
+    dbg_print("YOU SHALL NOT SEE THIS LINE!\n");
     while (1) {}
 }
 
 __INIT __NORETURN void sys_init_ap() {
+    while (1) {}
+}
+
+//------------------------------------------------------------------------------
+// post-kernel initialization
+
+static void root_proc() {
+    dbg_print("running inside task.\n");
+    dbg_trace_here();
     while (1) {}
 }

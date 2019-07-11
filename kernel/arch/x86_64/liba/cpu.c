@@ -177,7 +177,6 @@ __INIT void cpu_init() {
 
 __INIT void gdt_init() {
     if (0 == cpu_activated) {
-        dbg_print("reserving %d bytes for gdt.\n", 6 + cpu_count() * 2);
         gdt = (u64 *) allot_permanent((6 + cpu_count() * 2) * sizeof(u64));
         gdt[0] = 0UL;                   // dummy
         gdt[1] = 0x00a0980000000000UL;  // kernel code

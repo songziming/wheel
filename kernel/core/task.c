@@ -12,7 +12,6 @@
 task_t * task_create(const char * name, int priority, void * proc,
                      void * a1, void * a2, void * a3, void * a4) {
     assert((0 <= priority) && (priority < PRIORITY_COUNT));
-    dbg_print("creating task <%s>\n", name);
 
     // allocate space for kernel stack, must be a single block
     int   order  = CTZL(CFG_KERNEL_STACK_SIZE) - PAGE_SHIFT;
@@ -73,13 +72,53 @@ void task_suspend() {
 }
 
 void task_resume(task_t * tid) {
-    //
+    assert(NULL != tid);
+
+    u32 key = irq_spin_take(&tid->lock);
+    u32 old = sched_cont(tid, TS_SUSPEND);
+    int cpu = tid->last_cpu;
+    irq_spin_give(&tid->lock, key);
+
+    if (TS_READY == old) {
+        return;
+    }
+
+    if (cpu_index() == cpu) {
+        task_switch();
+    } else {
+        // smp_reschedule(cpu);
+    }
 }
 
 void task_delay(int ticks) {
-    //
+    wdog_t   wd;
+    task_t * tid = thiscpu_var(tid_prev);
+    u32      key = irq_spin_take(&tid->lock);
+
+    wdog_init(&wd);
+    sched_stop(tid, TS_DELAY);
+    wdog_start(&wd, ticks, task_wakeup, tid, 0,0,0);
+    irq_spin_give(&tid->lock, key);
+
+    task_switch();
+    wdog_cancel(&wd);
 }
 
 void task_wakeup(task_t * tid) {
-    //
+    assert(NULL != tid);
+
+    u32 key = irq_spin_take(&tid->lock);
+    u32 old = sched_cont(tid, TS_DELAY);
+    int cpu = tid->last_cpu;
+    irq_spin_give(&tid->lock, key);
+
+    if (TS_READY == old) {
+        return;
+    }
+
+    if (cpu_index() == cpu) {
+        task_switch();
+    } else {
+        // smp_reschedule(cpu);
+    }
 }

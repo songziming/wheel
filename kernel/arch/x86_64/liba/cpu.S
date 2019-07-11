@@ -221,7 +221,15 @@ syscall_entry:
 // entry of task
 
 task_entry:
-    ret
+    pushq   $0                      // dummy return addr
+    pushq   $0                      // dummy rbp value
+    movq    %rsp, %rbp
+
+    call    * %rax                  // start running task code
+    call    task_exit               // remove this task
+1:
+    hlt
+    jmp     1b
 
 //------------------------------------------------------------------------------
 // save tid_prev, load tid_next
