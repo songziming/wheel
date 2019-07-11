@@ -215,7 +215,7 @@ typedef struct int_frame {
 } __PACKED int_frame_t;
 
 extern __PERCPU int    int_depth;
-extern __PERCPU int    int_rsp;
+extern __PERCPU usize  int_rsp;
 extern          void * isr_tbl[256];
 
 extern void int_disable();

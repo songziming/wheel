@@ -16,6 +16,9 @@ GLOBAL_FUNC(task_entry)
 EXTERN_DATA(isr_tbl)
 EXTERN_DATA(int_depth)
 EXTERN_DATA(int_rsp)
+
+EXTERN_DATA(tid_prev)
+EXTERN_DATA(tid_next)
 EXTERN_DATA(no_preempt)
 
 //------------------------------------------------------------------------------
@@ -110,7 +113,7 @@ irq_entries:
     vector = vector + 1
     .endr
 
-// stack layout:
+// stack layout at exception_stub/interrupt_stub:
 // High |    SS    |
 //      |   RSP    |
 //      |  RFLAGS  |
@@ -157,16 +160,15 @@ interrupt_stub:
     save_regs_except_rax            // %rax already saved, save rest registers
     movl    %eax, %edi              // rdi = vector number, clear upper 32 bits
     movq    %rsp, %rsi              // rsi = stack frame
-    movq    %rsp, %rbp              // point to current stack frame
 
     incl    %gs:(int_depth)
     cmpl    $1, %gs:(int_depth)
     jne     2f                      // skip stack switching if re-entered
 
-    // TODO: save current rsp to tcb?
-    // current rsp already saved in rsi and rbp
-    // we can save it in our C callback
-    // movq    %gs:(int_rsp), %rsp     // switch to the interrupt stack
+    movq    %gs:(tid_prev), %rax
+    movq    %rsp, (%rax)            // save to tid_prev->regs.rsp
+    movq    %gs:(int_rsp), %rsp     // switch to the interrupt stack
+    movq    %rsp, %rbp              // point to current stack frame
 2:
     pushq   $0                      // dummy return address
     pushq   $0                      // dummy rbp value
@@ -176,7 +178,6 @@ interrupt_stub:
     sti
     call    * %rax
     cli
-    movq    %rbp, %rsp
 
     decl    %gs:(int_depth)
     cmpl    $0, %gs:(int_depth)     // if we're still inside ISR
@@ -184,9 +185,10 @@ interrupt_stub:
     cmpl    $0, %gs:(no_preempt)    // if we've disabled preemption
     jne     4f                      // then no task switch is performed
 
-    // switch to another task
-    // load tcb from tid_next
-    // store the kernel stack of new stack in TSS
+// yield to tid_next
+return_to_task:
+    movq    %gs:(tid_next), %rdi
+    movq    0x00(%rdi), %rsp
 4:
     // call   work_dequeue
     testl   $3, 0x88(%rsp)

@@ -234,8 +234,8 @@ __INIT void tss_init() {
 // exception and interrupt
 
 __PERCPU int    int_depth;
-__PERCPU int    int_rsp;
-__PERCPU int    int_stack[CFG_INT_STACK_SIZE];
+__PERCPU usize  int_rsp;
+__PERCPU u8     int_stack[CFG_INT_STACK_SIZE];
          void * isr_tbl  [256];
 
 void int_disable() {

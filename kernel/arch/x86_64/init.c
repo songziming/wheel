@@ -162,10 +162,12 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     dbg_print("processor count: %d.\n", cpu_installed);
     dbg_trace_here();
 
-    // dbg_print("raising exception.\n");
-    // ASM("ud2");
+    // we need a temporary tcb to hold rsp
+    task_t dummy;
+    thiscpu_var(tid_prev) = &dummy;
+    thiscpu_var(tid_next) = &dummy;
 
-    // assert(0);
+    dbg_print("starting loapic timer interrupt.\n");
     ASM("sti");
 
     while (1) {}
