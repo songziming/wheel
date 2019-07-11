@@ -177,7 +177,8 @@ __INIT void cpu_init() {
 
 __INIT void gdt_init() {
     if (0 == cpu_activated) {
-        gdt = (u64 *) allot_permanent(6 + cpu_installed * 2);
+        dbg_print("reserving %d bytes for gdt.\n", 6 + cpu_count() * 2);
+        gdt = (u64 *) allot_permanent((6 + cpu_count() * 2) * sizeof(u64));
         gdt[0] = 0UL;                   // dummy
         gdt[1] = 0x00a0980000000000UL;  // kernel code
         gdt[2] = 0x00c0920000000000UL;  // kernel data
@@ -187,7 +188,7 @@ __INIT void gdt_init() {
     }
     tbl_ptr_t gdtr;
     gdtr.base  = (u64) gdt;
-    gdtr.limit = (6 + cpu_installed * 2) * sizeof(u64) - 1;
+    gdtr.limit = (6 + cpu_count() * 2) * sizeof(u64) - 1;
     load_gdtr(&gdtr);
 }
 
@@ -258,25 +259,35 @@ void int_unlock(u32 key) {
     }
 }
 
-static void exp_default(int vec) {
+static void exp_default(int vec, int_frame_t * f) {
     static const char * mnemonics[] = {
         "DE", "DB", "NMI","BP", "OF", "BR", "UD", "NM",
         "DF", "??", "TS", "NP", "SS", "GP", "PF", "??",
         "MF", "AC", "MC", "XF", "??", "??", "??", "??",
         "??", "??", "??", "??", "??", "??", "SX", "??"
     };
-    dbg_print("Exception #%s vector=0x%02x.\n", mnemonics[vec], vec);
+
+    dbg_print("==> Exception #%s vector=0x%02x.\n", mnemonics[vec], vec);
+    dbg_print("    SS:RSP = 0x%02x:0x%016llx\n", f->ss, f->rsp);
+    dbg_print("    CS:RIP = 0x%02x:0x%016llx\n", f->cs, f->rip);
+
+    if (0 == (f->cs & 3)) {
+        dbg_trace_from(f->rip, (u64 *) f->rbp);
+    }
+
     while (1) {}
 }
 
-static void int_default(int vec) {
-    dbg_print("Interrupt vector=0x%02x.\n", vec);
+static void int_default(int vec, int_frame_t * f) {
+    dbg_print("==> Interrupt vector=0x%02x.\n", vec);
+    dbg_print("    SS:RSP = 0x%02x:0x%016llx\n", f->ss, f->rsp);
+    dbg_print("    CS:RIP = 0x%02x:0x%016llx\n", f->cs, f->rip);
     while (1) {}
 }
 
 // setup interrupt stack, init isr table
 __INIT void int_init() {
-    for (int i = 0; i < cpu_installed; ++i) {
+    for (int i = 0; i < cpu_count(); ++i) {
         percpu_var(i, int_depth) = 0;
         percpu_var(i, int_rsp)   = (u64) percpu_ptr(i, int_stack[CFG_INT_STACK_SIZE]);
     }

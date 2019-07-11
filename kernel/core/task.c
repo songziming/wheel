@@ -1,7 +1,5 @@
 #include <wheel.h>
 
-// __PERCPU int no_preempt = 0;
-
 #if (CFG_KERNEL_STACK_SIZE & (CFG_KERNEL_STACK_SIZE - 1)) != 0
     #error "CFG_KERNEL_STACK_SIZE must be power of 2"
 #endif
@@ -23,7 +21,7 @@ task_t * task_create(const char * name, int priority, void * proc,
     if (NO_PAGE == kstack) {
         return NULL;
     }
-    
+
     // mark allocated page as kstack type
     for (pfn_t i = 0; i < (1U << order); ++i) {
         page_array[kstack + i].type  = PT_KSTACK;
@@ -54,4 +52,34 @@ task_t * task_create(const char * name, int priority, void * proc,
     tid->kstack    = kstack;
 
     return tid;
+}
+
+// mark current task as deleted
+void task_exit() {
+    task_t * tid = thiscpu_var(tid_prev);
+
+    u32 key = irq_spin_take(&tid->lock);
+    // sched_stop(tid, TS_ZOMBIE);
+    irq_spin_give(&tid->lock, key);
+
+    // // register work function to free kernel stack pages
+    // work_enqueue(task_cleanup, tid, 0,0,0);
+
+    task_switch();
+}
+
+void task_suspend() {
+    //
+}
+
+void task_resume(task_t * tid) {
+    //
+}
+
+void task_delay(int ticks) {
+    //
+}
+
+void task_wakeup(task_t * tid) {
+    //
 }

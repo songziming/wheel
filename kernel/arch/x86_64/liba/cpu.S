@@ -12,6 +12,8 @@ GLOBAL_FUNC(exception_stub)
 GLOBAL_FUNC(interrupt_stub)
 GLOBAL_FUNC(syscall_entry)
 GLOBAL_FUNC(task_entry)
+GLOBAL_FUNC(task_switch)
+GLOBAL_FUNC(user_return)
 
 EXTERN_DATA(isr_tbl)
 EXTERN_DATA(int_depth)
@@ -132,15 +134,16 @@ exception_stub:
     save_regs_except_rax            // %rax already saved, save rest registers
     movl    %eax, %edi              // rdi = vector number, clear upper 32 bits
     movq    %rsp, %rsi              // rsi = stack frame
-    movq    %rsp, %rbp              // point to current stack frame
+    movq    %rsp, %rbx              // save old stack frame in rbx
 
     pushq   $0                      // dummy return address
     pushq   $0                      // dummy rbp value
+    movq    %rsp, %rbp              // point to current stack frame
 
     movq    $isr_tbl, %rax
     movq    (%rax, %rdi, 8), %rax   // rax = isr_tbl[rdi]
     call    * %rax
-    movq    %rbp, %rsp
+    movq    %rbx, %rsp              // restore old stack frame
 
     restore_all_regs                // restore all saved registers
     testl   $3, 0x10(%rsp)          // check RPL field of selector CS
@@ -160,24 +163,26 @@ interrupt_stub:
     save_regs_except_rax            // %rax already saved, save rest registers
     movl    %eax, %edi              // rdi = vector number, clear upper 32 bits
     movq    %rsp, %rsi              // rsi = stack frame
+    movq    %rsp, %rbx              // save old stack frame in rbx
+
+    pushq   $0                      // dummy return address
+    pushq   $0                      // dummy rbp value
+    movq    %rsp, %rbp              // point to current stack frame
 
     incl    %gs:(int_depth)
     cmpl    $1, %gs:(int_depth)
     jne     2f                      // skip stack switching if re-entered
 
     movq    %gs:(tid_prev), %rax
-    movq    %rsp, (%rax)            // save to tid_prev->regs.rsp
+    movq    %rbx, (%rax)            // tid_prev->regs.rsp = &int_frame
     movq    %gs:(int_rsp), %rsp     // switch to the interrupt stack
-    movq    %rsp, %rbp              // point to current stack frame
 2:
-    pushq   $0                      // dummy return address
-    pushq   $0                      // dummy rbp value
-
     movq    $isr_tbl, %rax
     movq    (%rax, %rdi, 8), %rax   // rax = isr_tbl[rdi]
     sti
     call    * %rax
     cli
+    movq    %rbx, %rsp              // restore old stack frame
 
     decl    %gs:(int_depth)
     cmpl    $0, %gs:(int_depth)     // if we're still inside ISR
@@ -185,13 +190,17 @@ interrupt_stub:
     cmpl    $0, %gs:(no_preempt)    // if we've disabled preemption
     jne     4f                      // then no task switch is performed
 
-// yield to tid_next
-return_to_task:
-    movq    %gs:(tid_next), %rdi
+    movq    %gs:(tid_next), %rdi    // destination task
+    // movq    %gs:(tid_prev), %rsi    // source task
+    // cmpq    %rdi, %rsi
+    // je      4f                      // same task, no need to switch
+
+load_tid_next:
+    movq    %rdi, %gs:(tid_prev)    // update `tid_prev`
     movq    0x00(%rdi), %rsp
 4:
     // call   work_dequeue
-    testl   $3, 0x88(%rsp)
+    testl   $3, 0x88(%rsp)          // offset of rsp in int_frame
     jz      3f
     swapgs
 3:
@@ -213,3 +222,58 @@ syscall_entry:
 
 task_entry:
     ret
+
+//------------------------------------------------------------------------------
+// save tid_prev, load tid_next
+
+task_switch:
+    pushfq
+    cli                             // disable interrupt for now
+    popq    %rax                    // rflags before cli
+
+    cmpq    $0, %gs:(int_depth)
+    jne     1f                      // no switch if inside ISR
+    cmpq    $0, %gs:(no_preempt)
+    jne     1f                      // no switch if preemption is locked
+
+    movq    %gs:(tid_prev), %rsi    // load `tid_prev` to rsi
+    movq    %gs:(tid_next), %rdi    // load `tid_next` to rdi
+    cmpq    %rdi, %rsi
+    je      1f                      // same task, no need to switch
+
+    movq    %cs, %r8                // r8  = cs
+    popq    %r9                     // r9  = rip, restart from caller directly
+    movq    %ss,  %r10              // r10 = ss
+    movq    %rsp, %r11              // r11 = rsp
+    pushq   %r10                    // ss
+    pushq   %r11                    // rsp
+    pushq   %rax                    // rflags
+    pushq   %r8                     // cs
+    pushq   %r9                     // rip, return address
+    pushq   $0                      // error code
+    pushq   $0                      // rax
+    save_regs_except_rax            // rest of int_frame
+    movq    %rsp, (%rsi)            // tid_prev->regs.rsp = &int_frame
+
+    jmp     load_tid_next
+
+1:
+    pushq   %rax
+    popfq
+    ret
+
+//------------------------------------------------------------------------------
+// return to user mode
+
+user_return:
+    pushfq
+    cli                             // disable interrupt for now
+    popq    %rax                    // rflags before cli
+    pushq   $0x23                   // ss
+    pushq   %rsi                    // rsp
+    pushq   %rax                    // rflags
+    pushq   $0x2b                   // cs
+    pushq   %rdi                    // rip
+    swapgs
+    iretq
+

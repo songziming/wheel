@@ -15,14 +15,12 @@ static __INIT void parse_madt(madt_t * tbl) {
         acpi_subtbl_t * sub = (acpi_subtbl_t *) p;
         switch (sub->type) {
         case MADT_TYPE_IO_APIC:
-            // dbg_print("got io apic.\n");
             ioapic_dev_add((madt_ioapic_t *) sub);
             break;
         case MADT_TYPE_INTERRUPT_OVERRIDE:
             ioapic_int_override((madt_int_override_t *) sub);
             break;
         case MADT_TYPE_LOCAL_APIC:
-            // dbg_print("got local apic.\n");
             loapic_dev_add((madt_loapic_t *) sub);
             break;
         case MADT_TYPE_LOCAL_APIC_OVERRIDE:
@@ -51,13 +49,13 @@ static __INIT void parse_mmap(u8 * mmap_buf, u32 mmap_len) {
     u8 * kernel_end = (u8 *) ROUND_UP(allot_permanent(0), 64);
     percpu_base = (u64) (kernel_end - &_percpu_addr);
     percpu_size = ROUND_UP((u64) (&_percpu_end - &_percpu_addr), 64);
-    for (int i = 0; i < cpu_installed; ++i) {
+    for (int i = 0; i < cpu_count(); ++i) {
         memcpy(kernel_end, &_percpu_addr, percpu_size);
         kernel_end += percpu_size;
     }
 
     // page array comes right after percpu area
-    kernel_end = (u8 *) ROUND_UP((u64) kernel_end + cpu_installed * percpu_size, 16);
+    kernel_end = (u8 *) ROUND_UP((u64) kernel_end + cpu_count() * percpu_size, 16);
     page_array = (page_t *) kernel_end;
     page_count = 0;
 
@@ -159,13 +157,15 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     kmem_lib_init();
     sched_lib_init();
 
-    dbg_print("processor count: %d.\n", cpu_installed);
+    dbg_print("processor count: %d.\n", cpu_count());
     dbg_trace_here();
 
     // we need a temporary tcb to hold rsp
     task_t dummy;
     thiscpu_var(tid_prev) = &dummy;
     thiscpu_var(tid_next) = &dummy;
+
+    // ASM("ud2");
 
     dbg_print("starting loapic timer interrupt.\n");
     ASM("sti");

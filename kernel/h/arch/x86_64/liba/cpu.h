@@ -235,6 +235,9 @@ typedef struct regs {
     u64           cr3;      // current page table
 } __PACKED __ALIGNED(16) regs_t;
 
+extern void task_switch();
+extern void user_return(usize ip, usize sp);
+
 extern void regs_init(regs_t * regs, usize sp, void * proc,
                       void * a1, void * a2, void * a3, void * a4);
 

@@ -37,5 +37,10 @@ typedef struct task {
 
 extern task_t * task_create (const char * name, int priority, void * proc,
                              void * a1, void * a2, void * a3, void * a4);
+extern void     task_exit   ();
+extern void     task_suspend();
+extern void     task_resume (task_t * tid);
+extern void     task_delay  (int ticks);
+extern void     task_wakeup (task_t * tid);
 
 #endif // CORE_TASK_H

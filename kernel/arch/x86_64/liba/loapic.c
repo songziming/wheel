@@ -129,7 +129,7 @@ __INIT void loapic_override(u64 addr) {
     loapic_base = (u8 *) phys_to_virt(addr);
 }
 
-// register a local apic instance, cpu_installed already increased
+// register a local apic instance
 __INIT void loapic_dev_add(madt_loapic_t * tbl) {
     if (cpu_installed < 64) {
         loapic_devs[cpu_installed].apic_id      = tbl->id;

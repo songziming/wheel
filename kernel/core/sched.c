@@ -206,8 +206,7 @@ static void idle_proc() {
 
 __INIT void sched_lib_init() {
     // this function is called before starting all cpu
-    // so we should use `cpu_installed` instead of `cpu_activated`
-    for (int i = 0; i < cpu_installed; ++i) {
+    for (int i = 0; i < cpu_count(); ++i) {
         percpu_var(i, tid_prev)   = NULL;
         percpu_var(i, tid_prev)   = NULL;
         percpu_var(i, no_preempt) = 0;
