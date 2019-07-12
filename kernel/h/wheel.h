@@ -8,6 +8,7 @@
 #include <core/spin.h>
 #include <core/task.h>
 #include <core/tick.h>
+#include <core/work.h>
 #include <core/sched.h>
 
 #include <mem/allot.h>

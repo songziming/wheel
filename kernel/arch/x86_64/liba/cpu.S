@@ -23,6 +23,8 @@ EXTERN_DATA(tid_prev)
 EXTERN_DATA(tid_next)
 EXTERN_DATA(no_preempt)
 
+EXTERN_FUNC(work_dequeue)
+
 //------------------------------------------------------------------------------
 // helper functions used by `cpu.c`
 
@@ -165,10 +167,6 @@ interrupt_stub:
     movq    %rsp, %rsi              // rsi = stack frame
     movq    %rsp, %rbx              // save old stack frame in rbx
 
-    pushq   $0                      // dummy return address
-    pushq   $0                      // dummy rbp value
-    movq    %rsp, %rbp              // point to current stack frame
-
     incl    %gs:(int_depth)
     cmpl    $1, %gs:(int_depth)
     jne     2f                      // skip stack switching if re-entered
@@ -177,16 +175,23 @@ interrupt_stub:
     movq    %rbx, (%rax)            // tid_prev->regs.rsp = &int_frame
     movq    %gs:(int_rsp), %rsp     // switch to the interrupt stack
 2:
+    pushq   $0                      // dummy return address
+    pushq   $0                      // dummy rbp value
+    movq    %rsp, %rbp              // point to current stack frame
+
     movq    $isr_tbl, %rax
     movq    (%rax, %rdi, 8), %rax   // rax = isr_tbl[rdi]
     sti
     call    * %rax
     cli
-    movq    %rbx, %rsp              // restore old stack frame
 
     decl    %gs:(int_depth)
     cmpl    $0, %gs:(int_depth)     // if we're still inside ISR
     jne     3f                      // no need to switch stack and gsbase
+
+    call    work_dequeue            // flush works (still inside int stack)
+    movq    %rbx, %rsp              // restore old stack frame
+
     cmpl    $0, %gs:(no_preempt)    // if we've disabled preemption
     jne     4f                      // then no task switch is performed
 
@@ -199,7 +204,6 @@ load_tid_next:
     movq    %rdi, %gs:(tid_prev)    // update `tid_prev`
     movq    0x00(%rdi), %rsp
 4:
-    // call   work_dequeue
     testl   $3, 0x88(%rsp)          // offset of rsp in int_frame
     jz      3f
     swapgs

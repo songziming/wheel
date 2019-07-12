@@ -213,7 +213,7 @@ pfn_t page_block_alloc_or_fail(u32 zones, int order) {
     pfn_t blk = page_block_alloc(zones, order);
 
     if (NO_PAGE == blk) {
-        panic("out of memory when allocating 2^%d pages from %s %s",
+        panic("out of memory when allocating 2^%d pages from %s %s\n",
               order,
               (zones & ZONE_DMA)    ? "DMA"    : "",
               (zones & ZONE_NORMAL) ? "NORMAL" : "");

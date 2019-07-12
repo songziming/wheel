@@ -220,9 +220,7 @@ __INIT void sched_lib_init() {
             rdy->tasks[p] = DLLIST_INIT;
         }
 
-        char name[] = "idle-x";
-        name[5] = '0' + i;
-        task_t * idle = task_create(name, PRIORITY_IDLE, idle_proc, 0,0,0,0);
+        task_t * idle = task_create(PRIORITY_IDLE, idle_proc, 0,0,0,0);
         idle->state    = TS_READY;
         idle->affinity = 1UL << i;
         idle->last_cpu = i;

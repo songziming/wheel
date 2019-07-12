@@ -157,11 +157,10 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
 
     // init kernel memory allocator
     kmem_lib_init();
+    work_lib_init();
     sched_lib_init();
 
-    dbg_print("processor count: %d.\n", cpu_count());
-    dbg_trace_here();
-
+    dbg_print("> cpu %02d started.\n", cpu_activated);
     atomic32_inc((u32 *) &cpu_activated);
 
     // we need a temporary tcb to hold rsp
@@ -169,7 +168,7 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     thiscpu_var(tid_prev) = &dummy;
     thiscpu_var(tid_next) = &dummy;
 
-    task_t * root = task_create("root", PRIORITY_NONRT, root_proc, 0,0,0,0);
+    task_t * root = task_create(PRIORITY_NONRT, root_proc, 0,0,0,0);
     task_resume(root);
 
     dbg_print("YOU SHALL NOT SEE THIS LINE!\n");
@@ -184,7 +183,18 @@ __INIT __NORETURN void sys_init_ap() {
 // post-kernel initialization
 
 static void root_proc() {
+    // TODO: copying trampoline code to 0x7c000
+    for (int i = 0; i < cpu_count(); ++i) {
+        //
+    }
+
     dbg_print("running inside task.\n");
     dbg_trace_here();
-    while (1) {}
+
+    dbg_print("waiting for 4 ticks...");
+    tick_delay(4);
+    dbg_print("ok.\n");
+
+    task_exit();
+    dbg_print("you shall not see this line!\n");
 }

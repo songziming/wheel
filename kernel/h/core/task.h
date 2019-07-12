@@ -35,7 +35,7 @@ typedef struct task {
 #define TS_SUSPEND      0x04    // stopped on purpose, not on any q
 #define TS_ZOMBIE       0x08    // finished, but TCB still reclaimed
 
-extern task_t * task_create (const char * name, int priority, void * proc,
+extern task_t * task_create (int priority, void * proc,
                              void * a1, void * a2, void * a3, void * a4);
 extern void     task_exit   ();
 extern void     task_suspend();

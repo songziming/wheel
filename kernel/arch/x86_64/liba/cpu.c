@@ -266,6 +266,7 @@ static void exp_default(int vec, int_frame_t * f) {
         "??", "??", "??", "??", "??", "??", "SX", "??"
     };
 
+    dbg_print("\n");
     dbg_print("==> Exception #%s vector=0x%02x.\n", mnemonics[vec], vec);
     dbg_print("    SS:RSP = 0x%02x:0x%016llx\n", f->ss, f->rsp);
     dbg_print("    CS:RIP = 0x%02x:0x%016llx\n", f->cs, f->rip);
@@ -278,6 +279,7 @@ static void exp_default(int vec, int_frame_t * f) {
 }
 
 static void int_default(int vec, int_frame_t * f) {
+    dbg_print("\n");
     dbg_print("==> Interrupt vector=0x%02x.\n", vec);
     dbg_print("    SS:RSP = 0x%02x:0x%016llx\n", f->ss, f->rsp);
     dbg_print("    CS:RIP = 0x%02x:0x%016llx\n", f->cs, f->rip);

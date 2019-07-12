@@ -9,7 +9,7 @@
 #endif
 
 // create new task
-task_t * task_create(const char * name, int priority, void * proc,
+task_t * task_create(int priority, void * proc,
                      void * a1, void * a2, void * a3, void * a4) {
     assert((0 <= priority) && (priority < PRIORITY_COUNT));
 
@@ -53,22 +53,60 @@ task_t * task_create(const char * name, int priority, void * proc,
     return tid;
 }
 
+// work function to be called after task_exit during isr
+static void task_cleanup(task_t * tid) {
+    assert(TS_ZOMBIE == tid->state);
+    // assert(thiscpu_var(int_depth) != 0);
+    raw_spin_take(&tid->lock);
+
+    // // unmap and remove vm region for user stack
+    // if ((NULL != tid->process) && (NULL != tid->ustack)) {
+    //     vmspace_unmap(&tid->process->vm, tid->ustack);
+    //     vmspace_free (&tid->process->vm, tid->ustack);
+    //     tid->ustack = NULL;
+    // }
+
+    // free all pages in kernel stack
+    int order = CTZL(CFG_KERNEL_STACK_SIZE) - PAGE_SHIFT;
+    assert(page_array[tid->kstack].type  == PT_KSTACK);
+    assert(page_array[tid->kstack].order == order);
+    assert(page_array[tid->kstack].block == 1);
+    page_block_free(tid->kstack, order);
+
+    // // remove this thread from the process
+    // if (NULL != tid->process) {
+    //     dl_remove(&tid->process->tasks, &tid->dl_proc);
+    //     if ((NULL == tid->process->tasks.head) &&
+    //         (NULL == tid->process->tasks.tail)) {
+    //         // if this is the last thread, also delete the process
+    //         process_delete(tid->process);
+    //     }
+    // }
+
+    kmem_free(sizeof(task_t), tid);
+}
+
 // mark current task as deleted
 void task_exit() {
     task_t * tid = thiscpu_var(tid_prev);
 
     u32 key = irq_spin_take(&tid->lock);
-    // sched_stop(tid, TS_ZOMBIE);
+    sched_stop(tid, TS_ZOMBIE);
     irq_spin_give(&tid->lock, key);
 
-    // // register work function to free kernel stack pages
-    // work_enqueue(task_cleanup, tid, 0,0,0);
+    work_enqueue(task_cleanup, tid, 0,0,0);
 
     task_switch();
 }
 
 void task_suspend() {
-    //
+    task_t * tid = thiscpu_var(tid_prev);
+
+    u32 key = irq_spin_take(&tid->lock);
+    sched_stop(tid, TS_SUSPEND);
+    irq_spin_give(&tid->lock, key);
+
+    task_switch();
 }
 
 void task_resume(task_t * tid) {
