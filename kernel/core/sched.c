@@ -204,12 +204,7 @@ static void idle_proc() {
 }
 
 __INIT void sched_lib_init() {
-    // this function is called before starting all cpu
     for (int i = 0; i < cpu_count(); ++i) {
-        percpu_var(i, tid_prev)   = NULL;
-        percpu_var(i, tid_prev)   = NULL;
-        percpu_var(i, no_preempt) = 0;
-
         ready_q_t * rdy = percpu_ptr(i, ready_q);
         rdy->lock       = SPIN_INIT;
         rdy->load       = 1;        // idle task
@@ -219,10 +214,14 @@ __INIT void sched_lib_init() {
             rdy->tasks[p] = DLLIST_INIT;
         }
 
-        task_t * idle = task_create(PRIORITY_IDLE, idle_proc, 0,0,0,0);
+        task_t * idle  = task_create(PRIORITY_IDLE, idle_proc, 0,0,0,0);
         idle->state    = TS_READY;
         idle->affinity = 1UL << i;
         idle->last_cpu = i;
         dl_push_tail(&rdy->tasks[PRIORITY_IDLE], &idle->dl_sched);
+
+        percpu_var(i, tid_prev)   = NULL;
+        percpu_var(i, tid_next)   = idle;
+        percpu_var(i, no_preempt) = 0;
     }
 }

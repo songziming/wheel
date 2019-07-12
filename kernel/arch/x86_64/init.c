@@ -160,15 +160,13 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     work_lib_init();
     sched_lib_init();
 
-    dbg_print("> cpu %02d started.\n", cpu_activated++);
-
-    // we need a temporary tcb to hold rsp
+    // temporary tcb to hold saved registers
     task_t dummy = { .priority = PRIORITY_IDLE + 1 };
     thiscpu_var(tid_prev) = &dummy;
-    thiscpu_var(tid_next) = &dummy;
 
-    task_t * root = task_create(PRIORITY_NONRT, root_proc, 0,0,0,0);
-    task_resume(root);
+    // start root task
+    dbg_print("> cpu %02d started.\n", cpu_activated++);
+    task_resume(task_create(PRIORITY_NONRT, root_proc, 0,0,0,0));
 
     dbg_print("YOU SHALL NOT SEE THIS LINE!\n");
     while (1) {}
@@ -180,11 +178,18 @@ __INIT __NORETURN void sys_init_ap() {
     gdt_init();
     idt_init();
 
+    // thiscpu and tss
     write_gsbase(percpu_base + cpu_activated * percpu_size);
     tss_init();
 
+    // interrupt controller
     loapic_dev_init();
 
+    // temporary tcb to hold saved registers
+    task_t dummy = { .priority = PRIORITY_IDLE + 1 };
+    thiscpu_var(tid_prev) = &dummy;
+
+    // start idle task
     dbg_print("> cpu %02d started.\n", cpu_activated++);
     sched_yield();
 
@@ -195,9 +200,25 @@ __INIT __NORETURN void sys_init_ap() {
 //------------------------------------------------------------------------------
 // post-kernel initialization
 
-// defined in layout.ld
+// defined in `layout.ld`
 extern u8 _trampoline_addr;
 extern u8 _trampoline_end;
+
+static void a_proc() {
+    dbg_print("a running on cpu %d.\n", cpu_index());
+    while (1) {
+        dbg_print("A");
+        tick_delay(100);
+    }
+}
+
+static void b_proc() {
+    dbg_print("b running on cpu %d.\n", cpu_index());
+    while (1) {
+        dbg_print("B");
+        tick_delay(100);
+    }
+}
 
 static void root_proc() {
     // copy trampoline code to 0x7c000
@@ -227,6 +248,17 @@ static void root_proc() {
     dbg_print("waiting for 4 ticks...");
     tick_delay(4);
     dbg_print("ok.\n");
+
+    task_t * a = task_create(PRIORITY_NONRT, a_proc, 0,0,0,0);
+    task_t * b = task_create(PRIORITY_NONRT, b_proc, 0,0,0,0);
+    task_resume(a);
+    task_resume(b);
+
+    dbg_print("root running on cpu %d.\n", cpu_index());
+    while (1) {
+        dbg_print("R");
+        tick_delay(200);
+    }
 
     task_exit();
     dbg_print("you shall not see this line!\n");
