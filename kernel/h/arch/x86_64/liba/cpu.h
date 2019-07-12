@@ -200,7 +200,7 @@ extern void * calc_thiscpu_addr(void * ptr);
 extern __INIT void cpu_init();
 extern __INIT void gdt_init();  // requires: allot
 extern __INIT void idt_init();
-extern __INIT void tss_init();  // requires: percpu-var
+extern __INIT void tss_init();  // requires: percpu-var, thiscpu-var
 
 //------------------------------------------------------------------------------
 // exception and interrupt

@@ -184,11 +184,13 @@ interrupt_stub:
     sti
     call    * %rax
     cli
+    addq    $16, %rsp
 
     decl    %gs:(int_depth)
     cmpl    $0, %gs:(int_depth)     // if we're still inside ISR
     jne     3f                      // no need to switch stack and gsbase
 
+    subq    $16, %rsp               // dummy return addr and rbp still there
     call    work_dequeue            // flush works (still inside int stack)
     movq    %rbx, %rsp              // restore old stack frame
 
@@ -288,4 +290,3 @@ user_return:
     pushq   %rdi                    // rip
     swapgs
     iretq
-

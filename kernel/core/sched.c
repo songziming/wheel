@@ -162,9 +162,8 @@ void preempt_unlock() {
 void sched_yield() {
     ready_q_t * rdy = thiscpu_ptr(ready_q);
     u32         key = irq_spin_take(&rdy->lock);
-
-    int      pri = CTZ32(rdy->priorities);
-    task_t * tid = PARENT(rdy->tasks[pri].head, task_t, dl_sched);
+    int         pri = CTZ32(rdy->priorities);
+    task_t    * tid = PARENT(rdy->tasks[pri].head, task_t, dl_sched);
 
     // round robin only if current task is the head task
     if (thiscpu_var(tid_prev) == tid) {
@@ -175,7 +174,7 @@ void sched_yield() {
     thiscpu_var(tid_next) = tid;
 
     irq_spin_give(&rdy->lock, key);
-    // task_switch();
+    task_switch();
 }
 
 // this function is called during clock interrupt

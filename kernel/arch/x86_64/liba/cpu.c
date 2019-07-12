@@ -210,9 +210,8 @@ __INIT void idt_init() {
 }
 
 __INIT void tss_init() {
-    u32 cpu_idx  = cpu_activated;
     u64 tss_size = (u64) sizeof(tss_t);
-    u64 tss_addr = (u64) percpu_ptr(cpu_idx, tss);
+    u64 tss_addr = (u64) thiscpu_ptr(tss);
     memset((void *) tss_addr, 0, tss_size);
 
     u64 lower = 0UL;
@@ -224,10 +223,10 @@ __INIT void tss_init() {
     lower |=                    0x0000e90000000000UL;   // present 64bit ring3
     upper  = (tss_addr >> 32) & 0x00000000ffffffffUL;   // base  [63:32]
 
-    gdt[2 * cpu_idx + 6] = lower;
-    gdt[2 * cpu_idx + 7] = upper;
+    gdt[2 * cpu_index() + 6] = lower;
+    gdt[2 * cpu_index() + 7] = upper;
 
-    load_tr(((2 * cpu_idx + 6) << 3) | 3);
+    load_tr(((2 * cpu_index() + 6) << 3) | 3);
 }
 
 //------------------------------------------------------------------------------
@@ -267,7 +266,8 @@ static void exp_default(int vec, int_frame_t * f) {
     };
 
     dbg_print("\n");
-    dbg_print("==> Exception #%s vector=0x%02x.\n", mnemonics[vec], vec);
+    dbg_print("==> Exception #%s vector=0x%02x, cpu=%d, errcode=0x%x.\n",
+              mnemonics[vec], vec, cpu_index(), f->errcode);
     dbg_print("    SS:RSP = 0x%02x:0x%016llx\n", f->ss, f->rsp);
     dbg_print("    CS:RIP = 0x%02x:0x%016llx\n", f->cs, f->rip);
 
@@ -280,7 +280,7 @@ static void exp_default(int vec, int_frame_t * f) {
 
 static void int_default(int vec, int_frame_t * f) {
     dbg_print("\n");
-    dbg_print("==> Interrupt vector=0x%02x.\n", vec);
+    dbg_print("==> Interrupt vector=0x%02x, cpu=%d.\n", vec, cpu_index());
     dbg_print("    SS:RSP = 0x%02x:0x%016llx\n", f->ss, f->rsp);
     dbg_print("    CS:RIP = 0x%02x:0x%016llx\n", f->cs, f->rip);
     while (1) {}

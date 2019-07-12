@@ -54,7 +54,7 @@ task_t * task_create(int priority, void * proc,
 }
 
 // work function to be called after task_exit during isr
-static void task_cleanup(task_t * tid) {
+void task_cleanup(task_t * tid) {
     assert(TS_ZOMBIE == tid->state);
     // assert(thiscpu_var(int_depth) != 0);
     raw_spin_take(&tid->lock);

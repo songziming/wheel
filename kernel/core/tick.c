@@ -68,7 +68,6 @@ void wdog_cancel(wdog_t * dog) {
 void tick_proc() {
     if (0 == cpu_index()) {
         atomicul_inc(&tick_count);
-        dbg_print("~");
 
         u32 k = irq_spin_take(&tick_q.lock);
         dlnode_t * node = tick_q.q.head;
@@ -93,7 +92,7 @@ void tick_proc() {
         irq_spin_give(&tick_q.lock, k);
     }
 
-    // sched_tick();
+    sched_tick();
 }
 
 // busy wait

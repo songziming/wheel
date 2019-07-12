@@ -160,8 +160,7 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     work_lib_init();
     sched_lib_init();
 
-    dbg_print("> cpu %02d started.\n", cpu_activated);
-    atomic32_inc((u32 *) &cpu_activated);
+    dbg_print("> cpu %02d started.\n", cpu_activated++);
 
     // we need a temporary tcb to hold rsp
     task_t dummy = { .priority = PRIORITY_IDLE + 1 };
@@ -176,16 +175,50 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
 }
 
 __INIT __NORETURN void sys_init_ap() {
+    // prepare essential cpu features
+    cpu_init();
+    gdt_init();
+    idt_init();
+
+    write_gsbase(percpu_base + cpu_activated * percpu_size);
+    tss_init();
+
+    loapic_dev_init();
+
+    dbg_print("> cpu %02d started.\n", cpu_activated++);
+    sched_yield();
+
+    dbg_print("YOU SHALL NOT SEE THIS LINE!\n");
     while (1) {}
 }
 
 //------------------------------------------------------------------------------
 // post-kernel initialization
 
+// defined in layout.ld
+extern u8 _trampoline_addr;
+extern u8 _trampoline_end;
+
 static void root_proc() {
-    // TODO: copying trampoline code to 0x7c000
-    for (int i = 0; i < cpu_count(); ++i) {
-        //
+    // copy trampoline code to 0x7c000
+    u8 * src = (u8 *) &_trampoline_addr;
+    u8 * dst = (u8 *) phys_to_virt(0x7c000);
+    u64  len = (u64) (&_trampoline_end - &_trampoline_addr);
+    memcpy(dst, src, len);
+
+    for (int i = 1; i < cpu_count(); ++i) {
+        loapic_emit_init(i);            // send INIT
+        tick_delay(10);                 // wait for 10ms
+        loapic_emit_sipi(i, 0x7c);      // send SIPI
+        tick_delay(1);                  // wait for 1ms
+        loapic_emit_sipi(i, 0x7c);      // send SIPI again
+        tick_delay(1);                  // wait for 1ms
+
+        // same boot stack is used, have to start cpus one-by-one
+        while ((percpu_var(i, tid_prev) == NULL) ||
+               (percpu_var(i, tid_prev)->priority > PRIORITY_IDLE)) {
+            tick_delay(10);
+        }
     }
 
     dbg_print("running inside task.\n");
