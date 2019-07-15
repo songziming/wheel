@@ -278,6 +278,8 @@ usize vsnprintf(char * buf, usize size, const char * fmt, va_list args) {
             ++fmt;
             break;
         case 'p':
+            qualifier = 'L';
+            // fallthrough
         case 'x':
             flags |= FLG_LOWER;
             // fallthrough

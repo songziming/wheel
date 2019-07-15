@@ -8,16 +8,20 @@
 typedef struct task task_t;
 
 typedef struct turnstile {
+    int      count;
     u32      priorities;
     dllist_t tasks[PRIORITY_COUNT];
 } turnstile_t;
 
-#define TURNSTILE_INIT ((turnstile_t) { 0U, { DLLIST_INIT } })
+// #define TURNSTILE_INIT ((turnstile_t) { 0, 0, { DLLIST_INIT } })
 
-extern void     turnstile_put(task_t * tid);
-extern task_t * turnstile_top();
-extern task_t * turnstile_pop();
+extern void     turnstile_init  (turnstile_t * ts);
+extern void     turnstile_push  (turnstile_t * ts, task_t * tid);
+extern void     turnstile_remove(turnstile_t * ts, task_t * tid);
+extern task_t * turnstile_peek  (turnstile_t * ts);
+extern task_t * turnstile_pop   (turnstile_t * ts);
 
+extern __PERCPU int      no_preempt;
 extern __PERCPU task_t * tid_prev;
 extern __PERCPU task_t * tid_next;
 
