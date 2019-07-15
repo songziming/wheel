@@ -331,3 +331,15 @@ void regs_init(regs_t * regs, usize sp, void * proc,
     regs->rsp->rdx    = (u64) a3;
     regs->rsp->rcx    = (u64) a4;
 }
+
+// void regs_ctx_set(regs_t * regs, usize ctx) {
+//     regs->cr3 = (u64) ctx;
+// }
+
+// usize regs_ctx_get(regs_t * regs) {
+//     return (usize) regs->cr3;
+// }
+
+void smp_reschedule(int cpu) {
+    loapic_emit_ipi(cpu, VECNUM_RESCHED);
+}

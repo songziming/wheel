@@ -2,8 +2,21 @@
 #define CORE_SCHED_H
 
 #include <base.h>
+#include <core/task.h>
+#include <misc/list.h>
 
 typedef struct task task_t;
+
+typedef struct turnstile {
+    u32      priorities;
+    dllist_t tasks[PRIORITY_COUNT];
+} turnstile_t;
+
+#define TURNSTILE_INIT ((turnstile_t) { 0U, { DLLIST_INIT } })
+
+extern void     turnstile_put(task_t * tid);
+extern task_t * turnstile_top();
+extern task_t * turnstile_pop();
 
 extern __PERCPU task_t * tid_prev;
 extern __PERCPU task_t * tid_next;

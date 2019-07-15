@@ -240,5 +240,6 @@ extern void user_return(usize ip, usize sp);
 
 extern void regs_init(regs_t * regs, usize sp, void * proc,
                       void * a1, void * a2, void * a3, void * a4);
+extern void smp_reschedule(int cpu)；
 
 #endif // ARCH_X86_64_LIBA_CPU_H

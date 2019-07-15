@@ -1,17 +1,47 @@
 #include <wheel.h>
 
-typedef struct ready_q {
-    spin_t   lock;
-    int      load;                  // number of tasks
-    u32      priorities;            // bit mask
-    dllist_t tasks[PRIORITY_COUNT]; // protected by ready_q.lock
-} ready_q_t;
+//------------------------------------------------------------------------------
+// turnstile
 
-static __PERCPU ready_q_t ready_q;
+static task_t * find_highest_task(turnstile_t * ts) {
+    assert(0 != ts->priorities);
+    int pri = CTZ32(rdy->priorities);
+    return PARENT(rdy->tasks[pri].head, task_t, dl_sched);
+}
 
-__PERCPU u32      no_preempt;
-__PERCPU task_t * tid_prev;
-__PERCPU task_t * tid_next;         // also protected by ready_q.lock
+void turnstile_put(task_t * tid) {
+    int pri = tid->priority;
+    ts->priorities |= pri;
+    dl_push_tail(&ts->tasks[pri], &tid->dl_sched);
+}
+
+task_t * turnstile_top() {
+    int pri = CTZ32(ts->priorities);
+    return PARENT(ts->tasks[pri].head, task_t, dl_sched);
+}
+
+task_t * turnstile_pop() {
+    int pri = CTZ32(ts->priorities);
+    return PARENT(dl_pop_head(ts->tasks[pri]), task_t, dl_sched);
+}
+
+
+// typedef struct ready_q {
+//     spin_t   lock;
+//     int      load;                  // number of tasks
+//     u32      priorities;            // bit mask
+//     dllist_t tasks[PRIORITY_COUNT]; // protected by ready_q.lock
+// } ready_q_t;
+
+// static __PERCPU ready_q_t ready_q;
+
+static __PERCPU spin_t      sched_lock;
+static __PERCPU int         sched_load;
+static __PERCPU turnstile_t sched_queue;
+       __PERCPU task_t *    tid_next;         // also protected by sched_lock
+
+       __PERCPU task_t *    tid_prev;
+       __PERCPU u32         no_preempt;
 
 //------------------------------------------------------------------------------
 // helper function
@@ -27,14 +57,16 @@ static int find_lowest_cpu(task_t * tid) {
     // find the cpu with lowest priority
     if (-1 != tid->last_cpu) {
         lowest_cpu = tid->last_cpu;
-        lowest_pri = CTZ32(percpu_ptr(lowest_cpu, ready_q)->priorities);
+        // lowest_pri = CTZ32(percpu_ptr(lowest_cpu, ready_q)->priorities);
+        lowest_pri = CTZ32(percpu_ptr(lowest_cpu, sched_priorities));
     } else {
         lowest_cpu = -1;
         lowest_pri = PRIORITY_IDLE+1;
     }
     for (int i = 0; i < cpu_activated; ++i) {
-        ready_q_t * rdy = percpu_ptr(i, ready_q);
-        int         pri = CTZ32(rdy->priorities);
+        // ready_q_t * rdy = percpu_ptr(i, ready_q);
+        // int         pri = CTZ32(rdy->priorities);
+        int pri = CTZ32(percpu_var(i, sched_priorities));
         if (pri < lowest_pri) {
             lowest_cpu  = i;
             lowest_pri  = pri;
@@ -49,16 +81,16 @@ static int find_lowest_cpu(task_t * tid) {
     // if can't preempt, choose the lowest loaded cpu instead
     if (-1 != tid->last_cpu) {
         lowest_cpu  = tid->last_cpu;
-        lowest_load = percpu_ptr(lowest_cpu, ready_q)->load;
+        lowest_load = percpu_ptr(lowest_cpu, sched_load);
     } else {
         lowest_cpu  = -1;
         lowest_load = 0x7fffffff;
     }
     for (int i = 0; i < cpu_activated; ++i) {
-        ready_q_t * rdy = percpu_ptr(i, ready_q);
+        // ready_q_t * rdy = percpu_ptr(i, ready_q);
         if (rdy->load < lowest_load) {
             lowest_cpu  = i;
-            lowest_load = rdy->load;
+            lowest_load = percpu_var(i, sched_load);
         }
     }
 
