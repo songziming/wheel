@@ -28,11 +28,19 @@ void turnstile_remove(turnstile_t * ts, task_t * tid) {
 }
 
 task_t * turnstile_peek(turnstile_t * ts) {
+    if ((0 == ts->priorities) && (0 == ts->count)) {
+        return NULL;
+    }
+
     int pri = CTZ32(ts->priorities);
     return PARENT(ts->tasks[pri].head, task_t, dl_sched);
 }
 
 task_t * turnstile_pop(turnstile_t * ts) {
+    if ((0 == ts->priorities) && (0 == ts->count)) {
+        return NULL;
+    }
+
     int        pri = CTZ32(ts->priorities);
     dlnode_t * dl  = dl_pop_head(&ts->tasks[pri]);
     if (dl_is_empty(&ts->tasks[pri])) {

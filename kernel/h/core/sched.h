@@ -13,8 +13,6 @@ typedef struct turnstile {
     dllist_t tasks[PRIORITY_COUNT];
 } turnstile_t;
 
-// #define TURNSTILE_INIT ((turnstile_t) { 0, 0, { DLLIST_INIT } })
-
 extern void     turnstile_init  (turnstile_t * ts);
 extern void     turnstile_push  (turnstile_t * ts, task_t * tid);
 extern void     turnstile_remove(turnstile_t * ts, task_t * tid);
