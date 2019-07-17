@@ -12,11 +12,10 @@ typedef struct task {
     spin_t      lock;
     dlnode_t    dl_sched;       // node in ready queue
 
-    cpuset_t    affinity;
-    int         last_cpu;
-
     u32         state;
     int         priority;
+    cpuset_t    affinity;
+    int         last_cpu;
     int         timeslice;
     int         remaining;
 

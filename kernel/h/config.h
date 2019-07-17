@@ -11,7 +11,7 @@
 
 #define CFG_DEBUG_BUFF_SIZE     0x1000
 
-#define CFG_SYS_CLOCK_RATE      1000
-#define CFG_TASK_TIMESLICE      200
+#define CFG_SYS_CLOCK_RATE      50
+#define CFG_TASK_TIMESLICE      10
 
 #endif // CONFIG_H

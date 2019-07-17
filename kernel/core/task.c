@@ -42,10 +42,11 @@ task_t * task_create(int priority, void * proc,
 
     // init tcb fields
     tid->lock      = SPIN_INIT;
-    tid->affinity  = 0UL;
-    tid->last_cpu  = -1;
+    tid->dl_sched  = DLNODE_INIT;
     tid->state     = TS_SUSPEND;
     tid->priority  = priority;
+    tid->affinity  = 0UL;
+    tid->last_cpu  = -1;
     tid->timeslice = CFG_TASK_TIMESLICE;
     tid->remaining = CFG_TASK_TIMESLICE;
     tid->kstack    = kstack;
@@ -56,15 +57,7 @@ task_t * task_create(int priority, void * proc,
 // work function to be called after task_exit during isr
 void task_cleanup(task_t * tid) {
     assert(TS_ZOMBIE == tid->state);
-    // assert(thiscpu_var(int_depth) != 0);
     raw_spin_take(&tid->lock);
-
-    // // unmap and remove vm region for user stack
-    // if ((NULL != tid->process) && (NULL != tid->ustack)) {
-    //     vmspace_unmap(&tid->process->vm, tid->ustack);
-    //     vmspace_free (&tid->process->vm, tid->ustack);
-    //     tid->ustack = NULL;
-    // }
 
     // free all pages in kernel stack
     int order = CTZL(CFG_KERNEL_STACK_SIZE) - PAGE_SHIFT;
@@ -73,16 +66,7 @@ void task_cleanup(task_t * tid) {
     assert(page_array[tid->kstack].block == 1);
     page_block_free(tid->kstack, order);
 
-    // // remove this thread from the process
-    // if (NULL != tid->process) {
-    //     dl_remove(&tid->process->tasks, &tid->dl_proc);
-    //     if ((NULL == tid->process->tasks.head) &&
-    //         (NULL == tid->process->tasks.tail)) {
-    //         // if this is the last thread, also delete the process
-    //         process_delete(tid->process);
-    //     }
-    // }
-
+    // release tcb
     kmem_free(sizeof(task_t), tid);
 }
 
@@ -92,9 +76,8 @@ void task_exit() {
 
     u32 key = irq_spin_take(&tid->lock);
     sched_stop(tid, TS_ZOMBIE);
-    irq_spin_give(&tid->lock, key);
-
     work_enqueue(task_cleanup, tid, 0,0,0);
+    irq_spin_give(&tid->lock, key);
 
     task_switch();
 }
@@ -124,16 +107,16 @@ void task_resume(task_t * tid) {
     if (cpu_index() == cpu) {
         task_switch();
     } else {
-        // smp_reschedule(cpu);
+        smp_reschedule(cpu);
     }
 }
 
 void task_delay(int ticks) {
-    wdog_t   wd;
+    wdog_t wd;
+    wdog_init(&wd);
+
     task_t * tid = thiscpu_var(tid_prev);
     u32      key = irq_spin_take(&tid->lock);
-
-    wdog_init(&wd);
     sched_stop(tid, TS_DELAY);
     wdog_start(&wd, ticks, task_wakeup, tid, 0,0,0);
     irq_spin_give(&tid->lock, key);
@@ -157,6 +140,6 @@ void task_wakeup(task_t * tid) {
     if (cpu_index() == cpu) {
         task_switch();
     } else {
-        // smp_reschedule(cpu);
+        smp_reschedule(cpu);
     }
 }

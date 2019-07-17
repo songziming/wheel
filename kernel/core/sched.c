@@ -1,62 +1,52 @@
 #include <wheel.h>
 
 //------------------------------------------------------------------------------
-// turnstile
-
-void turnstile_init(turnstile_t * ts) {
-    ts->count = 0;
-    ts->priorities = 0;
-    for (int i = 0; i < PRIORITY_COUNT; ++i) {
-        ts->tasks[i] = DLLIST_INIT;
-    }
-}
-
-void turnstile_push(turnstile_t * ts, task_t * tid) {
-    int pri = tid->priority;
-    dl_push_tail(&ts->tasks[pri], &tid->dl_sched);
-    ts->priorities |= 1U << pri;
-    ++ts->count;
-}
-
-void turnstile_remove(turnstile_t * ts, task_t * tid) {
-    int pri = tid->priority;
-    dl_remove(&ts->tasks[pri], &tid->dl_sched);
-    if (dl_is_empty(&ts->tasks[pri])) {
-        ts->priorities &= ~(1U << pri);
-    }
-    --ts->count;
-}
-
-task_t * turnstile_peek(turnstile_t * ts) {
-    if ((0 == ts->priorities) && (0 == ts->count)) {
-        return NULL;
-    }
-
-    int pri = CTZ32(ts->priorities);
-    return PARENT(ts->tasks[pri].head, task_t, dl_sched);
-}
-
-task_t * turnstile_pop(turnstile_t * ts) {
-    if ((0 == ts->priorities) && (0 == ts->count)) {
-        return NULL;
-    }
-
-    int        pri = CTZ32(ts->priorities);
-    dlnode_t * dl  = dl_pop_head(&ts->tasks[pri]);
-    if (dl_is_empty(&ts->tasks[pri])) {
-        ts->priorities &= ~(1U << pri);
-    }
-    --ts->count;
-    return PARENT(dl, task_t, dl_sched);
-}
-
-//------------------------------------------------------------------------------
 // ready queue
 
 typedef struct ready_q {
     spin_t      lock;
-    turnstile_t ts;
+    int         count;
+    u32         priorities;
+    dllist_t    tasks[PRIORITY_COUNT];
 } ready_q_t;
+
+static void ready_q_push(ready_q_t * rdy, task_t * tid) {
+    int pri = tid->priority;
+    dl_push_tail(&rdy->tasks[pri], &tid->dl_sched);
+    rdy->priorities |= 1U << pri;
+    ++rdy->count;
+}
+
+static task_t * ready_q_pop(ready_q_t * rdy) {
+    assert(0 != rdy->count);
+    assert(0 != rdy->priorities);
+    int        pri = CTZ32(rdy->priorities);
+    dlnode_t * dl  = dl_pop_head(&rdy->tasks[pri]);
+    if (dl_is_empty(&rdy->tasks[pri])) {
+        rdy->priorities &= ~(1U << pri);
+    }
+    --rdy->count;
+    return PARENT(dl, task_t, dl_sched);
+}
+
+static task_t * ready_q_head(ready_q_t * rdy) {
+    assert(0 != rdy->count);
+    assert(0 != rdy->priorities);
+    int pri = CTZ32(rdy->priorities);
+    return PARENT(rdy->tasks[pri].head, task_t, dl_sched);
+}
+
+static void ready_q_remove(ready_q_t * rdy, task_t * tid) {
+    int pri = tid->priority;
+    dl_remove(&rdy->tasks[pri], &tid->dl_sched);
+    if (dl_is_empty(&rdy->tasks[pri])) {
+        rdy->priorities &= ~(1U << pri);
+    }
+    --rdy->count;
+}
+
+//------------------------------------------------------------------------------
+// scheduler
 
 static __PERCPU ready_q_t ready_q;
 
@@ -75,23 +65,23 @@ static int find_lowest_cpu(task_t * tid) {
     if (-1 != tid->last_cpu) {
         ready_q_t * rdy = percpu_ptr(tid->last_cpu, ready_q);
         lowest_cpu  = tid->last_cpu;
-        lowest_pri  = CTZ32(rdy->ts.priorities);
-        lowest_load = rdy->ts.count;
+        lowest_pri  = CTZ32(rdy->priorities);
+        lowest_load = rdy->count;
     }
 
     // find the cpu with lowest priority
     for (int i = 0; i < cpu_count(); ++i) {
         ready_q_t * rdy = percpu_ptr(i, ready_q);
-        int         pri = CTZ32(rdy->ts.priorities);
+        int         pri = CTZ32(rdy->priorities);
         if (pri > lowest_pri) {
             continue;
         }
-        if ((pri == lowest_pri) && (rdy->ts.count >= lowest_load)) {
+        if ((pri == lowest_pri) && (rdy->count >= lowest_load)) {
             continue;
         }
         lowest_cpu  = i;
         lowest_pri  = pri;
-        lowest_load = rdy->ts.count;
+        lowest_load = rdy->count;
     }
 
     return lowest_cpu;
@@ -113,8 +103,8 @@ u32 sched_stop(task_t * tid, u32 bits) {
     raw_spin_take(&rdy->lock);
 
     // remove task and update tid_next
-    turnstile_remove(&rdy->ts, tid);
-    percpu_var(cpu, tid_next) = turnstile_peek(&rdy->ts);
+    ready_q_remove(rdy, tid);
+    percpu_var(cpu, tid_next) = ready_q_head(rdy);
 
     // after this point, `tid_next` might be changed again
     raw_spin_give(&rdy->lock);
@@ -137,9 +127,9 @@ u32 sched_cont(task_t * tid, u32 bits) {
     raw_spin_take(&rdy->lock);
 
     // push task and update tid_next
-    turnstile_push(&rdy->ts, tid);
+    ready_q_push(rdy, tid);
     tid->last_cpu = cpu;
-    percpu_var(cpu, tid_next) = turnstile_peek(&rdy->ts);
+    percpu_var(cpu, tid_next) = ready_q_head(rdy);
 
     // after this point, `tid_next` might be changed again
     raw_spin_give(&rdy->lock);
@@ -167,10 +157,10 @@ void sched_yield() {
     u32         key = irq_spin_take(&rdy->lock);
 
     // round robin only if current task is the head task
-    if (turnstile_peek(&rdy->ts) == tid) {
-        turnstile_remove(&rdy->ts, tid);
-        turnstile_push  (&rdy->ts, tid);
-        thiscpu_var(tid_next) = turnstile_peek(&rdy->ts);
+    if (ready_q_head(rdy) == tid) {
+        assert(ready_q_pop(rdy) == tid);
+        ready_q_push(rdy, tid);
+        thiscpu_var(tid_next) = ready_q_head(rdy);
     }
 
     irq_spin_give(&rdy->lock, key);
@@ -205,16 +195,22 @@ static void idle_proc() {
 
 __INIT void sched_lib_init() {
     for (int i = 0; i < cpu_count(); ++i) {
+        ready_q_t * rdy = percpu_ptr(i, ready_q);
+        rdy->lock       = SPIN_INIT;
+        rdy->count      = 0;
+        rdy->priorities = 1U << PRIORITY_IDLE;
+        for (int i = 0; i < PRIORITY_COUNT; ++i) {
+            rdy->tasks[i] = DLLIST_INIT;
+        }
+
         task_t * idle  = task_create(PRIORITY_IDLE, idle_proc, 0,0,0,0);
         idle->state    = TS_READY;
         idle->affinity = 1UL << i;
         idle->last_cpu = i;
+        ready_q_push(rdy, idle);
 
-        ready_q_t * rdy = percpu_ptr(i, ready_q);
-        turnstile_init(&rdy->ts);
-        turnstile_push(&rdy->ts, idle);
-        rdy->lock = SPIN_INIT;
-
-        percpu_var(i, tid_next) = idle;
+        percpu_var(i, tid_prev)   = NULL;
+        percpu_var(i, tid_next)   = idle;
+        percpu_var(i, no_preempt) = 0;
     }
 }

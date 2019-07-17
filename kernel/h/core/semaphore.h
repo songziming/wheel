@@ -7,10 +7,10 @@
 #include <misc/list.h>
 
 typedef struct semaphore {
-    spin_t      lock;
-    int         limit;
-    int         value;
-    turnstile_t ts;
+    spin_t   lock;
+    dllist_t pend_q;
+    int      limit;
+    int      value;
 } semaphore_t;
 
 #define SEM_WAIT_FOREVER     ((int) -1)

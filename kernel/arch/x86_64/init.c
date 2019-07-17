@@ -204,27 +204,10 @@ __INIT __NORETURN void sys_init_ap() {
 extern u8 _trampoline_addr;
 extern u8 _trampoline_end;
 
-static void a_proc() {
-    dbg_print("a running on cpu %d.\n", cpu_index());
-    while (1) {
-        dbg_print("A");
-        tick_delay(100);
-    }
-}
-
-static void b_proc() {
-    dbg_print("b running on cpu %d.\n", cpu_index());
-    while (1) {
-        dbg_print("B");
-        tick_delay(100);
-    }
-}
-
 static wdog_t      wd;
 static semaphore_t sem;
 
 static void wd_proc() {
-    // dbg_print("tick!");
     semaphore_give(&sem);
     wdog_start(&wd, CFG_SYS_CLOCK_RATE, wd_proc, 0,0,0,0);
 }
@@ -258,28 +241,20 @@ static void root_proc() {
     tick_delay(4);
     dbg_print("ok.\n");
 
-
     wdog_init(&wd);
     semaphore_init(&sem, 1, 1);
 
-    semaphore_take(&sem, 0);
-    wd_proc();
+    // semaphore_take(&sem, 0);
+    // wd_proc();
 
     while (1) {
-        semaphore_take(&sem, 0);
-        dbg_print("advancing...");
+        if (OK == semaphore_take(&sem, CFG_SYS_CLOCK_RATE)) {
+            dbg_print("taken ");
+        } else {
+            dbg_print("timeout ");
+        }
+        // dbg_print("advancing ");
     }
-
-    // task_t * a = task_create(PRIORITY_NONRT, a_proc, 0,0,0,0);
-    // task_t * b = task_create(PRIORITY_NONRT, b_proc, 0,0,0,0);
-    // task_resume(a);
-    // task_resume(b);
-
-    // dbg_print("root running on cpu %d.\n", cpu_index());
-    // while (1) {
-    //     dbg_print("R");
-    //     tick_delay(200);
-    // }
 
     task_exit();
     dbg_print("you shall not see this line!\n");

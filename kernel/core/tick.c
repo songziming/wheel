@@ -95,6 +95,10 @@ void tick_proc() {
     sched_tick();
 }
 
+usize tick_get() {
+    return tick_count;
+}
+
 // busy wait
 void tick_delay(int ticks) {
     usize start = tick_count;

@@ -176,7 +176,7 @@ static __INIT int calibrate_freq() {
     // now read loapic counter again, and disable PIT channel 2
     u32 end_count = read32(loapic_base + LOAPIC_CCR);
     out8(0x61, in8(0x61) & ~0x01);
-    return (start_count - end_count) * 20;  // 1s = 50ms
+    return (start_count - end_count) * 20;  // 1s = 20 * 50ms
 }
 
 // initialize the local apic of current cpu
