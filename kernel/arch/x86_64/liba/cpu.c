@@ -151,9 +151,34 @@ extern void load_tr  (u16 sel);
 extern void irq_entries  ();
 extern void syscall_entry();
 
+// detected cpu features
+char vendor_id[13];
+u32  feat_ecx;
+u32  feat_edx;
+
 __INIT void cpu_init() {
     if (0 == cpu_activated) {
-        // TODO: query cpu capabilities (cache line size, floating point support, etc)
+        u32 a, b, c, d;
+
+        // get cpu vendor id string
+        a = 0;
+        cpuid(&a, &b, &c, &d);
+        memcpy(&vendor_id[0], &b, sizeof(u32));
+        memcpy(&vendor_id[4], &d, sizeof(u32));
+        memcpy(&vendor_id[8], &c, sizeof(u32));
+        vendor_id[12] = 0;
+
+        // get cpu features
+        a = 1;
+        cpuid(&a, &b, &c, &d);
+        feat_ecx = c;
+        feat_edx = d;
+
+        // get cache and tlb information
+        a = 2;
+        cpuid(&a, &b, &c, &d);
+
+        dbg_print("cpu: %s.\n", vendor_id);
     }
 
     u64 cr0 = read_cr0();
@@ -163,10 +188,15 @@ __INIT void cpu_init() {
     cr0 |=  (1UL << 16);        // cr0.WP: enable write protection
     write_cr0(cr0);
 
-    // enable NX bit in page entries
+    // enable syscall/sysret on intel processors
     u64 efer = read_msr(0xc0000080);
-    efer |= (1UL <<  0);        // enable syscall/sysret on intel processors
-    efer |= (1UL << 11);        // no-execute mode enable
+    efer |= (1UL <<  0);
+    write_msr(0xc0000080, efer);
+
+    // enable NX bit in page entries
+    // TODO: move to mmu.c
+    efer = read_msr(0xc0000080);
+    efer |= (1UL << 11);
     write_msr(0xc0000080, efer);
 
     // setup msr for syscall/sysret

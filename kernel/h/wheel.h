@@ -11,6 +11,7 @@
 #include <core/work.h>
 #include <core/sched.h>
 #include <core/semaphore.h>
+#include <core/pipe.h>
 
 #include <mem/allot.h>
 #include <mem/page.h>

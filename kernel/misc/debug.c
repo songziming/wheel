@@ -7,8 +7,8 @@
 // circular buffer, write to head, read from tail
 static char   dbg_buff[CFG_DEBUG_BUFF_SIZE];
 static spin_t dbg_lock = SPIN_INIT;
-static usize  head     = 0;
-static usize  tail     = 0;
+static usize  w_offset = 0;
+static usize  r_offset = 0;
 
 // arch specific hook functions
 write_func_t dbg_write_hook = NULL;
@@ -18,11 +18,11 @@ trace_func_t dbg_trace_hook = NULL;
 static usize buff_read(char * buf, usize len) {
     u32 key = irq_spin_take(&dbg_lock);
 
-    usize copy = MIN(head - tail, len);
+    usize copy = MIN(w_offset - r_offset, len);
     for (unsigned int i = 0; i < copy; ++i) {
-        buf[i] = dbg_buff[(tail+i) & (CFG_DEBUG_BUFF_SIZE-1)];
+        buf[i] = dbg_buff[(r_offset+i) & (CFG_DEBUG_BUFF_SIZE-1)];
     }
-    tail += copy;
+    r_offset += copy;
 
     irq_spin_give(&dbg_lock, key);
     return copy;
@@ -33,11 +33,11 @@ static usize buff_write(const char * buf, usize len) {
     u32 key = irq_spin_take(&dbg_lock);
 
     for (unsigned int i = 0; i < len; ++i) {
-        dbg_buff[(head+i) & (CFG_DEBUG_BUFF_SIZE-1)] = buf[i];
+        dbg_buff[(w_offset+i) & (CFG_DEBUG_BUFF_SIZE-1)] = buf[i];
     }
-    head += len;
-    if (head - tail > CFG_DEBUG_BUFF_SIZE) {
-        tail = head - CFG_DEBUG_BUFF_SIZE;
+    w_offset += len;
+    if (w_offset - r_offset > CFG_DEBUG_BUFF_SIZE) {
+        r_offset = w_offset - CFG_DEBUG_BUFF_SIZE;
     }
 
     irq_spin_give(&dbg_lock, key);
