@@ -6,7 +6,6 @@
 typedef struct sem_waiter {
     dlnode_t dl;
     task_t * tid;
-    int      pri;
     int      up;
 } sem_waiter_t;
 
@@ -51,6 +50,8 @@ static void semaphore_timeout(task_t * tid, int * expired) {
 // return ERROR if failed (might block)
 // this function cannot be called inside ISR
 int semaphore_take(semaphore_t * sem, int timeout) {
+    assert(0 == thiscpu_var(int_depth));
+
     preempt_lock();
     raw_spin_take(&sem->lock);
 
@@ -62,16 +63,14 @@ int semaphore_take(semaphore_t * sem, int timeout) {
         return OK;
     }
 
-
     // resource not available, pend current task
     task_t * tid = thiscpu_var(tid_prev);
     raw_spin_take(&tid->lock);
 
-    // TODO: order by priority?
+    // put waiter into the pend queue
     sem_waiter_t waiter;
     waiter.dl  = DLNODE_INIT;
     waiter.tid = tid;
-    waiter.pri = tid->priority;
     waiter.up  = NO;
     dl_push_tail(&sem->pend_q, &waiter.dl);
 
@@ -114,6 +113,25 @@ int semaphore_take(semaphore_t * sem, int timeout) {
             return OK;
         }
     }
+}
+
+// this function can be called during ISR
+int semaphore_trytake(semaphore_t * sem) {
+    task_t * tid = thiscpu_var(tid_prev);
+
+    u32 key = irq_spin_take(&sem->lock);
+    raw_spin_take(&tid->lock);
+
+    if (sem->value) {
+        --sem->value;
+        raw_spin_give(&tid->lock);
+        irq_spin_give(&sem->lock, key);
+        return OK;
+    }
+
+    raw_spin_give(&tid->lock);
+    irq_spin_give(&sem->lock, key);
+    return ERROR;
 }
 
 // this function can be called inside ISR
