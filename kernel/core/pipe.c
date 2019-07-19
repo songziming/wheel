@@ -1,30 +1,20 @@
 #include <wheel.h>
 
-void pipe_init(pipe_t * pipe) {
-    pipe->lock     = SPIN_INIT;
-    pipe->pages    = PGLIST_INIT;
-    pipe->r_offset = 0;
-    pipe->w_offset = 0;
+//------------------------------------------------------------------------------
+// pipe device backingstore
 
-    pfn_t pn = page_block_alloc_or_fail(ZONE_NORMAL|ZONE_DMA, 0);
-    page_array[pn].block = 1;
-    page_array[pn].order = 0;
-    page_array[pn].type  = PT_PIPE;
-    pglist_push_tail(&pipe->pages, pn);
-}
+typedef struct pipe_dev {
+    iodev_t  dev;
+    pglist_t pages;
+    usize    r_offset;  // must within pages.head [0, PAGE_SIZE-1]
+    usize    w_offset;  // must within pages.tail [0, PAGE_SIZE-1]
+} pipe_dev_t;
 
-void pipe_destroy(pipe_t * pipe) {
-    raw_spin_take(&pipe->lock);
-    pglist_free_all(&pipe->pages);
-}
-
-usize pipe_read(pipe_t * pipe, u8 * buf, usize len) {
+static usize pipe_read(pipe_dev_t * pipe, u8 * buf, usize len) {
     usize backup_len = len;
-    raw_spin_take(&pipe->lock);
 
     if ((pipe->pages.head  == pipe->pages.tail) &&
         (pipe->r_offset == pipe->w_offset)) {
-        raw_spin_give(&pipe->lock);
         return 0;
     }
 
@@ -39,7 +29,6 @@ usize pipe_read(pipe_t * pipe, u8 * buf, usize len) {
             buf            += copy;
             len            -= copy;
 
-            raw_spin_give(&pipe->lock);
             return backup_len - len;
         }
 
@@ -60,12 +49,10 @@ usize pipe_read(pipe_t * pipe, u8 * buf, usize len) {
         }
     }
 
-    raw_spin_give(&pipe->lock);
     return backup_len;
 }
 
-usize pipe_write(pipe_t * pipe, u8 * buf, usize len) {
-    raw_spin_take(&pipe->lock);
+static usize pipe_write(pipe_dev_t * pipe, const u8 * buf, usize len) {
     usize backup_len = len;
 
     while (len) {
@@ -86,6 +73,42 @@ usize pipe_write(pipe_t * pipe, u8 * buf, usize len) {
             pipe->w_offset = 0;
         }
     }
-    raw_spin_give(&pipe->lock);
+
     return backup_len;
+}
+
+//------------------------------------------------------------------------------
+// pipe driver and device
+
+static iodrv_t pipe_drv = {
+    // .open  = NULL,
+    // .close = NULL,
+    .read  = pipe_read,
+    .write = pipe_write,
+};
+
+iodev_t * pipe_dev_create() {
+    pipe_dev_t * pipe = kmem_alloc(sizeof(pipe_dev_t));
+
+    pipe->dev      = IODEV_INIT;
+    pipe->dev.drv  = &pipe_drv;
+
+    // pipe->lock     = SPIN_INIT;
+    pipe->pages    = PGLIST_INIT;
+    pipe->r_offset = 0;
+    pipe->w_offset = 0;
+
+    pfn_t pn = page_block_alloc_or_fail(ZONE_NORMAL|ZONE_DMA, 0);
+    page_array[pn].block = 1;
+    page_array[pn].order = 0;
+    page_array[pn].type  = PT_PIPE;
+    pglist_push_tail(&pipe->pages, pn);
+    return pipe;
+}
+
+void pipe_dev_destroy(iodev_t * dev) {
+    // raw_spin_take(&pipe->lock);
+    pipe_dev_t * pipe = (pipe_dev_t *) dev;
+    pglist_free_all(&pipe->pages);
+    kmem_free(sizeof(pipe_dev_t), pipe);
 }

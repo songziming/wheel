@@ -2,20 +2,15 @@
 #define CORE_PIPE_H
 
 #include <base.h>
-#include <core/spin.h>
-#include <mem/page.h>
+// #include <core/spin.h>
+// #include <mem/page.h>
 
-// plain pipe, non blocking
-typedef struct pipe {
-    spin_t   lock;
-    pglist_t pages;
-    usize    r_offset;  // must within pages.head [0, PAGE_SIZE-1]
-    usize    w_offset;  // must within pages.tail [0, PAGE_SIZE-1]
-} pipe_t;
+// extern void  pipe_init   (pipe_t * pipe);
+// extern void  pipe_destroy(pipe_t * pipe);
+// extern usize pipe_read   (pipe_t * pipe, u8 * buf, usize len);
+// extern usize pipe_write  (pipe_t * pipe, u8 * buf, usize len);
 
-extern void  pipe_init   (pipe_t * pipe);
-extern void  pipe_destroy(pipe_t * pipe);
-extern usize pipe_read   (pipe_t * pipe, u8 * buf, usize len);
-extern usize pipe_write  (pipe_t * pipe, u8 * buf, usize len);
+extern iodev_t * pipe_dev_create();
+extern void      pipe_dev_delete(iodev_t * dev);
 
 #endif // CORE_PIPE_H
