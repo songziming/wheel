@@ -83,8 +83,8 @@ static usize pipe_write(pipe_dev_t * pipe, const u8 * buf, usize len) {
 static iodrv_t pipe_drv = {
     // .open  = NULL,
     // .close = NULL,
-    .read  = pipe_read,
-    .write = pipe_write,
+    .read  = (ios_read_t)  pipe_read,
+    .write = (ios_write_t) pipe_write,
 };
 
 iodev_t * pipe_dev_create() {
@@ -103,7 +103,8 @@ iodev_t * pipe_dev_create() {
     page_array[pn].order = 0;
     page_array[pn].type  = PT_PIPE;
     pglist_push_tail(&pipe->pages, pn);
-    return pipe;
+
+    return (iodev_t *) pipe;
 }
 
 void pipe_dev_destroy(iodev_t * dev) {

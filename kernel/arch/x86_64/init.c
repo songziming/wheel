@@ -247,14 +247,17 @@ static void root_proc() {
     // semaphore_take(&sem, 0);
     // wd_proc();
 
-    while (1) {
-        if (OK == semaphore_take(&sem, CFG_SYS_CLOCK_RATE)) {
-            dbg_print("taken ");
-        } else {
-            dbg_print("timeout ");
-        }
-        // dbg_print("advancing ");
-    }
+    // while (1) {
+    //     if (OK == semaphore_take(&sem, CFG_SYS_CLOCK_RATE)) {
+    //         dbg_print("taken ");
+    //     } else {
+    //         dbg_print("timeout ");
+    //     }
+    //     // dbg_print("advancing ");
+    // }
+
+    fdesc_t * pipe_desc = ios_open("hello");
+    dbg_print("openedg pipe file %p.\n", pipe_desc);
 
     task_exit();
     dbg_print("you shall not see this line!\n");

@@ -4,8 +4,8 @@
 #include <base.h>
 
 typedef struct spin {
-    u32 tkt;    // ticket counter
-    u32 svc;    // service counter
+    int tkt;    // ticket counter
+    int svc;    // service counter
 } spin_t;
 
 #define SPIN_INIT ((spin_t) { 0, 0 })

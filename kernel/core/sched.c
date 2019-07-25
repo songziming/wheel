@@ -141,12 +141,12 @@ u32 sched_cont(task_t * tid, u32 bits) {
 
 // disable task preemption
 void preempt_lock() {
-    atomic32_inc((u32 *) thiscpu_ptr(no_preempt));
+    atomic32_inc(thiscpu_ptr(no_preempt));
 }
 
 // re-enable task preemption, caller needs to call `task_switch` after this
 void preempt_unlock() {
-    atomic32_dec((u32 *) thiscpu_ptr(no_preempt));
+    atomic32_dec(thiscpu_ptr(no_preempt));
 }
 
 // this function might be called during tick_advance
