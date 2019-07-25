@@ -259,6 +259,10 @@ static void root_proc() {
     fdesc_t * pipe_desc = ios_open("hello");
     dbg_print("openedg pipe file %p.\n", pipe_desc);
 
+    u8 data[32];
+    usize readlen = ios_read(pipe_desc, data, 32);
+    dbg_print("read %d bytes from pipe file.\n", readlen);
+
     task_exit();
     dbg_print("you shall not see this line!\n");
 }

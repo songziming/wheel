@@ -2,6 +2,7 @@
 #define CORE_IOS_H
 
 #include <base.h>
+#include <core/semaphore.h>
 
 typedef struct iodrv iodrv_t;
 typedef struct iodev iodev_t;
@@ -35,6 +36,7 @@ struct fdesc {
     iodev_t * dev;          // which device we've opened
     dlnode_t  dl_reader;    // node in the readers list
     dlnode_t  dl_writer;    // node in the writers list
+    semaphore_t sem;
 };
 
 #define IODRV_INIT ((iodrv_t) { NULL, NULL })

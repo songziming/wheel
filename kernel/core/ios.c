@@ -19,6 +19,7 @@ fdesc_t * ios_open(const char * filename) {
     desc->dev       = dev;
     desc->dl_reader = DLNODE_INIT;
     desc->dl_writer = DLNODE_INIT;
+    semaphore_init(&desc->sem, 1, 0);
 
     // TODO: check read/write permission
     dl_push_tail(&dev->readers, &desc->dl_reader);
@@ -56,10 +57,7 @@ usize ios_read(fdesc_t * desc, u8 * buf, usize len) {
         }
 
         // cannot read any information, pend current task
-        raw_spin_take(&tid->lock);
-        sched_stop(tid, TS_PEND);
-        raw_spin_give(&tid->lock);
-        task_switch();
+        semaphore_take(&desc->sem, SEM_WAIT_FOREVER);
     }
 }
 
