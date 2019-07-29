@@ -6,7 +6,7 @@
 typedef struct sem_waiter {
     dlnode_t dl;
     task_t * tid;
-    int      up;
+    int      acquired;
 } sem_waiter_t;
 
 void semaphore_init(semaphore_t * sem, int limit, int value) {
@@ -17,8 +17,13 @@ void semaphore_init(semaphore_t * sem, int limit, int value) {
     sem->value  = value;
 }
 
-// resume all pending tasks on this semaphore
-void semaphore_destroy(semaphore_t * sem) {
+// Linux doesn't have this function, is it useless?
+#if 0
+// resume all pending tasks waiting for this semaphore
+// waiters still remain inside `sem->pend_q`
+// unpended tasks still need this semaphore to check unpend reason
+// parent structure could use ref-counting to manage object life cycle
+void semaphore_freeall(semaphore_t * sem) {
     u32 key = irq_spin_take(&sem->lock);
 
     for (dlnode_t * dl = sem->pend_q.head; NULL != dl; dl = dl->next) {
@@ -26,20 +31,25 @@ void semaphore_destroy(semaphore_t * sem) {
         task_t       * tid    = waiter->tid;
 
         raw_spin_take(&tid->lock);
+        waiter->acquired = NO;
         sched_cont(tid, TS_PEND);
+        int cpu = tid->last_cpu;
         raw_spin_give(&tid->lock);
 
-        if (cpu_index() != tid->last_cpu) {
-            smp_reschedule(tid->last_cpu);
+        if (cpu_index() != cpu) {
+            smp_reschedule(cpu);
         }
     }
 
     irq_spin_give(&sem->lock, key);
     task_switch();
 }
+#endif
 
 // this function is executed under ISR
 static void semaphore_timeout(task_t * tid, int * expired) {
+    // variable `expired` is on the stack of `tid`,
+    // which is also protected by `tid->lock`
     u32 key = irq_spin_take(&tid->lock);
     sched_cont(tid, TS_PEND);
     * expired = YES;
@@ -50,13 +60,14 @@ static void semaphore_timeout(task_t * tid, int * expired) {
 // return ERROR if failed (might block)
 // this function cannot be called inside ISR
 int semaphore_take(semaphore_t * sem, int timeout) {
+    assert(NULL != sem);
     assert(0 == thiscpu_var(int_depth));
 
     preempt_lock();
     raw_spin_take(&sem->lock);
 
     // check if we can take this semaphore
-    if (sem->value) {
+    if (sem->value > 0) {
         --sem->value;
         raw_spin_give(&sem->lock);
         preempt_unlock();
@@ -67,69 +78,77 @@ int semaphore_take(semaphore_t * sem, int timeout) {
     task_t * tid = thiscpu_var(tid_prev);
     raw_spin_take(&tid->lock);
 
-    // put waiter into the pend queue
+    // prepare waiter structure
     sem_waiter_t waiter;
-    waiter.dl  = DLNODE_INIT;
-    waiter.tid = tid;
-    waiter.up  = NO;
+    waiter.dl       = DLNODE_INIT;
+    waiter.tid      = tid;
+    waiter.acquired = NO;
     dl_push_tail(&sem->pend_q, &waiter.dl);
 
-    // prepare watchdog timer
+    // prepare timeout watchdog
+    int expired = NO;
     wdog_t wd;
     wdog_init(&wd);
-    int expired = NO;
+
+    // start wdog while holding `tid->lock`
+    // so that timeout will not happen before pending
     if (timeout != SEM_WAIT_FOREVER) {
         wdog_start(&wd, timeout, semaphore_timeout, tid, &expired, 0,0);
     }
 
-    while (1) {
-        // if (signal_pending) {}
+    // pend this task
+    sched_stop(tid, TS_PEND);
+    raw_spin_give(&tid->lock);
+    raw_spin_give(&sem->lock);
+    preempt_unlock();
 
-        if (expired) {
-            raw_spin_give(&tid->lock);
-            raw_spin_give(&sem->lock);
-            preempt_unlock();
-            return ERROR;
-        }
+    // pend here
+    task_switch();
 
-        sched_stop(tid, TS_PEND);
+    // stop timer as soon as we unpend
+    wdog_cancel(&wd);
 
-        // release locks and pend here
-        raw_spin_give(&tid->lock);
+    // lock semaphore again, so other tasks cannot give or freeall
+    preempt_lock();
+    raw_spin_take(&sem->lock);
+
+    // check success condition first
+    // since timeout might overlap with acquire and delete
+    if (YES == waiter.acquired) {
         raw_spin_give(&sem->lock);
         preempt_unlock();
-        task_switch();
-
-        // lock semaphore again
-        preempt_lock();
-        raw_spin_take(&sem->lock);
-        raw_spin_take(&tid->lock);
-
-        // whether we've taken the lock
-        if (YES == waiter.up) {
-            raw_spin_give(&tid->lock);
-            raw_spin_give(&sem->lock);
-            preempt_unlock();
-            return OK;
-        }
+        return OK;
     }
+
+    // semaphore not acquired, waiter still in pend_q
+    dl_remove(&sem->pend_q, &waiter.dl);
+
+    // TODO: if we have no `freeall`, no signal,
+    //       then no need to check `expired`
+    //       not acquired just means timeout
+#if 0
+    // check if we have expired
+    if (expired) {
+        raw_spin_give(&sem->lock);
+        preempt_unlock();
+        return ERROR;
+    }
+#endif
+
+    // if semaphore got destroyed
+    raw_spin_give(&sem->lock);
+    preempt_unlock();
+    return ERROR;
 }
 
 // this function can be called during ISR
 int semaphore_trytake(semaphore_t * sem) {
-    task_t * tid = thiscpu_var(tid_prev);
-
     u32 key = irq_spin_take(&sem->lock);
-    raw_spin_take(&tid->lock);
-
-    if (sem->value) {
+    if (sem->value > 0) {
         --sem->value;
-        raw_spin_give(&tid->lock);
         irq_spin_give(&sem->lock, key);
         return OK;
     }
-
-    raw_spin_give(&tid->lock);
     irq_spin_give(&sem->lock, key);
     return ERROR;
 }
@@ -152,7 +171,7 @@ void semaphore_give(semaphore_t * sem) {
 
     // wake up this task
     raw_spin_take(&tid->lock);
-    waiter->up = YES;
+    waiter->acquired = YES;
     sched_cont(tid, TS_PEND);
     int cpu = tid->last_cpu;
     raw_spin_give(&tid->lock);
@@ -164,4 +183,3 @@ void semaphore_give(semaphore_t * sem) {
         smp_reschedule(cpu);
     }
 }
-

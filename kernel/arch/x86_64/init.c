@@ -220,12 +220,12 @@ static void root_proc() {
     memcpy(dst, src, len);
 
     for (int i = 1; i < cpu_count(); ++i) {
-        loapic_emit_init(i);            // send INIT
-        tick_delay(10);                 // wait for 10ms
-        loapic_emit_sipi(i, 0x7c);      // send SIPI
-        tick_delay(1);                  // wait for 1ms
-        loapic_emit_sipi(i, 0x7c);      // send SIPI again
-        tick_delay(1);                  // wait for 1ms
+        loapic_emit_init(i);                            // send INIT
+        tick_delay(MAX(CFG_SYS_CLOCK_RATE/100, 1));     // wait for 10ms
+        loapic_emit_sipi(i, 0x7c);                      // send SIPI
+        tick_delay(MAX(CFG_SYS_CLOCK_RATE/1000, 1));    // wait for 1ms
+        loapic_emit_sipi(i, 0x7c);                      // send SIPI again
+        tick_delay(MAX(CFG_SYS_CLOCK_RATE/1000, 1));    // wait for 1ms
 
         // same boot stack is used, have to start cpus one-by-one
         while ((percpu_var(i, tid_prev) == NULL) ||
@@ -244,17 +244,17 @@ static void root_proc() {
     wdog_init(&wd);
     semaphore_init(&sem, 1, 1);
 
-    // semaphore_take(&sem, 0);
-    // wd_proc();
+    semaphore_take(&sem, 0);
+    wd_proc();
 
-    // while (1) {
-    //     if (OK == semaphore_take(&sem, CFG_SYS_CLOCK_RATE)) {
-    //         dbg_print("taken ");
-    //     } else {
-    //         dbg_print("timeout ");
-    //     }
-    //     // dbg_print("advancing ");
-    // }
+    while (1) {
+        if (OK == semaphore_take(&sem, 2 * CFG_SYS_CLOCK_RATE)) {
+            dbg_print("taken ");
+        } else {
+            dbg_print("timeout ");
+        }
+        // dbg_print("advancing ");
+    }
 
     fdesc_t * pipe_desc = ios_open("hello");
     dbg_print("openedg pipe file %p.\n", pipe_desc);
