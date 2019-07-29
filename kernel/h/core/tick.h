@@ -2,6 +2,7 @@
 #define CORE_TICK_H
 
 #include <base.h>
+#include <core/spin.h>
 #include <misc/list.h>
 
 typedef int (* wdog_proc_t) (void * a1, void * a2, void * a3, void * a4);
@@ -16,10 +17,10 @@ typedef struct wdog {
     void *      arg4;
 } wdog_t;
 
-extern void  wdog_init  (wdog_t * dog);
-extern void  wdog_start (wdog_t * dog, int ticks, void * proc,
+extern void  wdog_init  (wdog_t * wd);
+extern void  wdog_start (wdog_t * wd, int ticks, void * proc,
                          void * a1, void * a2, void * a3, void * a4);
-extern void  wdog_cancel(wdog_t * dog);
+extern void  wdog_cancel(wdog_t * wd);
 extern void  tick_proc  ();
 extern usize tick_get   ();
 extern void  tick_delay (int ticks);
