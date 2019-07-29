@@ -205,10 +205,10 @@ extern u8 _trampoline_addr;
 extern u8 _trampoline_end;
 
 static wdog_t      wd;
-static semaphore_t sem;
+static sema_t sem;
 
 static void wd_proc() {
-    semaphore_give(&sem);
+    sema_give(&sem);
     wdog_start(&wd, CFG_SYS_CLOCK_RATE, wd_proc, 0,0,0,0);
 }
 
@@ -242,13 +242,13 @@ static void root_proc() {
     dbg_print("ok.\n");
 
     wdog_init(&wd);
-    semaphore_init(&sem, 1, 1);
+    sema_init(&sem, 1, 1);
 
-    semaphore_take(&sem, 0);
+    sema_take(&sem, 0);
     wd_proc();
 
     while (1) {
-        if (OK == semaphore_take(&sem, 2 * CFG_SYS_CLOCK_RATE)) {
+        if (OK == sema_take(&sem, 2 * CFG_SYS_CLOCK_RATE)) {
             dbg_print("taken ");
         } else {
             dbg_print("timeout ");

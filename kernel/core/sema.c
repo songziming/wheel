@@ -9,7 +9,7 @@ typedef struct sem_waiter {
     int      acquired;
 } sem_waiter_t;
 
-void semaphore_init(semaphore_t * sem, int limit, int value) {
+void sema_init(sema_t * sem, int limit, int value) {
     assert(value <= limit);
     sem->lock   = SPIN_INIT;
     sem->pend_q = DLLIST_INIT;
@@ -19,11 +19,11 @@ void semaphore_init(semaphore_t * sem, int limit, int value) {
 
 // Linux doesn't have this function, is it useless?
 #if 0
-// resume all pending tasks waiting for this semaphore
+// resume all pending tasks waiting for this sema
 // waiters still remain inside `sem->pend_q`
-// unpended tasks still need this semaphore to check unpend reason
+// unpended tasks still need this sema to check unpend reason
 // parent structure could use ref-counting to manage object life cycle
-void semaphore_freeall(semaphore_t * sem) {
+void sema_freeall(sema_t * sem) {
     u32 key = irq_spin_take(&sem->lock);
 
     for (dlnode_t * dl = sem->pend_q.head; NULL != dl; dl = dl->next) {
@@ -47,7 +47,7 @@ void semaphore_freeall(semaphore_t * sem) {
 #endif
 
 // this function is executed under ISR
-static void semaphore_timeout(task_t * tid, int * expired) {
+static void sema_timeout(task_t * tid, int * expired) {
     // variable `expired` is on the stack of `tid`,
     // which is also protected by `tid->lock`
     u32 key = irq_spin_take(&tid->lock);
@@ -56,17 +56,17 @@ static void semaphore_timeout(task_t * tid, int * expired) {
     irq_spin_give(&tid->lock, key);
 }
 
-// return OK if successfully taken the semaphore
+// return OK if successfully taken the sema
 // return ERROR if failed (might block)
 // this function cannot be called inside ISR
-int semaphore_take(semaphore_t * sem, int timeout) {
+int sema_take(sema_t * sem, int timeout) {
     assert(NULL != sem);
     assert(0 == thiscpu_var(int_depth));
 
     preempt_lock();
     raw_spin_take(&sem->lock);
 
-    // check if we can take this semaphore
+    // check if we can take this sema
     if (sem->value > 0) {
         --sem->value;
         raw_spin_give(&sem->lock);
@@ -93,7 +93,7 @@ int semaphore_take(semaphore_t * sem, int timeout) {
     // start wdog while holding `tid->lock`
     // so that timeout will not happen before pending
     if (timeout != SEM_WAIT_FOREVER) {
-        wdog_start(&wd, timeout, semaphore_timeout, tid, &expired, 0,0);
+        wdog_start(&wd, timeout, sema_timeout, tid, &expired, 0,0);
     }
 
     // pend this task
@@ -108,7 +108,7 @@ int semaphore_take(semaphore_t * sem, int timeout) {
     // stop timer as soon as we unpend
     wdog_cancel(&wd);
 
-    // lock semaphore again, so other tasks cannot give or freeall
+    // lock sema again, so other tasks cannot give or freeall
     preempt_lock();
     raw_spin_take(&sem->lock);
 
@@ -120,7 +120,7 @@ int semaphore_take(semaphore_t * sem, int timeout) {
         return OK;
     }
 
-    // semaphore not acquired, waiter still in pend_q
+    // sema not acquired, waiter still in pend_q
     dl_remove(&sem->pend_q, &waiter.dl);
 
     // TODO: if we have no `freeall`, no signal,
@@ -135,14 +135,14 @@ int semaphore_take(semaphore_t * sem, int timeout) {
     }
 #endif
 
-    // if semaphore got destroyed
+    // if sema got destroyed
     raw_spin_give(&sem->lock);
     preempt_unlock();
     return ERROR;
 }
 
 // this function can be called during ISR
-int semaphore_trytake(semaphore_t * sem) {
+int sema_trytake(sema_t * sem) {
     u32 key = irq_spin_take(&sem->lock);
     if (sem->value > 0) {
         --sem->value;
@@ -154,7 +154,7 @@ int semaphore_trytake(semaphore_t * sem) {
 }
 
 // this function can be called inside ISR
-void semaphore_give(semaphore_t * sem) {
+void sema_give(sema_t * sem) {
     u32 key = irq_spin_take(&sem->lock);
 
     dlnode_t * dl = dl_pop_head(&sem->pend_q);

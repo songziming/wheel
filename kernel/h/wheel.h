@@ -10,7 +10,7 @@
 #include <core/tick.h>
 #include <core/work.h>
 #include <core/sched.h>
-#include <core/semaphore.h>
+#include <core/sema.h>
 
 #include <core/ios.h>
 #include <core/pipe.h>
