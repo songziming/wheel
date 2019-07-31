@@ -6,7 +6,7 @@
 #include <mem/page.h>
 
 typedef struct pool {
-    spin_t   lock;
+    spin_t   spin;
     int      obj_size;
     int      blk_order;
     pglist_t full;          // all objects not allocated

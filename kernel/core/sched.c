@@ -4,7 +4,7 @@
 // ready queue
 
 typedef struct ready_q {
-    spin_t      lock;
+    spin_t      spin;
     int         count;
     u32         priorities;
     dllist_t    tasks[PRIORITY_COUNT];
@@ -100,14 +100,14 @@ u32 sched_stop(task_t * tid, u32 bits) {
     // lock current ready queue
     int cpu = tid->last_cpu;
     ready_q_t * rdy = percpu_ptr(cpu, ready_q);
-    raw_spin_take(&rdy->lock);
+    raw_spin_take(&rdy->spin);
 
     // remove task and update tid_next
     ready_q_remove(rdy, tid);
     percpu_var(cpu, tid_next) = ready_q_head(rdy);
 
     // after this point, `tid_next` might be changed again
-    raw_spin_give(&rdy->lock);
+    raw_spin_give(&rdy->spin);
     return state;
 }
 
@@ -124,7 +124,7 @@ u32 sched_cont(task_t * tid, u32 bits) {
     // pick and lock a target ready queue
     int cpu = find_lowest_cpu(tid);
     ready_q_t * rdy = percpu_ptr(cpu, ready_q);
-    raw_spin_take(&rdy->lock);
+    raw_spin_take(&rdy->spin);
 
     // push task and update tid_next
     ready_q_push(rdy, tid);
@@ -132,7 +132,7 @@ u32 sched_cont(task_t * tid, u32 bits) {
     percpu_var(cpu, tid_next) = ready_q_head(rdy);
 
     // after this point, `tid_next` might be changed again
-    raw_spin_give(&rdy->lock);
+    raw_spin_give(&rdy->spin);
     return state;
 }
 
@@ -154,7 +154,7 @@ void preempt_unlock() {
 void sched_yield() {
     task_t    * tid = thiscpu_var(tid_prev);
     ready_q_t * rdy = thiscpu_ptr(ready_q);
-    u32         key = irq_spin_take(&rdy->lock);
+    u32         key = irq_spin_take(&rdy->spin);
 
     // round robin only if current task is the head task
     if (ready_q_head(rdy) == tid) {
@@ -163,7 +163,7 @@ void sched_yield() {
         thiscpu_var(tid_next) = ready_q_head(rdy);
     }
 
-    irq_spin_give(&rdy->lock, key);
+    irq_spin_give(&rdy->spin, key);
     task_switch();
 }
 
@@ -185,7 +185,7 @@ void sched_tick() {
 
 static void idle_proc() {
     // lock current task and never give away
-    raw_spin_take(&thiscpu_var(tid_prev)->lock);
+    raw_spin_take(&thiscpu_var(tid_prev)->spin);
 
     // loop forever
     while (1) {
@@ -196,7 +196,7 @@ static void idle_proc() {
 __INIT void sched_lib_init() {
     for (int i = 0; i < cpu_count(); ++i) {
         ready_q_t * rdy = percpu_ptr(i, ready_q);
-        rdy->lock       = SPIN_INIT;
+        rdy->spin       = SPIN_INIT;
         rdy->count      = 0;
         rdy->priorities = 1U << PRIORITY_IDLE;
         for (int i = 0; i < PRIORITY_COUNT; ++i) {

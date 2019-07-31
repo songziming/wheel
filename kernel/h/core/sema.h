@@ -12,13 +12,13 @@
 // NOTE: no support for priority inversion
 
 typedef struct sema {
-    spin_t   lock;
+    spin_t   spin;
     dllist_t pend_q;
     int      limit;
     int      value;
 } sema_t;
 
-#define SEM_WAIT_FOREVER ((int) -1)
+#define SEMA_WAIT_FOREVER ((int) -1)
 
 extern void sema_init   (sema_t * sem, int limit, int value);
 // extern void sema_freeall(sema_t * sem);

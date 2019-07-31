@@ -41,7 +41,7 @@ task_t * task_create(int priority, void * proc,
     regs_init(&tid->regs, vstack + (1U << order), proc, a1, a2, a3, a4);
 
     // init tcb fields
-    tid->lock      = SPIN_INIT;
+    tid->spin      = SPIN_INIT;
     tid->dl_sched  = DLNODE_INIT;
     tid->state     = TS_SUSPEND;
     tid->priority  = priority;
@@ -57,7 +57,7 @@ task_t * task_create(int priority, void * proc,
 // work function to be called after task_exit during isr
 void task_cleanup(task_t * tid) {
     assert(TS_ZOMBIE == tid->state);
-    raw_spin_take(&tid->lock);
+    raw_spin_take(&tid->spin);
 
     // free all pages in kernel stack
     int order = CTZL(CFG_KERNEL_STACK_SIZE) - PAGE_SHIFT;
@@ -74,10 +74,10 @@ void task_cleanup(task_t * tid) {
 void task_exit() {
     task_t * tid = thiscpu_var(tid_prev);
 
-    u32 key = irq_spin_take(&tid->lock);
+    u32 key = irq_spin_take(&tid->spin);
     sched_stop(tid, TS_ZOMBIE);
     work_enqueue(task_cleanup, tid, 0,0,0);
-    irq_spin_give(&tid->lock, key);
+    irq_spin_give(&tid->spin, key);
 
     task_switch();
 }
@@ -85,9 +85,9 @@ void task_exit() {
 void task_suspend() {
     task_t * tid = thiscpu_var(tid_prev);
 
-    u32 key = irq_spin_take(&tid->lock);
+    u32 key = irq_spin_take(&tid->spin);
     sched_stop(tid, TS_SUSPEND);
-    irq_spin_give(&tid->lock, key);
+    irq_spin_give(&tid->spin, key);
 
     task_switch();
 }
@@ -95,10 +95,10 @@ void task_suspend() {
 void task_resume(task_t * tid) {
     assert(NULL != tid);
 
-    u32 key = irq_spin_take(&tid->lock);
+    u32 key = irq_spin_take(&tid->spin);
     u32 old = sched_cont(tid, TS_SUSPEND);
     int cpu = tid->last_cpu;
-    irq_spin_give(&tid->lock, key);
+    irq_spin_give(&tid->spin, key);
 
     if (TS_READY == old) {
         return;
@@ -116,10 +116,10 @@ void task_delay(int ticks) {
     wdog_init(&wd);
 
     task_t * tid = thiscpu_var(tid_prev);
-    u32      key = irq_spin_take(&tid->lock);
+    u32      key = irq_spin_take(&tid->spin);
     sched_stop(tid, TS_DELAY);
     wdog_start(&wd, ticks, task_wakeup, tid, 0,0,0);
-    irq_spin_give(&tid->lock, key);
+    irq_spin_give(&tid->spin, key);
 
     task_switch();
     wdog_cancel(&wd);
@@ -128,10 +128,10 @@ void task_delay(int ticks) {
 void task_wakeup(task_t * tid) {
     assert(NULL != tid);
 
-    u32 key = irq_spin_take(&tid->lock);
+    u32 key = irq_spin_take(&tid->spin);
     u32 old = sched_cont(tid, TS_DELAY);
     int cpu = tid->last_cpu;
-    irq_spin_give(&tid->lock, key);
+    irq_spin_give(&tid->spin, key);
 
     if (TS_READY == old) {
         return;

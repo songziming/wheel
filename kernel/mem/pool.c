@@ -82,7 +82,7 @@ void pool_init(pool_t * pool, usize obj_size) {
     }
 
     // initialize member variables
-    pool->lock      = SPIN_INIT;
+    pool->spin      = SPIN_INIT;
     pool->obj_size  = obj_size;
     pool->blk_order = blk_order;
     pool->full      = PGLIST_INIT;
@@ -91,23 +91,23 @@ void pool_init(pool_t * pool, usize obj_size) {
 }
 
 void pool_destroy(pool_t * pool) {
-    raw_spin_take(&pool->lock);
+    raw_spin_take(&pool->spin);
     pglist_free_all(&pool->full);
     pglist_free_all(&pool->partial);
     pglist_free_all(&pool->empty);
 }
 
 void pool_shrink(pool_t * pool) {
-    raw_spin_take(&pool->lock);
+    raw_spin_take(&pool->spin);
     pglist_free_all(&pool->full);
-    raw_spin_give(&pool->lock);
+    raw_spin_give(&pool->spin);
 }
 
 //------------------------------------------------------------------------------
 // pool level object alloc and free
 
 void * pool_alloc(pool_t * pool) {
-    raw_spin_take(&pool->lock);
+    raw_spin_take(&pool->spin);
 
     if (pglist_is_empty(&pool->partial)) {
         if (pglist_is_empty(&pool->full)) {
@@ -134,12 +134,12 @@ void * pool_alloc(pool_t * pool) {
         pglist_push_head(&pool->empty, slab);
     }
 
-    raw_spin_give(&pool->lock);
+    raw_spin_give(&pool->spin);
     return obj;
 }
 
 void pool_free(pool_t * pool, void * obj) {
-    raw_spin_take(&pool->lock);
+    raw_spin_take(&pool->spin);
 
     pfn_t slab = parent_block((pfn_t) (virt_to_phys(obj) >> PAGE_SHIFT));
     u16   head = page_array[slab].objects;
@@ -149,7 +149,7 @@ void pool_free(pool_t * pool, void * obj) {
     if (NO_OBJ == head) {
         pglist_remove(&pool->empty, slab);
         pglist_push_tail(&pool->partial, slab);
-        raw_spin_give(&pool->lock);
+        raw_spin_give(&pool->spin);
         return;
     }
 
@@ -157,7 +157,7 @@ void pool_free(pool_t * pool, void * obj) {
     if (0 == page_array[slab].inuse) {
         pglist_remove(&pool->partial, slab);
         pglist_push_head(&pool->full, slab);
-        raw_spin_give(&pool->lock);
+        raw_spin_give(&pool->spin);
         return;
     }
 
@@ -169,7 +169,7 @@ void pool_free(pool_t * pool, void * obj) {
 
     // if no need to move
     if (prev == page_array[slab].prev) {
-        raw_spin_give(&pool->lock);
+        raw_spin_give(&pool->spin);
         return;
     }
 
@@ -191,5 +191,5 @@ void pool_free(pool_t * pool, void * obj) {
         }
     }
 
-    raw_spin_give(&pool->lock);
+    raw_spin_give(&pool->spin);
 }

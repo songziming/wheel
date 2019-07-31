@@ -9,7 +9,7 @@
 
 typedef struct task {
     regs_t      regs;           // arch-specific context
-    spin_t      lock;
+    spin_t      spin;
     dlnode_t    dl_sched;       // node in ready queue
 
     u32         state;

@@ -11,7 +11,7 @@ typedef struct sem_waiter {
 
 void sema_init(sema_t * sem, int limit, int value) {
     assert(value <= limit);
-    sem->lock   = SPIN_INIT;
+    sem->spin   = SPIN_INIT;
     sem->pend_q = DLLIST_INIT;
     sem->limit  = limit;
     sem->value  = value;
@@ -24,24 +24,24 @@ void sema_init(sema_t * sem, int limit, int value) {
 // unpended tasks still need this sema to check unpend reason
 // parent structure could use ref-counting to manage object life cycle
 void sema_freeall(sema_t * sem) {
-    u32 key = irq_spin_take(&sem->lock);
+    u32 key = irq_spin_take(&sem->spin);
 
     for (dlnode_t * dl = sem->pend_q.head; NULL != dl; dl = dl->next) {
         sem_waiter_t * waiter = PARENT(dl, sem_waiter_t, dl);
         task_t       * tid    = waiter->tid;
 
-        raw_spin_take(&tid->lock);
+        raw_spin_take(&tid->spin);
         waiter->acquired = NO;
         sched_cont(tid, TS_PEND);
         int cpu = tid->last_cpu;
-        raw_spin_give(&tid->lock);
+        raw_spin_give(&tid->spin);
 
         if (cpu_index() != cpu) {
             smp_reschedule(cpu);
         }
     }
 
-    irq_spin_give(&sem->lock, key);
+    irq_spin_give(&sem->spin, key);
     task_switch();
 }
 #endif
@@ -49,11 +49,11 @@ void sema_freeall(sema_t * sem) {
 // this function is executed under ISR
 static void sema_timeout(task_t * tid, int * expired) {
     // variable `expired` is on the stack of `tid`,
-    // which is also protected by `tid->lock`
-    u32 key = irq_spin_take(&tid->lock);
+    // which is also protected by `tid->spin`
+    u32 key = irq_spin_take(&tid->spin);
     sched_cont(tid, TS_PEND);
     * expired = YES;
-    irq_spin_give(&tid->lock, key);
+    irq_spin_give(&tid->spin, key);
 }
 
 // return OK if successfully taken the sema
@@ -64,19 +64,19 @@ int sema_take(sema_t * sem, int timeout) {
     assert(0 == thiscpu_var(int_depth));
 
     preempt_lock();
-    raw_spin_take(&sem->lock);
+    raw_spin_take(&sem->spin);
 
     // check if we can take this sema
     if (sem->value > 0) {
         --sem->value;
-        raw_spin_give(&sem->lock);
+        raw_spin_give(&sem->spin);
         preempt_unlock();
         return OK;
     }
 
     // resource not available, pend current task
     task_t * tid = thiscpu_var(tid_prev);
-    raw_spin_take(&tid->lock);
+    raw_spin_take(&tid->spin);
 
     // prepare waiter structure
     sem_waiter_t waiter;
@@ -90,16 +90,16 @@ int sema_take(sema_t * sem, int timeout) {
     wdog_t wd;
     wdog_init(&wd);
 
-    // start wdog while holding `tid->lock`
+    // start wdog while holding `tid->spin`
     // so that timeout will not happen before pending
-    if (timeout != SEM_WAIT_FOREVER) {
+    if (timeout != SEMA_WAIT_FOREVER) {
         wdog_start(&wd, timeout, sema_timeout, tid, &expired, 0,0);
     }
 
     // pend this task
     sched_stop(tid, TS_PEND);
-    raw_spin_give(&tid->lock);
-    raw_spin_give(&sem->lock);
+    raw_spin_give(&tid->spin);
+    raw_spin_give(&sem->spin);
     preempt_unlock();
 
     // pend here
@@ -110,12 +110,12 @@ int sema_take(sema_t * sem, int timeout) {
 
     // lock sema again, so other tasks cannot give or freeall
     preempt_lock();
-    raw_spin_take(&sem->lock);
+    raw_spin_take(&sem->spin);
 
     // check success condition first
     // since timeout might overlap with acquire and delete
     if (YES == waiter.acquired) {
-        raw_spin_give(&sem->lock);
+        raw_spin_give(&sem->spin);
         preempt_unlock();
         return OK;
     }
@@ -129,40 +129,40 @@ int sema_take(sema_t * sem, int timeout) {
 #if 0
     // check if we have expired
     if (expired) {
-        raw_spin_give(&sem->lock);
+        raw_spin_give(&sem->spin);
         preempt_unlock();
         return ERROR;
     }
 #endif
 
     // if sema got destroyed
-    raw_spin_give(&sem->lock);
+    raw_spin_give(&sem->spin);
     preempt_unlock();
     return ERROR;
 }
 
 // this function can be called during ISR
 int sema_trytake(sema_t * sem) {
-    u32 key = irq_spin_take(&sem->lock);
+    u32 key = irq_spin_take(&sem->spin);
     if (sem->value > 0) {
         --sem->value;
-        irq_spin_give(&sem->lock, key);
+        irq_spin_give(&sem->spin, key);
         return OK;
     }
-    irq_spin_give(&sem->lock, key);
+    irq_spin_give(&sem->spin, key);
     return ERROR;
 }
 
 // this function can be called inside ISR
 void sema_give(sema_t * sem) {
-    u32 key = irq_spin_take(&sem->lock);
+    u32 key = irq_spin_take(&sem->spin);
 
     dlnode_t * dl = dl_pop_head(&sem->pend_q);
     if (NULL == dl) {
         if (sem->value < sem->limit) {
             ++sem->value;
         }
-        irq_spin_give(&sem->lock, key);
+        irq_spin_give(&sem->spin, key);
         return;
     }
 
@@ -170,12 +170,12 @@ void sema_give(sema_t * sem) {
     task_t * tid = waiter->tid;
 
     // wake up this task
-    raw_spin_take(&tid->lock);
+    raw_spin_take(&tid->spin);
     waiter->acquired = YES;
     sched_cont(tid, TS_PEND);
     int cpu = tid->last_cpu;
-    raw_spin_give(&tid->lock);
-    irq_spin_give(&sem->lock, key);
+    raw_spin_give(&tid->spin);
+    irq_spin_give(&sem->spin, key);
 
     if (cpu_index() == cpu) {
         task_switch();

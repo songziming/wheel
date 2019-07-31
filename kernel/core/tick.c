@@ -4,7 +4,7 @@
 // so spinlock is not needed inside wdog_t structure
 
 typedef struct tick_q {
-    spin_t   lock;
+    spin_t   spin;
     dllist_t q;
 } tick_q_t;
 
@@ -23,9 +23,9 @@ void wdog_start(wdog_t * wd, int ticks, void * proc,
     assert(NULL != proc);
     assert(ticks >= 0);
 
-    u32 key = irq_spin_take(&tick_q.lock);
+    u32 key = irq_spin_take(&tick_q.spin);
     if ((wd->node.prev != &wd->node) && (wd->node.next != &wd->node)) {
-        irq_spin_give(&tick_q.lock, key);
+        irq_spin_give(&tick_q.spin, key);
         return;
     }
 
@@ -51,11 +51,11 @@ void wdog_start(wdog_t * wd, int ticks, void * proc,
     }
 
     dl_insert_before(&tick_q.q, &wd->node, node);
-    irq_spin_give(&tick_q.lock, key);
+    irq_spin_give(&tick_q.spin, key);
 }
 
 void wdog_cancel(wdog_t * wd) {
-    u32 key = irq_spin_take(&tick_q.lock);
+    u32 key = irq_spin_take(&tick_q.spin);
 
     if ((wd->node.prev != &wd->node) && (wd->node.next != &wd->node)) {
         dlnode_t * node = wd->node.next;
@@ -68,7 +68,7 @@ void wdog_cancel(wdog_t * wd) {
         }
     }
 
-    irq_spin_give(&tick_q.lock, key);
+    irq_spin_give(&tick_q.spin, key);
 }
 
 // clock interrupt handler
@@ -76,7 +76,7 @@ void tick_proc() {
     if (0 == cpu_index()) {
         atomic_inc(&tick_count);
 
-        u32 key = irq_spin_take(&tick_q.lock);
+        u32 key = irq_spin_take(&tick_q.spin);
         dlnode_t * node = tick_q.q.head;
         wdog_t   * wdog = PARENT(node, wdog_t, node);
         if (NULL != node) {
@@ -90,15 +90,15 @@ void tick_proc() {
 
             // during wdog execution, contention of tick_q is released
             // so we can start wdog inside wdog
-            irq_spin_give(&tick_q.lock, key);
+            irq_spin_give(&tick_q.spin, key);
             wdog->proc(wdog->arg1, wdog->arg2, wdog->arg3, wdog->arg4);
-            key = irq_spin_take(&tick_q.lock);
+            key = irq_spin_take(&tick_q.spin);
 
             node = tick_q.q.head;
             wdog = PARENT(node, wdog_t, node);
         }
 
-        irq_spin_give(&tick_q.lock, key);
+        irq_spin_give(&tick_q.spin, key);
     }
 
     sched_tick();

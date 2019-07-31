@@ -204,14 +204,6 @@ __INIT __NORETURN void sys_init_ap() {
 extern u8 _trampoline_addr;
 extern u8 _trampoline_end;
 
-static wdog_t      wd;
-static sema_t sem;
-
-static void wd_proc() {
-    sema_give(&sem);
-    wdog_start(&wd, CFG_SYS_CLOCK_RATE, wd_proc, 0,0,0,0);
-}
-
 static void root_proc() {
     // copy trampoline code to 0x7c000
     u8 * src = (u8 *) &_trampoline_addr;
@@ -237,31 +229,20 @@ static void root_proc() {
     dbg_print("running inside task.\n");
     dbg_trace_here();
 
-    dbg_print("waiting for 4 ticks...");
-    tick_delay(4);
-    dbg_print("ok.\n");
-
-    wdog_init(&wd);
-    sema_init(&sem, 1, 1);
-
-    sema_take(&sem, 0);
-    wd_proc();
-
-    while (1) {
-        if (OK == sema_take(&sem, 2 * CFG_SYS_CLOCK_RATE)) {
-            dbg_print("taken ");
-        } else {
-            dbg_print("timeout ");
-        }
-        // dbg_print("advancing ");
-    }
-
-    fdesc_t * pipe_desc = ios_open("hello");
+    fdesc_t * pipe_desc = ios_open("pipe");
     dbg_print("openedg pipe file %p.\n", pipe_desc);
 
-    u8 data[32];
-    usize readlen = ios_read(pipe_desc, data, 32);
+    char text[] = "message written into pipe buffer.";
+    usize wrotelen = ios_write(pipe_desc, text, strlen(text));
+    dbg_print("wrote %d bytes into pipe.\n", wrotelen);
+
+    u8 data[64];
+    usize readlen = ios_read(pipe_desc, data, 64);
+    data[readlen] = '\0';
     dbg_print("read %d bytes from pipe file.\n", readlen);
+    dbg_print("read content: %s.\n", data);
+
+    ios_close(pipe_desc);
 
     task_exit();
     dbg_print("you shall not see this line!\n");

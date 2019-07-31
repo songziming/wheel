@@ -4,7 +4,7 @@ page_t * page_array;
 usize    page_count;
 
 typedef struct zone {
-    spin_t   lock;
+    spin_t   spin;
     usize    page_count;
     pglist_t list[ORDER_COUNT]; // block list of each order
 } zone_t;
@@ -186,9 +186,9 @@ pfn_t page_block_alloc(u32 zones, int order) {
     }
 
     if (zones & ZONE_NORMAL) {
-        u32 key = irq_spin_take(&zone_normal.lock);
+        u32 key = irq_spin_take(&zone_normal.spin);
         pfn_t blk = zone_block_alloc(&zone_normal, order);
-        irq_spin_give(&zone_normal.lock, key);
+        irq_spin_give(&zone_normal.spin, key);
         assert((blk & ((1U << order) - 1)) == 0);
         if (NO_PAGE != blk) {
             return blk;
@@ -196,9 +196,9 @@ pfn_t page_block_alloc(u32 zones, int order) {
     }
 
     if (zones & ZONE_DMA) {
-        u32 key = irq_spin_take(&zone_dma.lock);
+        u32 key = irq_spin_take(&zone_dma.spin);
         pfn_t blk = zone_block_alloc(&zone_dma, order);
-        irq_spin_give(&zone_dma.lock, key);
+        irq_spin_give(&zone_dma.spin, key);
         assert((blk & ((1U << order) - 1)) == 0);
         if (NO_PAGE != blk) {
             return blk;
@@ -231,9 +231,9 @@ void page_block_free(pfn_t blk, int order) {
     assert(0 == (blk & (size - 1)));
     assert(NULL != zone);
 
-    raw_spin_take(&zone->lock);
+    raw_spin_take(&zone->spin);
     zone_block_free(zone, blk, order);
-    raw_spin_give(&zone->lock);
+    raw_spin_give(&zone->spin);
 }
 
 pfn_t parent_block(pfn_t page) {
@@ -258,8 +258,8 @@ usize free_page_count(u32 zones) {
 // initialize page frame allocator, initially no free page
 
 __INIT void page_lib_init() {
-    zone_dma.lock          = SPIN_INIT;
-    zone_normal.lock       = SPIN_INIT;
+    zone_dma.spin          = SPIN_INIT;
+    zone_normal.spin       = SPIN_INIT;
     zone_dma.page_count    = 0;
     zone_normal.page_count = 0;
     for (int i = 0; i < ORDER_COUNT; ++i) {

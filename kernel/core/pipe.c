@@ -10,7 +10,8 @@ typedef struct pipe_dev {
     usize    w_offset;  // must within pages.tail [0, PAGE_SIZE-1]
 } pipe_dev_t;
 
-static usize pipe_read(pipe_dev_t * pipe, u8 * buf, usize len) {
+static usize pipe_read(fdesc_t * fdesc, u8 * buf, usize len, usize * pos __UNUSED) {
+    pipe_dev_t * pipe = (pipe_dev_t *) fdesc->dev;
     usize backup_len = len;
 
     if ((pipe->pages.head  == pipe->pages.tail) &&
@@ -52,7 +53,8 @@ static usize pipe_read(pipe_dev_t * pipe, u8 * buf, usize len) {
     return backup_len;
 }
 
-static usize pipe_write(pipe_dev_t * pipe, const u8 * buf, usize len) {
+static usize pipe_write(fdesc_t * fdesc, const u8 * buf, usize len, usize * pos __UNUSED) {
+    pipe_dev_t * pipe = (pipe_dev_t *) fdesc->dev;
     usize backup_len = len;
 
     while (len) {
@@ -81,19 +83,22 @@ static usize pipe_write(pipe_dev_t * pipe, const u8 * buf, usize len) {
 // pipe driver and device
 
 static iodrv_t pipe_drv = {
-    // .open  = NULL,
-    // .close = NULL,
+    .open  = (ios_open_t)  NULL,
+    .close = (ios_close_t) NULL,
     .read  = (ios_read_t)  pipe_read,
     .write = (ios_write_t) pipe_write,
+    .lseek = (ios_lseek_t) NULL,
 };
 
 iodev_t * pipe_dev_create() {
     pipe_dev_t * pipe = kmem_alloc(sizeof(pipe_dev_t));
 
-    pipe->dev      = IODEV_INIT;
-    pipe->dev.drv  = &pipe_drv;
+    pipe->dev.refcount = 1;
+    sema_init(&pipe->dev.sema, 1, 1);
+    pipe->dev.drv     = &pipe_drv;
+    pipe->dev.readers = DLLIST_INIT;
+    pipe->dev.writers = DLLIST_INIT;
 
-    // pipe->lock     = SPIN_INIT;
     pipe->pages    = PGLIST_INIT;
     pipe->r_offset = 0;
     pipe->w_offset = 0;
