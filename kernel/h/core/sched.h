@@ -7,6 +7,19 @@
 
 typedef struct task task_t;
 
+typedef struct wait_q {
+    spin_t   spin;
+    dllist_t waiters;
+} wait_q_t;
+
+typedef struct waiter {
+    dlnode_t dl;
+    int      up;
+    task_t * tid;
+} waiter_t;
+
+#define WAIT_Q_INIT ((wait_q_t) { SPIN_INIT, DLLIST_INIT })
+
 // typedef struct turnstile {
 //     int      count;
 //     u32      priorities;

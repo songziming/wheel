@@ -1,6 +1,46 @@
 #include <wheel.h>
 
 //------------------------------------------------------------------------------
+// wait queue
+
+void wait_q_push(wait_q_t * q, waiter_t * waiter) {
+    waiter->dl  = DLNODE_INIT;
+    waiter->up  = NO;
+    waiter->tid = thiscpu_var(tid_prev);
+
+    u32 key = irq_spin_take(&q->spin);
+    dl_push_tail(&q->waiters, &waiter->dl);
+    irq_spin_give(&q->spin);
+}
+
+void wait_q_flush(wait_q_t * q) {
+    u32 key = irq_spin_take(&q->spin);
+
+    while (1) {
+        dlnode_t * head   = dl_pop_head(&q->waiters);
+        waiter_t * waiter = PARENT(head, waiter_t, dl);
+        task_t   * tid    = waiter->tid;
+
+        if (NULL == head) {
+            break;
+        }
+
+        raw_spin_take(&tid->spin);
+        waiter->up = YES;
+        sched_cont(tid, TS_PEND);
+        int cpu = tid->last_cpu;
+        raw_spin_give(&tid->spin);
+
+        if (cpu_index() != cpu) {
+            smp_reschedule(cpu);
+        }
+    }
+
+    irq_spin_give(&q->spin);
+    task_switch();
+}
+
+//------------------------------------------------------------------------------
 // ready queue
 
 typedef struct ready_q {

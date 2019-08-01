@@ -18,12 +18,9 @@ typedef struct sema {
     int      value;
 } sema_t;
 
-#define SEMA_WAIT_FOREVER ((int) -1)
-
-extern void sema_init   (sema_t * sem, int limit, int value);
-// extern void sema_freeall(sema_t * sem);
-extern int  sema_take   (sema_t * sem, int timeout);
-extern int  sema_trytake(sema_t * sem);
-extern void sema_give   (sema_t * sem);
+extern void sema_init   (sema_t * sema, int limit, int value);
+// extern void sema_freeall(sema_t * sema);
+extern int  sema_take   (sema_t * sema, int timeout);
+extern void sema_give   (sema_t * sema);
 
 #endif // CORE_SEMA_H

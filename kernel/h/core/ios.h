@@ -26,11 +26,13 @@ struct iodrv {
 
 // multiple fdesc could link to this device
 struct iodev {
-    int       refcount;
-    sema_t    sema;
+    spin_t    spin;
+    int       ref;
     iodrv_t * drv;
     dllist_t  readers;      // list of readers
     dllist_t  writers;      // list of writers
+    sema_t    sema_readers;
+    sema_t    sema_writers;
 };
 
 // multiple task can access this descriptor
@@ -39,6 +41,7 @@ struct fdesc {
     iodrv_t * drv;          // virtual table
     iodev_t * dev;          // which device we've opened
     usize     pos;
+    int       mode;
     dlnode_t  dl_reader;    // node in the readers list
     dlnode_t  dl_writer;    // node in the writers list
 };
@@ -47,9 +50,12 @@ struct fdesc {
 // #define IODEV_INIT ((iodev_t) { NULL, DLLIST_INIT, DLLIST_INIT })
 // #define FDESC_INIT ((fdesc_t) { NULL, DLNODE_INIT, DLNODE_INIT })
 
-extern fdesc_t * ios_open (const char * filename);
+#define IOS_READ    1
+#define IOS_WRITE   2
+
+extern fdesc_t * ios_open (const char * filename, int mode);
 extern void      ios_close(fdesc_t * desc);
-extern usize     ios_read (fdesc_t * desc,       u8 * buf, usize len);
-extern usize     ios_write(fdesc_t * desc, const u8 * buf, usize len);
+extern usize     ios_read (fdesc_t * desc,       u8 * buf, usize len, int timeout);
+extern usize     ios_write(fdesc_t * desc, const u8 * buf, usize len, int timeout);
 
 #endif // CORE_IOS_H

@@ -93,11 +93,13 @@ static iodrv_t pipe_drv = {
 iodev_t * pipe_dev_create() {
     pipe_dev_t * pipe = kmem_alloc(sizeof(pipe_dev_t));
 
-    pipe->dev.refcount = 1;
-    sema_init(&pipe->dev.sema, 1, 1);
+    pipe->dev.spin    = SPIN_INIT;
+    pipe->dev.ref     = 1;
     pipe->dev.drv     = &pipe_drv;
     pipe->dev.readers = DLLIST_INIT;
     pipe->dev.writers = DLLIST_INIT;
+    sema_init(&pipe->dev.sema_readers, 1, 0);
+    sema_init(&pipe->dev.sema_writers, 1, 0);
 
     pipe->pages    = PGLIST_INIT;
     pipe->r_offset = 0;

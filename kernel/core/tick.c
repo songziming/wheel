@@ -22,6 +22,7 @@ void wdog_start(wdog_t * wd, int ticks, void * proc,
     assert(NULL != wd);
     assert(NULL != proc);
     assert(ticks >= 0);
+    assert(ticks != WAIT_FOREVER);
 
     u32 key = irq_spin_take(&tick_q.spin);
     if ((wd->node.prev != &wd->node) && (wd->node.next != &wd->node)) {

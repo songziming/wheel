@@ -17,6 +17,9 @@ typedef struct wdog {
     void *      arg4;
 } wdog_t;
 
+#define WAIT_FOREVER    ((int) -1)
+#define NO_WAIT         ((int) -2)
+
 extern void  wdog_init  (wdog_t * wd);
 extern void  wdog_start (wdog_t * wd, int ticks, void * proc,
                          void * a1, void * a2, void * a3, void * a4);
