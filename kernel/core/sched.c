@@ -3,6 +3,7 @@
 //------------------------------------------------------------------------------
 // wait queue
 
+// put current task into the wait queue
 void wait_q_push(wait_q_t * q, waiter_t * waiter) {
     waiter->dl  = DLNODE_INIT;
     waiter->up  = NO;
@@ -10,7 +11,32 @@ void wait_q_push(wait_q_t * q, waiter_t * waiter) {
 
     u32 key = irq_spin_take(&q->spin);
     dl_push_tail(&q->waiters, &waiter->dl);
-    irq_spin_give(&q->spin);
+    irq_spin_give(&q->spin, key);
+}
+
+// wake up the head node of the wait queue
+void wait_q_pop(wait_q_t * q) {
+    u32 key = irq_spin_take(&q->spin);
+    dlnode_t * dl = dl_pop_head(&q->waiters);
+    if (NULL == dl) {
+        irq_spin_give(&q->spin, key);
+        return;
+    }
+
+    waiter_t * waiter = PARENT(dl, waiter_t, dl);
+    waiter->up = YES;
+
+    raw_spin_take(&waiter->tid->spin);
+    sched_cont(waiter->tid, TS_PEND);
+    int cpu = waiter->tid->last_cpu;
+    raw_spin_give(&waiter->tid->spin);
+
+    irq_spin_give(&q->spin, key);
+    if (cpu_index() == cpu) {
+        task_switch();
+    } else {
+        smp_resched();
+    }
 }
 
 void wait_q_flush(wait_q_t * q) {
@@ -32,7 +58,7 @@ void wait_q_flush(wait_q_t * q) {
         raw_spin_give(&tid->spin);
 
         if (cpu_index() != cpu) {
-            smp_reschedule(cpu);
+            smp_resched(cpu);
         }
     }
 

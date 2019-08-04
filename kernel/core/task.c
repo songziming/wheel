@@ -107,7 +107,7 @@ void task_resume(task_t * tid) {
     if (cpu_index() == cpu) {
         task_switch();
     } else {
-        smp_reschedule(cpu);
+        smp_resched(cpu);
     }
 }
 
@@ -140,6 +140,6 @@ void task_wakeup(task_t * tid) {
     if (cpu_index() == cpu) {
         task_switch();
     } else {
-        smp_reschedule(cpu);
+        smp_resched(cpu);
     }
 }

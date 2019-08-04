@@ -37,7 +37,7 @@ void sema_freeall(sema_t * sema) {
         raw_spin_give(&tid->spin);
 
         if (cpu_index() != cpu) {
-            smp_reschedule(cpu);
+            smp_resched(cpu);
         }
     }
 
@@ -174,6 +174,6 @@ void sema_give(sema_t * sema) {
     if (cpu_index() == cpu) {
         task_switch();
     } else {
-        smp_reschedule(cpu);
+        smp_resched(cpu);
     }
 }

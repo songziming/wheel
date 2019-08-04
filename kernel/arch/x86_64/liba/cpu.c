@@ -370,6 +370,6 @@ void regs_init(regs_t * regs, usize sp, void * proc,
 //     return (usize) regs->cr3;
 // }
 
-void smp_reschedule(int cpu) {
+void smp_resched(int cpu) {
     loapic_emit_ipi(cpu, VECNUM_RESCHED);
 }
