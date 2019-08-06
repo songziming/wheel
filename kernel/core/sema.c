@@ -3,11 +3,11 @@
 // P (proberen), a.k.a. take / down
 // V (verhogen), a.k.a. give / up
 
-typedef struct sem_waiter {
+typedef struct sem_pender {
     dlnode_t dl;
     task_t * tid;
-    int      acquired;
-} sem_waiter_t;
+    int      up;
+} sema_pender_t;
 
 void sema_init(sema_t * sema, int limit, int value) {
     assert(value <= limit);
@@ -16,35 +16,6 @@ void sema_init(sema_t * sema, int limit, int value) {
     sema->limit  = limit;
     sema->value  = value;
 }
-
-// Linux doesn't have this function, is it useless?
-#if 0
-// resume all pending tasks waiting for this sema
-// waiters still remain inside `sema->pend_q`
-// unpended tasks still need this sema to check unpend reason
-// parent structure could use ref-counting to manage object life cycle
-void sema_freeall(sema_t * sema) {
-    u32 key = irq_spin_take(&sema->spin);
-
-    for (dlnode_t * dl = sema->pend_q.head; NULL != dl; dl = dl->next) {
-        sem_waiter_t * waiter = PARENT(dl, sem_waiter_t, dl);
-        task_t       * tid    = waiter->tid;
-
-        raw_spin_take(&tid->spin);
-        waiter->acquired = NO;
-        sched_cont(tid, TS_PEND);
-        int cpu = tid->last_cpu;
-        raw_spin_give(&tid->spin);
-
-        if (cpu_index() != cpu) {
-            smp_resched(cpu);
-        }
-    }
-
-    irq_spin_give(&sema->spin, key);
-    task_switch();
-}
-#endif
 
 // this function is executed under ISR
 static void sema_timeout(task_t * tid, int * expired) {
@@ -72,7 +43,7 @@ int sema_take(sema_t * sema, int timeout) {
     }
 
     // if no waiting, just return error
-    if (timeout == 0) {
+    if (NO_WAIT == timeout) {
         irq_spin_give(&sema->spin, key);
         return ERROR;
     }
@@ -81,12 +52,13 @@ int sema_take(sema_t * sema, int timeout) {
     task_t * tid = thiscpu_var(tid_prev);
     raw_spin_take(&tid->spin);
 
-    // prepare waiter structure
-    sem_waiter_t waiter;
-    waiter.dl       = DLNODE_INIT;
-    waiter.tid      = tid;
-    waiter.acquired = NO;
-    dl_push_tail(&sema->pend_q, &waiter.dl);
+    // prepare pender structure
+    sema_pender_t pender = {
+        .dl  = DLNODE_INIT,
+        .tid = tid,
+        .up  = NO,
+    };
+    dl_push_tail(&sema->pend_q, &pender.dl);
 
     // prepare timeout watchdog
     int expired = NO;
@@ -111,41 +83,17 @@ int sema_take(sema_t * sema, int timeout) {
 
     // check success condition first
     // since timeout might overlap with acquire and delete
-    if (YES == waiter.acquired) {
+    if (YES == pender.up) {
         irq_spin_give(&sema->spin, key);
         return OK;
     }
 
-    // sema not acquired, waiter still in pend_q
-    dl_remove(&sema->pend_q, &waiter.dl);
-
-    // TODO: if we have no `freeall`, no signal,
-    //       then no need to check `expired`
-    //       not acquired just means timeout
-#if 0
-    // check if we have expired
-    if (expired) {
-        irq_spin_give(&sema->spin, key);
-        return ERROR;
-    }
-#endif
-
-    // if sema got destroyed
+    // sema not acquired, pender still in pend_q
+    assert(YES == expired);
+    dl_remove(&sema->pend_q, &pender.dl);
     irq_spin_give(&sema->spin, key);
     return ERROR;
 }
-
-// // this function can be called during ISR
-// int sema_trytake(sema_t * sema) {
-//     u32 key = irq_spin_take(&sema->spin);
-//     if (sema->value > 0) {
-//         --sema->value;
-//         irq_spin_give(&sema->spin, key);
-//         return OK;
-//     }
-//     irq_spin_give(&sema->spin, key);
-//     return ERROR;
-// }
 
 // this function can be called inside ISR
 void sema_give(sema_t * sema) {
@@ -160,12 +108,12 @@ void sema_give(sema_t * sema) {
         return;
     }
 
-    sem_waiter_t * waiter = PARENT(dl, sem_waiter_t, dl);
-    task_t * tid = waiter->tid;
+    sema_pender_t * pender = PARENT(dl, sema_pender_t, dl);
+    task_t * tid = pender->tid;
 
     // wake up this task
     raw_spin_take(&tid->spin);
-    waiter->acquired = YES;
+    pender->up = YES;
     sched_cont(tid, TS_PEND);
     int cpu = tid->last_cpu;
     raw_spin_give(&tid->spin);

@@ -102,9 +102,9 @@ static usize ios_read_no_wait(fdesc_t * desc, u8 * buf, usize len) {
     return ret;
 }
 
-// cannot be canned under ISR
+// cannot be called under ISR
 static usize ios_read_wait_forever(fdesc_t * desc, u8 * buf, usize len) {
-    assert(0 != thiscpu_var(int_depth));
+    assert(0 == thiscpu_var(int_depth));
 
     if (OK != sema_take(&desc->sema, WAIT_FOREVER)) {
         return -1;
