@@ -7,18 +7,17 @@
 typedef struct iodrv iodrv_t;
 typedef struct iodev iodev_t;
 typedef struct fdesc fdesc_t;
-typedef struct task  task_t;
 
-typedef void  (* ios_open_t)  (fdesc_t * desc, iodev_t * dev);
-typedef void  (* ios_close_t) (fdesc_t * desc, iodev_t * dev);
-typedef usize (* ios_read_t)  (fdesc_t * desc,       u8 * buf, usize len, usize * pos);
-typedef usize (* ios_write_t) (fdesc_t * desc, const u8 * buf, usize len, usize * pos);
-typedef void  (* ios_lseek_t) (fdesc_t * desc, usize pos, int delta);
+// typedef void  (* ios_open_t)  (iodev_t * dev);
+// typedef void  (* ios_close_t) (iodev_t * dev);
+typedef usize (* ios_read_t)  (iodev_t * dev,       u8 * buf, usize len, usize * pos);
+typedef usize (* ios_write_t) (iodev_t * dev, const u8 * buf, usize len, usize * pos);
+typedef void  (* ios_lseek_t) (iodev_t * dev, usize pos, int delta);
+
+typedef void  (* ios_free_t)  (iodev_t * dev);
 
 // multiple iodev could use this driver
 struct iodrv {
-    ios_open_t  open;
-    ios_close_t close;
     ios_read_t  read;
     ios_write_t write;
     ios_lseek_t lseek;
@@ -26,13 +25,9 @@ struct iodrv {
 
 // multiple fdesc could link to this device
 struct iodev {
-    spin_t    spin;
-    int       ref;
-    iodrv_t * drv;
-    dllist_t  readers;      // list of readers
-    dllist_t  writers;      // list of writers
-    sema_t    sema_readers;
-    sema_t    sema_writers;
+    int         ref;    // RCU counter
+    ios_free_t  free;   // release function
+    iodrv_t   * drv;
 };
 
 // multiple task can access this descriptor
@@ -42,20 +37,17 @@ struct fdesc {
     iodev_t * dev;          // which device we've opened
     usize     pos;
     int       mode;
-    dlnode_t  dl_reader;    // node in the readers list
-    dlnode_t  dl_writer;    // node in the writers list
 };
 
-// #define IODRV_INIT ((iodrv_t) { NULL, NULL })
-// #define IODEV_INIT ((iodev_t) { NULL, DLLIST_INIT, DLLIST_INIT })
-// #define FDESC_INIT ((fdesc_t) { NULL, DLNODE_INIT, DLNODE_INIT })
+extern iodev_t * iodev_retain(iodev_t * dev);
+extern void      iodev_delete(iodev_t * dev);
 
 #define IOS_READ    1
 #define IOS_WRITE   2
 
 extern fdesc_t * ios_open (const char * filename, int mode);
 extern void      ios_close(fdesc_t * desc);
-extern usize     ios_read (fdesc_t * desc,       u8 * buf, usize len, int timeout);
-extern usize     ios_write(fdesc_t * desc, const u8 * buf, usize len, int timeout);
+extern usize     ios_read (fdesc_t * desc,       void * buf, usize len);
+extern usize     ios_write(fdesc_t * desc, const void * buf, usize len);
 
 #endif // CORE_IOS_H

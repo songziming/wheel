@@ -3,95 +3,78 @@
 // P (proberen), a.k.a. take / down
 // V (verhogen), a.k.a. give / up
 
-typedef struct sem_pender {
+typedef struct pender {
     dlnode_t dl;
     task_t * tid;
     int      up;
-} sema_pender_t;
-
-void sema_init(sema_t * sema, int limit, int value) {
-    assert(value <= limit);
-    sema->spin   = SPIN_INIT;
-    sema->pend_q = DLLIST_INIT;
-    sema->limit  = limit;
-    sema->value  = value;
-}
+} pender_t;
 
 // this function is executed under ISR
 static void sema_timeout(task_t * tid, int * expired) {
-    // variable `expired` is on the stack of `tid`,
-    // which is also protected by `tid->spin`
+    assert(NULL != tid);
+    assert(NULL != expired);
+
     u32 key = irq_spin_take(&tid->spin);
     sched_cont(tid, TS_PEND);
     * expired = YES;
     irq_spin_give(&tid->spin, key);
 }
 
-// return OK if successfully taken the sema
-// return ERROR if failed (might block)
-// this function cannot be called inside ISR
+// return OK for success, ERROR for fail
 int sema_take(sema_t * sema, int timeout) {
     assert(NULL != sema);
 
     u32 key = irq_spin_take(&sema->spin);
-
-    // check if we can take this sema
     if (sema->value > 0) {
         --sema->value;
         irq_spin_give(&sema->spin, key);
         return OK;
     }
-
-    // if no waiting, just return error
     if (NO_WAIT == timeout) {
         irq_spin_give(&sema->spin, key);
         return ERROR;
     }
 
     // resource not available, pend current task
-    task_t * tid = thiscpu_var(tid_prev);
-    raw_spin_take(&tid->spin);
-
-    // prepare pender structure
-    sema_pender_t pender = {
+    wdog_t   wd      = WDOG_INIT;
+    int      expired = NO;
+    task_t * tid     = thiscpu_var(tid_prev);
+    pender_t pender  = {
         .dl  = DLNODE_INIT,
         .tid = tid,
         .up  = NO,
     };
-    dl_push_tail(&sema->pend_q, &pender.dl);
 
-    // prepare timeout watchdog
-    int expired = NO;
-    wdog_t wd;
-    wdog_init(&wd);
+    dl_push_tail(&sema->pend_q, &pender.dl);
 
     // start wdog while holding `tid->spin`
     // so that timeout will not happen before pending
+    raw_spin_take(&tid->spin);
     if (timeout != WAIT_FOREVER) {
         wdog_start(&wd, timeout, sema_timeout, tid, &expired, 0,0);
     }
 
-    // pend this task
+    // pend here
     sched_stop(tid, TS_PEND);
     raw_spin_give(&tid->spin);
     irq_spin_give(&sema->spin, key);
     task_switch();
 
-    // stop the timer and lock sema again
-    wdog_cancel(&wd);
+    // on wakeup, stop timer and lock semaphore again
+    wdog_stop(&wd);
     key = irq_spin_take(&sema->spin);
 
-    // check success condition first
-    // since timeout might overlap with acquire and delete
     if (YES == pender.up) {
         irq_spin_give(&sema->spin, key);
         return OK;
     }
+    if (YES == expired) {
+        dl_remove(&sema->pend_q, &pender.dl);
+        irq_spin_give(&sema->spin, key);
+        return ERROR;
+    }
 
-    // sema not acquired, pender still in pend_q
-    assert(YES == expired);
-    dl_remove(&sema->pend_q, &pender.dl);
-    irq_spin_give(&sema->spin, key);
+    panic("semaphore wakeup exception\n");
     return ERROR;
 }
 
@@ -108,8 +91,8 @@ void sema_give(sema_t * sema) {
         return;
     }
 
-    sema_pender_t * pender = PARENT(dl, sema_pender_t, dl);
-    task_t * tid = pender->tid;
+    pender_t * pender = PARENT(dl, pender_t, dl);
+    task_t   * tid    = pender->tid;
 
     // wake up this task
     raw_spin_take(&tid->spin);

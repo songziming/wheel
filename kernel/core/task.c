@@ -112,9 +112,7 @@ void task_resume(task_t * tid) {
 }
 
 void task_delay(int ticks) {
-    wdog_t wd;
-    wdog_init(&wd);
-
+    wdog_t   wd  = WDOG_INIT;
     task_t * tid = thiscpu_var(tid_prev);
     u32      key = irq_spin_take(&tid->spin);
     sched_stop(tid, TS_DELAY);
@@ -122,7 +120,7 @@ void task_delay(int ticks) {
     irq_spin_give(&tid->spin, key);
 
     task_switch();
-    wdog_cancel(&wd);
+    wdog_stop(&wd);
 }
 
 void task_wakeup(task_t * tid) {

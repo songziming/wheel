@@ -208,9 +208,9 @@ static fdesc_t * pipe_desc = NULL;
 
 static void work_proc() {
     while (1) {
-        task_delay(CFG_SYS_CLOCK_RATE);
+        task_delay(CFG_SYS_CLOCK_RATE / 2);
         if (NULL != pipe_desc) {
-            ios_write(pipe_desc, "A", 1, WAIT_FOREVER);
+            ios_write(pipe_desc, "Abc", 3);
         }
     }
 }
@@ -244,26 +244,16 @@ static void root_proc() {
     fdesc_t * dup = ios_open("pipe", IOS_READ);
     dbg_print("opened pipe file %p.\n", pipe_desc);
 
-    char text[] = "message written into pipe buffer.";
-    usize wrotelen = ios_write(pipe_desc, text, strlen(text), WAIT_FOREVER);
-    dbg_print("wrote %d bytes into pipe.\n", wrotelen);
+    task_t * tid_work = task_create(PRIORITY_NONRT, work_proc, 0,0,0,0);
+    task_resume(tid_work);
 
-    u8 data[64];
-    usize readlen = ios_read(dup, data, 64, WAIT_FOREVER);
-    data[readlen] = '\0';
-    dbg_print("read %d bytes from pipe file.\n", readlen);
-    dbg_print("read content: %s.\n", data);
-
-    // task_t * tid_work = task_create(PRIORITY_NONRT, work_proc, 0,0,0,0);
-    // task_resume(tid_work);
-
-    // u8    buf[32];
-    // usize sz;
-    // while (1) {
-    //     sz = ios_read(dup, buf, 32, WAIT_FOREVER);
-    //     buf[sz] = 0;
-    //     dbg_print("%s", buf);
-    // }
+    u8    buf[32];
+    usize sz;
+    while (1) {
+        sz = ios_read(dup, buf, 32);
+        buf[sz] = 0;
+        dbg_print("%s", buf);
+    }
 
     ios_close(dup);
     ios_close(pipe_desc);

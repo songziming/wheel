@@ -3,6 +3,8 @@
 // a giant lock (tick_q.lock) is used to guard all watch dog operations
 // so spinlock is not needed inside wdog_t structure
 
+// `wd->proc == NULL` means this wdog is not in tick_q
+
 typedef struct tick_q {
     spin_t   spin;
     dllist_t q;
@@ -10,12 +12,6 @@ typedef struct tick_q {
 
 static tick_q_t tick_q     = { SPIN_INIT, DLLIST_INIT };
 static ssize    tick_count = 0;
-
-void wdog_init(wdog_t * wd) {
-    memset(wd, 0, sizeof(wdog_t));
-    wd->node.prev = &wd->node;
-    wd->node.next = &wd->node;
-}
 
 void wdog_start(wdog_t * wd, int ticks, void * proc,
                 void * a1, void * a2, void * a3, void * a4) {
@@ -25,7 +21,7 @@ void wdog_start(wdog_t * wd, int ticks, void * proc,
     assert(ticks != WAIT_FOREVER);
 
     u32 key = irq_spin_take(&tick_q.spin);
-    if ((wd->node.prev != &wd->node) && (wd->node.next != &wd->node)) {
+    if (NULL != wd->proc) {
         irq_spin_give(&tick_q.spin, key);
         return;
     }
@@ -55,15 +51,14 @@ void wdog_start(wdog_t * wd, int ticks, void * proc,
     irq_spin_give(&tick_q.spin, key);
 }
 
-void wdog_cancel(wdog_t * wd) {
+void wdog_stop(wdog_t * wd) {
     u32 key = irq_spin_take(&tick_q.spin);
 
-    if ((wd->node.prev != &wd->node) && (wd->node.next != &wd->node)) {
+    if (NULL != wd->proc) {
         dlnode_t * node = wd->node.next;
         wdog_t   * next = PARENT(node, wdog_t, node);
         dl_remove(&tick_q.q, &wd->node);
-        wd->node.prev = &wd->node;
-        wd->node.next = &wd->node;
+        wd->proc = NULL;
         if (NULL != node) {
             next->ticks += wd->ticks;
         }
@@ -86,13 +81,13 @@ void tick_proc() {
 
         while ((NULL != node) && (wdog->ticks <= 0)) {
             dl_pop_head(&tick_q.q);
-            wdog->node.prev = &wdog->node;
-            wdog->node.next = &wdog->node;
+            wdog_proc_t proc = wdog->proc;
+            wdog->proc = NULL;
 
             // during wdog execution, contention of tick_q is released
-            // so we can start wdog inside wdog
+            // so we can start (another or the same) wdog inside proc
             irq_spin_give(&tick_q.spin, key);
-            wdog->proc(wdog->arg1, wdog->arg2, wdog->arg3, wdog->arg4);
+            proc(wdog->arg1, wdog->arg2, wdog->arg3, wdog->arg4);
             key = irq_spin_take(&tick_q.spin);
 
             node = tick_q.q.head;
