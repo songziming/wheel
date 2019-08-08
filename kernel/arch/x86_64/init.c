@@ -204,13 +204,15 @@ __INIT __NORETURN void sys_init_ap() {
 extern u8 _trampoline_addr;
 extern u8 _trampoline_end;
 
-static fdesc_t * pipe_desc = NULL;
+// static fdesc_t * pipe_desc = NULL;
 
-static void work_proc() {
+static void kbd_proc() {
+    fdesc_t * kbd = ios_open("/dev/kbd", IOS_READ);
+    int       key;
     while (1) {
-        task_delay(CFG_SYS_CLOCK_RATE / 2);
-        if (NULL != pipe_desc) {
-            ios_write(pipe_desc, "Abc", 3);
+        ios_read(kbd, &key, sizeof(u32));
+        if (0 == (key & 0x80000000)) {
+            dbg_print("<%x>", key);
         }
     }
 }
@@ -240,23 +242,9 @@ static void root_proc() {
     dbg_print("running inside task.\n");
     dbg_trace_here();
 
-    pipe_desc = ios_open("pipe", IOS_WRITE);
-    fdesc_t * dup = ios_open("pipe", IOS_READ);
-    dbg_print("opened pipe file %p.\n", pipe_desc);
-
-    task_t * tid_work = task_create(PRIORITY_NONRT, work_proc, 0,0,0,0);
-    task_resume(tid_work);
-
-    u8    buf[32];
-    usize sz;
-    while (1) {
-        sz = ios_read(dup, buf, 32);
-        buf[sz] = 0;
-        dbg_print("%s", buf);
-    }
-
-    ios_close(dup);
-    ios_close(pipe_desc);
+    // starting other kernel components
+    task_resume(task_create(0, kbd_proc, 0,0,0,0));
+    ps2kbd_dev_init();
 
     task_exit();
     dbg_print("you shall not see this line!\n");

@@ -13,7 +13,6 @@ typedef struct fdesc fdesc_t;
 typedef usize (* ios_read_t)  (iodev_t * dev,       u8 * buf, usize len, usize * pos);
 typedef usize (* ios_write_t) (iodev_t * dev, const u8 * buf, usize len, usize * pos);
 typedef void  (* ios_lseek_t) (iodev_t * dev, usize pos, int delta);
-
 typedef void  (* ios_free_t)  (iodev_t * dev);
 
 // multiple iodev could use this driver

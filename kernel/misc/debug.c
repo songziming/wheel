@@ -7,8 +7,8 @@
 // circular buffer, write to head, read from tail
 static char   dbg_buff[CFG_DEBUG_BUFF_SIZE];
 static spin_t dbg_lock = SPIN_INIT;
-static usize  w_offset = 0;
-static usize  r_offset = 0;
+static usize  w_offset = 0;     // could exceed CFG_DEBUG_BUFF_SIZE
+static usize  r_offset = 0;     // could exceed CFG_DEBUG_BUFF_SIZE
 
 // arch specific hook functions
 write_func_t dbg_write_hook = NULL;

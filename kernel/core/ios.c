@@ -18,7 +18,8 @@ void iodev_delete(iodev_t * dev) {
 //------------------------------------------------------------------------------
 // open and close IO device
 
-static iodev_t * pipe = NULL;
+static iodev_t * tst_pipe = NULL;
+static iodev_t * kbd_pipe = NULL;
 
 fdesc_t * ios_open(const char * filename, int mode) {
     // TODO: check if this file is already opened
@@ -28,10 +29,15 @@ fdesc_t * ios_open(const char * filename, int mode) {
     //       then retrieve the iodev of that fs_node
     iodev_t * dev = NULL;
     if (0 == strcmp("pipe", filename)) {
-        if (NULL == pipe) {
-            pipe = pipe_dev_create();
+        if (NULL == tst_pipe) {
+            tst_pipe = pipe_dev_create();
         }
-        dev = pipe;
+        dev = tst_pipe;
+    } else if (0 == strcmp("/dev/kbd", filename)) {
+        if (NULL == kbd_pipe) {
+            kbd_pipe = pipe_dev_create();
+        }
+        dev = kbd_pipe;
     } else {
         return NULL;
     }
