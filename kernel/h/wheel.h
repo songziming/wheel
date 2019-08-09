@@ -28,5 +28,6 @@
 #include <misc/debug.h>
 
 #include <misc/list.h>
+#include <misc/fifo.h>
 
 #endif // WHEEL_H

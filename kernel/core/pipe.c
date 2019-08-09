@@ -4,8 +4,7 @@ typedef struct pipe_dev {
     iodev_t  dev;
     spin_t   spin;
     pfn_t    page;
-    usize    r_offset;      // could exceed PAGE_SIZE
-    usize    w_offset;      // could exceed PAGE_SIZE
+    fifo_t   fifo;
     dllist_t r_penders;
     dllist_t w_penders;
 } pipe_dev_t;
@@ -14,29 +13,6 @@ typedef struct pender {
     dlnode_t dl;
     task_t * tid;
 } pender_t;
-
-//------------------------------------------------------------------------------
-// single page pipe read and write
-
-static usize pipe_dev_read(pipe_dev_t * pipe, u8 * buf, usize len) {
-    u8  * data = (u8 *) phys_to_virt((usize) pipe->page << PAGE_SHIFT);
-    usize copy = MIN(pipe->w_offset - pipe->r_offset, len);
-    for (unsigned int i = 0; i < copy; ++i) {
-        buf[i] = data[(pipe->r_offset+i) & (PAGE_SIZE-1)];
-    }
-    pipe->r_offset += copy;
-    return copy;
-}
-
-static usize pipe_dev_write(pipe_dev_t * pipe, const u8 * buf, usize len) {
-    u8  * data = (u8 *) phys_to_virt((usize) pipe->page << PAGE_SHIFT);
-    usize copy = MIN(pipe->r_offset + PAGE_SIZE - pipe->w_offset, len);
-    for (unsigned int i = 0; i < copy; ++i) {
-        data[(pipe->w_offset+i) & (PAGE_SIZE-1)] = buf[i];
-    }
-    pipe->w_offset += copy;
-    return copy;
-}
 
 //------------------------------------------------------------------------------
 // blocking version of read write functions
@@ -67,7 +43,8 @@ static usize pipe_read(iodev_t * dev, u8 * buf, usize len, usize * pos __UNUSED)
 
     while (1) {
         raw_spin_take(&pipe->spin);
-        usize ret = pipe_dev_read(pipe, buf, len);
+        // usize ret = pipe_dev_read(pipe, buf, len);
+        usize ret = fifo_read(&pipe->fifo, buf, len);
         if (0 != ret) {
             preempt_lock();
             flush_penders(&pipe->w_penders);
@@ -101,7 +78,8 @@ static usize pipe_write(iodev_t * dev, const u8 * buf, usize len, usize * pos __
 
     while (1) {
         raw_spin_take(&pipe->spin);
-        usize ret = pipe_dev_write(pipe, buf, len);
+        // usize ret = pipe_dev_write(pipe, buf, len);
+        usize ret = fifo_write(&pipe->fifo, buf, len, NO);
         if (0 != ret) {
             preempt_lock();
             flush_penders(&pipe->r_penders);
@@ -139,6 +117,7 @@ static iodrv_t pipe_drv = {
     .lseek = (ios_lseek_t) NULL,
 };
 
+// destructor function
 static void pipe_dev_destroy(iodev_t * dev) {
     pipe_dev_t * pipe = (pipe_dev_t *) dev;
     page_block_free(pipe->page, 0);
@@ -146,6 +125,15 @@ static void pipe_dev_destroy(iodev_t * dev) {
 }
 
 iodev_t * pipe_dev_create() {
+    pfn_t page = page_block_alloc(ZONE_NORMAL|ZONE_DMA, 0);
+    if (NO_PAGE == page) {
+        return NULL;
+    }
+
+    page_array[page].block = 1;
+    page_array[page].order = 0;
+    page_array[page].type  = PT_PIPE;
+
     pipe_dev_t * pipe = kmem_alloc(sizeof(pipe_dev_t));
 
     pipe->dev.ref   = 1;
@@ -153,15 +141,10 @@ iodev_t * pipe_dev_create() {
     pipe->dev.drv   = &pipe_drv;
 
     pipe->spin      = SPIN_INIT;
-    pipe->page      = page_block_alloc_or_fail(ZONE_NORMAL|ZONE_DMA, 0);
-    pipe->r_offset  = 0;
-    pipe->w_offset  = 0;
+    pipe->page      = page;
+    pipe->fifo      = FIFO_INIT(phys_to_virt((usize) page << PAGE_SHIFT), PAGE_SIZE);
     pipe->r_penders = DLLIST_INIT;
     pipe->w_penders = DLLIST_INIT;
-
-    page_array[pipe->page].block = 1;
-    page_array[pipe->page].order = 0;
-    page_array[pipe->page].type  = PT_PIPE;
 
     return (iodev_t *) pipe;
 }

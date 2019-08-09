@@ -97,7 +97,7 @@ static keycode_t normal_lookup[] = {
 // so this driver also has multiple state, one for each prefix
 
 #define STATE_NORMAL        0
-#define STATE_E0            1
+#define STATE_E0            1   // prefix e0
 
 #define STATE_PRTSC_DOWN_2  2   // print screen pressed, got e0, 2a
 #define STATE_PRTSC_DOWN_3  3   // print screen pressed, got e0, 2a, e0
