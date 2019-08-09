@@ -207,10 +207,8 @@ extern u8 _trampoline_end;
 // static fdesc_t * pipe_desc = NULL;
 
 static void kbd_proc() {
-    fdesc_t * kbd = ios_open("/dev/kbd", IOS_READ);
-    int       key;
     while (1) {
-        ios_read(kbd, &key, sizeof(u32));
+        keycode_t key = kbd_recv();
         if (0 == (key & 0x80000000)) {
             dbg_print("<%x>", key);
         }

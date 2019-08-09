@@ -1,12 +1,12 @@
 #include <wheel.h>
 
-#if (CFG_DEBUG_BUFF_SIZE & (CFG_DEBUG_BUFF_SIZE - 1)) != 0
-    #error "CFG_DEBUG_BUFF_SIZE must be power of 2"
+#if (CFG_DBG_BUFF_SIZE & (CFG_DBG_BUFF_SIZE - 1)) != 0
+    #error "CFG_DBG_BUFF_SIZE must be power of 2"
 #endif
 
-static char   dbg_buff[CFG_DEBUG_BUFF_SIZE];
+static char   dbg_buff[CFG_DBG_BUFF_SIZE];
 static spin_t dbg_lock = SPIN_INIT;
-static fifo_t dbg_fifo = FIFO_INIT(dbg_buff, CFG_DEBUG_BUFF_SIZE);
+static fifo_t dbg_fifo = FIFO_INIT(dbg_buff, CFG_DBG_BUFF_SIZE);
 
 // arch specific hook functions
 write_func_t dbg_write_hook = NULL;

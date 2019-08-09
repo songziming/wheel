@@ -15,7 +15,8 @@ typedef struct sema {
     int      value;
 } sema_t;
 
-#define SEMA_INIT(x) ((sema_t) { SPIN_INIT, DLLIST_INIT, (x), (x) })
+#define SEMA_FULL(x) ((sema_t) { SPIN_INIT, DLLIST_INIT, (x), (x) })
+#define SEMA_ZERO(x) ((sema_t) { SPIN_INIT, DLLIST_INIT, (x), (0) })
 
 extern int  sema_take(sema_t * sema, int timeout);
 extern void sema_give(sema_t * sema);

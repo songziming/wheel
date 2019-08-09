@@ -6,66 +6,6 @@
 #define PS2KBD_CTRL_PORT 0x64
 #define PS2KBD_DATA_PORT 0x60
 
-// TODO: move keycode definition to global kbd.h
-typedef enum keycode {
-    KEY_RESERVED,
-
-    // number keys
-    KEY_0,  KEY_1,  KEY_2,  KEY_3,  KEY_4,
-    KEY_5,  KEY_6,  KEY_7,  KEY_8,  KEY_9,
-
-    // letteer keys
-    KEY_A,  KEY_B,  KEY_C,  KEY_D,  KEY_E,  KEY_F,  KEY_G,
-    KEY_H,  KEY_I,  KEY_J,  KEY_K,  KEY_L,  KEY_M,  KEY_N,
-    KEY_O,  KEY_P,  KEY_Q,  KEY_R,  KEY_S,  KEY_T,
-    KEY_U,  KEY_V,  KEY_W,  KEY_X,  KEY_Y,  KEY_Z,
-
-    // function keys
-    KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6,
-    KEY_F7, KEY_F8, KEY_F9, KEY_F10,KEY_F11,KEY_F12,
-
-    // and modifiers
-    KEY_LEFTCTRL,   KEY_RIGHTCTRL,
-    KEY_LEFTSHIFT,  KEY_RIGHTSHIFT,
-    KEY_LEFTALT,    KEY_RIGHTALT,
-
-    // punctuations
-    KEY_BACKTICK,   KEY_MINUS,      KEY_EQUAL,      KEY_TAB,
-    KEY_LEFTBRACE,  KEY_RIGHTBRACE, KEY_SEMICOLON,  KEY_QUOTE,
-    KEY_COMMA,      KEY_DOT,        KEY_SLASH,      KEY_BACKSLASH,
-    KEY_SPACE,      KEY_BACKSPACE,  KEY_ENTER,
-
-    // control keys
-    KEY_ESCAPE,     KEY_CAPSLOCK,   KEY_NUMLOCK,    KEY_SCROLLLOCK,
-    KEY_INSERT,     KEY_DELETE,     KEY_HOME,       KEY_END,
-    KEY_PAGEUP,     KEY_PAGEDOWN,
-    KEY_UP,         KEY_DOWN,       KEY_LEFT,       KEY_RIGHT,
-
-    // key pad
-    KEY_KP_0,       KEY_KP_1,       KEY_KP_2,       KEY_KP_3,       KEY_KP_4,
-    KEY_KP_5,       KEY_KP_6,       KEY_KP_7,       KEY_KP_8,       KEY_KP_9,
-    KEY_KP_SLASH,   KEY_KP_STAR,    KEY_KP_MINUS,   KEY_KP_PLUS,
-    KEY_KP_ENTER,   KEY_KP_DOT,
-
-    // special
-    KEY_PRTSC,      KEY_PAUSE,      KEY_APPS,
-
-    // multimedia
-    KEY_MM_PREV,    KEY_MM_NEXT,    KEY_MM_PLAY,    KEY_MM_STOP,
-    KEY_MM_MUTE,    KEY_MM_CALC,    KEY_MM_VOLUP,   KEY_MM_VOLDOWN,
-    KEY_MM_EMAIL,   KEY_MM_SELECT,  KEY_MM_MYCOMPUTER,
-
-    // multimedia www
-    KEY_WWW_HOME,   KEY_WWW_SEARCH, KEY_WWW_FAVORITES,
-    KEY_WWW_FORWARD,KEY_WWW_BACK,   KEY_WWW_STOP,   KEY_WWW_REFRESH,
-
-    // GUI (windows key)
-    KEY_GUI_LEFT,   KEY_GUI_RIGHT,
-
-    // acpi
-    KEY_ACPI_POWER, KEY_ACPI_SLEEP, KEY_ACPI_WAKE,
-} keycode_t;
-
 // lookup table to convert scan code set 1 to key code
 static keycode_t normal_lookup[] = {
     KEY_RESERVED,   KEY_ESCAPE,     KEY_1,          KEY_2,          // 0x00 - 0x03
@@ -110,18 +50,21 @@ static keycode_t normal_lookup[] = {
 #define STATE_PAUSE_4       9   // pause sequence, got e1, 1d, 45, e1
 #define STATE_PAUSE_5       10  // pause sequence, got e1, 1d, 45, e1, 9d
 
-static int       state = 0;
-static fdesc_t * desc  = NULL;
+static int state = 0;
 
-// send key code to kbd-task
-static void send_keycode(keycode_t key, int release) {
-    u32 encoded = (u32) key;
-    if (release) {
-        encoded |= 0x80000000;
-    }
+// // send key code to kbd-task
+// static void send_keycode(keycode_t code, int release) {
+//     if (release) {
+//         code |= 0x80000000;
+//     }
+//     u32 key = irq_spin_take(&kbd_spin);
+//     fifo_write(&kbd_fifo, (u8 *) &code, sizeof(keycode_t), NO);
+//     irq_spin_give(&kbd_spin, key);
 
-    ios_write(desc, &encoded, sizeof(u32));
-}
+//     sema_give(&kbd_sema);
+// }
+
+#define send_keycode(code, release) kbd_send((release) ? ((code) | 0x80000000) : (code))
 
 // convert from scan code set 1 to key code
 static void digest_scan_code(u8 scancode) {
@@ -264,17 +207,9 @@ static void ps2kbd_int_handler(int vec __UNUSED, int_frame_t * sp __UNUSED) {
 }
 
 __INIT void ps2kbd_dev_init() {
-    state = STATE_NORMAL;
-    desc  = ios_open("/dev/kbd", IOS_WRITE);
-    if (NULL == desc) {
-        panic("kbd pipe not found!");
-        return;
-    }
-
-    // PS/2 keyboard by default was connected to pin 1 of PIC
-    // first convert PIC pin number to gsi, then to vector number
     int gsi = ioapic_irq_to_gsi(1);
     int vec = ioapic_gsi_to_vec(gsi);
     isr_tbl[vec] = ps2kbd_int_handler;
+    state = STATE_NORMAL;
     ioapic_gsi_unmask(gsi);
 }

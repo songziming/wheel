@@ -43,7 +43,6 @@ static usize pipe_read(iodev_t * dev, u8 * buf, usize len, usize * pos __UNUSED)
 
     while (1) {
         raw_spin_take(&pipe->spin);
-        // usize ret = pipe_dev_read(pipe, buf, len);
         usize ret = fifo_read(&pipe->fifo, buf, len);
         if (0 != ret) {
             preempt_lock();
@@ -78,7 +77,6 @@ static usize pipe_write(iodev_t * dev, const u8 * buf, usize len, usize * pos __
 
     while (1) {
         raw_spin_take(&pipe->spin);
-        // usize ret = pipe_dev_write(pipe, buf, len);
         usize ret = fifo_write(&pipe->fifo, buf, len, NO);
         if (0 != ret) {
             preempt_lock();

@@ -45,7 +45,7 @@ fdesc_t * ios_open(const char * filename, int mode) {
     dev = iodev_retain(dev);
 
     fdesc_t * desc = kmem_alloc(sizeof(fdesc_t));
-    desc->sema = SEMA_INIT(1);
+    desc->sema = SEMA_FULL(1);
     desc->dev  = dev;
     desc->drv  = dev->drv;
     desc->pos  = 0;

@@ -20,6 +20,8 @@
 #include <mem/pool.h>
 #include <mem/kmem.h>
 
+#include <drvs/kbd.h>
+
 #include <misc/ctype.h>
 #include <misc/string.h>
 #include <misc/vsprintf.h>
