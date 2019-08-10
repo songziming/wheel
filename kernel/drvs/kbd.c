@@ -19,7 +19,7 @@ static spin_t    kbd_spin    = SPIN_INIT;
 static dllist_t  kbd_penders = DLLIST_INIT;
 static fifo_t    kbd_fifo    = FIFO_INIT(kbd_buff, CFG_KBD_BUFF_SIZE * sizeof(keycode_t));
 
-static void flush_penders() {
+static void ready_read() {
     while (1) {
         dlnode_t * head = dl_pop_head(&kbd_penders);
         if (NULL == head) {
@@ -45,7 +45,7 @@ void kbd_send(keycode_t code) {
     u32 key = irq_spin_take(&kbd_spin);
     fifo_write(&kbd_fifo, (u8 *) &code, sizeof(keycode_t), NO);
 
-    flush_penders();
+    ready_read();
     irq_spin_give(&kbd_spin, key);
     task_switch();
 }

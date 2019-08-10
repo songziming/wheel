@@ -11,6 +11,7 @@
 
 #define CFG_DBG_BUFF_SIZE       0x1000
 #define CFG_KBD_BUFF_SIZE       128
+#define CFG_TTY_BUFF_SIZE       1024
 
 #define CFG_SYS_CLOCK_RATE      50
 #define CFG_TASK_TIMESLICE      10

@@ -204,30 +204,17 @@ __INIT __NORETURN void sys_init_ap() {
 extern u8 _trampoline_addr;
 extern u8 _trampoline_end;
 
-// static fdesc_t * pipe_desc = NULL;
-
-static void fgets(fdesc_t * f, char * s, usize len) {
-    usize read_len = 0;
-    while (read_len < len - 1) {
-        usize got = ios_read(f, &s[read_len], len - read_len);
-        for (unsigned int i = 0; i < got; ++i) {
-            if ('\n' == s[read_len + i]) {
-                s[read_len + i] = '\0';
-                return;
-            }
-        }
-        read_len += got;
-    }
-
-    s[len - 1] = '\0';
-}
-
 static void sh_proc() {
     fdesc_t * tty = ios_open("/dev/tty", IOS_READ|IOS_WRITE);
     char buf[128];
     while (1) {
         ios_write(tty, "write something> ", 17);
-        fgets(tty, buf, 128);
+        // fgets(tty, buf, 128);
+        usize len = ios_read(tty, buf, 128);
+        if ('\n' == buf[len-1]) {
+            --len;
+        }
+        buf[len] = '\0';
         ios_write(tty, "we got: `", 9);
         ios_write(tty, buf, strlen(buf));
         ios_write(tty, "`.\n", 3);

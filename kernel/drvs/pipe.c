@@ -17,7 +17,7 @@ typedef struct pender {
 //------------------------------------------------------------------------------
 // blocking version of read write functions
 
-static void flush_penders(dllist_t * list) {
+static void unpend_all(dllist_t * list) {
     while (1) {
         dlnode_t * head = dl_pop_head(list);
         if (NULL == head) {
@@ -46,7 +46,7 @@ static usize pipe_read(iodev_t * dev, u8 * buf, usize len, usize * pos __UNUSED)
         usize ret = fifo_read(&pipe->fifo, buf, len);
         if (0 != ret) {
             preempt_lock();
-            flush_penders(&pipe->w_penders);
+            unpend_all(&pipe->w_penders);
 
             raw_spin_give(&pipe->spin);
             preempt_unlock();
@@ -80,7 +80,7 @@ static usize pipe_write(iodev_t * dev, const u8 * buf, usize len, usize * pos __
         usize ret = fifo_write(&pipe->fifo, buf, len, NO);
         if (0 != ret) {
             preempt_lock();
-            flush_penders(&pipe->r_penders);
+            unpend_all(&pipe->r_penders);
 
             raw_spin_give(&pipe->spin);
             preempt_unlock();

@@ -204,18 +204,76 @@ static char keycode_to_ascii(keycode_t code, int release) {
 //------------------------------------------------------------------------------
 // read write function
 
-static int       tty_xlate = YES;   // converts keycode to ascii
-static int       tty_echo  = YES;   // show input on screen
-static fdesc_t * stdin_r   = NULL;  // actual pipe that holds input
-static fdesc_t * stdin_w   = NULL;  // write end
+#if (CFG_TTY_BUFF_SIZE & (CFG_TTY_BUFF_SIZE - 1)) != 0
+    #error "CFG_TTY_BUFF_SIZE must be power of 2"
+#endif
+
+typedef struct pender {
+    dlnode_t dl;
+    task_t * tid;
+} pender_t;
+
+static int      tty_xlate = YES;    // converts keycode to ascii
+static int      tty_echo  = YES;    // show input on screen
+
+// tty input buffer, fixed size
+static char     tty_buff[CFG_TTY_BUFF_SIZE];
+static spin_t   tty_spin    = SPIN_INIT;
+static dllist_t tty_penders = DLLIST_INIT;
+static fifo_t   tty_fifo    = FIFO_INIT(tty_buff, CFG_TTY_BUFF_SIZE * sizeof(char));
+
+// wakeup pended readers
+static void ready_read() {
+    while (1) {
+        dlnode_t * head = dl_pop_head(&tty_penders);
+        if (NULL == head) {
+            return;
+        }
+
+        pender_t * pender = PARENT(head, pender_t, dl);
+        task_t   * tid    = pender->tid;
+
+        raw_spin_take(&tid->spin);
+        sched_cont(tid, TS_PEND);
+        int cpu = tid->last_cpu;
+        raw_spin_give(&tid->spin);
+
+        if (cpu_index() != cpu) {
+            smp_resched(cpu);
+        }
+    }
+}
 
 // blocking read
-static usize tty_read(iodev_t * tty __UNUSED, u8 * buf, usize len) {
-    return ios_read(stdin_r, buf, len);
+static usize tty_read(iodev_t * tty __UNUSED, u8 * buf, usize len, usize * pos __UNUSED) {
+    // return ios_read(stdin_r, buf, len);
+    while (1) {
+        u32   key = irq_spin_take(&tty_spin);
+        usize got = fifo_read(&tty_fifo, buf, len);
+        if (0 != got) {
+            irq_spin_give(&tty_spin, key);
+            return got;
+        }
+
+        // pend current task
+        task_t * tid    = thiscpu_var(tid_prev);
+        pender_t pender = {
+            .dl  = DLNODE_INIT,
+            .tid = tid,
+        };
+        dl_push_tail(&tty_penders, &pender.dl);
+
+        // pend here and try again
+        raw_spin_take(&tid->spin);
+        sched_stop(tid, TS_PEND);
+        raw_spin_give(&tid->spin);
+        irq_spin_give(&tty_spin, key);
+        task_switch();
+    }
 }
 
 // non blocking write
-static usize tty_write(iodev_t * tty __UNUSED, const u8 * buf, usize len) {
+static usize tty_write(iodev_t * tty __UNUSED, const u8 * buf, usize len, usize * pos __UNUSED) {
     // TODO: parse buf, detect and handle escape sequences
     // TODO: don't use debug function, call console driver directly
     dbg_print("%*s", len, buf);
@@ -224,6 +282,7 @@ static usize tty_write(iodev_t * tty __UNUSED, const u8 * buf, usize len) {
 
 // listen from event and pipe data to stdin
 // bottom half of keyboard ISR
+// if tty input buffer is full, then new data is discarded
 static void listener_proc() {
     while (1) {
         keycode_t code = kbd_recv();
@@ -232,12 +291,29 @@ static void listener_proc() {
             if ((char) -1 == ch) {
                 continue;
             }
-            ios_write(stdin_w, &ch, sizeof(char));
             if (YES == tty_echo) {
                 dbg_print("%c", ch);
             }
+
+            u32   key = irq_spin_take(&tty_spin);
+            usize len = fifo_write(&tty_fifo, (u8 *) &ch, sizeof(char), NO);
+            if ((len != 0) && ('\n' == ch)) {
+                ready_read();
+                irq_spin_give(&tty_spin, key);
+                task_switch();
+            } else {
+                irq_spin_give(&tty_spin, key);
+            }
         } else {
-            ios_write(stdin_w, &code, sizeof(keycode_t));
+            u32   key = irq_spin_take(&tty_spin);
+            usize len = fifo_write(&tty_fifo, (u8 *) &code, sizeof(keycode_t), NO);
+            if (0 != len) {
+                ready_read();
+                irq_spin_give(&tty_spin, key);
+                task_switch();
+            } else {
+                irq_spin_give(&tty_spin, key);
+            }
         }
     }
 }
@@ -270,7 +346,7 @@ __INIT void tty_dev_init() {
     // TODO: regist tty_dev into vfs as `/dev/tty`, so that any
     //       user program could access it.
 
-    stdin_r = ios_open("/dev/kbd", IOS_READ);
-    stdin_w = ios_open("/dev/kbd", IOS_WRITE);
+    // stdin_r = ios_open("/dev/kbd", IOS_READ);
+    // stdin_w = ios_open("/dev/kbd", IOS_WRITE);
     task_resume(task_create(0, listener_proc, 0,0,0,0));
 }
