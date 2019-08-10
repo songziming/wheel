@@ -109,7 +109,7 @@ static usize pipe_write(iodev_t * dev, const u8 * buf, usize len, usize * pos __
 //------------------------------------------------------------------------------
 // pipe driver and device
 
-static iodrv_t pipe_drv = {
+static const iodrv_t pipe_drv = {
     .read  = (ios_read_t)  pipe_read,
     .write = (ios_write_t) pipe_write,
     .lseek = (ios_lseek_t) NULL,
@@ -136,7 +136,7 @@ iodev_t * pipe_dev_create() {
 
     pipe->dev.ref   = 1;
     pipe->dev.free  = pipe_dev_destroy;
-    pipe->dev.drv   = &pipe_drv;
+    pipe->dev.drv   = (iodrv_t *) &pipe_drv;
 
     pipe->spin      = SPIN_INIT;
     pipe->page      = page;

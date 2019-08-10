@@ -206,12 +206,31 @@ extern u8 _trampoline_end;
 
 // static fdesc_t * pipe_desc = NULL;
 
-static void kbd_proc() {
-    while (1) {
-        keycode_t key = kbd_recv();
-        if (0 == (key & 0x80000000)) {
-            dbg_print("<%x>", key);
+static void fgets(fdesc_t * f, char * s, usize len) {
+    usize read_len = 0;
+    while (read_len < len - 1) {
+        usize got = ios_read(f, &s[read_len], len - read_len);
+        for (unsigned int i = 0; i < got; ++i) {
+            if ('\n' == s[read_len + i]) {
+                s[read_len + i] = '\0';
+                return;
+            }
         }
+        read_len += got;
+    }
+
+    s[len - 1] = '\0';
+}
+
+static void sh_proc() {
+    fdesc_t * tty = ios_open("/dev/tty", IOS_READ|IOS_WRITE);
+    char buf[128];
+    while (1) {
+        ios_write(tty, "write something> ", 17);
+        fgets(tty, buf, 128);
+        ios_write(tty, "we got: `", 9);
+        ios_write(tty, buf, strlen(buf));
+        ios_write(tty, "`.\n", 3);
     }
 }
 
@@ -241,8 +260,11 @@ static void root_proc() {
     dbg_trace_here();
 
     // starting other kernel components
-    task_resume(task_create(0, kbd_proc, 0,0,0,0));
+    // task_resume(task_create(0, kbd_proc, 0,0,0,0));
+    tty_dev_init();
     ps2kbd_dev_init();
+
+    task_resume(task_create(PRIORITY_NONRT, sh_proc, 0,0,0,0));
 
     task_exit();
     dbg_print("you shall not see this line!\n");

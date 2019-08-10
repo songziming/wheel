@@ -38,6 +38,8 @@ fdesc_t * ios_open(const char * filename, int mode) {
             kbd_pipe = pipe_dev_create();
         }
         dev = kbd_pipe;
+    } else if (0 == strcmp("/dev/tty", filename)) {
+        dev = tty_get_instance();
     } else {
         return NULL;
     }
@@ -78,6 +80,7 @@ usize ios_read(fdesc_t * desc, void * buf, usize len) {
         sema_give(&desc->sema);
         return ret;
     } else {
+        sema_give(&desc->sema);
         return (usize) -1;
     }
 }
@@ -93,6 +96,7 @@ usize ios_write(fdesc_t * desc, const void * buf, usize len) {
         sema_give(&desc->sema);
         return ret;
     } else {
+        sema_give(&desc->sema);
         return (usize) -1;
     }
 }

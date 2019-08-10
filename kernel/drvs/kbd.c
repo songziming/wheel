@@ -4,11 +4,16 @@
     #error "CFG_KBD_BUFF_SIZE must be power of 2"
 #endif
 
+// TODO: change this file into `event.c`, so that all kinds of input can
+//       share the same interface (keyboard, mouse, timer, etc).
+//       using a uniform message queue is very important for GUI.
+
 typedef struct pender {
     dlnode_t dl;
     task_t * tid;
 } pender_t;
 
+// singleton fifo buffer, non blocking write, blocking read
 static keycode_t kbd_buff[CFG_KBD_BUFF_SIZE];
 static spin_t    kbd_spin    = SPIN_INIT;
 static dllist_t  kbd_penders = DLLIST_INIT;
@@ -35,7 +40,7 @@ static void flush_penders() {
     }
 }
 
-// called in driver ISR
+// non blocking write, called in driver ISR
 void kbd_send(keycode_t code) {
     u32 key = irq_spin_take(&kbd_spin);
     fifo_write(&kbd_fifo, (u8 *) &code, sizeof(keycode_t), NO);
@@ -45,7 +50,7 @@ void kbd_send(keycode_t code) {
     task_switch();
 }
 
-// non blocking
+// non blocking read
 keycode_t kbd_peek() {
     static keycode_t code;
 
@@ -60,7 +65,7 @@ keycode_t kbd_peek() {
     }
 }
 
-// blocking
+// blocking read
 keycode_t kbd_recv() {
     static keycode_t code;
     assert(0 == thiscpu_var(int_depth));

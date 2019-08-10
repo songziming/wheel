@@ -1,5 +1,5 @@
-#ifndef CORE_IOS_H
-#define CORE_IOS_H
+#ifndef DRVS_IOS_H
+#define DRVS_IOS_H
 
 #include <base.h>
 #include <core/sema.h>
@@ -49,4 +49,4 @@ extern void      ios_close(fdesc_t * desc);
 extern usize     ios_read (fdesc_t * desc,       void * buf, usize len);
 extern usize     ios_write(fdesc_t * desc, const void * buf, usize len);
 
-#endif // CORE_IOS_H
+#endif // DRVS_IOS_H
