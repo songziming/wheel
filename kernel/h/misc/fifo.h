@@ -17,8 +17,10 @@ typedef struct fifo {
 // size must be power of 2
 #define FIFO_INIT(data, size) ((fifo_t) { (u8 *) (data), (size), 0, 0 })
 
-extern usize fifo_read (fifo_t * fifo,       u8 * buf, usize len);
-extern usize fifo_peek (fifo_t * fifo,       u8 * buf, usize len);
-extern usize fifo_write(fifo_t * fifo, const u8 * buf, usize len, int force);
+extern int   fifo_is_full (fifo_t * fifo);
+extern int   fifo_is_empty(fifo_t * fifo);
+extern usize fifo_read    (fifo_t * fifo,       u8 * buf, usize len);
+extern usize fifo_peek    (fifo_t * fifo,       u8 * buf, usize len);
+extern usize fifo_write   (fifo_t * fifo, const u8 * buf, usize len, int force);
 
 #endif // MISC_FIFO_H

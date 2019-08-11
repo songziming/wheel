@@ -1,5 +1,13 @@
 #include <wheel.h>
 
+int fifo_is_full(fifo_t * fifo) {
+    return (fifo->w_offset - fifo->r_offset) == fifo->size;
+}
+
+int fifo_is_empty(fifo_t * fifo) {
+    return fifo->w_offset == fifo->r_offset;
+}
+
 // copy and remove the data from fifo
 usize fifo_read(fifo_t * fifo, u8 * buf, usize len) {
     u8  * data = fifo->data;

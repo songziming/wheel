@@ -204,22 +204,8 @@ __INIT __NORETURN void sys_init_ap() {
 extern u8 _trampoline_addr;
 extern u8 _trampoline_end;
 
-static void sh_proc() {
-    fdesc_t * tty = ios_open("/dev/tty", IOS_READ|IOS_WRITE);
-    char buf[128];
-    while (1) {
-        ios_write(tty, "write something> ", 17);
-        // fgets(tty, buf, 128);
-        usize len = ios_read(tty, buf, 128);
-        if ('\n' == buf[len-1]) {
-            --len;
-        }
-        buf[len] = '\0';
-        ios_write(tty, "we got: `", 9);
-        ios_write(tty, buf, strlen(buf));
-        ios_write(tty, "`.\n", 3);
-    }
-}
+// in `core/shell.c`
+extern __INIT void shell_lib_init();
 
 static void root_proc() {
     // copy trampoline code to 0x7c000
@@ -251,7 +237,10 @@ static void root_proc() {
     tty_dev_init();
     ps2kbd_dev_init();
 
-    task_resume(task_create(PRIORITY_NONRT, sh_proc, 0,0,0,0));
+    // task_resume(task_create(PRIORITY_NONRT, sh_proc, 0,0,0,0));
+    shell_lib_init();
+
+    dbg_print("system init done.\n");
 
     task_exit();
     dbg_print("you shall not see this line!\n");

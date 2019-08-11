@@ -295,9 +295,11 @@ static void listener_proc() {
                 dbg_print("%c", ch);
             }
 
-            u32   key = irq_spin_take(&tty_spin);
-            usize len = fifo_write(&tty_fifo, (u8 *) &ch, sizeof(char), NO);
-            if ((len != 0) && ('\n' == ch)) {
+            u32 key = irq_spin_take(&tty_spin);
+            fifo_write(&tty_fifo, (u8 *) &ch, sizeof(char), NO);
+
+            // notify readers if tty buffer full or hit enter
+            if (fifo_is_full(&tty_fifo) || ('\n' == ch)) {
                 ready_read();
                 irq_spin_give(&tty_spin, key);
                 task_switch();
@@ -327,7 +329,7 @@ static const iodrv_t tty_drv = {
     .lseek = (ios_lseek_t) NULL,
 };
 
-// singleton object
+// singleton object, no custom fields
 static iodev_t tty_dev = {
     .ref  = 1,
     .free = (ios_free_t) NULL,
@@ -346,7 +348,5 @@ __INIT void tty_dev_init() {
     // TODO: regist tty_dev into vfs as `/dev/tty`, so that any
     //       user program could access it.
 
-    // stdin_r = ios_open("/dev/kbd", IOS_READ);
-    // stdin_w = ios_open("/dev/kbd", IOS_WRITE);
     task_resume(task_create(0, listener_proc, 0,0,0,0));
 }

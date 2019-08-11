@@ -169,9 +169,10 @@ static inline void write_kgsbase(u64 val) {
 //------------------------------------------------------------------------------
 // kernel debug support
 
-extern void dbg_trace_here();
-extern void dbg_trace_from(u64 rip, u64 * rbp);
-extern void dbg_write_text(const char * s, usize len);
+extern usize dbg_sym_locate(const char * name);
+extern void  dbg_trace_here();
+extern void  dbg_trace_from(u64 rip, u64 * rbp);
+extern void  dbg_write_text(const char * s, usize len);
 
 extern __INIT void regist_symtbl(void * tbl, usize len);
 extern __INIT void regist_strtbl(void * tbl, usize len);
