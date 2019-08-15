@@ -2,7 +2,7 @@
 #define ARCH_X86_64_ARCH_H
 
 // MMU configuration
-#define PAGE_SIZE       0x1000U                 // we use 4K pages
+#define PAGE_SIZE       0x1000UL                // we use 4K pages
 #define PAGE_SHIFT      12                      // 4K = 2^12
 
 // kernel image address
@@ -25,6 +25,7 @@
 #include "liba/multiboot.h"
 #include "liba/acpi.h"
 #include "liba/atomic.h"
+#include "liba/mmu.h"
 
 #include "liba/ioapic.h"
 #include "liba/loapic.h"

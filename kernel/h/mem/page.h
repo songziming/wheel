@@ -76,7 +76,25 @@ extern usize free_page_count         (u32 zones);
 
 // requires: nothing
 extern __INIT void page_lib_init ();
-extern __INIT void page_range_add(usize start, usize end);
+// extern __INIT void page_range_free(usize start, usize end);
 extern __INIT void page_info_show(u32 zones);
+
+static inline void page_range_free(usize start, usize end) {
+    pfn_t from = (pfn_t) (start >> PAGE_SHIFT);
+    pfn_t to   = (pfn_t) (end   >> PAGE_SHIFT);
+
+    while (from < to) {
+        int order = CTZ32(from);
+        if ((order >= ORDER_COUNT) || (from == 0)) {
+            order = ORDER_COUNT - 1;
+        }
+        while ((from + (1UL << order)) > to) {
+            --order;
+        }
+
+        page_block_free(from, order);
+        from += (1UL << order);
+    }
+}
 
 #endif // MEM_PAGE_H

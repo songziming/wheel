@@ -270,26 +270,26 @@ __INIT void page_lib_init() {
     }
 }
 
-// add a range of free memory
-__INIT void page_range_add(usize start, usize end) {
-    pfn_t from = (pfn_t) (start >> PAGE_SHIFT);
-    pfn_t to   = (pfn_t) (end   >> PAGE_SHIFT);
+// // add a range of free memory
+// __INIT void page_range_free(usize start, usize end) {
+//     pfn_t from = (pfn_t) (start >> PAGE_SHIFT);
+//     pfn_t to   = (pfn_t) (end   >> PAGE_SHIFT);
 
-    while (from < to) {
-        // compute best order for `from`
-        int order = CTZ32(from);
-        if ((order >= ORDER_COUNT) || (from == 0)) {
-            order = ORDER_COUNT - 1;
-        }
-        while ((from + (1UL << order)) > to) {
-            --order;
-        }
+//     while (from < to) {
+//         // compute best order for `from`
+//         int order = CTZ32(from);
+//         if ((order >= ORDER_COUNT) || (from == 0)) {
+//             order = ORDER_COUNT - 1;
+//         }
+//         while ((from + (1UL << order)) > to) {
+//             --order;
+//         }
 
-        // return this block
-        page_block_free(from, order);
-        from += (1UL << order);
-    }
-}
+//         // return this block
+//         page_block_free(from, order);
+//         from += (1UL << order);
+//     }
+// }
 
 static __INIT void dump_layout(zone_t * zone) {
     for (u32 o = 0; o < ORDER_COUNT; ++o) {

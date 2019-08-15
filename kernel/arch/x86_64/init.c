@@ -1,5 +1,7 @@
 #include <wheel.h>
 
+#define ZERO_MEMORY 1
+
 //------------------------------------------------------------------------------
 // parse madt table, find all local apic and io apic
 
@@ -83,11 +85,17 @@ static __INIT void parse_mmap(u8 * mmap_buf, u32 mmap_len) {
         if ((start < end) && (MB_MEMORY_AVAILABLE == item->type)) {
             if (start < KERNEL_LMA) {
                 dbg_print("+ ram 0x%08llx-0x%08llx.\n", start, MIN(KERNEL_LMA, end));
-                page_range_add(start, MIN(KERNEL_LMA, end));
+#if ZERO_MEMORY
+                memset(phys_to_virt(start), 0, MIN(KERNEL_LMA, end) - start);
+#endif
+                page_range_free(start, MIN(KERNEL_LMA, end));
             }
             if (p_end < end) {
                 dbg_print("+ ram 0x%08llx-0x%08llx.\n", MAX(start, p_end), end);
-                page_range_add(MAX(start, p_end), end);
+#if ZERO_MEMORY
+                memset(phys_to_virt(MAX(start, p_end)), 0, end - MAX(start, p_end));
+#endif
+                page_range_free(MAX(start, p_end), end);
             }
         }
         item = (mb_mmap_item_t *) ((u64) item + item->size + sizeof(item->size));
@@ -155,6 +163,9 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     ioapic_all_init();
     loapic_dev_init();
 
+    // prepare and switch to kernel space
+    kernel_ctx_init();
+
     // init kernel memory allocator
     kmem_lib_init();
     work_lib_init();
@@ -185,6 +196,9 @@ __INIT __NORETURN void sys_init_ap() {
     // interrupt controller
     loapic_dev_init();
 
+    // switch to kernel space
+    kernel_ctx_load();
+
     // temporary tcb to hold saved registers
     task_t dummy = { .priority = PRIORITY_IDLE + 1 };
     thiscpu_var(tid_prev) = &dummy;
@@ -203,9 +217,10 @@ __INIT __NORETURN void sys_init_ap() {
 // defined in `layout.ld`
 extern u8 _trampoline_addr;
 extern u8 _trampoline_end;
+extern u8 _init_end;
 
 // in `core/shell.c`
-extern __INIT void shell_lib_init();
+extern void shell_lib_init();
 
 static void root_proc() {
     // copy trampoline code to 0x7c000
@@ -229,18 +244,21 @@ static void root_proc() {
         }
     }
 
-    dbg_print("running inside task.\n");
-    dbg_trace_here();
-
     // starting other kernel components
-    // task_resume(task_create(0, kbd_proc, 0,0,0,0));
     tty_dev_init();
     ps2kbd_dev_init();
 
-    // task_resume(task_create(PRIORITY_NONRT, sh_proc, 0,0,0,0));
-    shell_lib_init();
+    // reclaim init section memory
+    usize init_addr = KERNEL_LMA;
+    usize init_end  = ROUND_UP(virt_to_phys(&_init_end), PAGE_SIZE);
+    dbg_print("reclaiming init memory 0x%llx~0x%llx.\n", init_addr, init_end);
+#if ZERO_MEMORY
+    memset((void *) KERNEL_VMA, 0, init_end - init_addr);
+#endif
+    page_range_free(init_addr, init_end);
 
-    dbg_print("system init done.\n");
+    // start kernel shell
+    shell_lib_init();
 
     task_exit();
     dbg_print("you shall not see this line!\n");

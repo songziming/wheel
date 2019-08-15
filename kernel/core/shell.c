@@ -54,7 +54,7 @@ static void sh_proc() {
     }
 }
 
-__INIT void shell_lib_init() {
+void shell_lib_init() {
     tty = ios_open("/dev/tty", IOS_READ|IOS_WRITE);
     task_resume(task_create(0, sh_proc, 0,0,0,0));
 }

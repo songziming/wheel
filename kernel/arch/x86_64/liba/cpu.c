@@ -317,6 +317,14 @@ static void exp_default(int vec, int_frame_t * f) {
     dbg_print("    SS:RSP = 0x%02x:0x%016llx\n", f->ss, f->rsp);
     dbg_print("    CS:RIP = 0x%02x:0x%016llx\n", f->cs, f->rip);
 
+    if (14 == vec) {
+        dbg_print("Page fault: %s %s %s.\n",
+                  (f->errcode & 1) ? "Present" : "Non-Present",
+                  (f->errcode & 2) ? "Write" : "Read",
+                  (f->errcode & 4) ? "User" : "Supervisor");
+        dbg_print("Virtual address: 0x%llx.\n", read_cr2());
+    }
+
     if (0 == (f->cs & 3)) {
         dbg_trace_from(f->rip, (u64 *) f->rbp);
     }

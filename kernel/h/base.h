@@ -64,8 +64,8 @@ typedef u64                     cpuset_t;       // limite: at most 64 cpus
 #define MAX(x, y)               (((x) > (y)) ? (x) : (y))
 #define MIN(x, y)               (((x) < (y)) ? (x) : (y))
 
-#define ROUND_UP(x, align)      (((usize) (x) + (align-1)) & ~(align-1))
-#define ROUND_DOWN(x, align)    ( (usize) (x)              & ~(align-1))
-#define IS_ALIGNED(x, align)    (((usize) (x) & (align-1)) == 0)
+#define ROUND_UP(x, align)      (((usize) (x) + ((align)-1)) & ~((align)-1))
+#define ROUND_DOWN(x, align)    ( (usize) (x)                & ~((align)-1))
+#define IS_ALIGNED(x, align)    (((usize) (x) & ((align)-1)) == 0)
 
 #endif // BASE_H

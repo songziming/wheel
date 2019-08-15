@@ -38,7 +38,7 @@ task_t * task_create(int priority, void * proc,
     }
 
     // fill register info on the kernel stack
-    regs_init(&tid->regs, vstack + (1U << order), proc, a1, a2, a3, a4);
+    regs_init(&tid->regs, vstack + CFG_KERNEL_STACK_SIZE, proc, a1, a2, a3, a4);
 
     // init tcb fields
     tid->spin      = SPIN_INIT;

@@ -152,16 +152,16 @@ void preempt_unlock() {
 // this function might be called during tick_advance
 // task state not changed, no need to lock current tid
 void sched_yield() {
-    task_t    * tid = thiscpu_var(tid_prev);
     ready_q_t * rdy = thiscpu_ptr(ready_q);
     u32         key = irq_spin_take(&rdy->spin);
+    task_t    * tid = ready_q_head(rdy);
 
     // round robin only if current task is the head task
-    if (ready_q_head(rdy) == tid) {
-        assert(ready_q_pop(rdy) == tid);
+    if (thiscpu_var(tid_prev) == tid) {
+        ready_q_pop(rdy);
         ready_q_push(rdy, tid);
-        thiscpu_var(tid_next) = ready_q_head(rdy);
     }
+    thiscpu_var(tid_next) = ready_q_head(rdy);
 
     irq_spin_give(&rdy->spin, key);
     task_switch();
