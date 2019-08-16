@@ -29,50 +29,72 @@ usize kernel_ctx = 0UL;
 extern u8 _init_end;
 extern u8 _text_end;
 extern u8 _rodata_end;
-// extern u8 _kernel_end;
 
 //------------------------------------------------------------------------------
 // private functions for creating page entry
 
 // create a 4k mapping entry in the page table
 static void mmu_map_4k(usize ctx, u64 va, u64 pa, u64 fields) {
-    u64 pte   = (va >> 12) & 0x01ff;    // index of page-table entry
+    u64 pe    = (va >> 12) & 0x01ff;    // index of page entry
     u64 pde   = (va >> 21) & 0x01ff;    // index of page-directory entry
     u64 pdpe  = (va >> 30) & 0x01ff;    // index of page-directory-pointer entry
     u64 pml4e = (va >> 39) & 0x01ff;    // index of page-map level-4 entry
 
     // PML4 table is always present
-    u64 * pml4 = (u64 *) phys_to_virt(ctx);
+    u64 * pml4t = (u64 *) phys_to_virt(ctx);
+    pfn_t pml4f = (pfn_t) (ctx >> PAGE_SHIFT);
+    assert(PT_PGTABLE == page_array[pml4f].type);
 
     // check if PDP is present
-    if (0 == (pml4[pml4e] & MMU_ADDR)) {
-        pfn_t pfn   = page_block_alloc_or_fail(ZONE_DMA|ZONE_NORMAL, 0);
-        pml4[pml4e] = ((u64) pfn << PAGE_SHIFT) & MMU_ADDR;
+    if (0 == (pml4t[pml4e] & MMU_ADDR)) {
+        pfn_t pfn = page_block_alloc_or_fail(ZONE_DMA|ZONE_NORMAL, 0, PT_PGTABLE);
+        page_array[pfn].ent_count = 0;
         memset(phys_to_virt((u64) pfn << PAGE_SHIFT), 0, PAGE_SIZE);
+        pml4t[pml4e] = ((u64) pfn << PAGE_SHIFT) & MMU_ADDR;
     }
-    pml4[pml4e] |= MMU_US | MMU_RW | MMU_P;
-    u64 * pdp = (u64 *) phys_to_virt(pml4[pml4e] & MMU_ADDR);
+    if (0 == (pml4t[pml4e] & MMU_P)) {
+        ++page_array[pml4f].ent_count;
+    }
+    pml4t[pml4e] |= MMU_US | MMU_RW | MMU_P;
+    u64 * pdpt = (u64 *) phys_to_virt(pml4t[pml4e] & MMU_ADDR);
+    pfn_t pdpf = (pfn_t) (pml4t[pml4e] >> PAGE_SHIFT);
+    assert(PT_PGTABLE == page_array[pdpf]);
 
     // check if PD is present
-    if (0 == (pdp[pdpe] & MMU_ADDR)) {
-        pfn_t pfn = page_block_alloc_or_fail(ZONE_DMA|ZONE_NORMAL, 0);
-        pdp[pdpe] = ((u64) pfn << PAGE_SHIFT) & MMU_ADDR;
+    if (0 == (pdpt[pdpe] & MMU_ADDR)) {
+        pfn_t pfn = page_block_alloc_or_fail(ZONE_DMA|ZONE_NORMAL, 0, PT_PGTABLE);
+        page_array[pfn].ent_count = 0;
         memset(phys_to_virt((u64) pfn << PAGE_SHIFT), 0, PAGE_SIZE);
+        pdpt[pdpe] = ((u64) pfn << PAGE_SHIFT) & MMU_ADDR;
     }
-    pdp[pdpe] |= MMU_US | MMU_RW | MMU_P;
-    u64 * pd = (u64 *) phys_to_virt(pdp[pdpe] & MMU_ADDR);
+    if (0 == (pdpt[pdpe] & MMU_P)) {
+        ++page_array[pdpf].ent_count;
+    }
+    pdpt[pdpe] |= MMU_US | MMU_RW | MMU_P;
+    u64 * pdt = (u64 *) phys_to_virt(pdpt[pdpe] & MMU_ADDR);
+    pfn_t pdf = (pfn_t) (pdpt[pdpe] >> PAGE_SHIFT);
+    assert(PT_PGTABLE == page_array[pdf]);
 
     // check if page table is present
-    if (0 == (pd[pde] & MMU_ADDR)) {
-        pfn_t pfn = page_block_alloc_or_fail(ZONE_DMA|ZONE_NORMAL, 0);
-        pd[pde]   = ((u64) pfn << PAGE_SHIFT) & MMU_ADDR;
+    if (0 == (pdt[pde] & MMU_ADDR)) {
+        pfn_t pfn = page_block_alloc_or_fail(ZONE_DMA|ZONE_NORMAL, 0, PT_PGTABLE);
+        page_array[pfn].ent_count = 0;
         memset(phys_to_virt((u64) pfn << PAGE_SHIFT), 0, PAGE_SIZE);
+        pdt[pde] = ((u64) pfn << PAGE_SHIFT) & MMU_ADDR;
     }
-    pd[pde] |= MMU_US | MMU_RW | MMU_P;
-    u64 * pt = (u64 *) phys_to_virt(pd[pde] & MMU_ADDR);
+    if (0 == (pdt[pde] & MMU_P)) {
+        ++page_array[pdf].ent_count;
+    }
+    pdt[pde] |= MMU_US | MMU_RW | MMU_P;
+    u64 * pt = (u64 *) phys_to_virt(pdt[pde] & MMU_ADDR);
+    pfn_t pf = (pfn_t) (pdt[pde] >> PAGE_SHIFT);
+    assert(PT_PGTABLE == page_array[pf]);
 
-    // fill the final entry
-    pt[pte] = (pa & MMU_ADDR) | fields | MMU_P;
+    // check if page entry is not mapped
+    if (0 == (pt[pe] & MMU_P)) {
+        ++page_array[pf].ent_count;
+    }
+    pt[pe] = (pa & MMU_ADDR) | fields | MMU_P;
 
     // clear TLB entry
     if (read_cr3() == ctx) {
@@ -87,28 +109,45 @@ static void mmu_map_2m(usize ctx, u64 va, u64 pa, u64 fields) {
     u64 pml4e = (va >> 39) & 0x01ff;    // index of page-map level-4 entry
 
     // pml4 table is always present
-    u64 * pml4 = (u64 *) phys_to_virt(ctx);
+    u64 * pml4t = (u64 *) phys_to_virt(ctx);
+    pfn_t pml4f = (pfn_t) (ctx >> PAGE_SHIFT);
+    assert(PT_PGTABLE == page_array[pml4f].type);
 
     // check if PDP is present
-    if (0 == (pml4[pml4e] & MMU_ADDR)) {
-        pfn_t pfn   = page_block_alloc_or_fail(ZONE_DMA|ZONE_NORMAL, 0);
-        pml4[pml4e] = ((u64) pfn << PAGE_SHIFT) & MMU_ADDR;
+    if (0 == (pml4t[pml4e] & MMU_ADDR)) {
+        pfn_t pfn = page_block_alloc_or_fail(ZONE_DMA|ZONE_NORMAL, 0, PT_PGTABLE);
+        page_array[pfn].ent_count = 0;
         memset(phys_to_virt((u64) pfn << PAGE_SHIFT), 0, PAGE_SIZE);
+        pml4t[pml4e] = ((u64) pfn << PAGE_SHIFT) & MMU_ADDR;
     }
-    pml4[pml4e] |= MMU_US | MMU_RW | MMU_P;
-    u64 * pdp = (u64 *) phys_to_virt(pml4[pml4e] & MMU_ADDR);
+    if (0 == (pml4t[pml4e] & MMU_P)) {
+        ++page_array[pml4f].ent_count;
+    }
+    pml4t[pml4e] |= MMU_US | MMU_RW | MMU_P;
+    u64 * pdpt = (u64 *) phys_to_virt(pml4t[pml4e] & MMU_ADDR);
+    pfn_t pdpf = (pfn_t) (pml4t[pml4e] >> PAGE_SHIFT);
+    assert(PT_PGTABLE == page_array[pdpf].type);
 
     // check if PD is present
-    if (0 == (pdp[pdpe] & MMU_ADDR)) {
-        pfn_t pfn = page_block_alloc_or_fail(ZONE_DMA|ZONE_NORMAL, 0);
-        pdp[pdpe] = ((u64) pfn << PAGE_SHIFT) & MMU_ADDR;
+    if (0 == (pdpt[pdpe] & MMU_ADDR)) {
+        pfn_t pfn = page_block_alloc_or_fail(ZONE_DMA|ZONE_NORMAL, 0, PT_PGTABLE);
+        page_array[pfn].ent_count = 0;
         memset(phys_to_virt((u64) pfn << PAGE_SHIFT), 0, PAGE_SIZE);
+        pdpt[pdpe] = ((u64) pfn << PAGE_SHIFT) & MMU_ADDR;
     }
-    pdp[pdpe] |= MMU_US | MMU_RW | MMU_P;
-    u64 * pd = (u64 *) phys_to_virt(pdp[pdpe] & MMU_ADDR);
+    if (0 == (pdpt[pdpe] & MMU_P)) {
+        ++page_array[pdpf].ent_count;
+    }
+    pdpt[pdpe] |= MMU_US | MMU_RW | MMU_P;
+    u64 * pdt = (u64 *) phys_to_virt(pdpt[pdpe] & MMU_ADDR);
+    pfn_t pdf = (pfn_t) (pdpt[pdpe] >> PAGE_SHIFT);
+    assert(PT_PGTABLE == page_array[pdf].type);
 
-    // fill the final entry
-    pd[pde] = (pa & MMU_ADDR) | fields | MMU_PS | MMU_P;
+    // check if PDE is already mapped
+    if (0 == (pdt[pde] & MMU_P)) {
+        ++page_array[pdf].ent_count;
+    }
+    pdt[pde] = (pa & MMU_ADDR) | fields | MMU_PS | MMU_P;
 
     // clear TLB entry
     if (read_cr3() == ctx) {
@@ -141,37 +180,42 @@ usize mmu_ctx_create() {
 // perform address translation by checking page table
 // return NO_ADDR if mapping for `va` is not present
 usize mmu_translate(usize ctx, usize va) {
-    u64 pte   = (va >> 12) & 0x01ff;
+    u64 pe    = (va >> 12) & 0x01ff;
     u64 pde   = (va >> 21) & 0x01ff;
     u64 pdpe  = (va >> 30) & 0x01ff;
     u64 pml4e = (va >> 39) & 0x01ff;
 
-    u64 * pml4 = (u64 *) phys_to_virt(ctx);
-    if (0 == (pml4[pml4e] & MMU_P)) {
+    u64 * pml4t = (u64 *) phys_to_virt(ctx);
+    assert(PT_PGTABLE == page_array[ctx >> PAGE_SHIFT].type);
+    if (0 == (pml4t[pml4e] & MMU_P)) {
         return NO_ADDR;
     }
 
-    u64 * pdp = (u64 *) phys_to_virt(pml4[pml4e] & MMU_ADDR);
-    if (0 == (pdp[pdpe] & MMU_P)) {
+    u64 * pdpt = (u64 *) phys_to_virt(pml4t[pml4e] & MMU_ADDR);
+    assert(PT_PGTABLE == page_array[pml4t[pml4e] >> PAGE_SHIFT].type);
+    if (0 == (pdpt[pdpe] & MMU_P)) {
         return NO_ADDR;
     }
 
-    u64 * pd = (u64 *) phys_to_virt(pdp[pdpe] & MMU_ADDR);
-    if (0 == (pd[pde] & MMU_P)) {
+    u64 * pdt = (u64 *) phys_to_virt(pdpt[pdpe] & MMU_ADDR);
+    assert(PT_PGTABLE == page_array[pdpt[pdpe] >> PAGE_SHIFT].type);
+    if (0 == (pdt[pde] & MMU_P)) {
         return NO_ADDR;
     }
 
-    if (0 != (pd[pde] & MMU_PS)) {
-        u64 base = pd[pde] & MMU_ADDR;
+    if (0 != (pdt[pde] & MMU_PS)) {
+        u64 base = pdt[pde] & MMU_ADDR;
         assert(0 == (base & (0x200000 - 1)));
         return base + (va & (0x200000 - 1));
     }
 
-    u64 * pt = (u64 *) phys_to_virt(pd[pde] & MMU_ADDR);
-    if (0 == (pt[pte] & MMU_P)) {
+    u64 * pt = (u64 *) phys_to_virt(pdt[pde] & MMU_ADDR);
+    assert(PT_PGTABLE == page_array[pdt[pde] >> PAGE_SHIFT].type);
+    if (0 == (pt[pe] & MMU_P)) {
         return NO_ADDR;
     }
-    return (pt[pte] & MMU_ADDR) + (va & (0x1000 - 1));
+
+    return (pt[pe] & MMU_ADDR) + (va & (0x1000 - 1));
 }
 
 // create mapping from va to pa, overwriting existing mapping
@@ -183,9 +227,15 @@ void mmu_map(usize ctx, usize va, usize pa, usize n, u32 attr) {
     assert(IS_ALIGNED(p, PAGE_SIZE));
 
     u64 fields = 0;
-    if ((attr & MMU_KERNEL) == 0) { fields |= MMU_US; }
-    if ((attr & MMU_RDONLY) == 0) { fields |= MMU_RW; }
-    if ((attr & MMU_NOEXEC) != 0) { fields |= MMU_NX; }
+    if (0 == (attr & MMU_KERNEL)) {
+        fields |= MMU_US;
+    }
+    if (0 == (attr & MMU_RDONLY)) {
+        fields |= MMU_RW;
+    }
+    if (0 != (attr & MMU_NOEXEC)) {
+        fields |= MMU_NX;
+    }
 
     while (n) {
         if ((n >= 512)              &&
@@ -205,39 +255,47 @@ void mmu_map(usize ctx, usize va, usize pa, usize n, u32 attr) {
     }
 }
 
-void mmu_unmap(usize ctx, usize va, usize n) {
-    u64 * pml4 = (u64 *) phys_to_virt(ctx);
-    usize end  = va + n * PAGE_SIZE;
+void mmu_unmap(usize ctx, usize va, usize n, int free) {
+    u64 * pml4t = (u64 *) phys_to_virt(ctx);
+    pfn_t pml4f = (pfn_t) (ctx >> PAGE_SHIFT);
+    assert(PT_PGTABLE == page_array[pml4f].type);
 
+    usize end   = va + n * PAGE_SIZE;
     for (; va < end; va += PAGE_SIZE) {
         u64 pte   = (va >> 12) & 0x01ff;
         u64 pde   = (va >> 21) & 0x01ff;
         u64 pdpe  = (va >> 30) & 0x01ff;
         u64 pml4e = (va >> 39) & 0x01ff;
 
-        if (0 == (pml4[pml4e] & MMU_P)) {
+        if (0 == (pml4t[pml4e] & MMU_P)) {
             continue;
         }
 
-        u64 * pdp = (u64 *) phys_to_virt(pml4[pml4e] & MMU_ADDR);
-        if (0 == (pdp[pdpe] & MMU_P)) {
+        u64 * pdpt = (u64 *) phys_to_virt(pml4t[pml4e] & MMU_ADDR);
+        pfn_t pdpf = (pfn_t) (pml4t[pml4e] >> PAGE_SHIFT);
+        if (0 == (pdpt[pdpe] & MMU_P)) {
             continue;
         }
 
-        u64 * pd = (u64 *) phys_to_virt(pdp[pdpe] & MMU_ADDR);
-        if (0 == (pd[pde] & MMU_P)) {
+        u64 * pdt = (u64 *) phys_to_virt(pdpt[pdpe] & MMU_ADDR);
+        if (0 == (pdt[pde] & MMU_P)) {
             continue;
         }
 
-        if (0 != (pd[pde] & MMU_PS)) {
+        if (0 != (pdt[pde] & MMU_PS)) {
             // 2M page size, first retrieve current mapping
             u64 va_2m  = va & ~(0x200000 - 1);
-            u64 pa_2m  = pd[pde] & MMU_ADDR;
-            u64 fields = pd[pde] & (MMU_US | MMU_RW | MMU_NX);
+            u64 pa_2m  = pdt[pde] & MMU_ADDR;
+            u64 fields = pdt[pde] & (MMU_US | MMU_RW | MMU_NX);
             assert(0 == (pa_2m & (0x200000 - 1)));
 
             // remove current mapping
-            pd[pde] &= ~MMU_P;
+            pdt[pde] &= ~MMU_P;
+            --page_array[]
+            if (YES == free) {
+                page_block_free((pfn_t) (pdt[pde] >> PAGE_SHIFT), 0);
+                pdt[pde] = 0;
+            }
 
             // if unmap range is less than 2M, add back rest range
             if (pte > 0) {
@@ -248,6 +306,13 @@ void mmu_unmap(usize ctx, usize va, usize n) {
                 usize n = (va + PAGE_SIZE * 512 - end) >> PAGE_SHIFT;
                 mmu_map(ctx, end, pa_2m, n, fields);
             }
+
+            continue;
+        }
+
+        u64 * pt = (u64 *) phys_to_virt(pd[pde] & MMU_ADDR);
+        if (0 == (pt[pte] & MMU_P)) {
+            continue;
         }
     }
 }

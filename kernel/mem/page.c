@@ -97,7 +97,7 @@ void pglist_free_all(pglist_t * list) {
 //------------------------------------------------------------------------------
 // page frame allocator - private
 
-static pfn_t zone_block_alloc(zone_t * zone, int order) {
+static pfn_t zone_block_alloc(zone_t * zone, int order, u32 type) {
     for (int o = order; o < ORDER_COUNT; ++o) {
         if (pglist_is_empty(&zone->list[o])) {
             continue;
@@ -118,7 +118,15 @@ static pfn_t zone_block_alloc(zone_t * zone, int order) {
             pglist_push_head(&zone->list[o-1], bud);
         }
 
-        // no need to fill page_array here, let caller do that
+        // fill page_array
+        page_array[blk].type  = type;
+        page_array[blk].order = order;
+        page_array[blk].block = 1;
+        for (int i = 1; i < (1U << order); ++i) {
+            page_array[blk+i].type  = type;
+            page_array[blk+i].order = order;
+            page_array[blk+i].block = 0;
+        }
         return blk;
     }
 
@@ -180,14 +188,15 @@ static inline zone_t * zone_for(usize start, usize end) {
 
 // allocate page block of size 2^order
 // lock zone and interrupt, so ISR could alloc pages
-pfn_t page_block_alloc(u32 zones, int order) {
+pfn_t page_block_alloc(u32 zones, int order, u32 type) {
+    assert(PT_FREE != type);
     if ((order < 0) || (order >= ORDER_COUNT)) {
         return NO_PAGE; // invalid parameter
     }
 
     if (zones & ZONE_NORMAL) {
         u32 key = irq_spin_take(&zone_normal.spin);
-        pfn_t blk = zone_block_alloc(&zone_normal, order);
+        pfn_t blk = zone_block_alloc(&zone_normal, order, type);
         irq_spin_give(&zone_normal.spin, key);
         assert((blk & ((1U << order) - 1)) == 0);
         if (NO_PAGE != blk) {
@@ -197,7 +206,7 @@ pfn_t page_block_alloc(u32 zones, int order) {
 
     if (zones & ZONE_DMA) {
         u32 key = irq_spin_take(&zone_dma.spin);
-        pfn_t blk = zone_block_alloc(&zone_dma, order);
+        pfn_t blk = zone_block_alloc(&zone_dma, order, type);
         irq_spin_give(&zone_dma.spin, key);
         assert((blk & ((1U << order) - 1)) == 0);
         if (NO_PAGE != blk) {
@@ -209,8 +218,8 @@ pfn_t page_block_alloc(u32 zones, int order) {
     return NO_PAGE;
 }
 
-pfn_t page_block_alloc_or_fail(u32 zones, int order) {
-    pfn_t blk = page_block_alloc(zones, order);
+pfn_t page_block_alloc_or_fail(u32 zones, int order, u32 type) {
+    pfn_t blk = page_block_alloc(zones, order, type);
 
     if (NO_PAGE == blk) {
         panic("out of memory when allocating 2^%d pages from %s %s\n",

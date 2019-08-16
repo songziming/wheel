@@ -15,6 +15,9 @@ typedef struct page {
     u32   order : 4;            // only valid when block=1
     u32   block : 1;            // is it the first page in block
     union {
+        struct {                // page table
+            u16 ent_count;      // number of valid entries
+        };
         struct {                // pool
             u16 objects;        // first free object
             u16 inuse;          // number of allocated objects
@@ -26,11 +29,11 @@ typedef struct page {
 #define PT_INVALID      0       // memory hole or mapped device
 #define PT_FREE         1       // not allocated
 #define PT_CACHED       2       // percpu cache
-#define PT_KERNEL       3       // generic kernel usage
-#define PT_POOL         4       // memory pool
-#define PT_KSTACK       5       // task's kernel stack page
-#define PT_PIPE         6       // buffer space of pipe
-#define PT_FIFOBUF      7       // FIFO buffer
+#define PT_PGTABLE      3
+#define PT_KERNEL       4       // generic kernel usage
+#define PT_POOL         5       // memory pool
+#define PT_KSTACK       6       // task's kernel stack page
+#define PT_PIPE         7       // buffer space of pipe
 
 // block order
 #define ORDER_COUNT     16
@@ -68,8 +71,8 @@ extern void  pglist_free_all (pglist_t * list);
 #define ZONE_NORMAL     2
 
 // page frame allocator
-extern pfn_t page_block_alloc        (u32 zones, int order);
-extern pfn_t page_block_alloc_or_fail(u32 zones, int order);
+extern pfn_t page_block_alloc        (u32 zones, int order, u32 type);
+extern pfn_t page_block_alloc_or_fail(u32 zones, int order, u32 type);
 extern void  page_block_free         (pfn_t blk, int order);
 extern pfn_t parent_block            (pfn_t page);
 extern usize free_page_count         (u32 zones);

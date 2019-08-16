@@ -48,5 +48,6 @@ extern fdesc_t * ios_open (const char * filename, int mode);
 extern void      ios_close(fdesc_t * desc);
 extern usize     ios_read (fdesc_t * desc,       void * buf, usize len);
 extern usize     ios_write(fdesc_t * desc, const void * buf, usize len);
+extern void      fprintf  (fdesc_t * desc, const char * fmt, ...);
 
 #endif // DRVS_IOS_H

@@ -100,3 +100,15 @@ usize ios_write(fdesc_t * desc, const void * buf, usize len) {
         return (usize) -1;
     }
 }
+
+//------------------------------------------------------------------------------
+// format text output
+
+void fprintf(fdesc_t * desc, const char * fmt, ...) {
+    static chat buf[1024];
+    va_list args;
+    va_start(args, fmt);
+    usize num = vsnprintf(buf, 1024, fmt, args);
+    va_end(args);
+    ios_write(desc, buf, num);
+}
