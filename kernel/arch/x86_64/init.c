@@ -1,6 +1,6 @@
 #include <wheel.h>
 
-#define ZERO_MEMORY 1
+#define ZERO_MEMORY 0
 
 //------------------------------------------------------------------------------
 // parse madt table, find all local apic and io apic
@@ -164,7 +164,7 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     loapic_dev_init();
 
     // prepare and switch to kernel space
-    kernel_ctx_init();
+    // kernel_ctx_init();
 
     // init kernel memory allocator
     kmem_lib_init();
@@ -255,7 +255,7 @@ static void root_proc() {
 #if ZERO_MEMORY
     memset((void *) KERNEL_VMA, 0, init_end - init_addr);
 #endif
-    page_range_free(init_addr, init_end);
+    // page_range_free(init_addr, init_end);
 
     // start kernel shell
     shell_lib_init();

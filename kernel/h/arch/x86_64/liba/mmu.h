@@ -9,8 +9,8 @@
 
 extern usize mmu_ctx_get();
 extern void  mmu_ctx_set(usize ctx);
-
 extern usize mmu_ctx_create();
+
 extern usize mmu_translate(usize ctx, usize va);
 extern void  mmu_map(usize ctx, usize va, usize pa, usize n, u32 attr);
 extern void  mmu_unmap(usize ctx, usize va, usize n);

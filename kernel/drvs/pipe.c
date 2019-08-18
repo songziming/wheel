@@ -123,14 +123,14 @@ static void pipe_dev_destroy(iodev_t * dev) {
 }
 
 iodev_t * pipe_dev_create() {
-    pfn_t page = page_block_alloc(ZONE_NORMAL|ZONE_DMA, 0);
+    pfn_t page = page_block_alloc(ZONE_NORMAL|ZONE_DMA, 0, PT_PIPE);
     if (NO_PAGE == page) {
         return NULL;
     }
 
-    page_array[page].block = 1;
-    page_array[page].order = 0;
-    page_array[page].type  = PT_PIPE;
+    // page_array[page].block = 1;
+    // page_array[page].order = 0;
+    // page_array[page].type  = PT_PIPE;
 
     pipe_dev_t * pipe = kmem_alloc(sizeof(pipe_dev_t));
 

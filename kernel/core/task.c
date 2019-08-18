@@ -15,20 +15,20 @@ task_t * task_create(int priority, void * proc,
 
     // allocate space for kernel stack, must be a single block
     int   order  = CTZL(CFG_KERNEL_STACK_SIZE) - PAGE_SHIFT;
-    pfn_t kstack = page_block_alloc(ZONE_DMA|ZONE_NORMAL, order);
+    pfn_t kstack = page_block_alloc(ZONE_DMA|ZONE_NORMAL, order, PT_KSTACK);
     usize vstack = (usize) phys_to_virt((usize) kstack << PAGE_SHIFT);
     if (NO_PAGE == kstack) {
         return NULL;
     }
 
-    // mark allocated page as kstack type
-    for (pfn_t i = 0; i < (1U << order); ++i) {
-        page_array[kstack + i].type  = PT_KSTACK;
-        page_array[kstack + i].block = 0;
-        page_array[kstack + i].order = order;
-    }
-    page_array[kstack].block = 1;
-    page_array[kstack].order = order;
+    // // mark allocated page as kstack type
+    // for (pfn_t i = 0; i < (1U << order); ++i) {
+    //     page_array[kstack + i].type  = PT_KSTACK;
+    //     page_array[kstack + i].block = 0;
+    //     page_array[kstack + i].order = order;
+    // }
+    // page_array[kstack].block = 1;
+    // page_array[kstack].order = order;
 
     // allocate tcb
     task_t * tid = kmem_alloc(sizeof(task_t));

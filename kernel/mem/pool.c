@@ -6,22 +6,22 @@
 // slab level object alloc and free
 
 static pfn_t slab_alloc(int blk_order, int obj_size) {
-    pfn_t slab = page_block_alloc_or_fail(ZONE_NORMAL|ZONE_DMA, blk_order);
+    pfn_t slab = page_block_alloc_or_fail(ZONE_NORMAL|ZONE_DMA, blk_order, PT_POOL);
     u8  * addr = (u8 *) phys_to_virt((usize) slab << PAGE_SHIFT);
 
     if (NO_PAGE == slab) {
         return NO_PAGE;
     }
 
-    int page_count = 1 << blk_order;
-    for (int i = 0; i < page_count; ++i) {
-        page_array[slab+i].type  = PT_POOL;
-        page_array[slab+i].block = 0;
-        page_array[slab+i].order = blk_order;
-    }
-    page_array[slab].type    = PT_POOL;
-    page_array[slab].block   = 1;
-    page_array[slab].order   = blk_order;
+    // int page_count = 1 << blk_order;
+    // for (int i = 0; i < page_count; ++i) {
+    //     page_array[slab+i].type  = PT_POOL;
+    //     page_array[slab+i].block = 0;
+    //     page_array[slab+i].order = blk_order;
+    // }
+    // page_array[slab].type    = PT_POOL;
+    // page_array[slab].block   = 1;
+    // page_array[slab].order   = blk_order;
     page_array[slab].inuse   = 0;
     page_array[slab].objects = 0;
 
