@@ -13,15 +13,6 @@ static pfn_t slab_alloc(int blk_order, int obj_size) {
         return NO_PAGE;
     }
 
-    // int page_count = 1 << blk_order;
-    // for (int i = 0; i < page_count; ++i) {
-    //     page_array[slab+i].type  = PT_POOL;
-    //     page_array[slab+i].block = 0;
-    //     page_array[slab+i].order = blk_order;
-    // }
-    // page_array[slab].type    = PT_POOL;
-    // page_array[slab].block   = 1;
-    // page_array[slab].order   = blk_order;
     page_array[slab].inuse   = 0;
     page_array[slab].objects = 0;
 

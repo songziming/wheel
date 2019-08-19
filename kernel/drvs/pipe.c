@@ -128,10 +128,6 @@ iodev_t * pipe_dev_create() {
         return NULL;
     }
 
-    // page_array[page].block = 1;
-    // page_array[page].order = 0;
-    // page_array[page].type  = PT_PIPE;
-
     pipe_dev_t * pipe = kmem_alloc(sizeof(pipe_dev_t));
 
     pipe->dev.ref   = 1;

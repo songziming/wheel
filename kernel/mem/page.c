@@ -122,7 +122,7 @@ static pfn_t zone_block_alloc(zone_t * zone, int order, u32 type) {
         page_array[blk].type  = type;
         page_array[blk].order = order;
         page_array[blk].block = 1;
-        for (int i = 1; i < (1U << order); ++i) {
+        for (unsigned int i = 1; i < (1U << order); ++i) {
             page_array[blk+i].type  = type;
             page_array[blk+i].order = order;
             page_array[blk+i].block = 0;

@@ -21,15 +21,6 @@ task_t * task_create(int priority, void * proc,
         return NULL;
     }
 
-    // // mark allocated page as kstack type
-    // for (pfn_t i = 0; i < (1U << order); ++i) {
-    //     page_array[kstack + i].type  = PT_KSTACK;
-    //     page_array[kstack + i].block = 0;
-    //     page_array[kstack + i].order = order;
-    // }
-    // page_array[kstack].block = 1;
-    // page_array[kstack].order = order;
-
     // allocate tcb
     task_t * tid = kmem_alloc(sizeof(task_t));
     if (NULL == tid) {
