@@ -1,6 +1,6 @@
 #include <wheel.h>
 
-#define ZERO_MEMORY 1
+#define ZERO_MEMORY 0
 
 //------------------------------------------------------------------------------
 // parse madt table, find all local apic and io apic
@@ -82,16 +82,20 @@ static __INIT void parse_mmap(u8 * mmap_buf, u32 mmap_len) {
     for (mb_mmap_item_t * item = (mb_mmap_item_t *) mmap_buf; item < map_end;) {
         u64 start = ROUND_UP(item->addr, PAGE_SIZE);
         u64 end   = ROUND_DOWN(item->addr + item->len, PAGE_SIZE);
+        if ((start < end) && (MB_MEMORY_RESERVED == item->type)) {
+            // TODO: map this range into kernel space
+            dbg_print("= dma 0x%08llx-0x%08llx.\n", start, end - 1);
+        }
         if ((start < end) && (MB_MEMORY_AVAILABLE == item->type)) {
             if (start < KERNEL_LMA) {
-                dbg_print("+ ram 0x%08llx-0x%08llx.\n", start, MIN(KERNEL_LMA, end));
+                dbg_print("+ ram 0x%08llx-0x%08llx.\n", start, MIN(KERNEL_LMA, end) - 1);
 #if ZERO_MEMORY
                 memset(phys_to_virt(start), 0, MIN(KERNEL_LMA, end) - start);
 #endif
                 page_range_free(start, MIN(KERNEL_LMA, end));
             }
             if (p_end < end) {
-                dbg_print("+ ram 0x%08llx-0x%08llx.\n", MAX(start, p_end), end);
+                dbg_print("+ ram 0x%08llx-0x%08llx.\n", MAX(start, p_end), end - 1);
 #if ZERO_MEMORY
                 memset(phys_to_virt(MAX(start, p_end)), 0, end - MAX(start, p_end));
 #endif
@@ -164,6 +168,7 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     loapic_dev_init();
 
     // prepare and switch to kernel space
+    mmu_lib_init();
     kernel_ctx_init();
 
     // init kernel memory allocator
@@ -199,6 +204,7 @@ __INIT __NORETURN void sys_init_ap() {
     loapic_dev_init();
 
     // switch to kernel space
+    mmu_lib_init();
     kernel_ctx_load();
 
     // temporary tcb to hold saved registers

@@ -16,6 +16,9 @@ extern usize mmu_translate(usize ctx, usize va);
 extern void  mmu_map(usize ctx, usize va, usize pa, u32 attr, usize n);
 extern void  mmu_unmap(usize ctx, usize va, usize n);
 
+// requires: nothing
+extern __INIT void mmu_lib_init();
+
 // requires: page-array
 extern __INIT void kernel_ctx_init();
 extern __INIT void kernel_ctx_load();

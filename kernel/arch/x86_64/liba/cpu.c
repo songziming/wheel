@@ -205,15 +205,9 @@ __INIT void cpu_init() {
     write_cr0(cr0);
 
     // enable syscall/sysret on intel processors
-    u64 efer = read_msr(0xc0000080);
+    u64 efer = read_msr(0xc0000080U);
     efer |= (1UL <<  0);
-    write_msr(0xc0000080, efer);
-
-    // enable NX bit in page entries
-    // TODO: move to mmu.c
-    efer = read_msr(0xc0000080);
-    efer |= (1UL << 11);
-    write_msr(0xc0000080, efer);
+    write_msr(0xc0000080U, efer);
 
     // setup msr for syscall/sysret
     write_msr(0xc0000081, 0x001b000800000000UL);    // STAR

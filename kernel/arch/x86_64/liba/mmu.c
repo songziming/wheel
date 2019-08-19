@@ -31,8 +31,9 @@
 #define VIRT(x)         ((x) |  0xffff800000000000UL)
 #define PHYS(x)         ((x) & ~0xffff800000000000UL)
 
-static int support_1g = NO;
-static int support_nx = NO;
+static int support_pcid = NO;
+static int support_nx   = NO;
+static int support_1g   = NO;
 
 //------------------------------------------------------------------------------
 // create new page table, return physical address
@@ -152,6 +153,7 @@ static u64 pml4t_translate(u64 tbl, u64 va) {
 //------------------------------------------------------------------------------
 // add new mapping, return the number of pages mapped
 // overwrite existing mapping without warning
+// won't merge into 2M and 1G large pages
 
 static u64 pt_map(u64 tbl, u64 va, u64 pa, u64 fields, u64 n) {
     u64 * pt  = (u64 *) VIRT(tbl);
@@ -331,7 +333,7 @@ static u64 pdt_unmap(u64 tbl, u64 va, u64 n) {
 
             // retrive old mapping and create new page table
             u64 pa     = pdt[idx] & MMU_ADDR;
-            u64 fields = pdt[idx] & (MMU_US | MMU_RW | MMU_NX);
+            u64 fields = pdt[idx] & (MMU_US | MMU_RW | MMU_NX | MMU_G);
             pdt[idx]   = (tbl_alloc() & MMU_ADDR) | MMU_US | MMU_RW | MMU_P;
 
             // add back extra ranges
@@ -402,7 +404,7 @@ static u64 pdpt_unmap(u64 tbl, u64 va, u64 n) {
 
             // retrive old mapping and create new page directory table
             u64 pa     = pdpt[idx] & MMU_ADDR;
-            u64 fields = pdpt[idx] & (MMU_US | MMU_RW | MMU_NX);
+            u64 fields = pdpt[idx] & (MMU_US | MMU_RW | MMU_NX | MMU_G);
             pdpt[idx]  = (tbl_alloc() & MMU_ADDR) | MMU_US | MMU_RW | MMU_P;
 
             // add back extra ranges
@@ -488,7 +490,7 @@ static u64 pml4t_unmap(u64 tbl, u64 va, u64 n) {
 //------------------------------------------------------------------------------
 // public functions
 
-static u64   kernel_pgtbl = 0;
+static u64   kernel_ctx   = 0;
 static u64 * kernel_pml4t = NULL;
 
 usize mmu_ctx_get() {
@@ -501,7 +503,7 @@ void mmu_ctx_set(usize ctx) {
 
 // create a new context table, allocate space for top-level table
 usize mmu_ctx_create() {
-    u64   phys = tbl_alloc();
+    u64   phys  = tbl_alloc();
     u64 * pml4t = (u64 *) VIRT(phys);
     memcpy(&pml4t[256], &kernel_pml4t[256], 256 * sizeof(u64));
     return phys;
@@ -541,49 +543,79 @@ extern u8 _init_end;
 extern u8 _text_end;
 extern u8 _rodata_end;
 
+__INIT void mmu_lib_init() {
+    if (0 == cpu_activated) {
+        u32 a, b, c, d;
+
+        // processor info
+        a = 1;
+        cpuid(&a, &b, &c, &d);
+        support_pcid = (c & (1U << 17)) ? YES : NO;
+
+        // extended processor info
+        a = 0x80000001U;
+        cpuid(&a, &b, &c, &d);
+        support_nx = (c & (1U << 11)) ? YES : NO;
+        support_1g = (d & (1U << 26)) ? YES : NO;
+    }
+
+    if (YES == support_pcid) {
+        // u64 cr4 = read_cr4();
+        // write_cr4(cr4 | (1U << 17));
+    }
+
+    if (YES == support_nx) {
+        u64 efer = read_msr(0xc0000080U);
+        efer |= (1UL << 11);
+        write_msr(0xc0000080U, efer);
+    }
+}
+
 __INIT void kernel_ctx_init() {
     usize virt, phys, mark;
 
-    kernel_pgtbl = tbl_alloc();
-    kernel_pml4t = (u64 *) VIRT(kernel_pgtbl);
+    kernel_ctx   = tbl_alloc();
+    kernel_pml4t = (u64 *) VIRT(kernel_ctx);
+
+    u64 mmu_nx = (YES == support_nx) ? MMU_NX : 0;
 
     // boot, trampoline and init sections
     virt = KERNEL_VMA;
     phys = KERNEL_LMA;
     mark = ROUND_UP(&_init_end, PAGE_SIZE);
-    dbg_print("mapping 0x%llx~0x%llx.\n", virt, mark);
-    mmu_map(kernel_pgtbl, virt, phys, MMU_KERNEL, (mark - virt) >> PAGE_SHIFT);
+    dbg_print("~ map 0x%llx~0x%llx.\n", virt, mark);
+    pml4t_map(kernel_ctx, virt, phys, MMU_RW|MMU_G, (mark - virt) >> PAGE_SHIFT);
 
     // kernel code section
     virt = mark;
     phys = virt - KERNEL_VMA + KERNEL_LMA;
     mark = ROUND_UP(&_text_end, PAGE_SIZE);
-    dbg_print("mapping 0x%llx~0x%llx.\n", virt, mark);
-    mmu_map(kernel_pgtbl, virt, phys, MMU_RDONLY|MMU_KERNEL, (mark - virt) >> PAGE_SHIFT);
+    dbg_print("~ map 0x%llx~0x%llx.\n", virt, mark);
+    pml4t_map(kernel_ctx, virt, phys, MMU_G, (mark - virt) >> PAGE_SHIFT);
 
     // kernel read only data section
     virt = mark;
     phys = virt - KERNEL_VMA + KERNEL_LMA;
     mark = ROUND_UP(&_rodata_end, PAGE_SIZE);
-    dbg_print("mapping 0x%llx~0x%llx.\n", virt, mark);
-    mmu_map(kernel_pgtbl, virt, phys, MMU_RDONLY|MMU_NOEXEC|MMU_KERNEL, (mark - virt) >> PAGE_SHIFT);
+    dbg_print("~ map 0x%llx~0x%llx.\n", virt, mark);
+    pml4t_map(kernel_ctx, virt, phys, mmu_nx|MMU_G, (mark - virt) >> PAGE_SHIFT);
 
     // kernel data section
     virt = mark;
     phys = virt - KERNEL_VMA + KERNEL_LMA;
     mark = ROUND_UP(&page_array[page_count], PAGE_SIZE);
-    dbg_print("mapping 0x%llx~0x%llx.\n", virt, mark);
-    mmu_map(kernel_pgtbl, virt, phys, MMU_NOEXEC|MMU_KERNEL, (mark - virt) >> PAGE_SHIFT);
+    dbg_print("~ map 0x%llx~0x%llx.\n", virt, mark);
+    pml4t_map(kernel_ctx, virt, phys, mmu_nx|MMU_RW|MMU_G, (mark - virt) >> PAGE_SHIFT);
 
     // map all physical memory to higher half
     // TODO: only map present pages, and IO spaces
-    dbg_print("mapping 0x%llx~0x%llx.\n", MAPPED_ADDR, MAPPED_ADDR + (1UL << 32));
-    mmu_map(kernel_pgtbl, MAPPED_ADDR, 0, MMU_NOEXEC|MMU_KERNEL, 1UL << 20);
+    dbg_print("~ map 0x%llx~0x%llx.\n", MAPPED_ADDR, MAPPED_ADDR + (1UL << 32));
+    pml4t_map(kernel_ctx, MAPPED_ADDR, 0, mmu_nx|MMU_RW|MMU_G, 1UL << 20);
 
     // switch to kernel context
-    mmu_ctx_set(kernel_pgtbl);
+    mmu_ctx_set(kernel_ctx);
 }
 
 __INIT void kernel_ctx_load() {
-    mmu_ctx_set(kernel_pgtbl);
+    mmu_ctx_set(kernel_ctx);
 }
