@@ -535,6 +535,13 @@ void mmu_unmap(usize ctx, usize va, usize n) {
     pml4t_unmap(ctx, va, n);
 }
 
+void tlb_flush(usize va, usize n) {
+    for (unsigned int i = 0; i < n; ++i) {
+        ASM("invlpg (%0)" :: "r"(va));
+        va += PAGE_SIZE;
+    }
+}
+
 //------------------------------------------------------------------------------
 // prepare page table for kernel space
 
@@ -583,34 +590,37 @@ __INIT void kernel_ctx_init() {
     virt = KERNEL_VMA;
     phys = KERNEL_LMA;
     mark = ROUND_UP(&_init_end, PAGE_SIZE);
-    dbg_print("~ map 0x%llx~0x%llx.\n", virt, mark);
+    dbg_print("[~] map 0x%016llx~0x%016llx (init)\n", virt, mark - 1);
     pml4t_map(kernel_ctx, virt, phys, MMU_RW|MMU_G, (mark - virt) >> PAGE_SHIFT);
 
     // kernel code section
     virt = mark;
     phys = virt - KERNEL_VMA + KERNEL_LMA;
     mark = ROUND_UP(&_text_end, PAGE_SIZE);
-    dbg_print("~ map 0x%llx~0x%llx.\n", virt, mark);
+    dbg_print("[~] map 0x%016llx~0x%016llx (code)\n", virt, mark - 1);
     pml4t_map(kernel_ctx, virt, phys, MMU_G, (mark - virt) >> PAGE_SHIFT);
 
     // kernel read only data section
     virt = mark;
     phys = virt - KERNEL_VMA + KERNEL_LMA;
     mark = ROUND_UP(&_rodata_end, PAGE_SIZE);
-    dbg_print("~ map 0x%llx~0x%llx.\n", virt, mark);
+    dbg_print("[~] map 0x%016llx~0x%016llx (rodata)\n", virt, mark - 1);
     pml4t_map(kernel_ctx, virt, phys, mmu_nx|MMU_G, (mark - virt) >> PAGE_SHIFT);
 
     // kernel data section
     virt = mark;
     phys = virt - KERNEL_VMA + KERNEL_LMA;
     mark = ROUND_UP(&page_array[page_count], PAGE_SIZE);
-    dbg_print("~ map 0x%llx~0x%llx.\n", virt, mark);
+    dbg_print("[~] map 0x%016llx~0x%016llx (data)\n", virt, mark - 1);
     pml4t_map(kernel_ctx, virt, phys, mmu_nx|MMU_RW|MMU_G, (mark - virt) >> PAGE_SHIFT);
 
     // map all physical memory to higher half
     // TODO: only map present pages, and IO spaces
-    dbg_print("~ map 0x%llx~0x%llx.\n", MAPPED_ADDR, MAPPED_ADDR + (1UL << 32));
-    pml4t_map(kernel_ctx, MAPPED_ADDR, 0, mmu_nx|MMU_RW|MMU_G, 1UL << 20);
+    virt = MAPPED_ADDR;
+    phys = 0;
+    mark = MAPPED_ADDR + (1UL << 32);
+    dbg_print("[~] map 0x%016llx~0x%016llx (all memory)\n", virt, mark - 1);
+    pml4t_map(kernel_ctx, virt, phys, mmu_nx|MMU_RW|MMU_G, (mark - virt) >> PAGE_SHIFT);
 
     // switch to kernel context
     mmu_ctx_set(kernel_ctx);

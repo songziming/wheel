@@ -190,11 +190,7 @@ __INIT void cpu_init() {
         feat_ecx = c;
         feat_edx = d;
 
-        // get cache and tlb information
-        a = 2;
-        cpuid(&a, &b, &c, &d);
-
-        dbg_print("cpu: %s.\n", vendor_id);
+        // TODO: query floating point support
     }
 
     u64 cr0 = read_cr0();
@@ -312,11 +308,11 @@ static void exp_default(int vec, int_frame_t * f) {
     dbg_print("    CS:RIP = 0x%02x:0x%016llx\n", f->cs, f->rip);
 
     if (14 == vec) {
-        dbg_print("Page fault: %s %s %s.\n",
+        dbg_print("~~> fault type: %s %s %s.\n",
                   (f->errcode & 1) ? "Present" : "Non-Present",
                   (f->errcode & 2) ? "Write" : "Read",
                   (f->errcode & 4) ? "User" : "Supervisor");
-        dbg_print("Virtual address: 0x%llx.\n", read_cr2());
+        dbg_print("~~> target address: 0x%llx.\n", read_cr2());
     }
 
     if (0 == (f->cs & 3)) {

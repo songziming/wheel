@@ -84,18 +84,18 @@ static __INIT void parse_mmap(u8 * mmap_buf, u32 mmap_len) {
         u64 end   = ROUND_DOWN(item->addr + item->len, PAGE_SIZE);
         if ((start < end) && (MB_MEMORY_RESERVED == item->type)) {
             // TODO: map this range into kernel space
-            dbg_print("= dma 0x%08llx-0x%08llx.\n", start, end - 1);
+            dbg_print("[+] mmio 0x%08llx-0x%08llx.\n", start, end - 1);
         }
         if ((start < end) && (MB_MEMORY_AVAILABLE == item->type)) {
             if (start < KERNEL_LMA) {
-                dbg_print("+ ram 0x%08llx-0x%08llx.\n", start, MIN(KERNEL_LMA, end) - 1);
+                dbg_print("[+] ram  0x%016llx-0x%016llx\n", start, MIN(KERNEL_LMA, end) - 1);
 #if ZERO_MEMORY
                 memset(phys_to_virt(start), 0, MIN(KERNEL_LMA, end) - start);
 #endif
                 page_range_free(start, MIN(KERNEL_LMA, end));
             }
             if (p_end < end) {
-                dbg_print("+ ram 0x%08llx-0x%08llx.\n", MAX(start, p_end), end - 1);
+                dbg_print("[+] ram 0x%016llx-0x%016llx\n", MAX(start, p_end), end - 1);
 #if ZERO_MEMORY
                 memset(phys_to_virt(MAX(start, p_end)), 0, end - MAX(start, p_end));
 #endif
@@ -183,7 +183,7 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     thiscpu_var(tid_prev) = &dummy;
 
     // start root task
-    dbg_print("> cpu %02d started.\n", cpu_activated++);
+    dbg_print("[!] cpu %02d started.\n", cpu_activated++);
     task_resume(task_create(0, root_proc, 0,0,0,0));
 
     dbg_print("YOU SHALL NOT SEE THIS LINE!\n");
@@ -214,7 +214,7 @@ __INIT __NORETURN void sys_init_ap() {
     thiscpu_var(tid_prev) = &dummy;
 
     // start idle task
-    dbg_print("> cpu %02d started.\n", cpu_activated++);
+    dbg_print("[!] cpu %02d started.\n", cpu_activated++);
     sched_yield();
 
     dbg_print("YOU SHALL NOT SEE THIS LINE!\n");
@@ -261,14 +261,19 @@ static void root_proc() {
     // reclaim init section memory
     usize init_addr = KERNEL_LMA;
     usize init_end  = ROUND_UP(virt_to_phys(&_init_end), PAGE_SIZE);
-    dbg_print("reclaiming init memory 0x%llx~0x%llx.\n", init_addr, init_end);
+    dbg_print("[+] free 0x%016llx~0x%016llx (init)\n", init_addr, init_end);
 #if ZERO_MEMORY
     memset((void *) KERNEL_VMA, 0, init_end - init_addr);
 #endif
     page_range_free(init_addr, init_end);
+    mmu_unmap(mmu_ctx_get(), KERNEL_VMA, (init_end - init_addr) >> PAGE_SHIFT);
+    tlb_flush(KERNEL_VMA, (init_end - init_addr) >> PAGE_SHIFT);
 
     // start kernel shell
     shell_lib_init();
+
+    // // trying to access init again, raise #PF
+    // dbg_print("cpu_activated = %d.\n", cpu_activated);
 
     task_exit();
     dbg_print("you shall not see this line!\n");
