@@ -590,28 +590,28 @@ __INIT void kernel_ctx_init() {
     virt = KERNEL_VMA;
     phys = KERNEL_LMA;
     mark = ROUND_UP(&_init_end, PAGE_SIZE);
-    dbg_print("[~] map 0x%016llx~0x%016llx (init)\n", virt, mark - 1);
+    // dbg_print("[~] map  0x%016llx~0x%016llx (init)\n", virt, mark - 1);
     pml4t_map(kernel_ctx, virt, phys, MMU_RW|MMU_G, (mark - virt) >> PAGE_SHIFT);
 
     // kernel code section
     virt = mark;
     phys = virt - KERNEL_VMA + KERNEL_LMA;
     mark = ROUND_UP(&_text_end, PAGE_SIZE);
-    dbg_print("[~] map 0x%016llx~0x%016llx (code)\n", virt, mark - 1);
+    // dbg_print("[~] map  0x%016llx~0x%016llx (code)\n", virt, mark - 1);
     pml4t_map(kernel_ctx, virt, phys, MMU_G, (mark - virt) >> PAGE_SHIFT);
 
     // kernel read only data section
     virt = mark;
     phys = virt - KERNEL_VMA + KERNEL_LMA;
     mark = ROUND_UP(&_rodata_end, PAGE_SIZE);
-    dbg_print("[~] map 0x%016llx~0x%016llx (rodata)\n", virt, mark - 1);
+    // dbg_print("[~] map  0x%016llx~0x%016llx (rodata)\n", virt, mark - 1);
     pml4t_map(kernel_ctx, virt, phys, mmu_nx|MMU_G, (mark - virt) >> PAGE_SHIFT);
 
     // kernel data section
     virt = mark;
     phys = virt - KERNEL_VMA + KERNEL_LMA;
     mark = ROUND_UP(&page_array[page_count], PAGE_SIZE);
-    dbg_print("[~] map 0x%016llx~0x%016llx (data)\n", virt, mark - 1);
+    // dbg_print("[~] map  0x%016llx~0x%016llx (data)\n", virt, mark - 1);
     pml4t_map(kernel_ctx, virt, phys, mmu_nx|MMU_RW|MMU_G, (mark - virt) >> PAGE_SHIFT);
 
     // map all physical memory to higher half
@@ -619,7 +619,7 @@ __INIT void kernel_ctx_init() {
     virt = MAPPED_ADDR;
     phys = 0;
     mark = MAPPED_ADDR + (1UL << 32);
-    dbg_print("[~] map 0x%016llx~0x%016llx (all memory)\n", virt, mark - 1);
+    // dbg_print("[~] map  0x%016llx~0x%016llx (all memory)\n", virt, mark - 1);
     pml4t_map(kernel_ctx, virt, phys, mmu_nx|MMU_RW|MMU_G, (mark - virt) >> PAGE_SHIFT);
 
     // switch to kernel context

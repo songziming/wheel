@@ -84,18 +84,18 @@ static __INIT void parse_mmap(u8 * mmap_buf, u32 mmap_len) {
         u64 end   = ROUND_DOWN(item->addr + item->len, PAGE_SIZE);
         if ((start < end) && (MB_MEMORY_RESERVED == item->type)) {
             // TODO: map this range into kernel space
-            dbg_print("[+] mmio 0x%08llx-0x%08llx.\n", start, end - 1);
+            // dbg_print("[+] mmio 0x%08llx-0x%08llx.\n", start, end - 1);
         }
         if ((start < end) && (MB_MEMORY_AVAILABLE == item->type)) {
             if (start < KERNEL_LMA) {
-                dbg_print("[+] ram  0x%016llx-0x%016llx\n", start, MIN(KERNEL_LMA, end) - 1);
+                // dbg_print("[+] ram  0x%016llx-0x%016llx\n", start, MIN(KERNEL_LMA, end) - 1);
 #if ZERO_MEMORY
                 memset(phys_to_virt(start), 0, MIN(KERNEL_LMA, end) - start);
 #endif
                 page_range_free(start, MIN(KERNEL_LMA, end));
             }
             if (p_end < end) {
-                dbg_print("[+] ram 0x%016llx-0x%016llx\n", MAX(start, p_end), end - 1);
+                // dbg_print("[+] ram  0x%016llx-0x%016llx\n", MAX(start, p_end), end - 1);
 #if ZERO_MEMORY
                 memset(phys_to_virt(MAX(start, p_end)), 0, end - MAX(start, p_end));
 #endif
@@ -231,6 +231,7 @@ extern u8 _init_end;
 
 // in `core/shell.c`
 extern void shell_lib_init();
+void test();
 
 static void root_proc() {
     // copy trampoline code to 0x7c000
@@ -261,7 +262,7 @@ static void root_proc() {
     // reclaim init section memory
     usize init_addr = KERNEL_LMA;
     usize init_end  = ROUND_UP(virt_to_phys(&_init_end), PAGE_SIZE);
-    dbg_print("[+] free 0x%016llx~0x%016llx (init)\n", init_addr, init_end);
+    // dbg_print("[+] free 0x%016llx~0x%016llx (init)\n", init_addr, init_end);
 #if ZERO_MEMORY
     memset((void *) KERNEL_VMA, 0, init_end - init_addr);
 #endif
@@ -269,12 +270,72 @@ static void root_proc() {
     mmu_unmap(mmu_ctx_get(), KERNEL_VMA, (init_end - init_addr) >> PAGE_SHIFT);
     tlb_flush(KERNEL_VMA, (init_end - init_addr) >> PAGE_SHIFT);
 
+    // run test program
+    test();
+
     // start kernel shell
     shell_lib_init();
 
-    // // trying to access init again, raise #PF
-    // dbg_print("cpu_activated = %d.\n", cpu_activated);
-
     task_exit();
     dbg_print("you shall not see this line!\n");
+}
+
+//------------------------------------------------------------------------------
+// (test) block device interface
+
+// like linux bio
+typedef struct blkdev {
+    int ref_count;
+    usize sec_size;
+} blkdev_t;
+
+//------------------------------------------------------------------------------
+// (test) PCI
+
+#define PCI_ADDR    0x0cf8
+#define PCI_DATA    0x0cfc
+
+static u32 pci_read(u8 bus, u8 dev, u8 func, u8 reg) {
+    u32 addr = (((u32) bus  << 16) & 0x00ff0000U)
+             | (((u32) dev  << 11) & 0x0000f800U)
+             | (((u32) func <<  8) & 0x00000700U)
+             | ( (u32) reg         & 0x000000fcU)
+             | 0x80000000U;
+    out32(PCI_ADDR, addr);
+    return in32(PCI_DATA);
+}
+
+static void pci_write(u8 bus, u8 dev, u8 func, u8 reg, u32 data) {
+    u32 addr = (((u32) bus  << 16) & 0x00ff0000U)
+             | (((u32) dev  << 11) & 0x0000f800U)
+             | (((u32) func <<  8) & 0x00000700U)
+             | ( (u32) reg         & 0x000000fcU)
+             | 0x80000000U;
+    out32(PCI_ADDR, addr);
+    out32(PCI_DATA, data);
+}
+
+void pci_check_dev(u8 bus, u8 dev) {
+    u32 reg0 = pci_read(bus, dev, 0);
+    u16 vendor_id = reg0 & 0xffff;
+    u16 device_id = (reg0 >> 16) & 0xffff;
+    if (0xffff == vendor_id) {
+        // device doesn't exist
+        return;
+    }
+}
+
+void pci_init() {
+    if (NULL == acpi_mcfg) {
+        dbg_print("PCI Express not present, use old way.\n");
+    }
+    // TODO: probe bus 0, dev 0
+    pci_check_dev(0, 0);
+}
+
+//------------------------------------------------------------------------------
+// test driver
+
+void test() {
+    pci_init();
 }
