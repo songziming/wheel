@@ -245,7 +245,7 @@ static void ready_read() {
 }
 
 // blocking read
-static usize tty_read(iodev_t * tty __UNUSED, u8 * buf, usize len, usize * pos __UNUSED) {
+static usize tty_read(file_t * file __UNUSED, u8 * buf, usize len) {
     // return ios_read(stdin_r, buf, len);
     while (1) {
         u32   key = irq_spin_take(&tty_spin);
@@ -273,7 +273,7 @@ static usize tty_read(iodev_t * tty __UNUSED, u8 * buf, usize len, usize * pos _
 }
 
 // non blocking write
-static usize tty_write(iodev_t * tty __UNUSED, const u8 * buf, usize len, usize * pos __UNUSED) {
+static usize tty_write(file_t * file __UNUSED, const u8 * buf, usize len) {
     // TODO: parse buf, detect and handle escape sequences
     // TODO: don't use debug function, call console driver directly
     dbg_print("%*s", len, buf);
@@ -323,30 +323,39 @@ static void listener_proc() {
 //------------------------------------------------------------------------------
 // tty device driver
 
-static const iodrv_t tty_drv = {
-    .read  = (ios_read_t)  tty_read,
-    .write = (ios_write_t) tty_write,
-    .lseek = (ios_lseek_t) NULL,
+// only one tty object (singleton)
+// so `private` in file_t is not used at all
+
+// static const iodrv_t tty_drv = {
+//     .read  = (ios_read_t)  tty_read,
+//     .write = (ios_write_t) tty_write,
+//     .lseek = (ios_lseek_t) NULL,
+// };
+
+static const fops_t tty_ops = {
+    .read  = (read_t)  tty_read,
+    .write = (write_t) tty_write,
+    .lseek = (lseek_t) NULL,
 };
 
-// singleton object, no custom fields
-static iodev_t tty_dev = {
-    .ref  = 1,
-    .free = (ios_free_t) NULL,
-    .drv  = (iodrv_t *) &tty_drv,
-};
-
-iodev_t * tty_get_instance() {
-    return &tty_dev;
+static void tty_file_delete(file_t * file) {
+    kmem_free(sizeof(file_t), file);
 }
 
-__INIT void tty_dev_init() {
-    tty_dev.ref  = 1;
-    tty_dev.free = (ios_free_t) NULL;
-    tty_dev.drv  = (iodrv_t *) &tty_drv;
+file_t * tty_file_create(int mode) {
+    file_t * file  = kmem_alloc(sizeof(file_t));
+    file->ref      = KREF_INIT(tty_file_delete);
+    file->ops_mode = ((usize) &tty_ops & ~3UL) | (mode & 3);
+    file->private  = NULL;
+    return file;
+}
 
+// iodev_t * tty_get_instance() {
+//     return &tty_dev;
+// }
+
+__INIT void tty_dev_init() {
     // TODO: regist tty_dev into vfs as `/dev/tty`, so that any
     //       user program could access it.
-
     task_resume(task_create(0, listener_proc, 0,0,0,0));
 }

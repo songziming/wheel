@@ -316,7 +316,7 @@ static void pci_write(u8 bus, u8 dev, u8 func, u8 reg, u32 data) {
 }
 
 void pci_check_dev(u8 bus, u8 dev) {
-    u32 reg0 = pci_read(bus, dev, 0);
+    u32 reg0 = pci_read(bus, dev, 0, 0);
     u16 vendor_id = reg0 & 0xffff;
     u16 device_id = (reg0 >> 16) & 0xffff;
     if (0xffff == vendor_id) {

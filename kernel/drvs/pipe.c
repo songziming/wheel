@@ -1,18 +1,43 @@
 #include <wheel.h>
 
-typedef struct pipe_dev {
-    iodev_t  dev;
+typedef struct pipe {
+    kref_t   ref;
     spin_t   spin;
     pfn_t    page;
     fifo_t   fifo;
     dllist_t r_penders;
     dllist_t w_penders;
-} pipe_dev_t;
+} pipe_t;
 
 typedef struct pender {
     dlnode_t dl;
     task_t * tid;
 } pender_t;
+
+//------------------------------------------------------------------------------
+// pipe destructor and constructor
+
+static void pipe_destroy(pipe_t * pipe) {
+    page_block_free(pipe->page, 0);
+    kmem_free(sizeof(pipe_t), pipe);
+}
+
+pipe_t * pipe_create() {
+    pfn_t page = page_block_alloc(ZONE_NORMAL|ZONE_DMA, 0, PT_PIPE);
+    if (NO_PAGE == page) {
+        return NULL;
+    }
+
+    pipe_t * pipe = kmem_alloc(sizeof(pipe_t));
+    pipe->ref       = KREF_INIT(pipe_destroy);
+    pipe->spin      = SPIN_INIT;
+    pipe->page      = page;
+    pipe->fifo      = FIFO_INIT(phys_to_virt((usize) page << PAGE_SHIFT), PAGE_SIZE);
+    pipe->r_penders = DLLIST_INIT;
+    pipe->w_penders = DLLIST_INIT;
+
+    return pipe;
+}
 
 //------------------------------------------------------------------------------
 // blocking version of read write functions
@@ -38,9 +63,7 @@ static void unpend_all(dllist_t * list) {
     }
 }
 
-static usize pipe_read(iodev_t * dev, u8 * buf, usize len, usize * pos __UNUSED) {
-    pipe_dev_t * pipe = (pipe_dev_t *) dev;
-
+usize pipe_read(pipe_t * pipe, u8 * buf, usize len) {
     while (1) {
         raw_spin_take(&pipe->spin);
         usize ret = fifo_read(&pipe->fifo, buf, len);
@@ -72,9 +95,7 @@ static usize pipe_read(iodev_t * dev, u8 * buf, usize len, usize * pos __UNUSED)
     }
 }
 
-static usize pipe_write(iodev_t * dev, const u8 * buf, usize len, usize * pos __UNUSED) {
-    pipe_dev_t * pipe = (pipe_dev_t *) dev;
-
+usize pipe_write(pipe_t * pipe, const u8 * buf, usize len) {
     while (1) {
         raw_spin_take(&pipe->spin);
         usize ret = fifo_write(&pipe->fifo, buf, len, NO);
@@ -107,38 +128,37 @@ static usize pipe_write(iodev_t * dev, const u8 * buf, usize len, usize * pos __
 }
 
 //------------------------------------------------------------------------------
-// pipe driver and device
+// new file interface
 
-static const iodrv_t pipe_drv = {
-    .read  = (ios_read_t)  pipe_read,
-    .write = (ios_write_t) pipe_write,
-    .lseek = (ios_lseek_t) NULL,
-};
-
-// destructor function
-static void pipe_dev_destroy(iodev_t * dev) {
-    pipe_dev_t * pipe = (pipe_dev_t *) dev;
-    page_block_free(pipe->page, 0);
-    kmem_free(sizeof(pipe_dev_t), pipe);
+static usize pipe_file_read(file_t * file, u8 * buf, usize len) {
+    return pipe_read((pipe_t *) file->private, buf, len);
 }
 
-iodev_t * pipe_dev_create() {
-    pfn_t page = page_block_alloc(ZONE_NORMAL|ZONE_DMA, 0, PT_PIPE);
-    if (NO_PAGE == page) {
-        return NULL;
+static usize pipe_file_write(file_t * file, const u8 * buf, usize len) {
+    return pipe_write((pipe_t *) file->private, buf, len);
+}
+
+static const fops_t pipe_ops = {
+    .read  = (read_t)  pipe_file_read,
+    .write = (write_t) pipe_file_write,
+    .lseek = (lseek_t) NULL,
+};
+
+static void pipe_file_delete(file_t * file) {
+    kref_delete(file->private);
+    kmem_free(sizeof(file_t), file);
+}
+
+file_t * pipe_file_create(pipe_t * pipe, int mode) {
+    file_t * file  = kmem_alloc(sizeof(file_t));
+    file->ref      = KREF_INIT(pipe_file_delete);
+    file->ops_mode = ((usize) &pipe_ops & ~3UL) | (mode & 3);
+
+    if (NULL != pipe) {
+        file->private = kref_retain(pipe);
+    } else {
+        file->private = pipe_create();
     }
 
-    pipe_dev_t * pipe = kmem_alloc(sizeof(pipe_dev_t));
-
-    pipe->dev.ref   = 1;
-    pipe->dev.free  = pipe_dev_destroy;
-    pipe->dev.drv   = (iodrv_t *) &pipe_drv;
-
-    pipe->spin      = SPIN_INIT;
-    pipe->page      = page;
-    pipe->fifo      = FIFO_INIT(phys_to_virt((usize) page << PAGE_SHIFT), PAGE_SIZE);
-    pipe->r_penders = DLLIST_INIT;
-    pipe->w_penders = DLLIST_INIT;
-
-    return (iodev_t *) pipe;
+    return file;
 }
