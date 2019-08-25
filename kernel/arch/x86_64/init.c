@@ -315,22 +315,60 @@ static void pci_write(u8 bus, u8 dev, u8 func, u8 reg, u32 data) {
     out32(PCI_DATA, data);
 }
 
-void pci_check_dev(u8 bus, u8 dev) {
-    u32 reg0 = pci_read(bus, dev, 0, 0);
-    u16 vendor_id = reg0 & 0xffff;
-    u16 device_id = (reg0 >> 16) & 0xffff;
-    if (0xffff == vendor_id) {
-        // device doesn't exist
+static u16 get_vendor_id(u8 bus, u8 dev, u8 func) {
+    return pci_read(bus, dev, func, 0) & 0xffff;
+}
+
+static u8 get_header_type(u8 bus, u8 dev, u8 func) {
+    return (pci_read(bus, dev, func, 12) >> 16) & 0xff;
+}
+
+static void pci_check_func(u8 bus, u8 dev, u8 func) {
+    u32 reg2 = pci_read(bus, dev, func, 8);
+    u8  base = (reg2 >> 24) & 0xff; // base class code
+    u8  sub  = (reg2 >> 16) & 0xff; // sub class code
+    u8  prog = (reg2 >>  8) & 0xff; // programming interface
+
+    dbg_print("pci device %d:%d.\n", base, sub);
+
+    // TODO: allow modules to register driver?
+
+    // TODO: base 6 sub 9 is also pci-to-pci bridge
+    if ((6 == base) && (4 == sub)) {
+        u32 reg6 = pci_read(bus, dev, func, 24);
+        dbg_print("second bus no.%d\n", (reg6 >> 8) & 0xff);
+    }
+}
+
+static void pci_check_dev(u8 bus, u8 dev) {
+    if (0xffff == get_vendor_id(bus, dev, 0)) {
         return;
+    }
+    pci_check_func(bus, dev, 0);
+
+    // if this is multi function device, check remaining functions
+    if (0 != (get_header_type(bus, dev, 0) & 0x80)) {
+        for (u8 f = 1; f < 8; ++f) {
+            if (0xffff == get_vendor_id(bus, dev, f)) {
+                continue;
+            }
+            pci_check_func(bus, dev, f);
+        }
+    }
+}
+
+static void pci_check_bus(u8 bus) {
+    for (u8 d = 0; d < 32; ++d) {
+        pci_check_dev(bus, d);
     }
 }
 
 void pci_init() {
-    if (NULL == acpi_mcfg) {
-        dbg_print("PCI Express not present, use old way.\n");
+    if (NULL != acpi_mcfg) {
+        dbg_print("PCI Express present, we can use mapped memory.\n");
     }
     // TODO: probe bus 0, dev 0
-    pci_check_dev(0, 0);
+    pci_check_bus(0);
 }
 
 //------------------------------------------------------------------------------
