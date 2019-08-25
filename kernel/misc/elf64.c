@@ -54,6 +54,7 @@ int elf64_load(u8 * bin, usize len) {
         if (PT_LOAD == phdr->p_type) {
             usize vm_start = ROUND_DOWN(phdr->p_vaddr, PAGE_SIZE);
             usize vm_end   = ROUND_UP(phdr->p_vaddr + phdr->p_memsz, PAGE_SIZE);
+            dbg_print("section 0x%llx~0x%llx.\n", vm_start, vm_end);
             // TODO: check whether this range is usable in the vmspace
         }
     }

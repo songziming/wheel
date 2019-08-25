@@ -12,6 +12,7 @@
 #include <core/sched.h>
 #include <core/sema.h>
 #include <core/file.h>
+#include <core/pipe.h>
 
 #include <mem/allot.h>
 #include <mem/page.h>
@@ -19,9 +20,6 @@
 #include <mem/kmem.h>
 
 #include <drvs/kbd.h>
-
-// #include <drvs/ios.h>
-#include <drvs/pipe.h>
 #include <drvs/tty.h>
 
 #include <misc/ctype.h>

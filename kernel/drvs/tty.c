@@ -342,17 +342,13 @@ static void tty_file_delete(file_t * file) {
     kmem_free(sizeof(file_t), file);
 }
 
-file_t * tty_file_create(int mode) {
+file_t * tty_file_open(int mode) {
     file_t * file  = kmem_alloc(sizeof(file_t));
     file->ref      = KREF_INIT(tty_file_delete);
     file->ops_mode = ((usize) &tty_ops & ~3UL) | (mode & 3);
     file->private  = NULL;
     return file;
 }
-
-// iodev_t * tty_get_instance() {
-//     return &tty_dev;
-// }
 
 __INIT void tty_dev_init() {
     // TODO: regist tty_dev into vfs as `/dev/tty`, so that any

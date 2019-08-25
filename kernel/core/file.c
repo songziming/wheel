@@ -14,18 +14,14 @@ file_t * file_open(const char * name, int mode) {
         if (NULL == kbd_pipe) {
             kbd_pipe = pipe_create();
         }
-        return pipe_file_create(kbd_pipe, mode);
+        return pipe_file_open(kbd_pipe, mode);
     }
 
     if (0 == strcmp("/dev/tty", name)) {
-        return tty_file_create(mode);
+        return tty_file_open(mode);
     }
 
     return NULL;
-}
-
-void file_close(file_t * file) {
-    kref_delete(&file->ref);
 }
 
 usize file_read(file_t * file, void * buf, usize len) {

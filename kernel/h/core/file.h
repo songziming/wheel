@@ -31,9 +31,13 @@ struct file {
 #define O_READ          1
 #define O_WRITE         2
 
-extern file_t * file_open (const char * name, int mode);
-extern void     file_close(file_t * file);
-extern usize    file_read(file_t * file, void * buf, usize len);
-extern usize    file_write(file_t * file, const void * buf, usize len);
+
+extern file_t * file_open(const char * name, int mode);
+static inline void file_close(file_t * file) {
+    kref_delete(&file->ref);
+}
+
+extern usize file_read (file_t * file, void * buf, usize len);
+extern usize file_write(file_t * file, const void * buf, usize len);
 
 #endif // CORE_FILE_H

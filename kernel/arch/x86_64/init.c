@@ -334,6 +334,39 @@ void pci_init() {
 }
 
 //------------------------------------------------------------------------------
+// fat file system
+
+// FAT views the storage media as a flat array of clusters
+
+// BIOS parameter block, all numbers are little-endian
+typedef struct bpb {
+    u8  jmp[3];
+    u8  oem[8]; // recommended "MSWIN4.1"
+    u16 bytes_per_sector;
+    u8  sectors_per_cluster;
+    u16 reserved_sectors;
+    u8  fat_count;
+    u16 dir_entry_count;
+    u16 sector_count;       // 0 means more than 65535
+    u8  media_descriptor_type;
+    u16 sectors_per_fat;    // FAT 12/16 only
+    u16 sectors_per_track;
+    u16 head_count;         // number of heads or sides
+    u32 hidden_sector_count;
+    u32 large_sector_count; // valid if `sector_count` == 0
+} __PACKED bpb_t;
+
+// extended boot record, comes right after bpb
+typedef struct ebr {
+    u8  drive_number;
+    u8  winnt_flag;
+    u8  signature;          // must be 0x28 or 0x29
+    u32 vol_id;
+    u8  vol_label[11];      // padded with string
+    u8  sys_id[8];
+} __PACKED ebr_t;
+
+//------------------------------------------------------------------------------
 // test driver
 
 void test() {

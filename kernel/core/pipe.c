@@ -149,7 +149,7 @@ static void pipe_file_delete(file_t * file) {
     kmem_free(sizeof(file_t), file);
 }
 
-file_t * pipe_file_create(pipe_t * pipe, int mode) {
+file_t * pipe_file_open(pipe_t * pipe, int mode) {
     file_t * file  = kmem_alloc(sizeof(file_t));
     file->ref      = KREF_INIT(pipe_file_delete);
     file->ops_mode = ((usize) &pipe_ops & ~3UL) | (mode & 3);
@@ -161,4 +161,20 @@ file_t * pipe_file_create(pipe_t * pipe, int mode) {
     }
 
     return file;
+}
+
+// create a pipe and return read end and write end
+void pipe_file_create(file_t * files[2]) {
+    file_t * r  = kmem_alloc(sizeof(file_t));
+    r->ref      = KREF_INIT(pipe_file_delete);
+    r->ops_mode = ((usize) &pipe_ops & ~3UL) | O_READ;
+    r->private  = pipe_create();
+
+    file_t * w  = kmem_alloc(sizeof(file_t));
+    w->ref      = KREF_INIT(pipe_file_delete);
+    w->ops_mode = ((usize) &pipe_ops & ~3UL) | O_WRITE;
+    w->private  = kref_retain(r->private);
+
+    files[0] = r;
+    files[1] = w;
 }

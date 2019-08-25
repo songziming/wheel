@@ -8,7 +8,7 @@
 
 typedef struct file file_t;
 
-extern file_t * tty_file_create(int mode);
+extern file_t * tty_file_open(int mode);
 
 extern __INIT void tty_dev_init();
 
