@@ -290,6 +290,13 @@ typedef struct blkdev {
 } blkdev_t;
 
 //------------------------------------------------------------------------------
+// (test) IDE driver
+
+void ide_probe() {
+    //
+}
+
+//------------------------------------------------------------------------------
 // (test) PCI
 
 #define PCI_ADDR    0x0cf8
@@ -324,20 +331,113 @@ static u8 get_header_type(u8 bus, u8 dev, u8 func) {
 }
 
 static void pci_check_func(u8 bus, u8 dev, u8 func) {
+    u32 reg0 = pci_read(bus, dev, func, 0);
     u32 reg2 = pci_read(bus, dev, func, 8);
-    u8  base = (reg2 >> 24) & 0xff; // base class code
-    u8  sub  = (reg2 >> 16) & 0xff; // sub class code
-    u8  prog = (reg2 >>  8) & 0xff; // programming interface
+    u16 vendor =  reg0        & 0xffff;
+    u16 device = (reg0 >> 16) & 0xffff;
+    u16 ccode  = (reg2 >> 16) & 0xffff;   // base and sub class code
+    u8  prog   = (reg2 >>  8) & 0xff;     // programming interface
 
-    dbg_print("pci device %d:%d.\n", base, sub);
-
-    // TODO: allow modules to register driver?
-
-    // TODO: base 6 sub 9 is also pci-to-pci bridge
-    if ((6 == base) && (4 == sub)) {
-        u32 reg6 = pci_read(bus, dev, func, 24);
-        dbg_print("second bus no.%d\n", (reg6 >> 8) & 0xff);
+    // TODO: allow modules to register pci driver rather than hard code
+    switch (ccode) {
+    case 0x0101:        // IDE controller
+        switch (prog) {
+        case 0x00:
+            dbg_print("[PCA] IDE controller: ISA Compatibility mode-only controller\n");
+            break;
+        case 0x05:
+            dbg_print("[PCA] IDE controller: PCI native mode-only controller.\n");
+            break;
+        case 0x0a:
+            dbg_print("[PCA] IDE controller: ISA Compatibility mode controller.\n");
+            break;
+        case 0x0f:
+            dbg_print("[PCA] IDE controller: PCI native mode controller.\n");
+            break;
+        case 0x80:
+            dbg_print("[PCA] IDE controller: ISA Compatibility mode-only controller.\n");
+            break;
+        case 0x85:
+            dbg_print("[PCA] IDE controller: PCI native mode-only controller.\n");
+            break;
+        case 0x8a:
+            dbg_print("[PCA] IDE controller: ISA Compatibility mode controller.\n");
+            break;
+        case 0x8f:
+            dbg_print("[PCA] IDE controller: PCI native mode controller.\n");
+            break;
+        default:
+            dbg_print("[PCA] IDE controller: unknown interface.\n");
+            break;
+        }
+        break;
+    case 0x0200:        // ethernet controller
+        dbg_print("[PCA] ethernet controller.\n");
+        break;
+    case 0x0300:        // VGA compatible controller
+        switch (prog) {
+        case 0x00:
+            dbg_print("[PCA] VGA controller.\n");
+            break;
+        case 0x01:
+            dbg_print("[PCA] VGA 8514-compatible controller.\n");
+            break;
+        }
+        break;
+    case 0x0600:        // host bridge
+        dbg_print("[PCA] host bridge.\n");
+        break;
+    case 0x0601:        // ISA bridge
+        dbg_print("[PCA] ISA bridge.\n");
+        break;
+    case 0x0602:
+        dbg_print("[PCA] EISA bridge.\n");
+        break;
+    case 0x0603:
+        dbg_print("[PCA] MCA bridge.\n");
+        break;
+    case 0x0604:        // PCI-to-PCI bridge
+        switch (prog) {
+        case 0x00:
+            dbg_print("[PCA] PCI-to-PCI bridge: normal decode.\n");
+            break;
+        case 0x01:
+            dbg_print("[PCA] PCI-to-PCI bridge: subtractive decode.\n");
+            break;
+        default:
+            dbg_print("[PCA] wrong prog!\n");
+            break;
+        }
+        dbg_print("      second bus number is %d.\n", (pci_read(bus, dev, func, 24) >> 8) & 0xff);
+        // TODO: call pci_check_bus recursively
+        break;
+    case 0x0609:
+        switch (prog) {
+        case 0x40:
+            dbg_print("[PCA] PCI-to-PCI bridge: primary bus towards host CPU.\n");
+            break;
+        case 0x80:
+            dbg_print("[PCA] PCI-to-PCI bridge: secondary bus towards host CPU.\n");
+            break;
+        default:
+            dbg_print("[PCA] wrong prog!\n");
+            break;
+        }
+        dbg_print("      second bus number is %d.\n", (pci_read(bus, dev, func, 24) >> 8) & 0xff);
+        break;
+    case 0x0680:
+        dbg_print("[PCA] unknown bridge.\n");
+        break;
+    default:
+        dbg_print("[PCA] unknown pci device 0x%04x, prog if %d.\n", type, prog);
+        break;
     }
+
+    // // TODO: base 6 sub 9 is also pci-to-pci bridge
+    // if ((6 == base) && (4 == sub)) {
+    //     u32 reg6 = pci_read(bus, dev, func, 24);
+    //     dbg_print("second bus no.%d\n", (reg6 >> 8) & 0xff);
+    // }
 }
 
 static void pci_check_dev(u8 bus, u8 dev) {
