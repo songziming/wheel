@@ -119,7 +119,7 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     // enable debug output
     dbg_trace_hook = dbg_trace_here;
     dbg_write_hook = dbg_write_text;
-    dbg_print("wheel operating system starting up.\n");
+    dbg_print(">>>>> wheel operating system starting up.\n");
 
     // backup multiboot info
     mb_info_t * mbi = (mb_info_t *) allot_temporary(sizeof(mb_info_t));
@@ -183,7 +183,7 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     thiscpu_var(tid_prev) = &dummy;
 
     // start root task
-    dbg_print("[!] cpu %02d started.\n", cpu_activated++);
+    dbg_print("[smp] cpu %02d started.\n", cpu_activated++);
     task_resume(task_create(0, root_proc, 0,0,0,0));
 
     dbg_print("YOU SHALL NOT SEE THIS LINE!\n");
@@ -214,7 +214,7 @@ __INIT __NORETURN void sys_init_ap() {
     thiscpu_var(tid_prev) = &dummy;
 
     // start idle task
-    dbg_print("[!] cpu %02d started.\n", cpu_activated++);
+    dbg_print("[smp] cpu %02d started.\n", cpu_activated++);
     sched_yield();
 
     dbg_print("YOU SHALL NOT SEE THIS LINE!\n");
@@ -256,13 +256,14 @@ static void root_proc() {
     }
 
     // starting other kernel components
+    dbg_print(">>>>> starting kernel components.\n");
     tty_dev_init();
     ps2kbd_dev_init();
 
     // reclaim init section memory
+    dbg_print(">>>>> reclaiming init section memory.\n");
     usize init_addr = KERNEL_LMA;
     usize init_end  = ROUND_UP(virt_to_phys(&_init_end), PAGE_SIZE);
-    // dbg_print("[+] free 0x%016llx~0x%016llx (init)\n", init_addr, init_end);
 #if ZERO_MEMORY
     memset((void *) KERNEL_VMA, 0, init_end - init_addr);
 #endif
@@ -299,27 +300,27 @@ extern void pci_lib_init();
 //------------------------------------------------------------------------------
 // (test) IDE driver
 
-void ide_probe(u8 bus, u8 dev, u8 func) {
-    u32 reg0 = pci_read(bus, dev, func, 0);
-    u32 reg2 = pci_read(bus, dev, func, 8);
-    u16 vendor =  reg0        & 0xffff;
-    u16 device = (reg0 >> 16) & 0xffff;
-    u16 ccode  = (reg2 >> 16) & 0xffff;   // base and sub class code
-    u8  prog   = (reg2 >>  8) & 0xff;     // programming interface
+// void ide_probe(u8 bus, u8 dev, u8 func) {
+//     u32 reg0 = pci_read(bus, dev, func, 0);
+//     u32 reg2 = pci_read(bus, dev, func, 8);
+//     u16 vendor =  reg0        & 0xffff;
+//     u16 device = (reg0 >> 16) & 0xffff;
+//     u16 ccode  = (reg2 >> 16) & 0xffff;   // base and sub class code
+//     u8  prog   = (reg2 >>  8) & 0xff;     // programming interface
 
-    u32 regf = pci_read(bus, dev, func, 0x3c);
-    pci_write(bus, dev, func, 0x3c, (regf & ~0xff) | 0xfe); // update int line
+//     u32 regf = pci_read(bus, dev, func, 0x3c);
+//     pci_write(bus, dev, func, 0x3c, (regf & ~0xff) | 0xfe); // update int line
 
-    if (0xfe == (pci_read(bus, dev, func, 0x3c) & 0xff)) {
-        // this device needs an IRQ assignment
-        dbg_print("ide needs irq assignment.\n");
-    } else {
-        if ((0x80 == prog) || (0x8a == prog)) {
-            // this is parallel IDE controller, uses IRQ 14 and 15
-            dbg_print("this is parallel ide controller.\n");
-        }
-    }
-}
+//     if (0xfe == (pci_read(bus, dev, func, 0x3c) & 0xff)) {
+//         // this device needs an IRQ assignment
+//         dbg_print("ide needs irq assignment.\n");
+//     } else {
+//         if ((0x80 == prog) || (0x8a == prog)) {
+//             // this is parallel IDE controller, uses IRQ 14 and 15
+//             dbg_print("this is parallel ide controller.\n");
+//         }
+//     }
+// }
 
 //------------------------------------------------------------------------------
 // fat file system
