@@ -37,7 +37,8 @@ iso: build
 	@ grub-mkrescue -o $(ISOFILE) $(ISODIR) 2> /dev/null
 
 run: iso
-	@ qemu-system-x86_64 -smp 4 -m 64 -hda c.img -vga vmware -serial stdio -gdb tcp::4444 -cdrom $(ISOFILE)
+	@ qemu-system-x86_64 -accel kvm -smp 4 -m 64 -drive file=c.img,format=raw \
+	    -cdrom $(ISOFILE) -vga vmware -serial stdio -gdb tcp::4444 -boot order=d
 
 loc:
 	@ find . -type f -name "*.S" -o -name "*.c" -o -name "*.h" | xargs wc -l

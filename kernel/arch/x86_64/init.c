@@ -298,31 +298,6 @@ extern void pci_write(u8 bus, u8 dev, u8 func, u8 reg, u32 data);
 extern void pci_lib_init();
 
 //------------------------------------------------------------------------------
-// (test) IDE driver
-
-// void ide_probe(u8 bus, u8 dev, u8 func) {
-//     u32 reg0 = pci_read(bus, dev, func, 0);
-//     u32 reg2 = pci_read(bus, dev, func, 8);
-//     u16 vendor =  reg0        & 0xffff;
-//     u16 device = (reg0 >> 16) & 0xffff;
-//     u16 ccode  = (reg2 >> 16) & 0xffff;   // base and sub class code
-//     u8  prog   = (reg2 >>  8) & 0xff;     // programming interface
-
-//     u32 regf = pci_read(bus, dev, func, 0x3c);
-//     pci_write(bus, dev, func, 0x3c, (regf & ~0xff) | 0xfe); // update int line
-
-//     if (0xfe == (pci_read(bus, dev, func, 0x3c) & 0xff)) {
-//         // this device needs an IRQ assignment
-//         dbg_print("ide needs irq assignment.\n");
-//     } else {
-//         if ((0x80 == prog) || (0x8a == prog)) {
-//             // this is parallel IDE controller, uses IRQ 14 and 15
-//             dbg_print("this is parallel ide controller.\n");
-//         }
-//     }
-// }
-
-//------------------------------------------------------------------------------
 // fat file system
 
 // FAT views the storage media as a flat array of clusters
@@ -358,9 +333,6 @@ typedef struct ebr {
 //------------------------------------------------------------------------------
 // test driver
 
-extern void ata_init();
-
 void test() {
     pci_lib_init();
-    ata_init();
 }
