@@ -36,6 +36,11 @@ typedef struct ata_controller {
     u16           bus_master_ide; // controls dma
 } ata_controller_t;
 
+typedef struct blk_dev {
+    usize sec_size;
+    usize sec_count;
+} blk_dev_t;
+
 //------------------------------------------------------------------------------
 
 // read alternate status 4 times
@@ -70,7 +75,7 @@ static void ata_identify(ata_channel_t * chan, int slave) {
 
     // check status register
     if (0 == in8(chan->cmd+7)) {
-        dbg_print("not exist.\n");
+        // dbg_print("not exist.\n");
         return;
     }
 
@@ -93,15 +98,15 @@ static void ata_identify(ata_channel_t * chan, int slave) {
             switch (u.l) {
             case 0x00000101:
             default:
-                dbg_print("not ATA.\n");
+                // dbg_print("not ATA.\n");
                 return;
             case 0xeb140101:
             case 0x96690101:
-                dbg_print("ATA-PI.\n");
+                // dbg_print("ATA-PI.\n");
                 // TODO: send identify-packet command and try again
                 return;
             case 0xc33c0101:
-                dbg_print("SATA.\n");
+                // dbg_print("SATA.\n");
                 return;
             }
         }
@@ -174,18 +179,46 @@ static void ata_identify(ata_channel_t * chan, int slave) {
 
     // retrieve device parameters from identify info
     // create blk_dev instance and register to system
+
+    blk_dev_t * blk = kmem_alloc(sizeof(blk_dev_t));
+    blk->sec_count = * (u32 *) &info[60];   // LBA-28 number of addressable sectors
+    blk->sec_count = * (u64 *) &info[100];  // LBA-48 number of addressable sectors
+    blk->sec_size  = 512;   // almost true
+    // blk_dev_regist(blk);
+
+    return;
 }
 
 // read a sector
-static void ata_read_pio(ata_channel_t * chan, int slave, u64 sector, u8 * buf) {
-    if (slave != chan->selected) {
-        out8(chan->cmd+6, slave ? 0xe0 : 0xf0); // use lba
+static void ata_read_pio(ata_channel_t * chan, int slave, u64 sector, u8 * buf, usize n) {
+    sector &= 0x0fffffffU;  // LBA-28 range
+    // if (slave != chan->selected) {
+        u8 select = 0xe0;
+        select |= (slave & 1) << 4;
+        select |= (sector >> 24) & 0x0f;
+        out8(chan->cmd+6, select); // use lba
         ata_wait(chan);
-    }
+    // }
+
+    out8(chan->cmd+2, n);   // number of sectors to read
+    out8(chan->cmd+3,  sector        & 0xff);   // LBA low
+    out8(chan->cmd+4, (sector >>  8) & 0xff);   // LBA mid
+    out8(chan->cmd+5, (sector >> 16) & 0xff);   // LBA high
 
     // send read command
     out8(chan->cmd+7, CMD_READ_PIO);
     ata_wait(chan);
+
+    while (1) {
+        u8 status = in8(chan->cmd+7);
+        if (status & STATUS_BSY) {
+            continue;
+        }
+
+        if (status & STATUS_ERR) {
+            // raise exception and software reset?
+        }
+    }
 }
 
 //------------------------------------------------------------------------------
