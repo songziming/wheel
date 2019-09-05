@@ -19,6 +19,7 @@
 #include <mem/pool.h>
 #include <mem/kmem.h>
 
+#include <drvs/pci.h>
 #include <drvs/kbd.h>
 #include <drvs/tty.h>
 

@@ -282,22 +282,6 @@ static void root_proc() {
 }
 
 //------------------------------------------------------------------------------
-// (test) block device interface
-
-// like linux bio
-typedef struct blkdev {
-    int ref_count;
-    usize sec_size;
-} blkdev_t;
-
-//------------------------------------------------------------------------------
-// (test) PCI
-
-extern u32  pci_read (u8 bus, u8 dev, u8 func, u8 reg);
-extern void pci_write(u8 bus, u8 dev, u8 func, u8 reg, u32 data);
-extern void pci_lib_init();
-
-//------------------------------------------------------------------------------
 // fat file system
 
 // FAT views the storage media as a flat array of clusters
@@ -334,5 +318,5 @@ typedef struct ebr {
 // test driver
 
 void test() {
-    pci_lib_init();
+    pci_probe_all();
 }

@@ -1,8 +1,5 @@
 #include <wheel.h>
 
-extern u32  pci_read (u8 bus, u8 dev, u8 func, u8 reg);
-extern void pci_write(u8 bus, u8 dev, u8 func, u8 reg, u32 data);
-
 // fields of status register
 #define STATUS_BSY  (1U << 7)
 #define STATUS_DRDY (1U << 6)
@@ -180,10 +177,19 @@ static void ata_identify(ata_channel_t * chan, int slave) {
     // retrieve device parameters from identify info
     // create blk_dev instance and register to system
 
+    // create block device object
     blk_dev_t * blk = kmem_alloc(sizeof(blk_dev_t));
-    blk->sec_count = * (u32 *) &info[60];   // LBA-28 number of addressable sectors
-    blk->sec_count = * (u64 *) &info[100];  // LBA-48 number of addressable sectors
-    blk->sec_size  = 512;   // almost true
+
+    // most ata have 512 byte sector
+    blk->sec_size  = 512;
+
+    // get number of addressable sectors
+    if (info[83] & 0x0200) {
+        blk->sec_count = * (u64 *) &info[100];  // lba-48
+    } else {
+        blk->sec_count = * (u32 *) &info[60];   // lba-28
+    }
+
     // blk_dev_regist(blk);
 
     return;
