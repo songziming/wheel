@@ -25,7 +25,8 @@
 typedef struct ata_channel {
     u16 cmd;
     u16 ctrl;
-    int selected;   // 0 for master, 1 for slave
+    // int selected;   // 0 for master, 1 for slave
+    u16 bmide;
 } ata_channel_t;
 
 typedef struct ata_controller {
@@ -33,15 +34,46 @@ typedef struct ata_controller {
     u16           bus_master_ide; // controls dma
 } ata_controller_t;
 
-typedef struct blk_dev {
-    usize sec_size;
-    usize sec_count;
-} blk_dev_t;
+//------------------------------------------------------------------------------
+// generic block device interface
+
+typedef struct blk_ops blk_ops_t;
+typedef struct blk_dev blk_dev_t;
+
+typedef usize (* blk_read_t)  (blk_dev_t * blk, usize sec, usize n,       u8 * buf);
+typedef usize (* blk_write_t) (blk_dev_t * blk, usize sec, usize n, const u8 * buf);
+
+struct blk_ops {
+    blk_read_t  read;
+    blk_write_t write;
+};
+
+struct blk_dev {
+    kref_t      ref;
+    blk_ops_t * ops;
+    usize       sec_size;
+    usize       sec_count;
+};
+
+
+
+typedef struct ata_dev {
+    blk_dev_t blk;
+    u32       flags;
+    usize     ata;      // channel and slave
+} ata_dev_t;
+
+// flag bits
+#define ATA_LBA48   1
+
+#define ATA_CHAN(dev)  ((ata_channel_t *) (dev->ata & ~1))
+#define ATA_SLAVE(dev) ((int)             (dev->ata &  1))
 
 //------------------------------------------------------------------------------
+// helper functions
 
 // read alternate status 4 times
-static void ata_wait(ata_channel_t * chan) {
+static inline void ata_wait(ata_channel_t * chan) {
     in8(chan->ctrl+2);
     in8(chan->ctrl+2);
     in8(chan->ctrl+2);
@@ -49,22 +81,24 @@ static void ata_wait(ata_channel_t * chan) {
     in8(chan->ctrl+2);
 }
 
-// // reset both master and slave on the bus
-// static void ata_reset(ata_channel_t * chan) {
-//     out8(chan->ctrl+2, 0x04);    // set SRST
-//     ata_wait(chan);
-//     out8(chan->ctrl+2, 0);       // clear SRST bit again
-//     ata_wait(chan);
-//     chan->selected = -1;
-// }
+// reset both master and slave on the bus
+static inline void ata_reset(ata_channel_t * chan) {
+    out8(chan->ctrl+2, 0x04);    // set SRST
+    ata_wait(chan);
+    out8(chan->ctrl+2, 0);       // clear SRST bit again
+    ata_wait(chan);
+    // chan->selected = -1;
+}
+
+//------------------------------------------------------------------------------
+// send identify command
+
+static usize ata_read_pio(ata_channel_t * chan, int slave, u64 sector, u16 * buf, usize n);
 
 static void ata_identify(ata_channel_t * chan, int slave) {
     // select drive
-    if (slave != chan->selected) {
-        out8(chan->cmd+6, slave ? 0xb0 : 0xa0);
-        ata_wait(chan);
-        chan->selected = slave;
-    }
+    out8(chan->cmd+6, slave ? 0xb0 : 0xa0);
+    ata_wait(chan);
 
     // send identify command
     out8(chan->cmd+7, CMD_IDENTIFY);
@@ -175,7 +209,7 @@ static void ata_identify(ata_channel_t * chan, int slave) {
     }
 
     // retrieve device parameters from identify info
-    // create blk_dev instance and register to system
+    // create blk_dev instance and regist to the system
 
     // create block device object
     blk_dev_t * blk = kmem_alloc(sizeof(blk_dev_t));
@@ -191,41 +225,62 @@ static void ata_identify(ata_channel_t * chan, int slave) {
     }
 
     // blk_dev_regist(blk);
+    dbg_print("reading sector 2...\n");
+    u32 sec[512/4];
+    ata_read_pio(chan, slave, 2, (u16 *) sec, 1);
+    for (int i = 0; i < 128; ++i) {
+        dbg_print(" %08x", sec[i]);
+        if ((i+1) % 8 == 0) {
+            dbg_print("\n");
+        }
+    }
 
     return;
 }
 
-// read a sector
-static void ata_read_pio(ata_channel_t * chan, int slave, u64 sector, u8 * buf, usize n) {
-    sector &= 0x0fffffffU;  // LBA-28 range
-    // if (slave != chan->selected) {
-        u8 select = 0xe0;
-        select |= (slave & 1) << 4;
-        select |= (sector >> 24) & 0x0f;
-        out8(chan->cmd+6, select); // use lba
-        ata_wait(chan);
-    // }
+// read n sectors, return the number of sectors read, -1 for fail
+static usize ata_read_pio(ata_channel_t * chan, int slave, u64 sector, u16 * buf, usize n) {
+    u32 lba = sector & 0x0fffffffU;         // LBA-28
 
-    out8(chan->cmd+2, n);   // number of sectors to read
-    out8(chan->cmd+3,  sector        & 0xff);   // LBA low
-    out8(chan->cmd+4, (sector >>  8) & 0xff);   // LBA mid
-    out8(chan->cmd+5, (sector >> 16) & 0xff);   // LBA high
+    u8 select = 0xe0;
+    select |= (slave & 1) << 4;
+    select |= (lba >> 24) & 0x0f;
+    out8(chan->cmd+6, select);              // use lba
+    ata_wait(chan);
 
-    // send read command
-    out8(chan->cmd+7, CMD_READ_PIO);
+    out8(chan->cmd+2, n);                   // sector count
+    out8(chan->cmd+3,  lba        & 0xff);  // LBA low
+    out8(chan->cmd+4, (lba >>  8) & 0xff);  // LBA mid
+    out8(chan->cmd+5, (lba >> 16) & 0xff);  // LBA high
+
+    out8(chan->cmd+7, CMD_READ_PIO);        // send read command
     ata_wait(chan);
 
     while (1) {
         u8 status = in8(chan->cmd+7);
-        if (status & STATUS_BSY) {
-            continue;
-        }
 
         if (status & STATUS_ERR) {
             // raise exception and software reset?
+            ata_reset(chan);
+            return -1;
+        }
+
+        if ((0 == (status & STATUS_BSY)) && (0 != (status & STATUS_DRQ))) {
+            break;
         }
     }
+
+    // read sector content
+    for (unsigned i = 0; i < 256 * n; ++i) {
+        buf[i] = in16(chan->cmd+0);
+    }
+
+    return n;
 }
+
+// static usize ata_write_pio(ata_channel_t * chan, int slave, u64 sector, usize n, u16 * buf) {
+//     //
+// }
 
 //------------------------------------------------------------------------------
 
@@ -256,8 +311,6 @@ void ata_probe(u8 bus, u8 dev, u8 func) {
 
     // create new device object, then regist to the kernel
     ata_controller_t * ata = kmem_alloc(sizeof(ata_controller_t));
-    ata->chan[1].selected = -1;
-    ata->chan[1].selected = -1;
 
     // read BAR, get command/control port of primary and secondary bus
     // if bar value is 0 or one, then use standard io port

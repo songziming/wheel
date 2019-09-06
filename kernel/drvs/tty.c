@@ -326,16 +326,10 @@ static void listener_proc() {
 // only one tty object (singleton)
 // so `private` in file_t is not used at all
 
-// static const iodrv_t tty_drv = {
-//     .read  = (ios_read_t)  tty_read,
-//     .write = (ios_write_t) tty_write,
-//     .lseek = (ios_lseek_t) NULL,
-// };
-
 static const fops_t tty_ops = {
-    .read  = (read_t)  tty_read,
-    .write = (write_t) tty_write,
-    .lseek = (lseek_t) NULL,
+    .read  = (file_read_t)  tty_read,
+    .write = (file_write_t) tty_write,
+    .lseek = (file_lseek_t) NULL,
 };
 
 static void tty_file_delete(file_t * file) {

@@ -7,14 +7,14 @@
 typedef struct fops fops_t;
 typedef struct file file_t;
 
-typedef usize (* read_t)  (file_t * file,       u8 * buf, usize len);
-typedef usize (* write_t) (file_t * file, const u8 * buf, usize len);
-typedef void  (* lseek_t) (file_t * file, usize pos);
+typedef usize (* file_read_t)  (file_t * file,       void * buf, usize len);
+typedef usize (* file_write_t) (file_t * file, const void * buf, usize len);
+typedef void  (* file_lseek_t) (file_t * file, usize pos);
 
 struct fops {
-    read_t  read;
-    write_t write;
-    lseek_t lseek;
+    file_read_t  read;
+    file_write_t write;
+    file_lseek_t lseek;
 };
 
 struct file {
@@ -37,7 +37,7 @@ static inline void file_close(file_t * file) {
     kref_delete(&file->ref);
 }
 
-extern usize file_read (file_t * file, void * buf, usize len);
+extern usize file_read (file_t * file,       void * buf, usize len);
 extern usize file_write(file_t * file, const void * buf, usize len);
 
 #endif // CORE_FILE_H

@@ -139,9 +139,9 @@ static usize pipe_file_write(file_t * file, const u8 * buf, usize len) {
 }
 
 static const fops_t pipe_ops = {
-    .read  = (read_t)  pipe_file_read,
-    .write = (write_t) pipe_file_write,
-    .lseek = (lseek_t) NULL,
+    .read  = (file_read_t)  pipe_file_read,
+    .write = (file_write_t) pipe_file_write,
+    .lseek = (file_lseek_t) NULL,
 };
 
 static void pipe_file_delete(file_t * file) {

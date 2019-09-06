@@ -1,6 +1,29 @@
 #include <wheel.h>
 
+// fill all memory with zero, takes a long time
 #define ZERO_MEMORY 0
+
+//------------------------------------------------------------------------------
+// install kernel symbol table
+
+static __INIT int sym_table_init(mb_elf_sec_tbl_t * elf) {
+    u8 * shdrs = (u8 *) phys_to_virt(elf->addr);
+    for (u32 i = 1; i < elf->num; ++i) {
+        elf64_shdr_t * sym = (elf64_shdr_t *) (shdrs + elf->size * i);
+        elf64_shdr_t * str = (elf64_shdr_t *) (shdrs + elf->size * sym->sh_link);
+        if ((SHT_SYMTAB != sym->sh_type) || (SHT_STRTAB != str->sh_type)) {
+            continue;
+        }
+        u8 * symtbl = (u8 *) allot_permanent(sym->sh_size);
+        u8 * strtbl = (u8 *) allot_permanent(str->sh_size);
+        memcpy(symtbl, phys_to_virt(sym->sh_addr), sym->sh_size);
+        memcpy(strtbl, phys_to_virt(str->sh_addr), str->sh_size);
+        regist_symtbl(symtbl, sym->sh_size);
+        regist_strtbl(strtbl, str->sh_size);
+        return OK;
+    }
+    return ERROR;
+}
 
 //------------------------------------------------------------------------------
 // parse madt table, find all local apic and io apic
@@ -32,7 +55,6 @@ static __INIT void parse_madt(madt_t * tbl) {
             loapic_set_nmi((madt_loapic_mni_t *) sub);
             break;
         default:
-            dbg_print("madt entry type %d not known!\n", sub->type);
             break;
         }
         p += sub->length;
@@ -42,7 +64,6 @@ static __INIT void parse_madt(madt_t * tbl) {
 //------------------------------------------------------------------------------
 // parse physical memory map
 
-// defined in `layout.ld`
 extern u8 _percpu_addr;
 extern u8 _percpu_end;
 
@@ -84,18 +105,15 @@ static __INIT void parse_mmap(u8 * mmap_buf, u32 mmap_len) {
         u64 end   = ROUND_DOWN(item->addr + item->len, PAGE_SIZE);
         if ((start < end) && (MB_MEMORY_RESERVED == item->type)) {
             // TODO: map this range into kernel space
-            // dbg_print("[+] mmio 0x%08llx-0x%08llx.\n", start, end - 1);
         }
         if ((start < end) && (MB_MEMORY_AVAILABLE == item->type)) {
             if (start < KERNEL_LMA) {
-                // dbg_print("[+] ram  0x%016llx-0x%016llx\n", start, MIN(KERNEL_LMA, end) - 1);
 #if ZERO_MEMORY
                 memset(phys_to_virt(start), 0, MIN(KERNEL_LMA, end) - start);
 #endif
                 page_range_free(start, MIN(KERNEL_LMA, end));
             }
             if (p_end < end) {
-                // dbg_print("[+] ram  0x%016llx-0x%016llx\n", MAX(start, p_end), end - 1);
 #if ZERO_MEMORY
                 memset(phys_to_virt(MAX(start, p_end)), 0, end - MAX(start, p_end));
 #endif
@@ -116,7 +134,7 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     serial_dev_init();
     console_dev_init();
 
-    // enable debug output
+    // enable early debug output
     dbg_trace_hook = dbg_trace_here;
     dbg_write_hook = dbg_write_text;
     dbg_print(">>>>> wheel operating system starting up.\n");
@@ -125,25 +143,14 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     mb_info_t * mbi = (mb_info_t *) allot_temporary(sizeof(mb_info_t));
     memcpy(mbi, phys_to_virt(ebx), sizeof(mb_info_t));
 
+    // find and install kernel symbol table
+    if (OK != sym_table_init(&mbi->elf)) {
+        dbg_print(">>>>> no symbol table found!\n");
+    }
+
     // backup memory map
     u8 * mmap_buff = (u8 *) allot_temporary(mbi->mmap_length);
     memcpy(mmap_buff, phys_to_virt(mbi->mmap_addr), mbi->mmap_length);
-
-    // copy and regist kernel symbol table
-    u8 * shdrs = (u8 *) phys_to_virt(mbi->elf.addr);
-    for (u32 i = 1; i < mbi->elf.num; ++i) {
-        elf64_shdr_t * sym = (elf64_shdr_t *) (shdrs + mbi->elf.size * i);
-        elf64_shdr_t * str = (elf64_shdr_t *) (shdrs + mbi->elf.size * sym->sh_link);
-        if ((SHT_SYMTAB == sym->sh_type) && (SHT_STRTAB == str->sh_type)) {
-            u8 * symtbl = (u8 *) allot_permanent(sym->sh_size);
-            u8 * strtbl = (u8 *) allot_permanent(str->sh_size);
-            memcpy(symtbl, phys_to_virt(sym->sh_addr), sym->sh_size);
-            memcpy(strtbl, phys_to_virt(str->sh_addr), str->sh_size);
-            regist_symtbl(symtbl, sym->sh_size);
-            regist_strtbl(strtbl, str->sh_size);
-            break;
-        }
-    }
 
     // get multi-processor info
     acpi_tbl_init();
@@ -260,6 +267,9 @@ static void root_proc() {
     tty_dev_init();
     ps2kbd_dev_init();
 
+    // detect hardware
+    pci_probe_all();
+
     // reclaim init section memory
     dbg_print(">>>>> reclaiming init section memory.\n");
     usize init_addr = KERNEL_LMA;
@@ -270,9 +280,6 @@ static void root_proc() {
     page_range_free(init_addr, init_end);
     mmu_unmap(mmu_ctx_get(), KERNEL_VMA, (init_end - init_addr) >> PAGE_SHIFT);
     tlb_flush(KERNEL_VMA, (init_end - init_addr) >> PAGE_SHIFT);
-
-    // run test program
-    test();
 
     // start kernel shell
     shell_lib_init();
@@ -314,9 +321,3 @@ typedef struct ebr {
     u8  sys_id[8];
 } __PACKED ebr_t;
 
-//------------------------------------------------------------------------------
-// test driver
-
-void test() {
-    pci_probe_all();
-}

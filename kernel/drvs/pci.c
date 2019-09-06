@@ -104,6 +104,7 @@ static void pci_check_bus(u8 bus) {
     }
 }
 
+// might be called again to re-probe all device when updated
 void pci_probe_all() {
     if (NULL != acpi_mcfg) {
         dbg_print("PCI Express present, we can use mapped memory.\n");

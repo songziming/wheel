@@ -9,17 +9,18 @@ static elf64_sym_t * symtbl_addr = NULL;
 static usize         symtbl_size = 0;
 
 usize dbg_sym_locate(const char * name) {
-    if ((NULL != symtbl_addr) && (NULL != strtbl_addr)) {
-        for (usize i = 0; i < symtbl_size; ++i) {
-            elf64_sym_t * sym = &symtbl_addr[i];
-            if (STT_FUNC != (sym->st_info & 0x0f)) {
-                continue;
-            }
-            if (0 != strcmp(&strtbl_addr[sym->st_name], name)) {
-                continue;
-            }
-            return sym->st_value;
+    if ((NULL == symtbl_addr) || (NULL == strtbl_addr)) {
+        return NO_ADDR;
+    }
+    for (usize i = 0; i < symtbl_size; ++i) {
+        elf64_sym_t * sym = &symtbl_addr[i];
+        if (STT_FUNC != (sym->st_info & 0x0f)) {
+            continue;
         }
+        if (0 != strcmp(&strtbl_addr[sym->st_name], name)) {
+            continue;
+        }
+        return sym->st_value;
     }
     return NO_ADDR;
 }

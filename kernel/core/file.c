@@ -26,7 +26,7 @@ file_t * file_open(const char * name, int mode) {
 
 usize file_read(file_t * file, void * buf, usize len) {
     if (file->ops_mode & O_READ) {
-        return FILE_OPS(file)->read(file, (u8 *) buf, len);
+        return FILE_OPS(file)->read(file, buf, len);
     } else {
         return (usize) -1;
     }
@@ -34,7 +34,7 @@ usize file_read(file_t * file, void * buf, usize len) {
 
 usize file_write(file_t * file, const void * buf, usize len) {
     if (file->ops_mode & O_WRITE) {
-        return FILE_OPS(file)->write(file, (const u8 *) buf, len);
+        return FILE_OPS(file)->write(file, buf, len);
     } else {
         return (usize) -1;
     }
