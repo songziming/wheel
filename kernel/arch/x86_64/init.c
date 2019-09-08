@@ -68,8 +68,11 @@ extern u8 _percpu_addr;
 extern u8 _percpu_end;
 
 static __INIT void parse_mmap(u8 * mmap_buf, u32 mmap_len) {
-    // reserve space for percpu sections
+    // get kernel end address
     u8 * kernel_end = (u8 *) ROUND_UP(allot_permanent(0), 64);
+    allot_disable();
+
+    // reserve space for percpu sections
     percpu_base = (u64) (kernel_end - &_percpu_addr);
     percpu_size = ROUND_UP((u64) (&_percpu_end - &_percpu_addr), 64);
     for (int i = 0; i < cpu_count(); ++i) {

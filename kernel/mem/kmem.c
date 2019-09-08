@@ -5,6 +5,10 @@ static int      kmem_count1 = 0;
 static int      kmem_count2 = 0;
 static pool_t * kmem_cache  = NULL;
 
+#ifdef DEBUG
+static int lib_initialized = NO;
+#endif
+
 static pool_t * get_pool(usize obj_size) {
     if (obj_size > PAGE_SIZE) {
         return NULL;
@@ -36,6 +40,12 @@ static pool_t * get_pool(usize obj_size) {
 }
 
 void * kmem_alloc(usize obj_size) {
+#ifdef DEBUG
+    if (YES != lib_initialized) {
+        panic("kmem lib not initialized.\n");
+    }
+#endif
+
     pool_t * pool = get_pool(obj_size);
     if (NULL == pool) {
         panic("obj_size %d not valid.\n", obj_size);
@@ -53,6 +63,12 @@ void * kmem_alloc(usize obj_size) {
 }
 
 void kmem_free(usize obj_size, void * obj) {
+#ifdef DEBUG
+    if (YES != lib_initialized) {
+        panic("kmem lib not initialized.\n");
+    }
+#endif
+
     pool_t * pool = get_pool(obj_size);
     if (NULL == pool) {
         panic("obj_size not valid.\n");
@@ -61,6 +77,13 @@ void kmem_free(usize obj_size, void * obj) {
 }
 
 __INIT void kmem_lib_init(usize l1_size) {
+#ifdef DEBUG
+    if (YES == lib_initialized) {
+        panic("kmem lib already initialized.\n");
+    }
+    lib_initialized = YES;
+#endif
+
     assert(0 == (l1_size & (l1_size-1)));
     kmem_align = l1_size;
 
@@ -71,14 +94,4 @@ __INIT void kmem_lib_init(usize l1_size) {
     for (int i = 0; i < (kmem_count1 + kmem_count2); ++i) {
         kmem_cache[i].obj_size = -1;
     }
-
-    // // objects smaller than L1 cache, align to power of 2
-    // for (int i = 0; i < kmem_count1; ++i) {
-    //     pool_init(&kmem_cache[i], sizeof(usize) << i);
-    // }
-
-    // // objects larger than L1 cache, align to kmem_align
-    // for (int i = 0; i < kmem_count2; ++i) {
-    //     pool_init(&kmem_cache[kmem_count1+i], kmem_align*(i+1));
-    // }
 }

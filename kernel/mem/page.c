@@ -1,5 +1,9 @@
 #include <wheel.h>
 
+#ifdef DEBUG
+static int lib_initialized = NO;
+#endif
+
 page_t * page_array;
 usize    page_count;
 
@@ -92,6 +96,13 @@ void pglist_free_all(pglist_t * list) {
         list->head = next;
     }
     list->tail = NO_PAGE;
+}
+
+pfn_t parent_block(pfn_t page) {
+    while ((page != 0) && (page_array[page].block == 0)) {
+        page &= page - 1;
+    }
+    return page;
 }
 
 //------------------------------------------------------------------------------
@@ -189,6 +200,12 @@ static inline zone_t * zone_for(usize start, usize end) {
 // allocate page block of size 2^order
 // lock zone and interrupt, so ISR could alloc pages
 pfn_t page_block_alloc(u32 zones, int order, u32 type) {
+#ifdef DEBUG
+    if (YES != lib_initialized) {
+        panic("page lib not initialized.\n");
+    }
+#endif
+
     assert(PT_FREE != type);
     if ((order < 0) || (order >= ORDER_COUNT)) {
         return NO_PAGE; // invalid parameter
@@ -232,6 +249,12 @@ pfn_t page_block_alloc_or_fail(u32 zones, int order, u32 type) {
 }
 
 void page_block_free(pfn_t blk, int order) {
+#ifdef DEBUG
+    if (YES != lib_initialized) {
+        panic("page lib not initialized.\n");
+    }
+#endif
+
     usize size = 1UL << order;
     zone_t * zone = zone_for((usize)  blk         << PAGE_SHIFT,
                              (usize) (blk + size) << PAGE_SHIFT);
@@ -245,14 +268,16 @@ void page_block_free(pfn_t blk, int order) {
     raw_spin_give(&zone->spin);
 }
 
-pfn_t parent_block(pfn_t page) {
-    while ((page != 0) && (page_array[page].block == 0)) {
-        page &= page - 1;
-    }
-    return page;
-}
+//------------------------------------------------------------------------------
+// statistics
 
 usize free_page_count(u32 zones) {
+#ifdef DEBUG
+    if (YES != lib_initialized) {
+        panic("page lib not initialized.\n");
+    }
+#endif
+
     usize count = 0;
     if (zones & ZONE_DMA) {
         count += zone_dma.page_count;
@@ -262,43 +287,6 @@ usize free_page_count(u32 zones) {
     }
     return count;
 }
-
-//------------------------------------------------------------------------------
-// initialize page frame allocator, initially no free page
-
-__INIT void page_lib_init() {
-    zone_dma.spin          = SPIN_INIT;
-    zone_normal.spin       = SPIN_INIT;
-    zone_dma.page_count    = 0;
-    zone_normal.page_count = 0;
-    for (int i = 0; i < ORDER_COUNT; ++i) {
-        zone_dma.list[i].head    = NO_PAGE;
-        zone_dma.list[i].tail    = NO_PAGE;
-        zone_normal.list[i].head = NO_PAGE;
-        zone_normal.list[i].tail = NO_PAGE;
-    }
-}
-
-// // add a range of free memory
-// __INIT void page_range_free(usize start, usize end) {
-//     pfn_t from = (pfn_t) (start >> PAGE_SHIFT);
-//     pfn_t to   = (pfn_t) (end   >> PAGE_SHIFT);
-
-//     while (from < to) {
-//         // compute best order for `from`
-//         int order = CTZ32(from);
-//         if ((order >= ORDER_COUNT) || (from == 0)) {
-//             order = ORDER_COUNT - 1;
-//         }
-//         while ((from + (1UL << order)) > to) {
-//             --order;
-//         }
-
-//         // return this block
-//         page_block_free(from, order);
-//         from += (1UL << order);
-//     }
-// }
 
 static __INIT void dump_layout(zone_t * zone) {
     for (u32 o = 0; o < ORDER_COUNT; ++o) {
@@ -315,13 +303,39 @@ static __INIT void dump_layout(zone_t * zone) {
     }
 }
 
-__INIT void page_info_show(u32 zones) {
-    if (zones & ZONE_DMA) {
-        dbg_print("== zone dma:\n");
-        dump_layout(&zone_dma);
+void page_info_show() {
+#ifdef DEBUG
+    if (YES != lib_initialized) {
+        panic("page lib not initialized.\n");
     }
-    if (zones & ZONE_NORMAL) {
-        dbg_print("== zone normal:\n");
-        dump_layout(&zone_normal);
+#endif
+
+    dbg_print("== zone dma:\n");
+    dump_layout(&zone_dma);
+
+    dbg_print("== zone normal:\n");
+    dump_layout(&zone_normal);
+}
+
+//------------------------------------------------------------------------------
+// initialize page frame allocator, initially no free page
+
+__INIT void page_lib_init() {
+#ifdef DEBUG
+    if (YES == lib_initialized) {
+        panic("page lib already initialized.\n");
+    }
+    lib_initialized = YES;
+#endif
+
+    zone_dma.spin          = SPIN_INIT;
+    zone_normal.spin       = SPIN_INIT;
+    zone_dma.page_count    = 0;
+    zone_normal.page_count = 0;
+    for (int i = 0; i < ORDER_COUNT; ++i) {
+        zone_dma.list[i].head    = NO_PAGE;
+        zone_dma.list[i].tail    = NO_PAGE;
+        zone_normal.list[i].head = NO_PAGE;
+        zone_normal.list[i].tail = NO_PAGE;
     }
 }

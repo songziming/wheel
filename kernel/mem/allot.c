@@ -6,7 +6,17 @@ static __SECTION(".allot") u8 perm_buff[CFG_PERM_ALLOT_SIZE];
 static __INITDATA usize temp_used = 0;
 static __INITDATA usize perm_used = 0;
 
+#ifdef DEBUG
+static int lib_disabled = NO;
+#endif
+
 __INIT void * allot_temporary(usize len) {
+#ifdef DEBUG
+    if (YES == lib_disabled) {
+        panic("allot lib is disabled.\n");
+    }
+#endif
+
     void * obj = (void *) &temp_buff[temp_used];
     temp_used += ROUND_UP(len, sizeof(usize));
     if (temp_used > CFG_TEMP_ALLOT_SIZE) {
@@ -23,3 +33,12 @@ __INIT void * allot_permanent(usize len) {
     }
     return obj;
 }
+
+#ifdef DEBUG
+__INIT void allot_disable() {
+    if (YES == lib_disabled) {
+        panic("allot lib already disabled.\n");
+    }
+    lib_disabled = YES;
+}
+#endif

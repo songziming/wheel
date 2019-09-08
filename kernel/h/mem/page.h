@@ -63,6 +63,8 @@ extern pfn_t pglist_pop_tail (pglist_t * list);
 extern void  pglist_remove   (pglist_t * list, pfn_t page);
 extern void  pglist_free_all (pglist_t * list);
 
+extern pfn_t parent_block(pfn_t page);
+
 //------------------------------------------------------------------------------
 // page frame allocator
 
@@ -70,18 +72,20 @@ extern void  pglist_free_all (pglist_t * list);
 #define ZONE_DMA        1
 #define ZONE_NORMAL     2
 
-// page frame allocator
+// allocate and free page frame
 extern pfn_t page_block_alloc        (u32 zones, int order, u32 type);
 extern pfn_t page_block_alloc_or_fail(u32 zones, int order, u32 type);
 extern void  page_block_free         (pfn_t blk, int order);
-extern pfn_t parent_block            (pfn_t page);
-extern usize free_page_count         (u32 zones);
+
+// statistics
+extern usize free_page_count(u32 zones);
+extern void  page_info_show ();
 
 // requires: nothing
 extern __INIT void page_lib_init ();
-// extern __INIT void page_range_free(usize start, usize end);
-extern __INIT void page_info_show(u32 zones);
+extern __INIT void page_info_show();
 
+// helper function for adding a range
 static inline void page_range_free(usize start, usize end) {
     pfn_t from = (pfn_t) (start >> PAGE_SHIFT);
     pfn_t to   = (pfn_t) (end   >> PAGE_SHIFT);
