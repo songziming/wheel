@@ -137,16 +137,19 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     // enable early debug output
     dbg_trace_hook = dbg_trace_here;
     dbg_write_hook = dbg_write_text;
-    dbg_print(">>>>> wheel operating system starting up.\n");
 
     // backup multiboot info
     mb_info_t * mbi = (mb_info_t *) allot_temporary(sizeof(mb_info_t));
     memcpy(mbi, phys_to_virt(ebx), sizeof(mb_info_t));
 
-    // find and install kernel symbol table
-    if (OK != sym_table_init(&mbi->elf)) {
-        dbg_print(">>>>> no symbol table found!\n");
+    // install kernel symbol table
+    if (0 != (mbi->flags & (1U << 5))) {
+        sym_table_init(&mbi->elf);
     }
+
+    // show welcome message
+    u8 boot_dev = (u8) (mbi->boot_device >> 24);
+    dbg_print(">>>>> wheel os booting from 0x%02x.\n", boot_dev);
 
     // backup memory map
     u8 * mmap_buff = (u8 *) allot_temporary(mbi->mmap_length);
@@ -160,6 +163,9 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     cpu_init();
     gdt_init();
     idt_init();
+
+    // reserve kmem cache
+    kmem_lib_init(64);
 
     // init page allocator and percpu-var support
     page_lib_init();
@@ -179,7 +185,6 @@ __INIT __NORETURN void sys_init_bsp(u32 ebx) {
     kernel_ctx_init();
 
     // init kernel memory allocator
-    kmem_lib_init();
     work_lib_init();
     sched_lib_init();
 

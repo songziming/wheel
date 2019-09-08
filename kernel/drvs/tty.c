@@ -326,7 +326,7 @@ static void listener_proc() {
 // only one tty object (singleton)
 // so `private` in file_t is not used at all
 
-static const fops_t tty_ops = {
+static const file_ops_t tty_ops = {
     .read  = (file_read_t)  tty_read,
     .write = (file_write_t) tty_write,
     .lseek = (file_lseek_t) NULL,

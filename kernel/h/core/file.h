@@ -4,14 +4,14 @@
 #include <base.h>
 #include <misc/kref.h>
 
-typedef struct fops fops_t;
-typedef struct file file_t;
+typedef struct file_ops file_ops_t;
+typedef struct file     file_t;
 
 typedef usize (* file_read_t)  (file_t * file,       void * buf, usize len);
 typedef usize (* file_write_t) (file_t * file, const void * buf, usize len);
 typedef void  (* file_lseek_t) (file_t * file, usize pos);
 
-struct fops {
+struct file_ops {
     file_read_t  read;
     file_write_t write;
     file_lseek_t lseek;
@@ -24,8 +24,8 @@ struct file {
 };
 
 // we save operations and open mode in one field
-#define FILE_OPS(f)     ((fops_t *) ((f)->ops_mode & ~3))
-#define FILE_MODE(f)    ((int)      ((f)->ops_mode &  3))
+#define FILE_OPS(f)     ((file_ops_t *) ((f)->ops_mode & ~3))
+#define FILE_MODE(f)    ((int)          ((f)->ops_mode &  3))
 
 // open modes
 #define O_READ          1

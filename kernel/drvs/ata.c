@@ -87,7 +87,6 @@ static inline void ata_reset(ata_channel_t * chan) {
     ata_wait(chan);
     out8(chan->ctrl+2, 0);       // clear SRST bit again
     ata_wait(chan);
-    // chan->selected = -1;
 }
 
 //------------------------------------------------------------------------------

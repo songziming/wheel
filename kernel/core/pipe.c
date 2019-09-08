@@ -138,7 +138,7 @@ static usize pipe_file_write(file_t * file, const u8 * buf, usize len) {
     return pipe_write((pipe_t *) file->private, buf, len);
 }
 
-static const fops_t pipe_ops = {
+static const file_ops_t pipe_ops = {
     .read  = (file_read_t)  pipe_file_read,
     .write = (file_write_t) pipe_file_write,
     .lseek = (file_lseek_t) NULL,
