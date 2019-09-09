@@ -10,22 +10,29 @@ typedef struct work {
     void *      arg4;
 } work_t;
 
-// TODO: work queue size should be configurable
-#define WORK_Q_SIZE 64
-
 typedef struct work_q {
     spin_t  spin;
     int     count;
-    work_t  works[WORK_Q_SIZE];
+    work_t  works[CFG_WORK_QUEUE_SIZE];
 } work_q_t;
 
 static __PERCPU work_q_t work_q;
 
+#ifdef DEBUG
+static int lib_initialized = NO;
+#endif
+
 // add a new work into the queue on current cpu
 void work_enqueue(void * proc, void * a1, void * a2, void * a3, void * a4) {
+#ifdef DEBUG
+    if (YES != lib_initialized) {
+        panic("work lib not initialized.\n");
+    }
+#endif
+
     work_q_t * q = thiscpu_ptr(work_q);
     u32 key = irq_spin_take(&q->spin);
-    if (q->count < WORK_Q_SIZE) {
+    if (q->count < CFG_WORK_QUEUE_SIZE) {
         q->works[q->count] = (work_t) { proc, a1, a2, a3, a4 };
         ++q->count;
     }
@@ -35,6 +42,12 @@ void work_enqueue(void * proc, void * a1, void * a2, void * a3, void * a4) {
 // execute all works in the work queue
 // usually called during isr, but also during task_switch
 void work_dequeue() {
+#ifdef DEBUG
+    if (YES != lib_initialized) {
+        panic("work lib not initialized.\n");
+    }
+#endif
+
     work_q_t * q = thiscpu_ptr(work_q);
     u32 key = irq_spin_take(&q->spin);
     for (int i = 0; i < q->count; ++i) {
@@ -46,10 +59,17 @@ void work_dequeue() {
 }
 
 __INIT void work_lib_init() {
+#ifdef DEBUG
+    if (YES == lib_initialized) {
+        panic("work lib already initialized.\n");
+    }
+    lib_initialized = YES;
+#endif
+
     for (int i = 0; i < cpu_installed; ++i) {
         work_q_t * q = percpu_ptr(i, work_q);
         q->spin  = SPIN_INIT;
         q->count = 0;
-        memset(q->works, 0, sizeof(work_t) * WORK_Q_SIZE);
+        memset(q->works, 0, sizeof(work_t) * CFG_WORK_QUEUE_SIZE);
     }
 }

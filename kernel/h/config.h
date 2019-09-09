@@ -13,6 +13,7 @@
 #define CFG_KBD_BUFF_SIZE       128
 #define CFG_TTY_BUFF_SIZE       1024
 
+#define CFG_WORK_QUEUE_SIZE     64
 #define CFG_SYS_CLOCK_RATE      50
 #define CFG_TASK_TIMESLICE      10
 

@@ -1,9 +1,5 @@
 #include <wheel.h>
 
-#ifdef DEBUG
-static int lib_initialized = NO;
-#endif
-
 page_t * page_array;
 usize    page_count;
 
@@ -15,6 +11,10 @@ typedef struct zone {
 
 static zone_t zone_dma;
 static zone_t zone_normal;
+
+#ifdef DEBUG
+static int lib_initialized = NO;
+#endif
 
 //------------------------------------------------------------------------------
 // page list operations
@@ -288,7 +288,7 @@ usize free_page_count(u32 zones) {
     return count;
 }
 
-static __INIT void dump_layout(zone_t * zone) {
+static void dump_layout(zone_t * zone) {
     for (u32 o = 0; o < ORDER_COUNT; ++o) {
         pfn_t blk = zone->list[o].head;
         if (NO_PAGE == blk) {

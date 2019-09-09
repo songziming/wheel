@@ -37,7 +37,7 @@ struct fs {
 static dllist_t mount_points = DLLIST_INIT;
 
 void vfs_mount(fs_t * fs) {
-    kref_retain(fs);
+    fs = kref_retain(fs);
     dl_push_tail(&mount_points, &fs->dl);
 }
 

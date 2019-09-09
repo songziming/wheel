@@ -1,5 +1,9 @@
 #include <wheel.h>
 
+#ifdef DEBUG
+static int lib_initialized = NO;
+#endif
+
 //------------------------------------------------------------------------------
 // ready queue
 
@@ -90,8 +94,14 @@ static int find_lowest_cpu(task_t * tid) {
 // add bits to `tid->state`, possibly stopping it, return old state.
 // this function only updates `tid`, `ready_q`, and `tid_next`.
 u32 sched_stop(task_t * tid, u32 bits) {
+#ifdef DEBUG
+    if (YES != lib_initialized) {
+        panic("sched lib not initialized.\n");
+    }
+#endif
+
     // change state, return if already stopped
-    u32 state   = tid->state;
+    u32 state = tid->state;
     tid->state |= bits;
     if (TS_READY != state) {
         return state;
@@ -114,8 +124,14 @@ u32 sched_stop(task_t * tid, u32 bits) {
 // remove bits from `tid->state`, possibly resuming it, return old state.
 // this function only updates `tid`, `ready_q`, and `tid_next`.
 u32 sched_cont(task_t * tid, u32 bits) {
+#ifdef DEBUG
+    if (YES != lib_initialized) {
+        panic("sched lib not initialized.\n");
+    }
+#endif
+
     // change state, return if already running
-    u32 state   = tid->state;
+    u32 state = tid->state;
     tid->state &= ~bits;
     if ((TS_READY == state) || (TS_READY != tid->state)) {
         return state;
@@ -152,6 +168,12 @@ void preempt_unlock() {
 // this function might be called during tick_advance
 // task state not changed, no need to lock current tid
 void sched_yield() {
+#ifdef DEBUG
+    if (YES != lib_initialized) {
+        panic("sched lib not initialized.\n");
+    }
+#endif
+
     ready_q_t * rdy = thiscpu_ptr(ready_q);
     u32         key = irq_spin_take(&rdy->spin);
     task_t    * tid = ready_q_head(rdy);
@@ -194,6 +216,13 @@ static void idle_proc() {
 }
 
 __INIT void sched_lib_init() {
+#ifdef DEBUG
+    if (YES == lib_initialized) {
+        panic("sched lib already initialized.\n");
+    }
+    lib_initialized = YES;
+#endif
+
     for (int i = 0; i < cpu_count(); ++i) {
         ready_q_t * rdy = percpu_ptr(i, ready_q);
         rdy->spin       = SPIN_INIT;

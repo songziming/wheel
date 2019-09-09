@@ -52,19 +52,13 @@ static keycode_t normal_lookup[] = {
 
 static int state = 0;
 
-// // send key code to kbd-task
-// static void send_keycode(keycode_t code, int release) {
-//     if (release) {
-//         code |= 0x80000000;
-//     }
-//     u32 key = irq_spin_take(&kbd_spin);
-//     fifo_write(&kbd_fifo, (u8 *) &code, sizeof(keycode_t), NO);
-//     irq_spin_give(&kbd_spin, key);
-
-//     sema_give(&kbd_sema);
-// }
-
-#define send_keycode(code, release) kbd_send((release) ? ((code) | 0x80000000) : (code))
+static inline void send_keycode(keycode_t code, int release) {
+    if (release) {
+        kbd_send(code | 0x80000000);
+    } else {
+        kbd_send(code);
+    }
+}
 
 // convert from scan code set 1 to key code
 static void digest_scan_code(u8 scancode) {

@@ -82,8 +82,7 @@ extern usize free_page_count(u32 zones);
 extern void  page_info_show ();
 
 // requires: nothing
-extern __INIT void page_lib_init ();
-extern __INIT void page_info_show();
+extern __INIT void page_lib_init();
 
 // helper function for adding a range
 static inline void page_range_free(usize start, usize end) {
