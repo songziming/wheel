@@ -246,7 +246,8 @@ extern u8 _init_end;
 
 // in `core/shell.c`
 extern void shell_lib_init();
-void test();
+
+static void fat_fs_init(blk_dev_t * dev);
 
 static void root_proc() {
     // copy trampoline code to 0x7c000
@@ -275,6 +276,8 @@ static void root_proc() {
     tty_dev_init();
     ps2kbd_dev_init();
 
+    // TODO: regist drivers to pci controller
+
     // detect hardware
     pci_probe_all();
 
@@ -288,6 +291,13 @@ static void root_proc() {
     page_range_free(init_addr, init_end);
     mmu_unmap(mmu_ctx_get(), KERNEL_VMA, (init_end - init_addr) >> PAGE_SHIFT);
     tlb_flush(KERNEL_VMA, (init_end - init_addr) >> PAGE_SHIFT);
+
+    // iterating each storage device
+    int num = blk_count_get();
+    for (int i = 0; i < num; ++i) {
+        blk_dev_t * dev = blk_dev_get(i);
+        fat_fs_init(dev);
+    }
 
     // start kernel shell
     shell_lib_init();
@@ -329,3 +339,16 @@ typedef struct ebr {
     u8  sys_id[8];
 } __PACKED ebr_t;
 
+void fat_fs_init(blk_dev_t * dev) {
+    if (512 != dev->sec_size) {
+        dbg_print("[fat] sector size is not 512.\n");
+        return;
+    }
+
+    u8 sec[512];
+    if (1 != blk_read(dev, 0, 1, sec)) {
+        dbg_print("[fat] cannot read from disk.\n");
+    }
+
+    dbg_print("[fat] last two bytes are 0x%02x%02x.\n", sec[510], sec[511]);
+}
