@@ -215,10 +215,7 @@ static blk_dev_t * ata_identify(u16 cmd, u16 ctrl, u16 bmide, int slave) {
 
     // we are sure this is ata drive
     ata_dev_t * ata = (ata_dev_t *) kmem_alloc(sizeof(ata_dev_t));
-    ata->blk.ref      = KREF_INIT(ata_delete);
-    ata->blk.dl       = DLNODE_INIT;
-    ata->blk.ops_mode = ((usize) &ata_ops & ~3UL) | BLK_READ | BLK_WRITE;
-    ata->blk.fs       = NULL;
+    blk_dev_init(&ata->blk, ata_delete, &ata_ops, BLK_READ|BLK_WRITE);
     ata->cmd   = cmd;
     ata->ctrl  = ctrl;
     ata->bmide = bmide;

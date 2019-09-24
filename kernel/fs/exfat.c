@@ -17,7 +17,7 @@ int exfat_check(u8 * sec) {
         dbg_print("jump field not valid.\n");
         return NO;
     }
-    if (0 != strncmp(bs->fsid, "EXFAT   ", 8)) {
+    if (0 != strncmp((const char *) bs->fsid, "EXFAT   ", 8)) {
         dbg_print("fs name field not valid.\n");
         return NO;
     }
