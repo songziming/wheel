@@ -20,8 +20,10 @@ struct blk_ops {
 struct blk_dev {
     kref_t   ref;
     dlnode_t dl;
+    fs_t *   fs;        // must be NULL if vols not empty
+    dllist_t vol_list;  // must be empty if fs != NULL
+    dlnode_t vol_node;  // node within vol_list
     usize    ops_mode;
-    fs_t *   fs;
     usize    sec_size;
     usize    sec_count;
 };
@@ -35,8 +37,8 @@ struct blk_dev {
 #define BLK_WRITE   2
 
 
-extern void blk_dev_init(blk_dev_t * dev, void * del, const blk_ops_t * ops, int mode);
-extern void blk_dev_regist_no_partition(blk_dev_t * dev);
+extern void blk_dev_init  (blk_dev_t * dev, void * del, const blk_ops_t * ops, int mode);
+extern void blk_vol_regist(blk_dev_t * dev);
 extern void blk_dev_regist(blk_dev_t * dev);
 extern int  blk_count_get();
 extern blk_dev_t * blk_dev_get(int idx);
