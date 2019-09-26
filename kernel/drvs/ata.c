@@ -261,6 +261,9 @@ static blk_dev_t * ata_identify(u16 cmd, u16 ctrl, u16 bmide, int slave) {
 
     dbg_print("[ata] installing block device.\n");
     blk_dev_regist((blk_dev_t *) ata);
+    if (YES != partprobe((blk_dev_t *) ata)) {
+        volume_create((blk_dev_t *) ata), 0, ata->blk.sec_count);
+    }
     return (blk_dev_t *) ata;
 }
 

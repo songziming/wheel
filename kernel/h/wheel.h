@@ -22,7 +22,10 @@
 #include <drvs/pci.h>
 #include <drvs/kbd.h>
 #include <drvs/tty.h>
+
 #include <drvs/blk.h>
+#include <drvs/vol.h>
+#include <drvs/part.h>
 
 #include <misc/ctype.h>
 #include <misc/string.h>

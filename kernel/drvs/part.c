@@ -26,12 +26,12 @@ static int probe(blk_dev_t * blk, usize start, usize size) {
 
     mbr_part_t * parts = (mbr_part_t *) &sec[446];
     for (int i = 0; i < 4; ++i) {
-        u8  start_s = part->start_chs[1] & 0x3f;
-        u8  last_s  = part->last_chs[1]  & 0x3f;
+        u8  start_s = parts[i].start_chs[1] & 0x3f;
+        u8  last_s  = parts[i].last_chs[1]  & 0x3f;
         if ((0 == start_s) || (0 == last_s)) {
             continue;
         }
-        if ((0 == part->sysid) || (0 == part->lba_size)) {
+        if ((0 == parts[i].sysid) || (0 == parts[i].lba_size)) {
             continue;
         }
         if (parts[i].lba_start + parts[i].lba_size > size) {
@@ -45,19 +45,22 @@ static int probe(blk_dev_t * blk, usize start, usize size) {
         } else {
             return NO;
         }
-        dbg_print("range 0x%llx:0x%llx, ", start + parts[i].lba_start, start + parts[i].lba_size);
+        dbg_print("range 0x%llx:0x%llx, type %x.\n", start + parts[i].lba_start, parts[i].lba_size, parts[i].sysid);
 
-        dbg_print("type %x.\n", parts[i].sysid);
+        dbg_print("");
         if ((0x05 == parts[i].sysid) || (0x0f == parts[i].sysid)) {
             // TODO: parse extended volume
         } else {
-            // TODO: add volume object
+            volume_t * vol = volume_create(blk, start+parts[i].lba_start, parts[i].lba_size);
+            volume_regist(vol);
         }
     }
 
     return YES;
 }
 
+// probe a given block device, create volumes
+// caller must umount all volumes on this device
 int partprobe(blk_dev_t * blk) {
     return probe(blk, 0, blk->sec_size);
 }

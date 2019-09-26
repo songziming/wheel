@@ -278,9 +278,24 @@ static void root_proc() {
     ps2kbd_dev_init();
 
     // TODO: regist drivers to pci controller
-
-    // detect hardware
+    // detect hardware, including hard drives
     pci_probe_all();
+
+    // iterating each logical volume
+    dbg_print(">>>>> searching for root partition.\n");
+    int num = volume_count();
+    for (int i = 0; i < num; ++i) {
+        volume_t * vol = volume_get(i);
+        dbg_print("[vol] size: ");
+        usize sz = 512UL * vol->sec_count;
+        if (sz > 1024) {
+            if (sz > 1024*1024) {
+                dbg_print("%dM,", (sz >> 20) & 1023);
+            }
+            dbg_print("%dK,", (sz >> 10) & 1023);
+        }
+        dbg_print("%dB.\n", sz & 1023);
+    }
 
     // reclaim init section memory
     dbg_print(">>>>> reclaiming init section memory.\n");
@@ -293,14 +308,7 @@ static void root_proc() {
     mmu_unmap(mmu_ctx_get(), KERNEL_VMA, (init_end - init_addr) >> PAGE_SHIFT);
     tlb_flush(KERNEL_VMA, (init_end - init_addr) >> PAGE_SHIFT);
 
-    // iterating each storage device
-    int num = blk_count_get();
-    for (int i = 0; i < num; ++i) {
-        blk_dev_t * dev = blk_dev_get(i);
-        fat_fs_init(dev);
-    }
-
-    // start kernel shell
+    // launch kernel shell
     shell_lib_init();
 
     task_exit();
