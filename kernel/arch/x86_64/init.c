@@ -247,8 +247,8 @@ extern u8 _init_end;
 // in `core/shell.c`
 extern void shell_lib_init();
 
-// in `fs/fat.c`
-extern void fat_fs_init(blk_dev_t * dev);
+// in `fs/exfat.c`
+extern void exfat_fs_init(volume_t * vol);
 
 static void root_proc() {
     // copy trampoline code to 0x7c000
@@ -295,6 +295,8 @@ static void root_proc() {
             dbg_print("%dK,", (sz >> 10) & 1023);
         }
         dbg_print("%dB.\n", sz & 1023);
+        //
+        exfat_fs_init(vol);
     }
 
     // reclaim init section memory

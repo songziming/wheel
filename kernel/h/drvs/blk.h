@@ -33,7 +33,7 @@ struct blk_dev {
 #define BLK_READ    1
 #define BLK_WRITE   2
 
-extern void blk_dev_init  (blk_dev_t * dev, void * del, const blk_ops_t * ops, int mode);
+extern void  blk_dev_init(blk_dev_t * dev, void * del, const blk_ops_t * ops, int mode);
 extern usize blk_read (blk_dev_t * dev, usize sec, usize n, void * buf);
 extern usize blk_write(blk_dev_t * dev, usize sec, usize n, const void * buf);
 
