@@ -1,10 +1,10 @@
 #include <wheel.h>
 
-typedef struct exfat {
-    ft_t    fs;
-    usize   sec_size;
-    usize   sec_count;
-} exfat_t;
+// typedef struct exfat {
+//     ft_t    fs;
+//     usize   sec_size;
+//     usize   sec_count;
+// } exfat_t;
 
 // main and backup boot sector
 typedef struct bootsec {
@@ -67,5 +67,5 @@ void exfat_fs_init(volume_t * vol) {
     static u8 sec[512];
     volume_read(vol, 0, 1, sec);
 
-    parse_boot_sector(sec);
+    parse_boot_sector(vol, sec);
 }

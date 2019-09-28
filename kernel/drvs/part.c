@@ -21,8 +21,11 @@ static int probe(blk_dev_t * blk, usize start, usize size) {
     static u8 sec[512];
     blk_read(blk, start, 1, sec);
 
-    // TODO: at most one bootable partition
+    // TODO: at most one active partition
     // TODO: at most one extended partition (sysid = 5 or 0xf)
+    int valid_count =  0;
+    int active_id   = -1;
+    int extended_id = -1;
 
     mbr_part_t * parts = (mbr_part_t *) &sec[446];
     for (int i = 0; i < 4; ++i) {
@@ -39,16 +42,27 @@ static int probe(blk_dev_t * blk, usize start, usize size) {
         }
 
         if (0x80 == parts[i].state) {
+            if (-1 != active_id) {
+                dbg_print("[mbr] warning: more than one active partition!\n");
+                return NO;
+            }
+            active_id = i;
             dbg_print("[mbr] %d. partition active (28): ", i);
+            ++valid_count;
         } else if (0x00 == parts[i].state) {
             dbg_print("[mbr] %d. partition normal (28): ", i);
+            ++valid_count;
         } else {
             return NO;
         }
         dbg_print("range 0x%llx:0x%llx, type %x.\n", start + parts[i].lba_start, parts[i].lba_size, parts[i].sysid);
 
-        dbg_print("");
         if ((0x05 == parts[i].sysid) || (0x0f == parts[i].sysid)) {
+            if (-1 != extended_id) {
+                dbg_print("[mbr] warning: more than one extended partition!\n");
+                return NO;
+            }
+            extended_id = i;
             // TODO: parse extended volume
         } else {
             volume_t * vol = volume_create(blk, start+parts[i].lba_start, parts[i].lba_size);
@@ -56,7 +70,7 @@ static int probe(blk_dev_t * blk, usize start, usize size) {
         }
     }
 
-    return YES;
+    return 0 != valid_count;
 }
 
 // probe a given block device, create volumes
