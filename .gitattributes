@@ -1,4 +1,0 @@
-*.c linguist-language=C
-*.h linguist-language=C
-
-c.img binary

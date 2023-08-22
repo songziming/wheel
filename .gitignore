@@ -1,18 +1,4 @@
 .vscode/
-bin/
+build*/
 
-*.d
-*.o
-*.elf
-*.bin
-*.map
-*.sym
-*.iso
-
-*~
-*.swp
-*.flc
-*.autosave
-
-Thumbs.db
-.DS_Store
+*.bak
