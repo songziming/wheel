@@ -1,11 +1,8 @@
 // 一套与标准库兼容的字符串操作函数
 // 都是弱符号，arch 模块可以提供更高效的实现
 
-#include <lib_string.h>
-
-// #include <debug.h>
-#define ASSERT(...)
-
+#include <libk_string.h>
+#include <debug.h>
 
 WEAK size_t kstrlen(const char *s) {
     const char *p = s;
@@ -38,7 +35,7 @@ WEAK int kstrncmp(const char *s1, const char *s2, size_t n) {
 }
 
 WEAK char *kstrcpy(char *dst, const char *src) {
-    ASSERT((dst <= src) || (dst > src + strlen(src)));
+    ASSERT((dst <= src) || (dst > src + kstrlen(src)));
     for (char *d = dst; (*d = *src); ++d, ++src) {}
     return dst;
 }
@@ -48,7 +45,7 @@ WEAK char *kstrcpy(char *dst, const char *src) {
 // 如果 src 过短，dst 剩余部分会填充 '\0'
 WEAK char *kstrncpy(char *dst, const char *src, size_t n) {
     ASSERT(n > 0);
-    ASSERT((dst <= src) || (dst > src + strnlen(src, n)));
+    ASSERT((dst <= src) || (dst > src + kstrnlen(src, n)));
     char *bak = dst;
     for (; *src && n; ++src, ++dst, --n) {
         *dst = *src;

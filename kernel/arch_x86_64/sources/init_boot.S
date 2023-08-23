@@ -5,7 +5,7 @@
 .extern sys_init
 .extern sys_init_ap
 
-#include <arch_settings.h>
+#include <arch_config.h>
 #include <multiboot1.h>
 #include <multiboot2.h>
 

@@ -17,7 +17,7 @@ typedef struct testitem {
 #ifdef __cplusplus
 extern "C"
 #endif
-void report_assert_fail(const char *file, const char *func, int line, const char *msg, ...);
+void report_test_fail(const char *file, const char *func, int line, const char *msg, ...);
 
 #define _CONCAT(a,b) a##b
 #define CONCAT(a,b) _CONCAT(a,b)
@@ -47,9 +47,10 @@ void report_assert_fail(const char *file, const char *func, int line, const char
 // EXPECT 宏不一定直接用在 TEST 函数中，可能用于 TEST 调用的子函数
 // 因此不能直接用 return 返回，但是可以在 report 里面用 longjmp 返回
 
-#define EXPECT_TRUE(cond, ...)   \
-    if (!(cond)) {          \
-        report_assert_fail(__FILE__, __func__, __LINE__, ""__VA_ARGS__); \
-    }
+#define EXPECT_TRUE(cond, ...) do { \
+    if (!(cond)) { \
+        report_test_fail(__FILE__, __func__, __LINE__, ""__VA_ARGS__); \
+    } \
+} while (0)
 
 #endif // TEST_H

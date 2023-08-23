@@ -1,5 +1,5 @@
-#include <lib_format.h>
-#include <lib_string.h>
+#include <libk_format.h>
+#include <libk_string.h>
 
 
 // 使用循环缓冲区接收格式化之后的字符串
@@ -23,7 +23,7 @@ static inline void fmt_flush(fmt_context_t *ctx) {
     }
 }
 
-static inline void fmt_print(fmt_context_t *ctx, char ch) {
+static inline void fmt_putchar(fmt_context_t *ctx, char ch) {
     if (ctx->ptr >= ctx->end) {
         fmt_flush(ctx);
     }
@@ -33,11 +33,11 @@ static inline void fmt_print(fmt_context_t *ctx, char ch) {
     ++ctx->ptr;
 }
 
-static inline PURE int _isdigit(int c) {
+static inline PURE int fmt_isdigit(int c) {
     return (('0' <= c) && (c <= '9'));
 }
 
-static inline PURE int _toupper(int c) {
+static inline PURE int fmt_toupper(int c) {
     return c & ~0x20;
 }
 
@@ -63,16 +63,16 @@ static void fmt_string(fmt_context_t *ctx, const char *str, uint32_t flags, int 
 
     if (0 == (flags & FLG_LEFT)) {
         for (; width > slen; --width) {
-            fmt_print(ctx, ' ');
+            fmt_putchar(ctx, ' ');
         }
     }
 
     for (int i = 0; i < slen; ++i, ++str) {
-        fmt_print(ctx, *str);
+        fmt_putchar(ctx, *str);
     }
 
     for (; width > slen; --width) {
-        fmt_print(ctx, ' ');
+        fmt_putchar(ctx, ' ');
     }
 }
 
@@ -165,34 +165,34 @@ static void fmt_number(fmt_context_t *ctx, uint64_t abs, int base, uint32_t flag
     // 如果右对齐，就在开头补空格
     if (0 == (flags & FLG_LEFT)) {
         for (int i = 0; i < pad_space; ++i) {
-            fmt_print(ctx, ' ');
+            fmt_putchar(ctx, ' ');
         }
     }
 
     // 打印符号
     if (0 != sign) {
-        fmt_print(ctx, sign);
+        fmt_putchar(ctx, sign);
     }
 
     // 打印前缀
     for (int i = 0; prefix[i]; ++i) {
-        fmt_print(ctx, prefix[i]);
+        fmt_putchar(ctx, prefix[i]);
     }
 
     // 补零
     for (int i = 0; i < pad_zero; ++i) {
-        fmt_print(ctx, '0');
+        fmt_putchar(ctx, '0');
     }
 
     // 打印数值
     for (int i = 0; i < bits; ++i) {
-        fmt_print(ctx, tmp[bits - i - 1]);
+        fmt_putchar(ctx, tmp[bits - i - 1]);
     }
 
     // 如果左对齐，就在末尾补空格
     if (flags & FLG_LEFT) {
         for (int i = 0; i < pad_space; ++i) {
-            fmt_print(ctx, ' ');
+            fmt_putchar(ctx, ' ');
         }
     }
 }
@@ -214,7 +214,7 @@ size_t format(char *buf, size_t n, format_cb_t cb, void *para, const char *fmt, 
 
     while (*fmt) {
         if ('%' != *fmt) {
-            fmt_print(&ctx, *fmt++);
+            fmt_putchar(&ctx, *fmt++);
             continue;
         }
 
@@ -245,7 +245,7 @@ size_t format(char *buf, size_t n, format_cb_t cb, void *para, const char *fmt, 
             width = va_arg(args, int);
         } else {
             width = 0;
-            for (; _isdigit(*fmt); ++fmt) {
+            for (; fmt_isdigit(*fmt); ++fmt) {
                 width = width * 10 + (*fmt - '0');
             }
         }
@@ -258,7 +258,7 @@ size_t format(char *buf, size_t n, format_cb_t cb, void *para, const char *fmt, 
                 precision = va_arg(args, int);
             } else {
                 precision = 0;
-                for (; _isdigit(*fmt); ++fmt) {
+                for (; fmt_isdigit(*fmt); ++fmt) {
                     precision = precision * 10 + (*fmt - '0');
                 }
             }
@@ -271,7 +271,7 @@ size_t format(char *buf, size_t n, format_cb_t cb, void *para, const char *fmt, 
             qualifier = *fmt++;
             if (qualifier == *fmt) {
                 ++fmt;
-                qualifier = _toupper(qualifier);
+                qualifier = fmt_toupper(qualifier);
             }
             break;
         case 'j':
@@ -285,18 +285,18 @@ size_t format(char *buf, size_t n, format_cb_t cb, void *para, const char *fmt, 
         switch (*fmt) {
         case '%':
             ++fmt;
-            fmt_print(&ctx, '%');
+            fmt_putchar(&ctx, '%');
             continue;
         case 'c':
             if (FLG_LEFT != (flags & FLG_LEFT)) {
                 while (--width > 0) {
-                    fmt_print(&ctx, ' ');
+                    fmt_putchar(&ctx, ' ');
                 }
             }
-            fmt_print(&ctx, (unsigned char)va_arg(args, int));
+            fmt_putchar(&ctx, (unsigned char)va_arg(args, int));
             ++fmt;
             while (--width > 0) {
-                fmt_print(&ctx, ' ');
+                fmt_putchar(&ctx, ' ');
             }
             continue;
         case 's':

@@ -1,33 +1,35 @@
 #include <test.h>
+#include <stdlib.h>
 #include <string.h>
-// #include <string>
 
 #include "../sources/lib_format.c"
 
 
-// static void printer(void *para, const char *s, size_t n) {
-//     // auto out = reinterpret_cast<string *>(para);
-//     // out->append(s, n);
-//     char *dst = *(char **)para;
-//     if (dst) {
-//         n += strlen(dst);
-//     }
-//     char *ss = ()malloc(n + 1);
-// }
+static void printer(char **dst, const char *s, size_t n) {
+    int len = *dst ? strlen(*dst) : 0;
+    *dst = (char *)realloc(*dst, len + n + 1);
+    memcpy(*dst + len, s, n);
+    (*dst)[len + n] = '\0';
+}
 
 static char *my_vprint(const char *fmt, ...) {
-    static char buf[256];
-
+    static char tmp[8];
+    char *str = NULL;
     va_list args;
     va_start(args, fmt);
-    format(buf, sizeof(buf), NULL, NULL, fmt, args);
+    format(tmp, sizeof(tmp), (format_cb_t)printer, &str, fmt, args);
     va_end(args);
-    return buf;
+    return str;
+}
+
+static void compare_and_free(const char *s1, char *s2) {
+    EXPECT_TRUE(0 == strcmp(s1, s2));
+    free(s2);
 }
 
 TEST(Format, Split) {
-    EXPECT_TRUE(0 == strcmp("abcdefghijklmn", my_vprint("abcdefghijklmn")));
-    EXPECT_TRUE(0 == strcmp("1234_hello_5678", my_vprint("1234%s5678", "_hello_")));
+    compare_and_free("abcdefghijklmn", my_vprint("abcdefghijklmn"));
+    compare_and_free("1234_hello_5678", my_vprint("1234%s5678", "_hello_"));
 }
 
 TEST(Format, Length) {

@@ -1,5 +1,5 @@
-#ifndef ARCH_SETTINGS_H
-#define ARCH_SETTINGS_H
+#ifndef ARCH_CONFIG_H
+#define ARCH_CONFIG_H
 
 // 需要和 layout.ld 保持一致
 #define KERNEL_LOAD_ADDR        0x0000000000100000UL    //  1M
@@ -18,8 +18,10 @@
 #define VIRT_ADDR_BITS          48
 #define VA_SIGN_EXTEND          16
 
-// 多任务之前的 init 流程使用的函数栈
-#define INIT_STACK_SIZE         0x1000
+#define INIT_STACK_SIZE         0x1000 // pre-task stack
+
+#define EARLY_CONST_BUFF_SIZE   0x4000
+#define EARLY_ALLOC_BUFF_SIZE   0x400000 // 需要容纳完整 framebuffer
 
 #define EARLY_CONST_HEAP_SIZE   0x4000
 #define EARLY_HEAP_SIZE         0x400000 // 需要容纳完整 framebuffer
@@ -33,4 +35,4 @@
 #define PAGE_CACHE_MAX          32  // 每个 CPU 最多保留多少页的缓存
 #define SYS_CLOCK_FREQ          60  // 系统时钟中断频率
 
-#endif // ARCH_SETTINGS_H
+#endif // ARCH_CONFIG_H
