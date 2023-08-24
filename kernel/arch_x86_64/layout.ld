@@ -73,7 +73,7 @@ SECTIONS {
     .bss (NOLOAD) : AT(ADDR(.bss) - TEXT_BASE) {
         *(.bss)
         *(.bss.*)
-        *(.tail)
+        *(.rwtail)
     } : data
 
     /DISCARD/ : {

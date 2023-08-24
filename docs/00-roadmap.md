@@ -1,3 +1,5 @@
 - [x] 引导：使用 multiboot 1&2 引导，进入 64-bit mode，跳转到 higher-half
 - [x] 输出：格式化字符串，打印调试输出
 - [ ] 解析 multiboot 信息
+  - [x] 解析物理内存布局
+  - [ ] 解析内核符号表

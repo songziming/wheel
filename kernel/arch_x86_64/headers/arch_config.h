@@ -20,11 +20,8 @@
 
 #define INIT_STACK_SIZE         0x1000 // pre-task stack
 
-#define EARLY_CONST_BUFF_SIZE   0x4000
-#define EARLY_ALLOC_BUFF_SIZE   0x400000 // 需要容纳完整 framebuffer
-
-#define EARLY_CONST_HEAP_SIZE   0x4000
-#define EARLY_HEAP_SIZE         0x400000 // 需要容纳完整 framebuffer
+#define EARLY_RO_BUFF_SIZE      0x4000
+#define EARLY_RW_BUFF_SIZE      0x400000 // 需要容纳完整 framebuffer
 
 #define INT_STACK_RANK          1   // 8K
 #define ROOT_STACK_SIZE         0x1000
