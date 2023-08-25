@@ -13,6 +13,9 @@
 #include <dev/out_serial.h>
 
 
+
+// 启动阶段，multiboot info 位于 lower-half
+
 static INIT_TEXT void mb1_init(uint32_t ebx) {
     mb1_info_t *info = (mb1_info_t *)(size_t)ebx;
 
@@ -38,6 +41,11 @@ static INIT_TEXT void mb1_init(uint32_t ebx) {
         }
         ASSERT(map_idx == map_len);
     }
+
+    if (MB1_INFO_ELF_SHDR & info->flags) {
+        mb1_elf_sec_tbl_t *elf = &info->elf;
+        symtab_init((void *)elf->addr, elf->num, elf->size, elf->shndx);
+    }
 }
 
 static INIT_TEXT void mb2_init(uint32_t ebx) {
@@ -56,14 +64,19 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
             ram_map_reserve(len);
             for (size_t i = 0; i < len; ++i) {
                 mb2_mmap_entry_t *ent = &mmap->entries[i];
-                if (MB2_MEMORY_AVAILABLE == ent->type) {
-                    ram_map_set(i, RAM_AVAILABLE, ent->addr, ent->len);
-                } else if (MB2_MEMORY_ACPI_RECLAIMABLE == ent->type) {
-                    ram_map_set(i, RAM_RECLAIMABLE, ent->addr, ent->len);
-                } else {
-                    ram_map_set(i, RAM_RESERVED, ent->addr, ent->len);
+                ram_type_t type;
+                switch (ent->type) {
+                case MB2_MEMORY_AVAILABLE:        type = RAM_AVAILABLE;   break;
+                case MB2_MEMORY_ACPI_RECLAIMABLE: type = RAM_RECLAIMABLE; break;
+                default:                          type = RAM_RESERVED;    break;
                 }
+                ram_map_set(i, type, ent->addr, ent->len);
             }
+            break;
+        }
+        case MB2_TAG_TYPE_ELF_SECTIONS: {
+            mb2_tag_elf_sections_t *elf = (mb2_tag_elf_sections_t *)tag;
+            symtab_init(elf->sections, elf->num, elf->entsize, elf->shndx);
             break;
         }
         default:

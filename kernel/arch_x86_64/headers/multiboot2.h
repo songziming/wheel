@@ -233,6 +233,7 @@ typedef struct mb2_tag_framebuffer {
     };
 } mb2_tag_framebuffer_t;
 
+// multiboot 2 文档内容有错误，以 grub2 仓库中的 multiboot.h 为准
 typedef struct mb2_tag_elf_sections {
     mb2_tag_t tag;
     uint32_t num;

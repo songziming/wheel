@@ -22,4 +22,6 @@ void report_assert_fail(const char *file, const char *func, int line);
     #define ASSERT(...)
 #endif
 
+INIT_TEXT void symtab_init(void *ptr, size_t num, size_t entsize, size_t shndx);
+
 #endif // DEBUG_H
