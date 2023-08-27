@@ -15,13 +15,13 @@
 #define ALIGNED(x)  __attribute__((aligned(x)))
 
 // #ifndef UNIT_TEST
-    #define SECTION(x)  __attribute__((section(x)))
-    #define CONST       SECTION(".rodata")
-    #define INIT_TEXT   SECTION(".init.text")
-    #define INIT_DATA   SECTION(".init.data")
-    #define INIT_BSS    SECTION(".init.bss")
-    #define PCPU_DATA   SECTION(".pcpu.data")
-    #define PCPU_BSS    SECTION(".pcpu.bss")
+#define SECTION(x)  __attribute__((section(x)))
+#define CONST       SECTION(".rodata")
+#define INIT_TEXT   SECTION(".init.text")
+#define INIT_DATA   SECTION(".init.data")
+#define INIT_BSS    SECTION(".init.bss")
+#define PCPU_DATA   SECTION(".pcpu.data")
+#define PCPU_BSS    SECTION(".pcpu.bss")
 // #else // !UNIT_TEST
 //     #define SECTION(x)
 //     #define CONST

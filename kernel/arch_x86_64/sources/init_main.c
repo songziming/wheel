@@ -44,7 +44,7 @@ static INIT_TEXT void mb1_init(uint32_t ebx) {
 
     if (MB1_INFO_ELF_SHDR & info->flags) {
         mb1_elf_sec_tbl_t *elf = &info->elf;
-        symtab_init((void *)elf->addr, elf->num, elf->size, elf->shndx);
+        symtab_init((void *)(size_t)elf->addr, elf->size, elf->num, elf->shndx);
     }
 }
 
@@ -76,7 +76,7 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
         }
         case MB2_TAG_TYPE_ELF_SECTIONS: {
             mb2_tag_elf_sections_t *elf = (mb2_tag_elf_sections_t *)tag;
-            symtab_init(elf->sections, elf->num, elf->entsize, elf->shndx);
+            symtab_init(elf->sections, elf->entsize, elf->num, elf->shndx);
             break;
         }
         default:
