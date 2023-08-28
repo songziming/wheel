@@ -53,8 +53,8 @@ typedef struct elf_symbol {
     const char *name;
 } elf_symbol_t;
 
-static CONST int            g_section_num  = 0;
-static CONST elf_section_t *g_sections     = NULL;
+static CONST int         g_section_num  = 0;
+static CONST Elf64_Shdr *g_sections     = NULL;
 
 static CONST int            g_symbol_num = 0;
 static CONST elf_symbol_t  *g_symbols    = NULL;
@@ -98,36 +98,32 @@ INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num, uint32_t s
     }
 
     // 准备 section 表
-    Elf64_Shdr *sections = (Elf64_Shdr *)ptr;
     g_section_num = (int)num;
-    g_sections = early_alloc_ro(num * sizeof(elf_section_t));
+    g_sections = early_alloc_ro(num * sizeof(Elf64_Shdr));
+    kmemcpy(g_sections, ptr, num * sizeof(Elf64_Shdr));
 
     // 填充 section 表
     for (int i = 0; i < g_section_num; ++i) {
-        Elf64_Shdr *sec = &sections[i];
+        Elf64_Shdr *sec = &g_sections[i];
+        uint32_t type = sec->sh_type;
 
-        g_sections[i].type = sec->sh_type;
-        if (SHT_NULL == sec->sh_type) {
+        // 如果是代码段或数据段，则段内容已在内存中
+        if ((SHT_NULL == type) || (SHT_PROGBITS == type) || (SHT_NOBITS == type)) {
             continue;
         }
 
-        g_sections[i].size = sec->sh_size;
-
-        // 如果是代码段或数据段，则段内容已在内存中
-        if ((SHT_PROGBITS == sec->sh_type) || (SHT_NOBITS == sec->sh_type)) {
-            g_sections[i].addr = (void *)sec->sh_addr;
-        } else {
-            g_sections[i].addr = early_alloc_ro(sec->sh_size);
-            kmemcpy(g_sections[i].addr, (void *)sec->sh_addr, sec->sh_size);
-        }
+        // 不属于有效地址空间，将数据备份
+        void *bak = early_alloc_ro(sec->sh_size);
+        kmemcpy(bak, (void *)sec->sh_addr, sec->sh_size);
+        sec->sh_addr = (Elf64_Addr)bak;
     }
 
     // 获取 section 名称的字符串表
     size_t name_len = 1;
-    char *name_buf = "";
+    const char *name_buf = "";
     if (SHN_UNDEF != shndx) {
-        name_len = g_sections[shndx].size;
-        name_buf = g_sections[shndx].addr;
+        name_len = g_sections[shndx].sh_size;
+        name_buf = (const char *)g_sections[shndx].sh_addr;
     }
 
     // 再次遍历每个 section，设置 section 名称
@@ -135,24 +131,27 @@ INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num, uint32_t s
     int symtab_num = 0;
     g_symbol_num = 0;
     for (int i = 0; i < g_section_num; ++i) {
-        uint32_t name_idx = sections[i].sh_name;
+        uint32_t name_idx = g_sections[i].sh_name;
         if (name_idx >= name_len) {
             name_idx = name_len - 1;
+            g_sections[i].sh_name = name_idx;
         }
-        g_sections[i].name = &name_buf[name_idx];
+
 #if DEBUG
-        dbg_print(" -> section type %10s, addr %18p, size %016lx, name '%s'\n",
-            elf_sec_type(g_sections[i].type), g_sections[i].addr,
-            g_sections[i].size, g_sections[i].name);
+        dbg_print(" -> section type %10s, addr 0x%016lx, size %016lx, flags %08lx, name '%s'\n",
+            elf_sec_type(g_sections[i].sh_type), g_sections[i].sh_addr,
+            g_sections[i].sh_size, g_sections[i].sh_flags,
+            &name_buf[g_sections[i].sh_name]);
 #endif
 
         // 如果这是符号表，计算包含的符号个数
-        if ((SHT_SYMTAB != g_sections[i].type) && (SHT_DYNSYM != g_sections[i].type)) {
+        if ((SHT_SYMTAB != g_sections[i].sh_type) && (SHT_DYNSYM != g_sections[i].sh_type)) {
             continue;
         }
-        ASSERT(sizeof(Elf64_Sym) == sections[i].sh_entsize);
+        ASSERT(sizeof(Elf64_Sym) == g_sections[i].sh_entsize);
+        ASSERT(0 == (g_sections[i].sh_size % g_sections[i].sh_entsize));
         ++symtab_num;
-        g_symbol_num += sections[i].sh_size / sections[i].sh_entsize;
+        g_symbol_num += g_sections[i].sh_size / g_sections[i].sh_entsize;
     }
     dbg_print("%d symtabs, and %d total symbols\n", symtab_num, g_symbol_num);
 
@@ -161,15 +160,15 @@ INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num, uint32_t s
 
     // 再次遍历 section，解析符号表
     for (int i = 0; i < g_section_num; ++i) {
-        if ((SHT_SYMTAB != g_sections[i].type) && (SHT_DYNSYM != g_sections[i].type)) {
+        if ((SHT_SYMTAB != g_sections[i].sh_type) && (SHT_DYNSYM != g_sections[i].sh_type)) {
             continue;
         }
-        int sym_num = sections[i].sh_size / sections[i].sh_entsize;
-        Elf64_Sym *syms = (Elf64_Sym *)g_sections[i].addr;
+        int sym_num = g_sections[i].sh_size / g_sections[i].sh_entsize;
+        Elf64_Sym *syms = (Elf64_Sym *)g_sections[i].sh_addr;
 
         // 该符号表对应的字符串表
-        uint32_t stridx = sections[i].sh_link;
-        Elf64_Shdr *shstr = &sections[stridx];
+        uint32_t stridx = g_sections[i].sh_link;
+        Elf64_Shdr *shstr = &g_sections[stridx];
         ASSERT(SHT_STRTAB == shstr->sh_type);
         size_t symstr_len = shstr->sh_size;
         const char *symstr_buf = (const char *)shstr->sh_addr;
