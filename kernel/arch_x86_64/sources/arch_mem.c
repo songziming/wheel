@@ -51,13 +51,13 @@ INIT_TEXT void *early_alloc_rw(size_t size) {
     return p;
 }
 
-INIT_TEXT size_t ram_map_extentof(size_t addr);
+INIT_TEXT size_t rammap_extentof(size_t addr);
 
 // 解锁长度限制，可以超过配置的 BUFF_SIZE，只要物理内存足够就能一直分配
 // 只放开 rw_buff 的限制，因为 ro_buff 与 rw_buff 很可能处于同一个 ram-range
 INIT_TEXT void early_alloc_unlock() {
     size_t rw_addr = (size_t)g_rw_area - KERNEL_TEXT_BASE;
-    g_rw_buff.size = ram_map_extentof(rw_addr) - rw_addr;
+    g_rw_buff.size = rammap_extentof(rw_addr) - rw_addr;
 }
 
 
@@ -71,43 +71,43 @@ typedef struct ram_range {
     size_t end;
 } ram_range_t;
 
-static CONST int g_ram_map_len = 0;
-static CONST ram_range_t *g_ram_map = NULL;
+static CONST int g_rammap_len = 0;
+static CONST ram_range_t *g_rammap = NULL;
 
-INIT_TEXT void ram_map_reserve(int num) {
-    ASSERT(0 == g_ram_map_len);
-    ASSERT(NULL == g_ram_map);
+INIT_TEXT void rammap_reserve(int num) {
+    ASSERT(0 == g_rammap_len);
+    ASSERT(NULL == g_rammap);
 
     if (num <= 0) {
         return;
     }
 
-    g_ram_map_len = num;
-    g_ram_map = early_alloc_ro(num * sizeof(ram_range_t));
-    kmemset(g_ram_map, 0, num * sizeof(ram_range_t));
+    g_rammap_len = num;
+    g_rammap = early_alloc_ro(num * sizeof(ram_range_t));
+    kmemset(g_rammap, 0, num * sizeof(ram_range_t));
 }
 
 // 添加一段物理内存
-INIT_TEXT void ram_map_set(int idx, ram_type_t type, size_t addr, size_t len) {
-    ASSERT(NULL != g_ram_map);
+INIT_TEXT void rammap_set(int idx, ram_type_t type, size_t addr, size_t len) {
+    ASSERT(NULL != g_rammap);
     ASSERT(idx >= 0);
-    ASSERT(idx < g_ram_map_len);
+    ASSERT(idx < g_rammap_len);
 
-    g_ram_map[idx].type = type;
-    g_ram_map[idx].addr = addr;
-    g_ram_map[idx].end  = addr + len;
+    g_rammap[idx].type = type;
+    g_rammap[idx].addr = addr;
+    g_rammap[idx].end  = addr + len;
 }
 
 // 返回 addr 之后能连续访问到的最高地址
-INIT_TEXT size_t ram_map_extentof(size_t addr) {
-    ASSERT(NULL != g_ram_map);
+INIT_TEXT size_t rammap_extentof(size_t addr) {
+    ASSERT(NULL != g_rammap);
 
-    for (int i = 0; i < g_ram_map_len; ++i) {
-        if (RAM_AVAILABLE != g_ram_map[i].type) {
+    for (int i = 0; i < g_rammap_len; ++i) {
+        if (RAM_AVAILABLE != g_rammap[i].type) {
             continue;
         }
-        size_t start = g_ram_map[i].addr;
-        size_t end = g_ram_map[i].end;
+        size_t start = g_rammap[i].addr;
+        size_t end = g_rammap[i].end;
         if ((start <= addr) && (addr < end)) {
             return end;
         }
@@ -117,7 +117,7 @@ INIT_TEXT size_t ram_map_extentof(size_t addr) {
     return 0;
 }
 
-#if DEBUG
+#ifdef DEBUG
 
 static INIT_TEXT const char *ram_type_str(ram_type_t type) {
     switch (type) {
@@ -127,14 +127,15 @@ static INIT_TEXT const char *ram_type_str(ram_type_t type) {
     }
 }
 
-INIT_TEXT void ram_map_show() {
-    ASSERT(NULL != g_ram_map);
+INIT_TEXT void rammap_show() {
+    ASSERT(NULL != g_rammap);
 
-    for (int i = 0; i < g_ram_map_len; ++i) {
-        size_t addr = g_ram_map[i].addr;
-        size_t end  = g_ram_map[i].end;
-        const char *type = ram_type_str(g_ram_map[i].type);
-        dbg_print(" -> ram range: addr=0x%016zx, end=0x%016zx, type=%s\n", addr, end, type);
+    dbg_print("ram ranges:\n");
+    for (int i = 0; i < g_rammap_len; ++i) {
+        size_t addr = g_rammap[i].addr;
+        size_t end  = g_rammap[i].end;
+        const char *type = ram_type_str(g_rammap[i].type);
+        dbg_print("  - ram range: addr=0x%016zx, end=0x%016zx, type=%s\n", addr, end, type);
     }
 }
 

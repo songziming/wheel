@@ -5,6 +5,11 @@
 #include <libk_elf.h>
 
 
+// 启动阶段是否打印内核 section、symbol 信息
+#define SHOW_ELF_SECTIONS 1
+#define SHOW_ELF_SYMBOLS  1
+
+
 //------------------------------------------------------------------------------
 // 调试输出
 //------------------------------------------------------------------------------
@@ -39,28 +44,19 @@ void report_assert_fail(const char *file, const char *func, int line) {
 // 内核符号表
 //------------------------------------------------------------------------------
 
-
-typedef struct elf_section {
-    uint32_t    type;
-    const char *name;
-    void       *addr; // 指向虚拟地址
-    size_t      size;
-} elf_section_t;
-
 typedef struct elf_symbol {
     size_t      addr;
     size_t      size;
     const char *name;
 } elf_symbol_t;
 
-static CONST int         g_section_num  = 0;
-static CONST Elf64_Shdr *g_sections     = NULL;
-
 static CONST int            g_symbol_num = 0;
 static CONST elf_symbol_t  *g_symbols    = NULL;
 
 
-static const char *elf_sec_type(uint32_t type) {
+#ifdef DEBUG
+#if SHOW_ELF_SECTIONS
+static INIT_TEXT const char *elf_sec_type(uint32_t type) {
     switch (type) {
     case SHT_NULL:          return "NULL";          break;
     case SHT_PROGBITS:      return "PROGBITS";      break;
@@ -79,114 +75,160 @@ static const char *elf_sec_type(uint32_t type) {
     case SHT_PREINIT_ARRAY: return "PREINIT_ARRAY"; break;
     case SHT_GROUP:         return "GROUP";         break;
     case SHT_SYMTAB_SHNDX:  return "SYMTAB_SHNDX";  break;
-    default:                return "unknown";       break;
+    default:                return "UNKNOWN";       break;
     }
 }
+#endif // SHOW_ELF_SECTIONS
+#if SHOW_ELF_SYMBOLS
+static INIT_TEXT const char *elf_sym_type(unsigned char type) {
+    switch (type) {
+    case STT_NOTYPE:  return "NOTYPE";  break;
+    case STT_OBJECT:  return "OBJECT";  break;
+    case STT_FUNC:    return "FUNC";    break;
+    case STT_SECTION: return "SECTION"; break;
+    case STT_FILE:    return "FILE";    break;
+    case STT_COMMON:  return "COMMON";  break;
+    case STT_TLS:     return "TLS";     break;
+    default:          return "UNKNOWN"; break;
+    }
+}
+#endif // SHOW_ELF_SYMBOLS
+#endif // DEBUG
 
-// TODO 仅备份符号表，还是连带 section 表、字符串表都复制一份？
 
 // 解析 ELF sections，解析符号表
-// ELF 文件可能有多个符号表
 INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num, uint32_t shndx) {
     ASSERT(NULL != ptr);
-    ASSERT(num < INT_MAX);
-    ASSERT(shndx < num);
 
     if (sizeof(Elf64_Shdr) != entsize) {
         dbg_print("section entry size is %d\n", entsize);
         return;
     }
 
-    // 准备 section 表
-    g_section_num = (int)num;
-    g_sections = early_alloc_ro(num * sizeof(Elf64_Shdr));
-    kmemcpy(g_sections, ptr, num * sizeof(Elf64_Shdr));
-
-    // 填充 section 表
-    for (int i = 0; i < g_section_num; ++i) {
-        Elf64_Shdr *sec = &g_sections[i];
-        uint32_t type = sec->sh_type;
-
-        // 如果是代码段或数据段，则段内容已在内存中
-        if ((SHT_NULL == type) || (SHT_PROGBITS == type) || (SHT_NOBITS == type)) {
-            continue;
-        }
-
-        // 不属于有效地址空间，将数据备份
-        void *bak = early_alloc_ro(sec->sh_size);
-        kmemcpy(bak, (void *)sec->sh_addr, sec->sh_size);
-        sec->sh_addr = (Elf64_Addr)bak;
-    }
+    const Elf64_Shdr *sections = (const Elf64_Shdr *)ptr;
 
     // 获取 section 名称的字符串表
-    size_t name_len = 1;
-    const char *name_buf = "";
-    if (SHN_UNDEF != shndx) {
-        name_len = g_sections[shndx].sh_size;
-        name_buf = (const char *)g_sections[shndx].sh_addr;
+    size_t secname_len = 1;
+    const char *secname_buf = "";
+    if ((SHN_UNDEF != shndx) && (shndx < num)) {
+        secname_len = sections[shndx].sh_size;
+        secname_buf = (const char *)sections[shndx].sh_addr;
     }
 
-    // 再次遍历每个 section，设置 section 名称
-    // 同时统计符号表的数量，符号的数量
-    int symtab_num = 0;
+    // 遍历 section，统计函数符号数量，符号名总长度
     g_symbol_num = 0;
-    for (int i = 0; i < g_section_num; ++i) {
-        uint32_t name_idx = g_sections[i].sh_name;
-        if (name_idx >= name_len) {
-            name_idx = name_len - 1;
-            g_sections[i].sh_name = name_idx;
+    int symstr_len = 0;
+    for (uint32_t i = 1; i < num; ++i) {
+        uint32_t name_idx = sections[i].sh_name;
+        if (name_idx >= secname_len) {
+            name_idx = secname_len - 1;
         }
 
-#if DEBUG
-        dbg_print(" -> section type %10s, addr 0x%016lx, size %016lx, flags %08lx, name '%s'\n",
-            elf_sec_type(g_sections[i].sh_type), g_sections[i].sh_addr,
-            g_sections[i].sh_size, g_sections[i].sh_flags,
-            &name_buf[g_sections[i].sh_name]);
+        uint32_t type = sections[i].sh_type;
+        uint32_t link = sections[i].sh_link;
+
+#if defined(DEBUG) && SHOW_ELF_SECTIONS
+        dbg_print("=> section type %10s, addr=%016lx, size=%08lx, flags=%02lx, name='%s'\n",
+            elf_sec_type(type), sections[i].sh_addr,
+            sections[i].sh_size, sections[i].sh_flags,
+            &secname_buf[name_idx]);
 #endif
 
-        // 如果这是符号表，计算包含的符号个数
-        if ((SHT_SYMTAB != g_sections[i].sh_type) && (SHT_DYNSYM != g_sections[i].sh_type)) {
+        // 带有字符串的符号表才需要处理
+        int is_symtab = ((SHT_SYMTAB == type) || (SHT_DYNSYM == type)) &&
+            (SHN_UNDEF != link) && (link < num) &&
+            (SHT_STRTAB == sections[link].sh_type);
+        if (!is_symtab) {
             continue;
         }
-        ASSERT(sizeof(Elf64_Sym) == g_sections[i].sh_entsize);
-        ASSERT(0 == (g_sections[i].sh_size % g_sections[i].sh_entsize));
-        ++symtab_num;
-        g_symbol_num += g_sections[i].sh_size / g_sections[i].sh_entsize;
-    }
-    dbg_print("%d symtabs, and %d total symbols\n", symtab_num, g_symbol_num);
 
-    // TODO 申请符号表空间（每个符号表第一个元素都是 UNDEF）
-    g_symbols = early_alloc_ro(g_symbol_num * sizeof(elf_symbol_t));
+        size_t symbol_num = sections[i].sh_size / sections[i].sh_entsize;
+        Elf64_Sym *symbols = (Elf64_Sym *)sections[i].sh_addr;
 
-    // 再次遍历 section，解析符号表
-    for (int i = 0; i < g_section_num; ++i) {
-        if ((SHT_SYMTAB != g_sections[i].sh_type) && (SHT_DYNSYM != g_sections[i].sh_type)) {
-            continue;
-        }
-        int sym_num = g_sections[i].sh_size / g_sections[i].sh_entsize;
-        Elf64_Sym *syms = (Elf64_Sym *)g_sections[i].sh_addr;
-
-        // 该符号表对应的字符串表
-        uint32_t stridx = g_sections[i].sh_link;
-        Elf64_Shdr *shstr = &g_sections[stridx];
-        ASSERT(SHT_STRTAB == shstr->sh_type);
-        size_t symstr_len = shstr->sh_size;
-        const char *symstr_buf = (const char *)shstr->sh_addr;
+        size_t symname_len = sections[link].sh_size;
+        const char *symname_buf = (const char *)sections[link].sh_addr;
 
         // 遍历该表中的每个符号，只记录函数类型的符号
-        int func_num = 0;
-        for (int j = 0; j < sym_num; ++j) {
-            if (STT_FUNC != ELF64_ST_TYPE(syms[j].st_info)) {
+        for (size_t j = 1; j < symbol_num; ++j) {
+            uint32_t name_idx = symbols[j].st_name;
+            if (name_idx >= symname_len) {
                 continue;
             }
-            ++func_num;
 
-            uint32_t name_idx = syms[j].st_name;
-            if (name_idx >= symstr_len) {
-                name_idx = symstr_len - 1;
+            unsigned char type = ELF64_ST_TYPE(symbols[j].st_info);
+#if defined(DEBUG) && SHOW_ELF_SYMBOLS
+            dbg_print("  -- symtype %6s, addr=%016lx, size=%08lx, name='%s'\n",
+                elf_sym_type(type), symbols[j].st_value,
+                symbols[j].st_size, &symname_buf[name_idx]);
+#endif
+            if (STT_FUNC != type) {
+                continue;
             }
-            dbg_print("function %s\n", &symstr_buf[name_idx]);
+
+            ++g_symbol_num;
+            symstr_len += kstrlen(&symname_buf[name_idx]) + 1;
         }
-        dbg_print("%d function symbols in this table\n", func_num);
+    }
+
+    // 申请函数符号表和符号名称的空间
+    char *symstr = early_alloc_ro(symstr_len);
+    int symstr_idx = 0;
+    g_symbols = early_alloc_ro(g_symbol_num * sizeof(elf_symbol_t));
+
+    // 再次遍历符号表和符号，将函数类型的符号保存下来
+    int symbol_idx = 0;
+    for (uint32_t i = 1; i < num; ++i) {
+        uint32_t type = sections[i].sh_type;
+        uint32_t link = sections[i].sh_link;
+        int is_symtab = ((SHT_SYMTAB == type) || (SHT_DYNSYM == type)) &&
+            (SHN_UNDEF != link) && (link < num) &&
+            (SHT_STRTAB == sections[link].sh_type);
+        if (!is_symtab) {
+            continue;
+        }
+
+        size_t symbol_num = sections[i].sh_size / sections[i].sh_entsize;
+        Elf64_Sym *symbols = (Elf64_Sym *)sections[i].sh_addr;
+        size_t symname_len = sections[link].sh_size;
+        const char *symname_buf = (const char *)sections[link].sh_addr;
+
+        for (size_t j = 1; j < symbol_num; ++j) {
+            uint32_t name_idx = symbols[j].st_name;
+            if (name_idx >= symname_len) {
+                continue;
+            }
+
+            unsigned char type = ELF64_ST_TYPE(symbols[j].st_info);
+            if (STT_FUNC != type) {
+                continue;
+            }
+
+            char *name = &symstr[symstr_idx];
+            kstrcpy(name, &symname_buf[name_idx]);
+            symstr_idx += kstrlen(name) + 1;
+
+            elf_symbol_t *sym = &g_symbols[symbol_idx++];
+            sym->name = name;
+            sym->addr = symbols[j].st_value;
+            sym->size = symbols[j].st_size;
+        }
+    }
+
+    ASSERT(symstr_idx == symstr_len);
+    ASSERT(symbol_idx == g_symbol_num);
+}
+
+#ifdef DEBUG
+
+INIT_TEXT void symtab_show() {
+    ASSERT(g_symbol_num > 0);
+    ASSERT(NULL != g_symbols);
+
+    dbg_print("kernel symbols:\n");
+    for (int i = 0; i < g_symbol_num; ++i) {
+        dbg_print("  - addr=%016lx, size=%08lx, name='%s'\n",
+            g_symbols[i].addr, g_symbols[i].size, g_symbols[i].name);
     }
 }
+
+#endif // DEBUG

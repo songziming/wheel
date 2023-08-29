@@ -13,10 +13,10 @@ typedef enum ram_type {
     RAM_RECLAIMABLE,
 } ram_type_t;
 
-INIT_TEXT void ram_map_reserve(int num);
-INIT_TEXT void ram_map_set(int idx, ram_type_t type, size_t addr, size_t len);
-#if DEBUG
-INIT_TEXT void ram_map_show();
+INIT_TEXT void rammap_reserve(int num);
+INIT_TEXT void rammap_set(int idx, ram_type_t type, size_t addr, size_t len);
+#ifdef DEBUG
+INIT_TEXT void rammap_show();
 #endif
 
 #endif // ARCH_MEM_H
