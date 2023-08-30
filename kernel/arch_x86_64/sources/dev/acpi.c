@@ -1,4 +1,5 @@
 #include <dev/acpi.h>
+#include <arch_config.h>
 #include <debug.h>
 #include <arch_mem.h>
 #include <libk_string.h>
@@ -48,9 +49,10 @@ INIT_TEXT acpi_rsdp_t *acpi_probe_rsdp() {
 }
 
 // 检查子表是否有效，并检查所处内存是否安全
-// 如果处于可用内存，则将表备份，否则内存可能被踩
+// 如果处于可用内存，则将表备份，防止内存被踩
+// 如果位于安全内存，则映射到 higher-half
 static INIT_TEXT acpi_tbl_t *check_table(uint64_t addr) {
-    acpi_tbl_t *tbl = (acpi_tbl_t *)addr;
+    acpi_tbl_t *tbl = (acpi_tbl_t *)(DIRECT_MAP_BASE + addr);
 
     if (bytes_sum(tbl, tbl->length)) {
         dbg_print("ACPI::%.4s checksum failed!\n", tbl->signature);
