@@ -6,8 +6,8 @@
 
 
 // 启动阶段是否打印内核 section、symbol 信息
-#define SHOW_ELF_SECTIONS 1
-#define SHOW_ELF_SYMBOLS  1
+#define SHOW_ALL_SECTIONS 0
+#define SHOW_ALL_SYMBOLS  0
 
 
 //------------------------------------------------------------------------------
@@ -55,7 +55,7 @@ static CONST elf_symbol_t  *g_symbols    = NULL;
 
 
 #ifdef DEBUG
-#if SHOW_ELF_SECTIONS
+#if SHOW_ALL_SECTIONS
 static INIT_TEXT const char *elf_sec_type(uint32_t type) {
     switch (type) {
     case SHT_NULL:          return "NULL";          break;
@@ -78,8 +78,8 @@ static INIT_TEXT const char *elf_sec_type(uint32_t type) {
     default:                return "UNKNOWN";       break;
     }
 }
-#endif // SHOW_ELF_SECTIONS
-#if SHOW_ELF_SYMBOLS
+#endif // SHOW_ALL_SECTIONS
+#if SHOW_ALL_SYMBOLS
 static INIT_TEXT const char *elf_sym_type(unsigned char type) {
     switch (type) {
     case STT_NOTYPE:  return "NOTYPE";  break;
@@ -92,13 +92,14 @@ static INIT_TEXT const char *elf_sym_type(unsigned char type) {
     default:          return "UNKNOWN"; break;
     }
 }
-#endif // SHOW_ELF_SYMBOLS
+#endif // SHOW_ALL_SYMBOLS
 #endif // DEBUG
 
 
 // 解析 ELF sections，解析符号表
 INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num, uint32_t shndx) {
     ASSERT(NULL != ptr);
+    (void)shndx;
 
     if (sizeof(Elf64_Shdr) != entsize) {
         dbg_print("section entry size is %d\n", entsize);
@@ -107,6 +108,7 @@ INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num, uint32_t s
 
     const Elf64_Shdr *sections = (const Elf64_Shdr *)ptr;
 
+#if defined(DEBUG) && SHOW_ALL_SECTIONS
     // 获取 section 名称的字符串表
     size_t secname_len = 1;
     const char *secname_buf = "";
@@ -114,20 +116,20 @@ INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num, uint32_t s
         secname_len = sections[shndx].sh_size;
         secname_buf = (const char *)sections[shndx].sh_addr;
     }
+#endif
 
     // 遍历 section，统计函数符号数量，符号名总长度
     g_symbol_num = 0;
     int symstr_len = 0;
     for (uint32_t i = 1; i < num; ++i) {
+        uint32_t type = sections[i].sh_type;
+        uint32_t link = sections[i].sh_link;
+
+#if defined(DEBUG) && SHOW_ALL_SECTIONS
         uint32_t name_idx = sections[i].sh_name;
         if (name_idx >= secname_len) {
             name_idx = secname_len - 1;
         }
-
-        uint32_t type = sections[i].sh_type;
-        uint32_t link = sections[i].sh_link;
-
-#if defined(DEBUG) && SHOW_ELF_SECTIONS
         dbg_print("=> section type %10s, addr=%016lx, size=%08lx, flags=%02lx, name='%s'\n",
             elf_sec_type(type), sections[i].sh_addr,
             sections[i].sh_size, sections[i].sh_flags,
@@ -156,8 +158,8 @@ INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num, uint32_t s
             }
 
             unsigned char type = ELF64_ST_TYPE(symbols[j].st_info);
-#if defined(DEBUG) && SHOW_ELF_SYMBOLS
-            dbg_print("  -- symtype %6s, addr=%016lx, size=%08lx, name='%s'\n",
+#if defined(DEBUG) && SHOW_ALL_SYMBOLS
+            dbg_print("  - symtype %6s, addr=%016lx, size=%08lx, name='%s'\n",
                 elf_sym_type(type), symbols[j].st_value,
                 symbols[j].st_size, &symname_buf[name_idx]);
 #endif

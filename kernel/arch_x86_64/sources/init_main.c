@@ -10,11 +10,19 @@
 
 #include <arch_mem.h>
 
+#include <dev/acpi.h>
 #include <dev/out_serial.h>
+#include <dev/out_console.h>
+#include <dev/out_framebuf.h>
 
 
 
-// 启动阶段，multiboot info 位于 lower-half
+static INIT_DATA acpi_rsdp_t *g_rsdp = NULL;
+static INIT_DATA mb2_tag_framebuffer_t *g_mb2_fb = NULL;
+
+
+// 启动阶段，multiboot info 和相关数据结构位于 lower-half
+// 重要的数据使用 early_alloc 备份到 higher-half，这样启动完成后还能访问
 
 static INIT_TEXT void mb1_init(uint32_t ebx) {
     mb1_info_t *info = (mb1_info_t *)(size_t)ebx;
@@ -79,10 +87,32 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
             symtab_init(elf->sections, elf->entsize, elf->num, elf->shndx);
             break;
         }
+        case MB2_TAG_TYPE_ACPI_OLD:
+            g_rsdp = (acpi_rsdp_t *)((mb2_tag_old_acpi_t *)tag)->rsdp;
+            break;
+        case MB2_TAG_TYPE_ACPI_NEW:
+            g_rsdp = (acpi_rsdp_t *)((mb2_tag_new_acpi_t *)tag)->rsdp;
+            break;
+        case MB2_TAG_TYPE_FRAMEBUFFER:
+            g_mb2_fb = (mb2_tag_framebuffer_t *)tag;
+            break;
         default:
             break;
         }
     }
+}
+
+
+// 图形模式输出
+static void serial_framebuf_puts(const char *s, size_t n) {
+    serial_puts(s, n);
+    framebuf_puts(s, n);
+}
+
+// 字符模式输出
+static void serial_console_puts(const char *s, size_t n) {
+    serial_puts(s, n);
+    console_puts(s, n);
 }
 
 INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
@@ -95,6 +125,15 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     default:
         dbg_print("error: unknown multibooot magic %x\n", eax);
         cpu_halt();
+    }
+
+    // 配置图形化终端或字符终端
+    if (g_mb2_fb) {
+        framebuf_init(g_mb2_fb);
+        g_dbg_print_func = serial_framebuf_puts;
+    } else {
+        console_init();
+        g_dbg_print_func = serial_console_puts;
     }
 
 #ifdef DEBUG

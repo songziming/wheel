@@ -15,6 +15,8 @@ typedef enum ram_type {
 
 INIT_TEXT void rammap_reserve(int num);
 INIT_TEXT void rammap_set(int idx, ram_type_t type, size_t addr, size_t len);
+INIT_TEXT size_t rammap_extentof(size_t addr);
+INIT_TEXT int rammap_hasoverlap(size_t addr, size_t len);
 #ifdef DEBUG
 INIT_TEXT void rammap_show();
 #endif

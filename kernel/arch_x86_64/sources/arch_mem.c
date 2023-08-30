@@ -35,7 +35,7 @@ static INIT_TEXT void *membuff_grow(membuff_t *buff, size_t size) {
 
 INIT_TEXT void *early_alloc_ro(size_t size) {
     void *p = membuff_grow(&g_ro_buff, size);
-    if (NULL == p) {
+    if (!p) {
         dbg_print("early ro alloc buffer overflow!\n");
         cpu_halt();
     }
@@ -44,14 +44,12 @@ INIT_TEXT void *early_alloc_ro(size_t size) {
 
 INIT_TEXT void *early_alloc_rw(size_t size) {
     void *p = membuff_grow(&g_rw_buff, size);
-    if (NULL == p) {
+    if (!p) {
         dbg_print("early rw alloc buffer overflow!\n");
         cpu_halt();
     }
     return p;
 }
-
-INIT_TEXT size_t rammap_extentof(size_t addr);
 
 // 解锁长度限制，可以超过配置的 BUFF_SIZE，只要物理内存足够就能一直分配
 // 只放开 rw_buff 的限制，因为 ro_buff 与 rw_buff 很可能处于同一个 ram-range
@@ -98,7 +96,8 @@ INIT_TEXT void rammap_set(int idx, ram_type_t type, size_t addr, size_t len) {
     g_rammap[idx].end  = addr + len;
 }
 
-// 返回 addr 之后能连续访问到的最高地址
+// 返回 addr 所在的内存范围的截止地址，用于确定 early_alloc_buff 的增长极限
+// 此时 ACPI 内存尚未回收，只考虑 AVAILABLE 类型的内存范围
 INIT_TEXT size_t rammap_extentof(size_t addr) {
     ASSERT(NULL != g_rammap);
 
@@ -114,6 +113,26 @@ INIT_TEXT size_t rammap_extentof(size_t addr) {
     }
 
     dbg_print("error: address %lx not in valid ram range\n", addr);
+    return 0;
+}
+
+// 检查一段内存是否与可用内存范围重叠，用于判断 ACPI 表是否需要备份（acpi.c）
+// 要考虑到 RECLAIMABLE 内存
+INIT_TEXT int rammap_hasoverlap(size_t addr, size_t len) {
+    ASSERT(NULL != g_rammap);
+
+    size_t end = addr + len;
+
+    for (int i = 0; i < g_rammap_len; ++i) {
+        ram_type_t type = g_rammap[i].type;
+        if ((RAM_AVAILABLE != type) && (RAM_RECLAIMABLE != type)) {
+            continue;
+        }
+        if ((end > g_rammap[i].addr) && (addr < g_rammap[i].end)) {
+            return 1;
+        }
+    }
+
     return 0;
 }
 
