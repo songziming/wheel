@@ -4,7 +4,8 @@
 #include <libk_string.h>
 
 
-// 目前的 framebuf 滚屏性能很差，特别是 QEMU
+// 滚屏操作需要大量的内存复制
+// 必须使用优化版本的 memcpy，否则速度很慢
 
 
 extern font_data_t g_font_terminux_32x16;

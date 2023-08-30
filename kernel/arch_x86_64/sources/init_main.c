@@ -103,13 +103,13 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
 }
 
 
-// 图形模式输出
+// 图形终端输出回调
 static void serial_framebuf_puts(const char *s, size_t n) {
     serial_puts(s, n);
     framebuf_puts(s, n);
 }
 
-// 字符模式输出
+// 字符终端输出回调
 static void serial_console_puts(const char *s, size_t n) {
     serial_puts(s, n);
     console_puts(s, n);
@@ -124,7 +124,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     case MB2_BOOTLOADER_MAGIC: mb2_init(ebx); break;
     default:
         dbg_print("error: unknown multibooot magic %x\n", eax);
-        cpu_halt();
+        goto end;
     }
 
     // 配置图形化终端或字符终端
@@ -141,6 +141,29 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     symtab_show();
 #endif
 
+    // 寻找并解析 ACPI 表
+    if (!g_rsdp) {
+        g_rsdp = acpi_probe_rsdp();
+    }
+    if (!g_rsdp) {
+        dbg_print("error: RSDP not found!\n");
+        goto end;
+    }
+    acpi_parse_rsdp(g_rsdp);
+
+#ifdef DEBUG
+    acpi_show_tables();
+#endif
+
+    // 解析 MADT
+    madt_t *madt = (madt_t *)acpi_get_table("APIC");
+    if (!madt) {
+        dbg_print("error: MADT not found!\n");
+        goto end;
+    }
+    dbg_print("found madt at %p\n", madt);
+
+end:
     cpu_halt();
     while (1) {}
 }

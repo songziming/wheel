@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../sources/lib_format.c"
+#include "../sources/libk_format.c"
 
 
 static void printer(char **dst, const char *s, size_t n) {

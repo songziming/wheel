@@ -67,7 +67,6 @@ static INIT_TEXT acpi_tbl_t *check_table(uint64_t addr) {
     return tbl;
 }
 
-
 // 从 RSDT 提取子表地址
 static INIT_TEXT void parse_rsdp_v1(acpi_rsdp_t *rsdp) {
     if (bytes_sum(rsdp, offsetof(acpi_rsdp_t, length))) {
@@ -88,7 +87,6 @@ static INIT_TEXT void parse_rsdp_v1(acpi_rsdp_t *rsdp) {
         g_tables[i] = check_table(rsdt->entries[i]);
     }
 }
-
 
 // 从 XSDT 提取子表地址
 static INIT_TEXT void parse_rsdp_v2(acpi_rsdp_t *rsdp) {
@@ -111,8 +109,10 @@ static INIT_TEXT void parse_rsdp_v2(acpi_rsdp_t *rsdp) {
     }
 }
 
-
 INIT_TEXT void acpi_parse_rsdp(acpi_rsdp_t *rsdp) {
+    ASSERT(0 == g_table_num);
+    ASSERT(NULL == g_tables);
+
     if (0 == rsdp->revision) {
         parse_rsdp_v1(rsdp);
     } else {
@@ -120,9 +120,11 @@ INIT_TEXT void acpi_parse_rsdp(acpi_rsdp_t *rsdp) {
     }
 }
 
-
 // 根据签名寻找 ACPI 表
 acpi_tbl_t *acpi_get_table(const char sig[4]) {
+    ASSERT(0 != g_table_num);
+    ASSERT(NULL != g_tables);
+
     for (int i = 0; i < g_table_num; ++i) {
         if (!g_tables[i]) {
             continue;
@@ -133,3 +135,20 @@ acpi_tbl_t *acpi_get_table(const char sig[4]) {
     }
     return NULL;
 }
+
+#ifdef DEBUG
+
+void acpi_show_tables() {
+    ASSERT(0 != g_table_num);
+    ASSERT(NULL != g_tables);
+
+    dbg_print("ACPI tables:\n");
+    for (int i = 0; i < g_table_num; ++i) {
+        if (!g_tables[i]) {
+            continue;
+        }
+        dbg_print("  - %.4s at %p\n", g_tables[i]->signature, g_tables[i]);
+    }
+}
+
+#endif // DEBUG

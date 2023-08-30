@@ -173,4 +173,8 @@ INIT_TEXT acpi_rsdp_t *acpi_probe_rsdp();
 INIT_TEXT void acpi_parse_rsdp(acpi_rsdp_t *rsdp);
 acpi_tbl_t *acpi_get_table(const char sig[4]);
 
+#ifdef DEBUG
+void acpi_show_tables();
+#endif
+
 #endif // DEV_ACPI_H

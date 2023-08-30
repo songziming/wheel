@@ -1,5 +1,8 @@
 - [x] 引导：使用 multiboot 1&2 引导，进入 64-bit mode，跳转到 higher-half
 - [x] 输出：格式化字符串，打印调试输出
-- [ ] 解析 multiboot 信息
+- 解析 multiboot 信息
   - [x] 解析物理内存布局
   - [x] 解析内核符号表
+  - [x] 解析 framebuffer 信息并据此设置伪字符终端
+- [x] 搜索并解析 ACPI 表
+- [ ] 解析 MADT，获取 Local APIC 和 IO APIC 信息
