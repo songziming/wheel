@@ -35,7 +35,7 @@ static INIT_TEXT void *membuff_grow(membuff_t *buff, size_t size) {
 
 INIT_TEXT void *early_alloc_ro(size_t size) {
     void *p = membuff_grow(&g_ro_buff, size);
-    if (!p) {
+    if (NULL == p) {
         dbg_print("early ro alloc buffer overflow!\n");
         cpu_halt();
     }
@@ -44,7 +44,7 @@ INIT_TEXT void *early_alloc_ro(size_t size) {
 
 INIT_TEXT void *early_alloc_rw(size_t size) {
     void *p = membuff_grow(&g_rw_buff, size);
-    if (!p) {
+    if (NULL == p) {
         dbg_print("early rw alloc buffer overflow!\n");
         cpu_halt();
     }

@@ -128,7 +128,7 @@ acpi_tbl_t *acpi_get_table(const char sig[4]) {
     ASSERT(NULL != g_tables);
 
     for (int i = 0; i < g_table_num; ++i) {
-        if (!g_tables[i]) {
+        if (NULL == g_tables[i]) {
             continue;
         }
         if (0 == kstrncmp(sig, g_tables[i]->signature, 4)) {
@@ -146,7 +146,7 @@ void acpi_show_tables() {
 
     dbg_print("ACPI tables:\n");
     for (int i = 0; i < g_table_num; ++i) {
-        if (!g_tables[i]) {
+        if (NULL == g_tables[i]) {
             continue;
         }
         dbg_print("  - %.4s at %p\n", g_tables[i]->signature, g_tables[i]);

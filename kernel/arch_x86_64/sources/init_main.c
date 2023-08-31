@@ -9,6 +9,7 @@
 #include <multiboot2.h>
 
 #include <arch_mem.h>
+#include <arch_smp.h>
 
 #include <dev/acpi.h>
 #include <dev/out_serial.h>
@@ -103,6 +104,7 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
 }
 
 
+
 // 图形终端输出回调
 static void serial_framebuf_puts(const char *s, size_t n) {
     serial_puts(s, n);
@@ -142,10 +144,10 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 #endif
 
     // 寻找并解析 ACPI 表
-    if (!g_rsdp) {
+    if (NULL == g_rsdp) {
         g_rsdp = acpi_probe_rsdp();
     }
-    if (!g_rsdp) {
+    if (NULL == g_rsdp) {
         dbg_print("error: RSDP not found!\n");
         goto end;
     }
@@ -157,11 +159,11 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 解析 MADT
     madt_t *madt = (madt_t *)acpi_get_table("APIC");
-    if (!madt) {
+    if (NULL == madt) {
         dbg_print("error: MADT not found!\n");
         goto end;
     }
-    dbg_print("found madt at %p\n", madt);
+    parse_madt(madt);
 
 end:
     cpu_halt();
