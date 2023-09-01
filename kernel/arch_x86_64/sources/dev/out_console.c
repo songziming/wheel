@@ -1,7 +1,6 @@
 // 字符模式终端
 
 #include <dev/out_console.h>
-#include <arch_config.h>
 #include <liba/rw.h>
 #include <libk_string.h>
 

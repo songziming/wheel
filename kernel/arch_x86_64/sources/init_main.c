@@ -10,11 +10,14 @@
 
 #include <arch_mem.h>
 #include <arch_smp.h>
+#include <cpu.h>
 
 #include <dev/acpi.h>
 #include <dev/out_serial.h>
 #include <dev/out_console.h>
 #include <dev/out_framebuf.h>
+
+#include <mem_page.h>
 
 
 
@@ -137,7 +140,6 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         console_init();
         g_dbg_print_func = serial_console_puts;
     }
-
 #ifdef DEBUG
     rammap_show();
     symtab_show();
@@ -152,7 +154,6 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         goto end;
     }
     acpi_parse_rsdp(g_rsdp);
-
 #ifdef DEBUG
     acpi_show_tables();
 #endif
@@ -164,6 +165,20 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         goto end;
     }
     parse_madt(madt);
+#ifdef DEBUG
+    acpi_show_tables();
+#endif
+
+    // 所有重要数据已经备份，可以占用 section 以外的空间
+    early_alloc_unlock();
+
+    get_cpu_info(); // 检测 CPU 特性
+    cpu_feat_init(); // 开启 CPU 功能
+#ifdef DEBUG
+    cpu_features_show();
+#endif
+
+    mem_init();
 
 end:
     cpu_halt();

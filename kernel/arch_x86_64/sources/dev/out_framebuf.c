@@ -1,5 +1,4 @@
 #include <dev/out_framebuf.h>
-#include <arch_api.h>
 #include <debug.h>
 #include <libk_string.h>
 

@@ -5,6 +5,7 @@
 #include <arch_api.h>
 #include <debug.h>
 #include <libk_string.h>
+#include <mem_page.h>
 
 
 //------------------------------------------------------------------------------
@@ -17,8 +18,10 @@ typedef struct membuff {
     size_t used;
 } membuff_t;
 
-static SECTION(".rotail") ALIGNED(16) uint8_t g_ro_area[EARLY_RO_BUFF_SIZE];
-static SECTION(".rwtail") ALIGNED(16) uint8_t g_rw_area[EARLY_RW_BUFF_SIZE];
+#define BUFF_ALIGN 16
+
+static SECTION(".rotail") ALIGNED(BUFF_ALIGN) uint8_t g_ro_area[EARLY_RO_BUFF_SIZE];
+static SECTION(".rwtail") ALIGNED(BUFF_ALIGN) uint8_t g_rw_area[EARLY_RW_BUFF_SIZE];
 static INIT_DATA membuff_t g_ro_buff = { g_ro_area, EARLY_RO_BUFF_SIZE, 0 };
 static INIT_DATA membuff_t g_rw_buff = { g_rw_area, EARLY_RW_BUFF_SIZE, 0 };
 
@@ -26,8 +29,8 @@ static INIT_TEXT void *membuff_grow(membuff_t *buff, size_t size) {
     if (buff->used + size >= buff->size) {
         return NULL;
     }
-    size +=   sizeof(size_t) - 1;
-    size &= ~(sizeof(size_t) - 1);
+    size +=   BUFF_ALIGN - 1;
+    size &= ~(BUFF_ALIGN - 1);
     uint8_t *p = &buff->ptr[buff->used];
     buff->used += size;
     return p;
@@ -159,3 +162,41 @@ INIT_TEXT void rammap_show() {
 }
 
 #endif // DEBUG
+
+
+//------------------------------------------------------------------------------
+// 内存使用方式划分
+//------------------------------------------------------------------------------
+
+static size_t *g_pcpu_offsets = NULL;
+
+
+INIT_TEXT void mem_init() {
+    ASSERT(g_rammap_len > 0); // 需要知道物理内存分布
+    ASSERT(cpu_count() > 0);  // 需要知道 CPU 个数
+    ASSERT(NULL == g_pcpu_offsets);
+
+    // 统计可分配的内存的范围，该范围内的内存才需要管理
+    size_t start = 0;
+    size_t end = 0;
+    for (int i = 0; i < g_rammap_len; ++i) {
+        if ((RAM_AVAILABLE != g_rammap[i].type) && (RAM_RECLAIMABLE != g_rammap[i].type)) {
+            continue;
+        }
+        if (0 == start) {
+            start = g_rammap[i].addr;
+        }
+        if (end < g_rammap[i].end) {
+            end = g_rammap[i].end;
+        }
+    }
+#ifdef DEBUG
+    dbg_print("managable ram range: %zx~%zx\n", start, end);
+#endif
+
+    // 准备 PCPU 空间
+    g_pcpu_offsets = early_alloc_ro(cpu_count() * sizeof(size_t));
+
+    // 分配页描述符，初始化页分配器
+    pages_init(end - start);
+}

@@ -1,5 +1,4 @@
 #include <dev/acpi.h>
-#include <arch_config.h>
 #include <debug.h>
 #include <arch_mem.h>
 #include <libk_string.h>

@@ -13,8 +13,4 @@ static inline void cpu_rfence() { __asm__("lfence" ::: "memory"); }
 static inline void cpu_wfence() { __asm__("sfence" ::: "memory"); }
 static inline void cpu_rwfence() { __asm__("mfence" ::: "memory"); }
 
-// arch_mem.h
-INIT_TEXT void *early_alloc_ro(size_t size);
-INIT_TEXT void *early_alloc_rw(size_t size);
-
 #endif // ARCH_API_H
