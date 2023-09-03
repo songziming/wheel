@@ -9,6 +9,6 @@ typedef struct page {
     pfn_t next;
 } page_t;
 
-INIT_TEXT void pages_init(size_t npages);
+INIT_TEXT void pages_init(size_t start, size_t end);
 
 #endif // MEM_PAGE_H

@@ -24,7 +24,7 @@ static CONST uint32_t g_cpu_features;
 
 
 
-INIT_TEXT void get_cpu_info() {
+INIT_TEXT void cpu_info_detect() {
     // 获取 vendor string
     __asm__("cpuid" : "=b"(*(uint32_t *)&g_cpu_vendor[0]),
                       "=c"(*(uint32_t *)&g_cpu_vendor[8]),
@@ -76,7 +76,7 @@ INIT_TEXT void get_cpu_info() {
 }
 
 
-INIT_TEXT void cpu_feat_init() {
+INIT_TEXT void cpu_features_init() {
     if (CPU_FEATURE_NX & g_cpu_features) {
         uint64_t efer = read_msr(MSR_EFER);
         efer |= 1UL << 11;  // NXE

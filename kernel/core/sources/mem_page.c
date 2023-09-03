@@ -11,9 +11,12 @@ INIT_TEXT void pages_init(size_t start, size_t end) {
     ASSERT(NULL == g_pages);
     ASSERT(start < end);
 
-    start +=   PAGE_SIZE - 1;
-    start &= ~(PAGE_SIZE - 1);
-    end   &= ~(PAGE_SIZE - 1);
+    start  += PAGE_SIZE - 1;
+    start >>= PAGE_SHIFT;
+    end   >>= PAGE_SHIFT;
+#ifdef DEBUG
+    dbg_print("allocating page descriptors for %zx~%zx\n", start, end);
+#endif
 
     // 分配页描述符
     g_page_num = (pfn_t)(end - start);

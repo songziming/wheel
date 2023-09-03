@@ -12,8 +12,8 @@
 #define CPU_FEATURE_ERMS            0x0040  // enhanced rep movsb/stosb
 #define CPU_FEATURE_INVPCID         0x0080
 
-INIT_TEXT void get_cpu_info();
-INIT_TEXT void cpu_feat_init();
+INIT_TEXT void cpu_info_detect();
+INIT_TEXT void cpu_features_init();
 
 #ifdef DEBUG
 INIT_TEXT void cpu_features_show();

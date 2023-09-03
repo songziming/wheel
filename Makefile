@@ -38,9 +38,9 @@ KERN_INCDIRS := $(patsubst %/sources,%/headers,$(KERN_SUBDIRS)) kernel/common
 KERN_SOURCES := $(foreach d,$(KERN_SUBDIRS),$(shell find $(d) -name "*.S" -o -name "*.c"))
 KERN_OBJECTS := $(patsubst %,$(OUT_DIR)/%.ko,$(KERN_SOURCES))
 
-# 内核编译选项
+# 内核编译选项，开启链接时优化、section 引用计数
 KERN_CFLAGS  := -std=c11 -Wall -Wextra -Werror=implicit $(KERN_INCDIRS:%=-I%)
-KERN_CFLAGS  += -ffreestanding -fno-builtin -ffunction-sections -fdata-sections
+KERN_CFLAGS  += -ffreestanding -fno-builtin -flto -ffunction-sections -fdata-sections
 ifeq ($(DEBUG),1)
     KERN_CFLAGS += -g -DDEBUG
 else

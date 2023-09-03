@@ -165,15 +165,12 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         goto end;
     }
     parse_madt(madt);
-#ifdef DEBUG
-    acpi_show_tables();
-#endif
 
     // 所有重要数据已经备份，可以占用 section 以外的空间
     early_alloc_unlock();
 
-    get_cpu_info(); // 检测 CPU 特性
-    cpu_feat_init(); // 开启 CPU 功能
+    cpu_info_detect(); // 检测 CPU 特性
+    cpu_features_init(); // 开启 CPU 功能
 #ifdef DEBUG
     cpu_features_show();
 #endif

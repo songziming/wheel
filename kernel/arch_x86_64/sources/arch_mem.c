@@ -59,6 +59,14 @@ INIT_TEXT void *early_alloc_rw(size_t size) {
 INIT_TEXT void early_alloc_unlock() {
     size_t rw_addr = (size_t)g_rw_area - KERNEL_TEXT_BASE;
     g_rw_buff.size = rammap_extentof(rw_addr) - rw_addr;
+#ifdef DEBUG
+    dbg_print("growing rw-buff size to %zx\n", g_rw_buff.size);
+#endif
+}
+
+static INIT_TEXT void early_alloc_disable() {
+    g_ro_buff.size = 0;
+    g_rw_buff.size = 0;
 }
 
 
@@ -168,6 +176,12 @@ INIT_TEXT void rammap_show() {
 // 内存使用方式划分
 //------------------------------------------------------------------------------
 
+
+// layout.ld
+extern char _pcpu_addr;
+extern char _pcpu_data_end;
+extern char _pcpu_bss_end;
+
 static size_t *g_pcpu_offsets = NULL;
 
 
@@ -177,13 +191,13 @@ INIT_TEXT void mem_init() {
     ASSERT(NULL == g_pcpu_offsets);
 
     // 统计可分配的内存的范围，该范围内的内存才需要管理
-    size_t start = 0;
+    size_t start = INVALID_ADDR;
     size_t end = 0;
     for (int i = 0; i < g_rammap_len; ++i) {
         if ((RAM_AVAILABLE != g_rammap[i].type) && (RAM_RECLAIMABLE != g_rammap[i].type)) {
             continue;
         }
-        if (0 == start) {
+        if (INVALID_ADDR == start) {
             start = g_rammap[i].addr;
         }
         if (end < g_rammap[i].end) {
@@ -194,9 +208,26 @@ INIT_TEXT void mem_init() {
     dbg_print("managable ram range: %zx~%zx\n", start, end);
 #endif
 
-    // 准备 PCPU 空间
+    // 准备 PCPU 偏移量数组
     g_pcpu_offsets = early_alloc_ro(cpu_count() * sizeof(size_t));
 
     // 分配页描述符，初始化页分配器
-    pages_init(end - start);
+    pages_init(start, end);
+
+    // 记录当前数据段结束位置，并禁用 early_alloc
+    size_t ro_end = (size_t)early_alloc_ro(0);
+    size_t rw_end = (size_t)early_alloc_rw(0);
+    early_alloc_disable();
+#ifdef DEBUG
+    dbg_print("ro_end=%zx, rw_end=%zx\n", ro_end, rw_end);
+#endif
+
+    // 划分 PCPU 区域
+    // TODO 按照 L1 缓存行大小对齐
+    size_t pcpu_copy_size = (size_t)(&_pcpu_data_end - &_pcpu_addr);
+    size_t pcpu_size      = (size_t)(&_pcpu_bss_end  - &_pcpu_addr);
+    // size_t pcpu_skip      = (pcpu_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+#ifdef DEBUG
+    dbg_print("per-cpu size=%zx, copy=%zx\n", pcpu_size, pcpu_copy_size);
+#endif
 }
