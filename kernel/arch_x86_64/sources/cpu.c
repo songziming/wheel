@@ -3,6 +3,7 @@
 #include <cpu.h>
 #include <liba/rw.h>
 #include <debug.h>
+#include <libk_string.h>
 
 
 
@@ -22,16 +23,152 @@ static CONST uint8_t  g_cpu_ex_family;
 static CONST uint32_t g_cpu_features;
 
 
+typedef struct cache_info {
+    size_t line_size;
+    size_t sets;        // 有多少个 set
+    size_t ways;        // 每个 set 有多少 tag，0 表示全相连，-1 表示无效
+    size_t total_size;
+} cache_info_t;
+
+static CONST cache_info_t g_l1d_info;
+static CONST cache_info_t g_l1i_info;
+static CONST cache_info_t g_l2_info;
+static CONST cache_info_t g_l3_info;
+
+
+// 解析 AMD 缓存信息
+
+static INIT_TEXT void amd_parse_l1(uint32_t reg, cache_info_t *info) {
+    size_t line_size     =  reg        & 0xff;
+    size_t lines_per_tag = (reg >>  8) & 0xff;
+    size_t ways          = (reg >> 16) & 0xff;
+    size_t size          = (reg >> 24) & 0xff;
+    size_t tag_size      = line_size * lines_per_tag;
+
+    if (0 == tag_size) {
+        return;
+    }
+
+    info->line_size  = tag_size;
+    info->ways       = ways;
+    info->total_size = (size_t)size << 10;
+
+    size_t line_num  = info->total_size / info->line_size;
+
+    if (0xff == info->ways) {
+        info->sets = 1; // full associative，只有一个 set
+        info->ways = line_num;
+    } else {
+        info->sets = line_num / info->ways;
+    }
+}
+
+static INIT_TEXT size_t amd_l2l3_assoc(size_t assoc) {
+    switch (assoc) {
+    case  5: return     6; break;
+    case  6: return     8; break;
+    case  8: return    16; break;
+    case 10: return    32; break;
+    case 11: return    48; break;
+    case 12: return    64; break;
+    case 13: return    96; break;
+    case 14: return   128; break;
+    case 15: return     0; break;
+    default: return assoc; break;
+    }
+}
+
+// 返回 1 表示缓存信息无效，需要用 cpuid(0x8000001d)
+static INIT_TEXT int amd_parse_l2(uint32_t reg, cache_info_t *info) {
+    size_t line_size     =  reg        & 0xff;
+    size_t lines_per_tag = (reg >>  8) & 0x0f;
+    size_t assoc         = (reg >> 12) & 0x0f;
+    size_t size          = (reg >> 16) & 0xffff; // KB
+    size_t tag_size      = line_size * lines_per_tag;
+
+    if ((9 == assoc) || (0 == tag_size)) {
+        return 1;
+    }
+
+    info->line_size  = tag_size;
+    info->ways       = amd_l2l3_assoc(assoc);
+    info->total_size = (size_t)size << 10;
+
+    size_t line_num  = info->total_size / info->line_size;
+
+    if (0 == info->ways) {
+        info->sets = 1;
+        info->ways = line_num;
+    } else {
+        info->sets = line_num / info->ways;
+    }
+
+    return 0;
+}
+
+// 返回 1 表示缓存信息无效，需要用 cpuid(0x8000001d)
+static INIT_TEXT int amd_parse_l3(uint32_t reg, cache_info_t *info) {
+    size_t line_size     =  reg        & 0xff;
+    size_t lines_per_tag = (reg >>  8) & 0x0f;
+    size_t assoc         = (reg >> 12) & 0x0f;
+    size_t size          = (reg >> 18) & 0x3fff; // 512KB
+    size_t tag_size      = line_size * lines_per_tag;
+
+    if ((9 == assoc) || (0 == tag_size)) {
+        return 1;
+    }
+
+    info->line_size  = tag_size;
+    info->ways       = amd_l2l3_assoc(assoc);
+    info->total_size = (size_t)size << 19;
+
+    size_t line_num  = info->total_size / info->line_size;
+
+    if (0 == info->ways) {
+        info->sets = 1;
+        info->ways = line_num;
+    } else {
+        info->sets = line_num / info->ways;
+    }
+
+    return 0;
+}
+
+static INIT_TEXT void amd_get_cache_info() {
+    uint32_t b, c, d;
+
+    __asm__("cpuid" : "=c"(c), "=d"(d) : "a"(0x80000005) : "ebx");
+    amd_parse_l1(c, &g_l1d_info);
+    amd_parse_l1(d, &g_l1i_info);
+
+    __asm__("cpuid" : "=c"(c), "=d"(d) : "a"(0x80000006) : "ebx");
+    int l2_bad = amd_parse_l2(c, &g_l2_info);
+    int l3_bad = amd_parse_l3(d, &g_l3_info);
+
+    if (l2_bad) {
+        uint32_t a;
+        __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c) : "a"(0x8000001d), "c"(2) : "edx");
+        uint8_t type  = a & 0x1f;
+        uint8_t level = (a >> 5) & 0x07;
+        dbg_print("- type %d, level %d\n", type, level);
+
+        g_l2_info.line_size = (b & 0xfff) + 1;
+        g_l2_info.sets      = (size_t)c + 1;
+        g_l2_info.ways      = ((b >> 22) & 0x3ff) + 1;
+    }
+
+    if (l3_bad) {
+        dbg_print("need to probe L3 cache info\n");
+    }
+}
+
 
 
 INIT_TEXT void cpu_info_detect() {
-    // 获取 vendor string
     __asm__("cpuid" : "=b"(*(uint32_t *)&g_cpu_vendor[0]),
                       "=c"(*(uint32_t *)&g_cpu_vendor[8]),
                       "=d"(*(uint32_t *)&g_cpu_vendor[4])
                     : "a"(0));
-
-    // 获取 processor brand
     __asm__("cpuid" : "=a"(*(uint32_t *)&g_cpu_brand[0]),
                       "=b"(*(uint32_t *)&g_cpu_brand[4]),
                       "=c"(*(uint32_t *)&g_cpu_brand[8]),
@@ -73,6 +210,16 @@ INIT_TEXT void cpu_info_detect() {
 
     __asm__("cpuid" : "=a"(a) : "a"(6) : "ebx", "ecx", "edx");
     g_cpu_features |= (a & (1U << 2)) ? CPU_FEATURE_APIC_CONSTANT : 0;
+
+    if (0 == kmemcmp(g_cpu_vendor, VENDOR_INTEL, 12)) {
+        // get_cache_info_intel();
+        dbg_print("vendor=intel\n");
+    } else if (0 == kmemcmp(g_cpu_vendor, VENDOR_AMD, 12)) {
+        // get_cache_info_amd();
+        amd_get_cache_info();
+    } else {
+        dbg_print("unknown vendor name '%.12s'\n", g_cpu_vendor);
+    }
 }
 
 
