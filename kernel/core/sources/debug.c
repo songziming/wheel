@@ -20,6 +20,7 @@ static void print_cb(void *para, const char *s, size_t n) {
     (void)para;
 
     // TODO 将调试输出写入文件 /var/dbg
+    // TODO 启动阶段，准备一段 buffer 作为临时文件缓冲区（ringbuf）
 
     if (NULL != g_dbg_print_func) {
         g_dbg_print_func(s, n);

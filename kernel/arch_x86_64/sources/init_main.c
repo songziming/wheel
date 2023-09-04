@@ -10,7 +10,7 @@
 
 #include <arch_mem.h>
 #include <arch_smp.h>
-#include <cpu.h>
+#include <arch_cpu.h>
 
 #include <dev/acpi.h>
 #include <dev/out_serial.h>
@@ -120,6 +120,13 @@ static void serial_console_puts(const char *s, size_t n) {
     console_puts(s, n);
 }
 
+// 退出 QEMU/Bochs 模拟器并返回值
+// TODO 应该放在 arch/debug.c，接口可以由 arch_api.h 规定
+static void emulator_exit(int ret) {
+    __asm__("outl %0, %1" :: "a"(ret), "Nd"(0xf4));
+}
+
+
 INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     serial_init();
     g_dbg_print_func = serial_puts;
@@ -176,6 +183,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 #endif
 
     mem_init();
+
+    emulator_exit(123);
 
 end:
     cpu_halt();

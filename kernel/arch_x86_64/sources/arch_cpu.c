@@ -1,6 +1,6 @@
 // 使用 cpuid 检测支持的特性，设置 MSR 开启相关功能
 
-#include <cpu.h>
+#include <arch_cpu.h>
 #include <liba/rw.h>
 #include <debug.h>
 #include <libk_string.h>
@@ -22,21 +22,15 @@ static CONST uint8_t  g_cpu_ex_family;
 
 static CONST uint32_t g_cpu_features;
 
-
-typedef struct cache_info {
-    size_t line_size;
-    size_t sets;        // 有多少个 set
-    size_t ways;        // 每个 set 有多少 tag，0 表示全相连，-1 表示无效
-    size_t total_size;
-} cache_info_t;
-
-static CONST cache_info_t g_l1d_info;
-static CONST cache_info_t g_l1i_info;
-static CONST cache_info_t g_l2_info;
-static CONST cache_info_t g_l3_info;
+CONST cache_info_t g_l1d_info;
+CONST cache_info_t g_l1i_info;
+CONST cache_info_t g_l2_info;
+CONST cache_info_t g_l3_info;
 
 
-// 解析 AMD 缓存信息
+//------------------------------------------------------------------------------
+// AMD 获取缓存信息
+//------------------------------------------------------------------------------
 
 static INIT_TEXT void amd_parse_l1(uint32_t reg, cache_info_t *info) {
     size_t line_size     =  reg        & 0xff;
@@ -146,23 +140,35 @@ static INIT_TEXT void amd_get_cache_info() {
     int l3_bad = amd_parse_l3(d, &g_l3_info);
 
     if (l2_bad) {
-        uint32_t a;
-        __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c) : "a"(0x8000001d), "c"(2) : "edx");
-        uint8_t type  = a & 0x1f;
-        uint8_t level = (a >> 5) & 0x07;
-        dbg_print("- type %d, level %d\n", type, level);
-
-        g_l2_info.line_size = (b & 0xfff) + 1;
-        g_l2_info.sets      = (size_t)c + 1;
-        g_l2_info.ways      = ((b >> 22) & 0x3ff) + 1;
+        __asm__("cpuid" : "=b"(b), "=c"(c) : "a"(0x8000001d), "c"(2) : "edx");
+        g_l2_info.line_size  = (b & 0xfff) + 1;
+        g_l2_info.sets       = (size_t)c + 1;
+        g_l2_info.ways       = ((b >> 22) & 0x3ff) + 1;
+        g_l2_info.total_size = g_l2_info.line_size * g_l2_info.sets * g_l2_info.ways;
     }
 
     if (l3_bad) {
-        dbg_print("need to probe L3 cache info\n");
+        __asm__("cpuid" : "=b"(b), "=c"(c) : "a"(0x8000001d), "c"(3) : "edx");
+        g_l3_info.line_size  = (b & 0xfff) + 1;
+        g_l3_info.sets       = (size_t)c + 1;
+        g_l3_info.ways       = ((b >> 22) & 0x3ff) + 1;
+        g_l3_info.total_size = g_l3_info.line_size * g_l3_info.sets * g_l3_info.ways;
     }
 }
 
 
+//------------------------------------------------------------------------------
+// Intel 获取缓存信息
+//------------------------------------------------------------------------------
+
+static INIT_TEXT void intel_get_cache_info() {
+    //
+}
+
+
+//------------------------------------------------------------------------------
+// 公开函数
+//------------------------------------------------------------------------------
 
 INIT_TEXT void cpu_info_detect() {
     __asm__("cpuid" : "=b"(*(uint32_t *)&g_cpu_vendor[0]),
@@ -186,7 +192,6 @@ INIT_TEXT void cpu_info_detect() {
                     : "a"(0x80000004));
 
     uint32_t a, b, c, d;
-    g_cpu_features = 0;
 
     // 获取型号和功能特性
     __asm__("cpuid" : "=a"(a), "=c"(c), "=d"(d) : "a"(1) : "ebx");
@@ -196,6 +201,7 @@ INIT_TEXT void cpu_info_detect() {
     g_cpu_type      = (a >> 12) & 0x03;
     g_cpu_ex_model  = (a >> 16) & 0x0f;
     g_cpu_ex_family = (a >> 20) & 0xff;
+    g_cpu_features  = 0;
     g_cpu_features |= (c & (1U << 17)) ? CPU_FEATURE_PCID   : 0;
     g_cpu_features |= (c & (1U << 21)) ? CPU_FEATURE_X2APIC : 0;
     g_cpu_features |= (d & (1U <<  4)) ? CPU_FEATURE_TSC    : 0;
@@ -212,16 +218,13 @@ INIT_TEXT void cpu_info_detect() {
     g_cpu_features |= (a & (1U << 2)) ? CPU_FEATURE_APIC_CONSTANT : 0;
 
     if (0 == kmemcmp(g_cpu_vendor, VENDOR_INTEL, 12)) {
-        // get_cache_info_intel();
-        dbg_print("vendor=intel\n");
+        intel_get_cache_info();
     } else if (0 == kmemcmp(g_cpu_vendor, VENDOR_AMD, 12)) {
-        // get_cache_info_amd();
         amd_get_cache_info();
     } else {
         dbg_print("unknown vendor name '%.12s'\n", g_cpu_vendor);
     }
 }
-
 
 INIT_TEXT void cpu_features_init() {
     if (CPU_FEATURE_NX & g_cpu_features) {

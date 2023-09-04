@@ -3,6 +3,7 @@
 
 #include <arch_mem.h>
 #include <arch_api.h>
+#include <arch_cpu.h>
 #include <debug.h>
 #include <libk_string.h>
 #include <mem_page.h>
@@ -222,12 +223,26 @@ INIT_TEXT void mem_init() {
     dbg_print("ro_end=%zx, rw_end=%zx\n", ro_end, rw_end);
 #endif
 
-    // 划分 PCPU 区域
-    // TODO 按照 L1 缓存行大小对齐
-    size_t pcpu_copy_size = (size_t)(&_pcpu_data_end - &_pcpu_addr);
-    size_t pcpu_size      = (size_t)(&_pcpu_bss_end  - &_pcpu_addr);
-    // size_t pcpu_skip      = (pcpu_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    // 获取 L1 一行大小，一路大小
+    size_t l1_line = g_l1d_info.line_size;
+    size_t l1_size = l1_line * g_l1d_info.sets;
+    ASSERT(0 == (l1_line & (l1_line - 1)));
+    ASSERT(0 == (l1_size & (l1_size - 1)));
 #ifdef DEBUG
-    dbg_print("per-cpu size=%zx, copy=%zx\n", pcpu_size, pcpu_copy_size);
+    dbg_print("align to L1 line 0x%zx, size 0x%zx\n", l1_line, l1_size);
 #endif
+
+    // 划分 PCPU 区域，地址按缓存行对齐，总大小按缓存大小对齐
+    // 确保不同 CPU 访问各自的 PCPU 变量时，映射到相同的 set
+    // 只需考虑到 L1，因为 L2、L3 缓存是所有 CPU 共享的
+    size_t pcpu_size = (size_t)(&_pcpu_bss_end  - &_pcpu_addr);
+    size_t pcpu_copy = (size_t)(&_pcpu_data_end - &_pcpu_addr);
+    rw_end    = (rw_end + l1_line - 1) & ~(l1_line - 1);
+    pcpu_size = (pcpu_size + l1_size - 1) & ~(l1_size - 1);
+    for (unsigned i = 0; i < cpu_count(); ++i) {
+        g_pcpu_offsets[i] = rw_end - (size_t)&_pcpu_addr;
+        kmemcpy((uint8_t *)rw_end, &_pcpu_addr, pcpu_copy);
+        kmemset((uint8_t *)rw_end + pcpu_copy, 0, pcpu_size - pcpu_copy);
+        rw_end += pcpu_size;
+    }
 }
