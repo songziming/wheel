@@ -58,7 +58,6 @@ SECTIONS {
         _rodata_addr = .;
         *(.rodata)
         *(.rodata.*)
-        *(.rotail)
         _rodata_end = .;
     } : rodata = 0
     .rotail (NOLOAD) : AT(ADDR(.rotail) - TEXT_BASE) {

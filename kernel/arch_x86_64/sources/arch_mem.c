@@ -2,7 +2,6 @@
 
 
 #include <arch_mem.h>
-#include <arch_api.h>
 #include <arch_cpu.h>
 #include <debug.h>
 #include <libk_string.h>

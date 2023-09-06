@@ -1,12 +1,11 @@
 #include <debug.h>
-#include <arch_api.h>
 #include <libk_string.h>
 #include <libk_format.h>
 #include <libk_elf.h>
 
 
 // 启动阶段是否打印内核 section、symbol 信息
-#define SHOW_ALL_SECTIONS 0
+#define SHOW_ALL_SECTIONS 1
 #define SHOW_ALL_SYMBOLS  0
 
 

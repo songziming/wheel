@@ -171,29 +171,17 @@ static INIT_TEXT void intel_get_cache_info() {
 //------------------------------------------------------------------------------
 
 INIT_TEXT void cpu_info_detect() {
-    __asm__("cpuid" : "=b"(*(uint32_t *)&g_cpu_vendor[0]),
-                      "=c"(*(uint32_t *)&g_cpu_vendor[8]),
-                      "=d"(*(uint32_t *)&g_cpu_vendor[4])
-                    : "a"(0));
-    __asm__("cpuid" : "=a"(*(uint32_t *)&g_cpu_brand[0]),
-                      "=b"(*(uint32_t *)&g_cpu_brand[4]),
-                      "=c"(*(uint32_t *)&g_cpu_brand[8]),
-                      "=d"(*(uint32_t *)&g_cpu_brand[12])
-                    : "a"(0x80000002));
-    __asm__("cpuid" : "=a"(*(uint32_t *)&g_cpu_brand[16]),
-                      "=b"(*(uint32_t *)&g_cpu_brand[20]),
-                      "=c"(*(uint32_t *)&g_cpu_brand[24]),
-                      "=d"(*(uint32_t *)&g_cpu_brand[28])
-                    : "a"(0x80000003));
-    __asm__("cpuid" : "=a"(*(uint32_t *)&g_cpu_brand[32]),
-                      "=b"(*(uint32_t *)&g_cpu_brand[36]),
-                      "=c"(*(uint32_t *)&g_cpu_brand[40]),
-                      "=d"(*(uint32_t *)&g_cpu_brand[44])
-                    : "a"(0x80000004));
-
     uint32_t a, b, c, d;
 
-    // 获取型号和功能特性
+    __asm__("cpuid" : "=b"(b), "=c"(c), "=d"(d) : "a"(0));
+    kmemcpy(g_cpu_vendor, (uint32_t[]){ b,d,c }, 12);
+    __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000002));
+    kmemcpy(g_cpu_brand, (uint32_t[]){ a,b,c,d }, 16);
+    __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000003));
+    kmemcpy(&g_cpu_brand[16], (uint32_t[]){ a,b,c,d }, 16);
+    __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000004));
+    kmemcpy(&g_cpu_brand[32], (uint32_t[]){ a,b,c,d }, 16);
+
     __asm__("cpuid" : "=a"(a), "=c"(c), "=d"(d) : "a"(1) : "ebx");
     g_cpu_stepping  =  a        & 0x0f;
     g_cpu_model     = (a >>  4) & 0x0f;
@@ -248,7 +236,10 @@ INIT_TEXT void cpu_features_init() {
 
 #ifdef DEBUG
 
-INIT_TEXT void cpu_features_show() {
+INIT_TEXT void cpu_info_show() {
+    dbg_print("cpu vendor: '%12s'\n", g_cpu_vendor);
+    dbg_print("cpu brand: '%48s'\n", g_cpu_brand);
+
     struct {
         const char *name;
         uint32_t mask;
@@ -263,7 +254,7 @@ INIT_TEXT void cpu_features_show() {
     };
     size_t nfeats = sizeof(feats) / sizeof(feats[0]);
 
-    dbg_print("cpu features:");
+    dbg_print("cpu flags:");
     for (size_t i = 0; i < nfeats; ++i) {
         if (g_cpu_features & feats[i].mask) {
             dbg_print(" %s", feats[i].name);

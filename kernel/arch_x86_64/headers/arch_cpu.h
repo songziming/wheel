@@ -25,10 +25,10 @@ extern CONST cache_info_t g_l2_info;
 extern CONST cache_info_t g_l3_info;
 
 INIT_TEXT void cpu_info_detect();
+#ifdef DEBUG
+INIT_TEXT void cpu_info_show();
+#endif
 INIT_TEXT void cpu_features_init();
 
-#ifdef DEBUG
-INIT_TEXT void cpu_features_show();
-#endif
 
 #endif // CPU_H

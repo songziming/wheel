@@ -4,7 +4,6 @@
 #include <base.h>
 #include <debug.h>
 
-#include <arch_api.h>
 #include <multiboot1.h>
 #include <multiboot2.h>
 
@@ -120,13 +119,8 @@ static void serial_console_puts(const char *s, size_t n) {
     console_puts(s, n);
 }
 
-// 退出 QEMU/Bochs 模拟器并返回值
-// TODO 应该放在 arch/debug.c，接口可以由 arch_api.h 规定
-static void emulator_exit(int ret) {
-    __asm__("outl %0, %1" :: "a"(ret), "Nd"(0xf4));
-}
 
-
+// BSP 启动流程
 INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     serial_init();
     g_dbg_print_func = serial_puts;
@@ -179,14 +173,14 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     cpu_info_detect(); // 检测 CPU 特性
     cpu_features_init(); // 开启 CPU 功能
 #ifdef DEBUG
-    cpu_features_show();
+    cpu_info_show();
 #endif
 
     mem_init();
 
-    emulator_exit(123);
 
 end:
+    emulator_exit(1);
     cpu_halt();
     while (1) {}
 }
@@ -194,6 +188,7 @@ end:
 INIT_TEXT NORETURN void sys_init_ap(uint32_t ebx) {
     (void)ebx;
 
+    emulator_exit(1);
     cpu_halt();
     while (1) {}
 }

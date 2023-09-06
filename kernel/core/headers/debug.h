@@ -16,6 +16,7 @@ void report_assert_fail(const char *file, const char *func, int line);
     #define ASSERT(x) do { \
         if (!(x)) { \
             report_assert_fail(__FILE__, __func__, __LINE__); \
+            emulator_exit(1); \
         } \
     } while (0)
 #else
