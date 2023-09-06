@@ -1,5 +1,6 @@
 #include <arch_smp.h>
 #include <debug.h>
+#include <liba/rw.h>
 
 
 #define SHOW_MADT_CONTENT 1
@@ -25,8 +26,8 @@ typedef struct ioapic {
 
 
 static CONST size_t    g_loapic_addr;
-static CONST uint32_t  g_loapic_num = 0; // x2APIC 最多允许 4G-1 个节点
-static CONST int       g_ioapic_num = 0;
+       CONST int       g_loapic_num = 0;
+       CONST int       g_ioapic_num = 0;
 static CONST loapic_t *g_loapics    = NULL;
 static CONST ioapic_t *g_ioapics    = NULL;
 
@@ -60,8 +61,7 @@ INIT_TEXT void parse_madt(madt_t *madt) {
 
     g_loapic_addr = madt->loapic_addr;
 
-    // 第一次遍历 MADT，统计 Local APIC、IO APIC 的数量
-    // 以及 irq-gsi 映射表需要的大小
+    // 第一次遍历 MADT，统计 Local APIC、IO APIC 的数量、irq-gsi 映射表大小
     for (size_t i = sizeof(madt_t); i < LEN;) {
         acpi_subtbl_t *sub = (acpi_subtbl_t *)((size_t)madt + i);
         i += sub->length;
@@ -125,8 +125,8 @@ INIT_TEXT void parse_madt(madt_t *madt) {
     }
 
     // TODO 再次遍历 MADT，创建设备
-    uint32_t loapic_idx = 0;
-    int      ioapic_idx = 0;
+    int loapic_idx = 0;
+    int ioapic_idx = 0;
     MADT_PRINT("MADT content:\n");
     for (size_t i = sizeof(madt_t); i < LEN;) {
         acpi_subtbl_t *sub = (acpi_subtbl_t *)((size_t)madt + i);
@@ -212,6 +212,31 @@ INIT_TEXT void parse_madt(madt_t *madt) {
     }
 }
 
-unsigned cpu_count() {
-    return g_loapic_num;
+
+//------------------------------------------------------------------------------
+// PCPU 数据管理
+//------------------------------------------------------------------------------
+
+CONST size_t *g_pcpu_offsets = NULL; // 由 arch_mem.c 设置
+PCPU_BSS int g_cpu_index; // 当前 CPU 编号
+
+INIT_TEXT void gsbase_init(int idx) {
+    ASSERT(NULL != g_pcpu_offsets);
+    ASSERT(idx < g_loapic_num);
+
+    write_gsbase(g_pcpu_offsets[idx]);
+    __asm__("movl %0, %%gs:(g_cpu_index)" :: "r"(idx));
+}
+
+void *pcpu_ptr(int idx, void *ptr) {
+    ASSERT(NULL != g_pcpu_offsets);
+    ASSERT(idx < g_loapic_num);
+
+    return (uint8_t *)ptr + g_pcpu_offsets[idx];
+}
+
+void *this_ptr(void *ptr) {
+    ASSERT(NULL != g_pcpu_offsets);
+
+    return (uint8_t *)ptr + read_gsbase();
 }

@@ -182,7 +182,8 @@ extern char _pcpu_addr;
 extern char _pcpu_data_end;
 extern char _pcpu_bss_end;
 
-static size_t *g_pcpu_offsets = NULL;
+// arch_smp.c
+extern size_t *g_pcpu_offsets;
 
 
 INIT_TEXT void mem_init() {
@@ -238,7 +239,7 @@ INIT_TEXT void mem_init() {
     size_t pcpu_copy = (size_t)(&_pcpu_data_end - &_pcpu_addr);
     rw_end    = (rw_end + l1_line - 1) & ~(l1_line - 1);
     pcpu_size = (pcpu_size + l1_size - 1) & ~(l1_size - 1);
-    for (unsigned i = 0; i < cpu_count(); ++i) {
+    for (int i = 0; i < cpu_count(); ++i) {
         g_pcpu_offsets[i] = rw_end - (size_t)&_pcpu_addr;
         kmemcpy((uint8_t *)rw_end, &_pcpu_addr, pcpu_copy);
         kmemset((uint8_t *)rw_end + pcpu_copy, 0, pcpu_size - pcpu_copy);

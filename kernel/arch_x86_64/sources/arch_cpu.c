@@ -161,8 +161,218 @@ static INIT_TEXT void amd_get_cache_info() {
 // Intel 获取缓存信息
 //------------------------------------------------------------------------------
 
+typedef enum cache_type {
+    INVALID = 0,
+    TLBI, TLBD,
+    L1I, L1D,
+    L2,
+    L3,
+} cache_type_t;
+
+static INIT_TEXT void intel_parse_leaf2_byte(uint8_t byte) {
+    cache_type_t type = INVALID;
+    int size = -1;
+    int way = -1;
+    int line = -1;
+
+    const int K = 1024;
+    const int M = 1024 * 1024;
+
+    switch (byte) {
+    case 0x00:
+    case 0xfe: // needs leaf 18
+    case 0xff: // needs leaf 4
+        return;
+
+    // L1 指令缓存
+    case 0x06: type = L1I; size =  8 * K; way = 4; line = 32; break;
+    case 0x08: type = L1I; size = 16 * K; way = 4; line = 32; break;
+    case 0x09: type = L1I; size = 32 * K; way = 4; line = 64; break;
+    case 0x30: type = L1I; size = 32 * K; way = 8; line = 64; break;
+
+    // L1 数据缓存
+    case 0x0a: type = L1D; size =  8 * K; way = 2; line = 32; break;
+    case 0x0c: type = L1D; size = 16 * K; way = 4; line = 32; break;
+    case 0x0d: type = L1D; size = 16 * K; way = 4; line = 64; break;
+    case 0x0e: type = L1D; size = 24 * K; way = 6; line = 64; break;
+    case 0x2c: type = L1D; size = 32 * K; way = 8; line = 64; break;
+    case 0x60: type = L1D; size = 16 * K; way = 8; line = 64; break;
+    case 0x66: type = L1D; size =  8 * K; way = 4; line = 64; break;
+    case 0x67: type = L1D; size = 16 * K; way = 4; line = 64; break;
+    case 0x68: type = L1D; size = 32 * K; way = 4; line = 64; break;
+
+    // L2，不区分指令与数据
+    case 0x1d: type = L2; size = 128 * K; way =  2; line = 64; break;
+    case 0x21: type = L2; size = 256 * K; way =  8; line = 64; break;
+    case 0x24: type = L2; size =   1 * M; way = 16; line = 64; break;
+    case 0x41: type = L2; size = 128 * K; way =  4; line = 32; break;
+    case 0x42: type = L2; size = 256 * K; way =  4; line = 32; break;
+    case 0x43: type = L2; size = 512 * K; way =  4; line = 32; break;
+    case 0x44: type = L2; size =   1 * M; way =  4; line = 32; break;
+    case 0x45: type = L2; size =   2 * M; way =  4; line = 32; break;
+    case 0x48: type = L2; size =   3 * M; way = 12; line = 64; break;
+    case 0x4e: type = L2; size =   6 * M; way = 24; line = 64; break;
+    case 0x78: type = L2; size =   1 * M; way =  4; line = 64; break;
+    case 0x79: type = L2; size = 128 * K; way =  8; line = 64; break;
+    case 0x7a: type = L2; size = 256 * K; way =  8; line = 64; break;
+    case 0x7b: type = L2; size = 512 * K; way =  8; line = 64; break;
+    case 0x7c: type = L2; size =   1 * M; way =  8; line = 64; break;
+    case 0x7d: type = L2; size =   2 * M; way =  8; line = 64; break;
+    case 0x7f: type = L2; size = 512 * K; way =  2; line = 64; break;
+    case 0x80: type = L2; size = 512 * K; way =  8; line = 64; break;
+    case 0x82: type = L2; size = 256 * K; way =  8; line = 32; break;
+    case 0x83: type = L2; size = 512 * K; way =  8; line = 32; break;
+    case 0x84: type = L2; size =   1 * M; way =  8; line = 32; break;
+    case 0x85: type = L2; size =   2 * M; way =  8; line = 32; break;
+    case 0x86: type = L2; size = 512 * K; way =  4; line = 64; break;
+    case 0x87: type = L2; size =   1 * M; way =  8; line = 64; break;
+
+    // 这个描述符在不同型号CPU上含义不同(Intel Xeon processor MP, Family 0FH, Model 06H)
+    // 需要已经获取型号信息
+    case 0x49:
+        type = ((0x0f == g_cpu_family) && (0x06 == g_cpu_model)) ? L3 : L2;
+        size = 4 * M; way = 16; line = 64;
+        break;
+
+    // 预取缓存
+    case 0xf0:
+    case 0xf1:
+        break;
+
+    // 其他
+    default:
+        return;
+    }
+
+    cache_info_t info;
+    info.line_size = line;
+    info.ways = way;
+    info.total_size = size;
+    info.sets = size / line / way;
+
+    switch (type) {
+    case L1I: g_l1i_info = info; break;
+    case L1D: g_l1d_info = info; break;
+    case L2:  g_l2_info  = info; break;
+    case L3:  g_l3_info  = info; break;
+    default: break;
+    }
+}
+
+static INIT_TEXT void intel_parse_leaf2(uint32_t reg) {
+    if (0x80000000 & reg) {
+        return;
+    }
+    intel_parse_leaf2_byte(reg & 0xff);
+    reg >>= 8;
+    intel_parse_leaf2_byte(reg & 0xff);
+    reg >>= 8;
+    intel_parse_leaf2_byte(reg & 0xff);
+    reg >>= 8;
+    intel_parse_leaf2_byte(reg & 0xff);
+}
+
+// 解析 CPUID leaf 4 调用结果
+// 返回 1 表示 subleaf 无效，返回 0 表示 subleaf 有效
+static INIT_TEXT int intel_parse_leaf4(uint32_t eax, uint32_t ebx, uint32_t ecx) {
+    int type = eax & 0x1f;
+    int level = (eax >> 5) & 0x07;
+
+    cache_info_t *target = NULL;
+    switch (level) {
+    case 0:
+        return 1;
+    case 1:
+        if (1 == type) {
+            target = &g_l1d_info;
+        } else {
+            target = &g_l1i_info;
+        }
+        break;
+    case 2:
+        target = &g_l2_info;
+        break;
+    case 3:
+        target = &g_l3_info;
+        break;
+    default:
+        break;
+    }
+
+    // 解析各字段含义
+    int line_size  = ( ebx        & 0xfff) + 1;
+    int partitions = ((ebx >> 12) & 0x3ff) + 1;
+    int ways       = ((ebx >> 22) & 0x3ff) + 1;
+    int sets       = ecx + 1;
+
+    target->line_size = line_size;
+    target->ways = ways;
+    target->sets = sets;
+    target->total_size = ways * partitions * line_size * sets;
+
+    return 0;
+}
+
+// 解析 CPUID leaf 18 调用结果
+// 返回 1 表示 subleaf 无效，返回 0 表示 subleaf 有效
+static INIT_TEXT int intel_parse_leaf18(uint32_t ebx, uint32_t ecx, uint32_t edx) {
+    int type = edx & 0x1f;
+    const char *type_name = "invalid";
+    switch (type) {
+    case 0: return 1;
+    case 1: type_name = "data TLB"; break;
+    case 2: type_name = "code TLB"; break;
+    case 3: type_name = "unified TLB"; break;
+    case 4: type_name = "load-only TLB"; break;
+    case 5: type_name = "store-only TLB"; break;
+    default: break;
+    }
+
+    int level = (edx >> 5) & 0x07;
+    int ways = (ebx >> 16) & 0xffff;
+    int sets = ecx;
+
+    dbg_print("level %d %s cache, %d-way, %d sets\n",
+            level, type_name, ways, sets);
+
+    return 0;
+}
+
 static INIT_TEXT void intel_get_cache_info() {
-    //
+    uint32_t a, b, c, d;
+
+    // 调用 CPUID leaf 2
+    __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(2));
+    a &= ~0xffU;
+    intel_parse_leaf2(a);
+    intel_parse_leaf2(b);
+    intel_parse_leaf2(c);
+    intel_parse_leaf2(d);
+
+    // 通过 CPUID leaf 4 获取缓存参数
+    // 新的 CPU 普遍通过这个 leaf 返回缓存信息
+    // 循环遍历所有 subleaf（通过 ecx 传入）
+    for (int n = 0; ; ++n) {
+        __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c) : "a"(4), "c"(n));
+        if (intel_parse_leaf4(a, b, c)) {
+            break;
+        }
+    }
+
+#ifdef DEBUG
+    // 通过 CPUID leaf 18 获取 TLB 参数
+    // 循环遍历所有 subleaf（通过 ecx 传入）
+    uint32_t max_subleaf = 0xffffffff;
+    for (uint32_t n = 0; n <= max_subleaf; ++n) {
+        __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x18), "c"(n));
+        if (0 == n) {
+            max_subleaf = a;
+        }
+        if (intel_parse_leaf18(b, c, d)) {
+            break;
+        }
+    }
+#endif // DEBUG
 }
 
 

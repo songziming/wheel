@@ -185,6 +185,7 @@ end:
     while (1) {}
 }
 
+
 INIT_TEXT NORETURN void sys_init_ap(uint32_t ebx) {
     (void)ebx;
 

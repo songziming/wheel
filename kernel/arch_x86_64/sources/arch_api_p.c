@@ -2,12 +2,14 @@
 // 实现 arch_api.h 中规定的函数（部分）
 // 还有一些接口函数在其他模块里实现
 
-#include <base.h>
-#include <liba/rw.h>
-
-
-
 // 开启了 LTO，即使处于不同 TU 也能内联
+
+
+#include <arch_api_p.h>
+#include <liba/rw.h>
+#include <arch_smp.h>
+
+
 inline void cpu_halt() { __asm__("hlt"); }
 inline void cpu_pause() { __asm__("pause"); }
 inline void cpu_rfence() { __asm__("lfence" ::: "memory"); }
@@ -48,5 +50,17 @@ int unwind(void **addrs, int max) {
 void emulator_exit(int ret) {
 #ifdef DEBUG
     __asm__("outl %0, %1" :: "a"(ret), "Nd"(0xf4));
+#else
+    (void)ret;
 #endif
+}
+
+inline int cpu_count() {
+    return g_loapic_num;
+}
+
+inline int cpu_index() {
+    int idx;
+    __asm__("movl %%gs:(g_cpu_index), %0" : "=a"(idx));
+    return idx;
 }

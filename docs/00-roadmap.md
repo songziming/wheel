@@ -6,3 +6,4 @@
   - [x] 解析 framebuffer 信息并据此设置伪字符终端
 - [x] 搜索并解析 ACPI 表
 - [ ] 解析 MADT，获取 Local APIC 和 IO APIC 信息
+- [ ] 根据 CPU 数量划分 PCPU 内存区域
