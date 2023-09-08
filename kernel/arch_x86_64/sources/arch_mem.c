@@ -185,6 +185,40 @@ extern char _pcpu_bss_end;
 // arch_smp.c
 extern size_t *g_pcpu_offsets;
 
+// 记录每一段虚拟内存，组成链表
+typedef struct vmrange {
+    size_t addr; // 虚拟地址起始
+    size_t size;
+    pfn_t page; // 映射到的第一个物理页块，映射的物理页可能是不连续的
+                // 后面的物理页块通过页描述符中的双链表索引
+    const char *desc;
+    struct vmrange *prev;
+    struct vmrange *next;
+} vmrange_t;
+
+// 这些都是临时内存范围
+static INIT_BSS vmrange_t g_range_boot; // lower-half
+static INIT_BSS vmrange_t g_range_pcpu; // 模板，并非真正使用的 pcpu area
+static INIT_BSS vmrange_t g_range_real;
+static INIT_BSS vmrange_t g_range_init; // 包括初始化相关代码、数据
+
+// 内核镜像，驻留内存部分
+static vmrange_t g_range_text;
+static vmrange_t g_range_rodata; // 结束位置由 early_ro_buff 决定
+static vmrange_t g_range_data; // + bss，结束位置由 early_rw_buff 决定
+
+// 动态划分的内存范围
+static          vmrange_t g_range_page;
+static PCPU_BSS vmrange_t g_range_pcpu; // 每个 PCPU 都需要专门的 range
+
+
+// 注册一段内存范围
+void add_kernel_range(vmrange_t *rng, size_t addr, size_t size, const char *desc) {
+    rng->addr = addr;
+    rng->size = size;
+    rng->desc = desc;
+}
+
 
 INIT_TEXT void mem_init() {
     ASSERT(g_rammap_len > 0); // 需要知道物理内存分布

@@ -39,6 +39,13 @@ void report_assert_fail(const char *file, const char *func, int line) {
     dbg_print("Assert failed %s:%s:%d\n", file, func, line);
 }
 
+// 当内核发生无法恢复的严重错误时调用此函数
+// 打印相关信息到屏幕和文件，然后停机（不是关机）
+// 如果在虚拟环境下，则设置返回值并关闭虚拟机
+void panic(const char *fmt, ...) {
+    //
+}
+
 
 //------------------------------------------------------------------------------
 // 内核符号表

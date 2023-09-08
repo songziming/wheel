@@ -47,7 +47,7 @@ int unwind(void **addrs, int max) {
 }
 
 // 退出 QEMU/Bochs 模拟器并返回值
-void emulator_exit(int ret) {
+void vmshutdown(int ret) {
 #ifdef DEBUG
     __asm__("outl %0, %1" :: "a"(ret), "Nd"(0xf4));
 #else
@@ -55,12 +55,12 @@ void emulator_exit(int ret) {
 #endif
 }
 
-inline int cpu_count() {
-    return g_loapic_num;
-}
+// inline int cpu_count() {
+//     return g_loapic_num;
+// }
 
-inline int cpu_index() {
-    int idx;
-    __asm__("movl %%gs:(g_cpu_index), %0" : "=a"(idx));
-    return idx;
-}
+// inline int cpu_index() {
+//     int idx;
+//     __asm__("movl %%gs:(g_cpu_index), %0" : "=a"(idx));
+//     return idx;
+// }

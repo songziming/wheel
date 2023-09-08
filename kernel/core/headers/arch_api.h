@@ -5,6 +5,11 @@
 
 #include <base_def.h>
 
+// 启动阶段永久分配内存
+// 这两个函数实现方式很统一，但内存布局和平台相关，因此由平台实现
+INIT_TEXT void *early_alloc_ro(size_t size);
+INIT_TEXT void *early_alloc_rw(size_t size);
+
 void cpu_halt();
 void cpu_pause();
 void cpu_rfence();
@@ -12,11 +17,7 @@ void cpu_wfence();
 void cpu_rwfence();
 
 int unwind(void **addrs, int max);
-void emulator_exit(int ret);
-
-// 启动阶段永久分配内存
-INIT_TEXT void *early_alloc_ro(size_t size);
-INIT_TEXT void *early_alloc_rw(size_t size);
+void vmshutdown(int ret);
 
 int cpu_count();
 int cpu_index();

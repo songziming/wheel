@@ -10,8 +10,8 @@ extern CONST int g_ioapic_num;
 INIT_TEXT void parse_madt(madt_t *madt);
 
 
-extern CONST size_t *g_pcpu_offsets;
-extern PCPU_BSS int g_cpu_index;
+// extern CONST size_t *g_pcpu_offsets;
+// extern PCPU_BSS int g_cpu_index;
 
 INIT_TEXT void gsbase_init(int idx);
 

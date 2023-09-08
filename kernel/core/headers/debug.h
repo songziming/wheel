@@ -9,6 +9,8 @@ extern dbg_print_func_t g_dbg_print_func;
 PRINTF(1, 2) void dbg_print(const char *fmt, ...);
 void report_assert_fail(const char *file, const char *func, int line);
 
+void panic(const char *fmt, ...);
+
 #if defined(UNIT_TEST)
     #include <assert.h>
     #define ASSERT assert
@@ -16,7 +18,7 @@ void report_assert_fail(const char *file, const char *func, int line);
     #define ASSERT(x) do { \
         if (!(x)) { \
             report_assert_fail(__FILE__, __func__, __LINE__); \
-            emulator_exit(1); \
+            vmshutdown(1); \
         } \
     } while (0)
 #else

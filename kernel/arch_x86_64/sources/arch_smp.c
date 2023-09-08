@@ -1,6 +1,7 @@
 #include <arch_smp.h>
 #include <debug.h>
 #include <liba/rw.h>
+#include <arch_cpu.h>
 
 
 #define SHOW_MADT_CONTENT 1
@@ -218,24 +219,36 @@ INIT_TEXT void parse_madt(madt_t *madt) {
 //------------------------------------------------------------------------------
 
 CONST size_t *g_pcpu_offsets = NULL; // 由 arch_mem.c 设置
-PCPU_BSS int g_cpu_index; // 当前 CPU 编号
+static PCPU_BSS int g_cpu_index; // 当前 CPU 编号
 
 INIT_TEXT void gsbase_init(int idx) {
     ASSERT(NULL != g_pcpu_offsets);
     ASSERT(idx < g_loapic_num);
 
     write_gsbase(g_pcpu_offsets[idx]);
-    __asm__("movl %0, %%gs:(g_cpu_index)" :: "r"(idx));
+    __asm__("movl %0, %%gs:%1" :: "r"(idx), "m"(g_cpu_index));
+    // __asm__("movl %0, %%gs:(g_cpu_index)" :: "r"(idx));
 }
 
-void *pcpu_ptr(int idx, void *ptr) {
+inline int cpu_count() {
+    return g_loapic_num;
+}
+
+inline int cpu_index() {
+    int idx;
+    __asm__("movl %%gs:%1, %0" : "=a"(idx) : "m"(g_cpu_index));
+    // __asm__("movl %%gs:(g_cpu_index), %0" : "=a"(idx));
+    return idx;
+}
+
+inline void *pcpu_ptr(int idx, void *ptr) {
     ASSERT(NULL != g_pcpu_offsets);
     ASSERT(idx < g_loapic_num);
 
     return (uint8_t *)ptr + g_pcpu_offsets[idx];
 }
 
-void *this_ptr(void *ptr) {
+inline void *this_ptr(void *ptr) {
     ASSERT(NULL != g_pcpu_offsets);
 
     return (uint8_t *)ptr + read_gsbase();

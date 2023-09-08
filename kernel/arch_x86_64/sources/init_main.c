@@ -176,11 +176,12 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     cpu_info_show();
 #endif
 
-    mem_init();
+    mem_init(); // 分配页描述符、划分 PCPU
+    gsbase_init(0);
 
 
 end:
-    emulator_exit(1);
+    vmshutdown(1);
     cpu_halt();
     while (1) {}
 }
@@ -189,7 +190,7 @@ end:
 INIT_TEXT NORETURN void sys_init_ap(uint32_t ebx) {
     (void)ebx;
 
-    emulator_exit(1);
+    vmshutdown(1);
     cpu_halt();
     while (1) {}
 }
