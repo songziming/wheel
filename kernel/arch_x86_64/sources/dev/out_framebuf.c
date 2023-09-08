@@ -1,6 +1,6 @@
 #include <dev/out_framebuf.h>
 #include <debug.h>
-#include <libk_string.h>
+#include <strlib.h>
 
 
 // 滚屏操作需要大量的内存复制

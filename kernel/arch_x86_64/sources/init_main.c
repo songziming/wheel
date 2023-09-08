@@ -16,7 +16,7 @@
 #include <dev/out_console.h>
 #include <dev/out_framebuf.h>
 
-#include <mem_page.h>
+#include <page.h>
 
 
 

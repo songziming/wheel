@@ -1,5 +1,5 @@
-#include <libk_format.h>
-#include <libk_string.h>
+#include <format.h>
+#include <strlib.h>
 
 
 // 使用循环缓冲区接收格式化之后的字符串

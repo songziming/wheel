@@ -2,7 +2,7 @@
 
 #include <dev/out_console.h>
 #include <liba/rw.h>
-#include <libk_string.h>
+#include <strlib.h>
 
 
 // 默认宽高

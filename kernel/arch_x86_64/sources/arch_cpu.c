@@ -3,7 +3,7 @@
 #include <arch_cpu.h>
 #include <liba/rw.h>
 #include <debug.h>
-#include <libk_string.h>
+#include <strlib.h>
 
 
 

@@ -1,7 +1,8 @@
 // 一套与标准库兼容的字符串操作函数
-// 都是弱符号，arch 模块可以提供更高效的实现
+// 避免使用和标准库相同的函数名，避免单元测试符号冲突
+// 都是弱符号，arch 模块可以提供更高效的版本，覆盖默认实现
 
-#include <libk_string.h>
+#include <strlib.h>
 #include <debug.h>
 
 WEAK size_t kstrlen(const char *s) {

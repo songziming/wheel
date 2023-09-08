@@ -1,5 +1,5 @@
-#ifndef LIBK_ELF_H
-#define LIBK_ELF_H
+#ifndef ELF_H
+#define ELF_H
 
 // 基于 Linux 自带的 elf.h 修改而来
 
@@ -714,4 +714,4 @@ typedef struct {
 // Legal values for the note segment descriptor types for object files.
 #define NT_VERSION  1       // Contains a version string.
 
-#endif // LIBK_ELF_H
+#endif // ELF_H

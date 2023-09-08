@@ -4,8 +4,9 @@
 #include <arch_mem.h>
 #include <arch_cpu.h>
 #include <debug.h>
-#include <libk_string.h>
-#include <mem_page.h>
+#include <strlib.h>
+#include <page.h>
+#include <vmspace.h>
 
 
 //------------------------------------------------------------------------------
@@ -178,76 +179,73 @@ INIT_TEXT void rammap_show() {
 
 
 // layout.ld
-extern char _pcpu_addr;
-extern char _pcpu_data_end;
-extern char _pcpu_bss_end;
+extern char _pcpu_addr, _pcpu_data_end, _pcpu_bss_end;
+extern char _init_end;
+extern char _text_addr, _text_end;
+extern char _rodata_addr;
+extern char _data_addr;
 
 // arch_smp.c
 extern size_t *g_pcpu_offsets;
 
-// 记录每一段虚拟内存，组成链表
-typedef struct vmrange {
-    size_t addr; // 虚拟地址起始
-    size_t size;
-    pfn_t page; // 映射到的第一个物理页块，映射的物理页可能是不连续的
-                // 后面的物理页块通过页描述符中的双链表索引
-    const char *desc;
-    struct vmrange *prev;
-    struct vmrange *next;
-} vmrange_t;
-
 // 这些都是临时内存范围
-static INIT_BSS vmrange_t g_range_boot; // lower-half
-static INIT_BSS vmrange_t g_range_pcpu; // 模板，并非真正使用的 pcpu area
-static INIT_BSS vmrange_t g_range_real;
-static INIT_BSS vmrange_t g_range_init; // 包括初始化相关代码、数据
+static INIT_BSS vmrange_t  g_range_init;    // 初始化代码数据，还有 PCPU 模板、实模式代码
+static          vmrange_t  g_range_text;
+static          vmrange_t  g_range_rodata;  // 结束位置由 early_ro_buff 决定
+static          vmrange_t  g_range_data;    // 结束位置由 early_rw_buff 决定
+static          vmrange_t *g_range_pcpu;    // 每个 PCPU 都需要专门的 range
 
-// 内核镜像，驻留内存部分
-static vmrange_t g_range_text;
-static vmrange_t g_range_rodata; // 结束位置由 early_ro_buff 决定
-static vmrange_t g_range_data; // + bss，结束位置由 early_rw_buff 决定
-
-// 动态划分的内存范围
-static          vmrange_t g_range_page;
-static PCPU_BSS vmrange_t g_range_pcpu; // 每个 PCPU 都需要专门的 range
+// 记录内核虚拟地址空间布局
+static vmspace_t g_kernel_vm;
 
 
-// 注册一段内存范围
-void add_kernel_range(vmrange_t *rng, size_t addr, size_t size, const char *desc) {
-    rng->addr = addr;
-    rng->size = size;
+// 标记一段内存范围
+static INIT_TEXT void add_kernel_range(vmrange_t *rng, void *addr, void *end, const char *desc) {
+    rng->addr = (size_t)addr;
+    rng->size = (size_t)end - (size_t)addr;
     rng->desc = desc;
+    vmspace_insert_range(&g_kernel_vm, rng);
 }
+
+// // 划分一段内存范围，返回新的 kernel_end
+// static INIT_TEXT void *alloc_kernel_range(vmrange_t *rng, void **end, size_t size, size_t align, const char *desc) {
+//     ASSERT(0 == (align & (align - 1)));
+
+//     size_t ptr = ((size_t)*end + align - 1) & ~(align - 1);
+//     *end = (void *)(ptr + size);
+//     add_kernel_range(rng, (void *)ptr, *end, desc);
+
+//     return (void *)ptr;
+// }
 
 
 INIT_TEXT void mem_init() {
     ASSERT(g_rammap_len > 0); // 需要知道物理内存分布
     ASSERT(cpu_count() > 0);  // 需要知道 CPU 个数
-    ASSERT(NULL == g_pcpu_offsets);
 
-    // 统计可分配的内存的范围，该范围内的内存才需要管理
-    size_t start = INVALID_ADDR;
-    size_t end = 0;
+    // 统计可用内存上限
+    size_t ramend = 0;
     for (int i = 0; i < g_rammap_len; ++i) {
         if ((RAM_AVAILABLE != g_rammap[i].type) && (RAM_RECLAIMABLE != g_rammap[i].type)) {
             continue;
         }
-        if (INVALID_ADDR == start) {
-            start = g_rammap[i].addr;
-        }
-        if (end < g_rammap[i].end) {
-            end = g_rammap[i].end;
+        if (ramend < g_rammap[i].end) {
+            ramend = g_rammap[i].end;
         }
     }
-#ifdef DEBUG
-    dbg_print("managable ram range: %zx~%zx\n", start, end);
-#endif
+    // start  += PAGE_SIZE - 1;
+    // start >>= PAGE_SHIFT;
+    // end   >>= PAGE_SHIFT;
+// #ifdef DEBUG
+//     dbg_print("managable page range: %zx\n", ramend);
+// #endif
 
     // 准备 PCPU 偏移量数组
     g_pcpu_offsets = early_alloc_ro(cpu_count() * sizeof(size_t));
+    g_range_pcpu = early_alloc_rw(cpu_count() * sizeof(vmrange_t));
 
-    // 分配页描述符，初始化页分配器
-    pages_init(start, end);
+    // 分配页描述符，初始化页分配器（这一步仍需要 early_alloc）
+    pages_init(0, ramend);
 
     // 记录当前数据段结束位置，并禁用 early_alloc
     size_t ro_end = (size_t)early_alloc_ro(0);
@@ -256,6 +254,15 @@ INIT_TEXT void mem_init() {
 #ifdef DEBUG
     dbg_print("ro_end=%zx, rw_end=%zx\n", ro_end, rw_end);
 #endif
+
+    // 内核虚拟地址空间
+    vmspace_init(&g_kernel_vm);
+
+    // 将几个内核 section 记录在地址空间中
+    add_kernel_range(&g_range_init, &_pcpu_addr, &_init_end, "init");
+    add_kernel_range(&g_range_text, &_text_addr, &_text_end, "text");
+    add_kernel_range(&g_range_rodata, &_rodata_addr, (void *)ro_end, "rodata");
+    add_kernel_range(&g_range_data, &_data_addr, (void *)rw_end, "data");
 
     // 获取 L1 一行大小，一路大小
     size_t l1_line = g_l1d_info.line_size;
@@ -277,6 +284,13 @@ INIT_TEXT void mem_init() {
         g_pcpu_offsets[i] = rw_end - (size_t)&_pcpu_addr;
         kmemcpy((uint8_t *)rw_end, &_pcpu_addr, pcpu_copy);
         kmemset((uint8_t *)rw_end + pcpu_copy, 0, pcpu_size - pcpu_copy);
+
+        // vmrange_t *rng = (vmrange_t *)((uint8_t *)&g_range_pcpu + g_pcpu_offsets[i]);
+        add_kernel_range(&g_range_pcpu[i], (void *)rw_end, (uint8_t *)rw_end + pcpu_size, "pcpu");
         rw_end += pcpu_size;
     }
+
+#ifdef DEBUG
+    vmspace_show(&g_kernel_vm);
+#endif
 }

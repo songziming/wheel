@@ -34,7 +34,7 @@ OUT_TST := $(OUT_DIR)/test
 # 内核各模块代码，其中 arch 要选择对应目标平台
 KERN_SUBDIRS := kernel/arch_$(ARCH)/sources
 KERN_SUBDIRS += $(filter-out $(wildcard kernel/arch_*/sources),$(wildcard kernel/*/sources))
-KERN_INCDIRS := $(patsubst %/sources,%/headers,$(KERN_SUBDIRS)) kernel/common
+KERN_INCDIRS := $(patsubst %/sources,%/headers,$(KERN_SUBDIRS)) kernel/core
 KERN_SOURCES := $(foreach d,$(KERN_SUBDIRS),$(shell find $(d) -name "*.S" -o -name "*.c"))
 KERN_OBJECTS := $(patsubst %,$(OUT_DIR)/%.ko,$(KERN_SOURCES))
 

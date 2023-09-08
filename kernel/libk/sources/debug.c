@@ -1,7 +1,7 @@
 #include <debug.h>
-#include <libk_string.h>
-#include <libk_format.h>
-#include <libk_elf.h>
+#include <strlib.h>
+#include <format.h>
+#include <elf.h>
 
 
 // 启动阶段是否打印内核 section、symbol 信息

@@ -1,7 +1,7 @@
 #include <test.h>
 #include <string.h>
 
-#include "../sources/libk_string.c"
+#include "../sources/strlib.c"
 
 
 TEST(String, Len) {

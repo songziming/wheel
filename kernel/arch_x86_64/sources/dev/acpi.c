@@ -1,7 +1,7 @@
 #include <dev/acpi.h>
 #include <debug.h>
 #include <arch_mem.h>
-#include <libk_string.h>
+#include <strlib.h>
 
 
 static CONST int g_table_num = 0;

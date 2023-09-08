@@ -1,5 +1,5 @@
-#ifndef LIBK_STRING_H
-#define LIBK_STRING_H
+#ifndef STRLIB_H
+#define STRLIB_H
 
 #include <base.h>
 
@@ -15,4 +15,4 @@ WEAK int    kmemcmp (const void *s1, const void *s2, size_t n);
 WEAK void  *kmemcpy (void *dst, const void *src, size_t n);
 WEAK void  *kmemmove(void *dst, const void *src, size_t n);
 
-#endif // LIBK_STRING_H
+#endif // STRLIB_H

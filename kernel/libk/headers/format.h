@@ -1,5 +1,5 @@
-#ifndef LIBK_FORMAT_H
-#define LIBK_FORMAT_H
+#ifndef FORMAT_H
+#define FORMAT_H
 
 #include <base.h>
 
@@ -9,4 +9,4 @@ size_t format(char *buf, size_t n, format_cb_t cb, void *para, const char *fmt, 
 size_t vsnprintk(char *buf, size_t n, const char *fmt, va_list args);
 PRINTF(3, 4) size_t snprintk(char *buf, size_t n, const char *fmt, ...);
 
-#endif // LIBK_FORMAT_H
+#endif // FORMAT_H
