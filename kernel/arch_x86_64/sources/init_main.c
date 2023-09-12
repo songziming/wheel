@@ -123,23 +123,23 @@ static void serial_console_puts(const char *s, size_t n) {
 // BSP 启动流程
 INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     serial_init();
-    g_dbg_print_func = serial_puts;
+    set_log_func(serial_puts);
 
     switch (eax) {
     case MB1_BOOTLOADER_MAGIC: mb1_init(ebx); break;
     case MB2_BOOTLOADER_MAGIC: mb2_init(ebx); break;
     default:
-        dbg_print("error: unknown multibooot magic %x\n", eax);
+        klog("error: unknown multibooot magic %x\n", eax);
         goto end;
     }
 
     // 配置图形化终端或字符终端
     if (g_mb2_fb) {
         framebuf_init(g_mb2_fb);
-        g_dbg_print_func = serial_framebuf_puts;
+        set_log_func(serial_framebuf_puts);
     } else {
         console_init();
-        g_dbg_print_func = serial_console_puts;
+        set_log_func(serial_console_puts);
     }
 #ifdef DEBUG
     rammap_show();
@@ -151,7 +151,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         g_rsdp = acpi_probe_rsdp();
     }
     if (NULL == g_rsdp) {
-        dbg_print("error: RSDP not found!\n");
+        klog("error: RSDP not found!\n");
         goto end;
     }
     acpi_parse_rsdp(g_rsdp);
@@ -162,7 +162,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // 解析 MADT
     madt_t *madt = (madt_t *)acpi_get_table("APIC");
     if (NULL == madt) {
-        dbg_print("error: MADT not found!\n");
+        klog("error: MADT not found!\n");
         goto end;
     }
     parse_madt(madt);

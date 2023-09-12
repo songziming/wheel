@@ -17,7 +17,7 @@ INIT_TEXT void pages_init(size_t start, size_t end) {
     start >>= PAGE_SHIFT;
     end   >>= PAGE_SHIFT;
 #ifdef DEBUG
-    dbg_print("allocating page descriptors for %zx~%zx\n", start, end);
+    klog("allocating page descriptors for %zx~%zx\n", start, end);
 #endif
     if (end > INVALID_PFN) {
         end = INVALID_PFN;

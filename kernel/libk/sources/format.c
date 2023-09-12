@@ -56,22 +56,22 @@ static inline PURE int fmt_toupper(int c) {
 
 // 格式化字符串
 static void fmt_string(fmt_context_t *ctx, const char *str, uint32_t flags, int width, int precision) {
-    int slen = kstrlen(str);
-    if ((0 <= precision) && (precision < slen)) {
-        slen = precision;
+    int len = slen(str, 4096);
+    if ((0 <= precision) && (precision < len)) {
+        len = precision;
     }
 
     if (0 == (flags & FLG_LEFT)) {
-        for (; width > slen; --width) {
+        for (; width > len; --width) {
             fmt_putchar(ctx, ' ');
         }
     }
 
-    for (int i = 0; i < slen; ++i, ++str) {
+    for (int i = 0; i < len; ++i, ++str) {
         fmt_putchar(ctx, *str);
     }
 
-    for (; width > slen; --width) {
+    for (; width > len; --width) {
         fmt_putchar(ctx, ' ');
     }
 }

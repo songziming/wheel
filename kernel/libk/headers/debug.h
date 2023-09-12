@@ -3,13 +3,10 @@
 
 #include <base.h>
 
-typedef void (*dbg_print_func_t)(const char *s, size_t n);
-extern dbg_print_func_t g_dbg_print_func;
+typedef void (*log_func_t)(const char *s, size_t n);
 
-PRINTF(1, 2) void dbg_print(const char *fmt, ...);
-void report_assert_fail(const char *file, const char *func, int line);
-
-void panic(const char *fmt, ...);
+void set_log_func(log_func_t func);
+PRINTF(1, 2) void klog(const char *fmt, ...);
 
 #if defined(UNIT_TEST)
     #include <assert.h>
@@ -17,7 +14,7 @@ void panic(const char *fmt, ...);
 #elif defined(DEBUG)
     #define ASSERT(x) do { \
         if (!(x)) { \
-            report_assert_fail(__FILE__, __func__, __LINE__); \
+            klog("Assert failed %s:%s:%d\n", __FILE__, __func__, __LINE__); \
             vmshutdown(1); \
         } \
     } while (0)

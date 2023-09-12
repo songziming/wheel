@@ -40,7 +40,7 @@ static INIT_TEXT void *membuff_grow(membuff_t *buff, size_t size) {
 INIT_TEXT void *early_alloc_ro(size_t size) {
     void *p = membuff_grow(&g_ro_buff, size);
     if (NULL == p) {
-        dbg_print("early ro alloc buffer overflow!\n");
+        klog("early ro alloc buffer overflow!\n");
         cpu_halt();
     }
     return p;
@@ -49,7 +49,7 @@ INIT_TEXT void *early_alloc_ro(size_t size) {
 INIT_TEXT void *early_alloc_rw(size_t size) {
     void *p = membuff_grow(&g_rw_buff, size);
     if (NULL == p) {
-        dbg_print("early rw alloc buffer overflow!\n");
+        klog("early rw alloc buffer overflow!\n");
         cpu_halt();
     }
     return p;
@@ -61,7 +61,7 @@ INIT_TEXT void early_alloc_unlock() {
     size_t rw_addr = (size_t)g_rw_area - KERNEL_TEXT_BASE;
     g_rw_buff.size = rammap_extentof(rw_addr) - rw_addr;
 #ifdef DEBUG
-    dbg_print("growing rw-buff size to %zx\n", g_rw_buff.size);
+    klog("growing rw-buff size to %zx\n", g_rw_buff.size);
 #endif
 }
 
@@ -94,7 +94,7 @@ INIT_TEXT void rammap_reserve(int num) {
 
     g_rammap_len = num;
     g_rammap = early_alloc_ro(num * sizeof(ram_range_t));
-    kmemset(g_rammap, 0, num * sizeof(ram_range_t));
+    mfill(g_rammap, 0, num * sizeof(ram_range_t));
 }
 
 // 添加一段物理内存
@@ -124,7 +124,7 @@ INIT_TEXT size_t rammap_extentof(size_t addr) {
         }
     }
 
-    dbg_print("error: address %lx not in valid ram range\n", addr);
+    klog("error: address %lx not in valid ram range\n", addr);
     return 0;
 }
 
@@ -161,12 +161,12 @@ static INIT_TEXT const char *ram_type_str(ram_type_t type) {
 INIT_TEXT void rammap_show() {
     ASSERT(NULL != g_rammap);
 
-    dbg_print("ram ranges:\n");
+    klog("ram ranges:\n");
     for (int i = 0; i < g_rammap_len; ++i) {
         size_t addr = g_rammap[i].addr;
         size_t end  = g_rammap[i].end;
         const char *type = ram_type_str(g_rammap[i].type);
-        dbg_print("  - ram range: addr=0x%016zx, end=0x%016zx, type=%s\n", addr, end, type);
+        klog("  - ram range: addr=0x%016zx, end=0x%016zx, type=%s\n", addr, end, type);
     }
 }
 
@@ -237,7 +237,7 @@ INIT_TEXT void mem_init() {
     // start >>= PAGE_SHIFT;
     // end   >>= PAGE_SHIFT;
 // #ifdef DEBUG
-//     dbg_print("managable page range: %zx\n", ramend);
+//     klog("managable page range: %zx\n", ramend);
 // #endif
 
     // 准备 PCPU 偏移量数组
@@ -252,7 +252,7 @@ INIT_TEXT void mem_init() {
     size_t rw_end = (size_t)early_alloc_rw(0);
     early_alloc_disable();
 #ifdef DEBUG
-    dbg_print("ro_end=%zx, rw_end=%zx\n", ro_end, rw_end);
+    klog("ro_end=%zx, rw_end=%zx\n", ro_end, rw_end);
 #endif
 
     // 内核虚拟地址空间
@@ -270,7 +270,7 @@ INIT_TEXT void mem_init() {
     ASSERT(0 == (l1_line & (l1_line - 1)));
     ASSERT(0 == (l1_size & (l1_size - 1)));
 #ifdef DEBUG
-    dbg_print("align to L1 line 0x%zx, size 0x%zx\n", l1_line, l1_size);
+    klog("align to L1 line 0x%zx, size 0x%zx\n", l1_line, l1_size);
 #endif
 
     // 划分 PCPU 区域，地址按缓存行对齐，总大小按缓存大小对齐
@@ -282,8 +282,8 @@ INIT_TEXT void mem_init() {
     pcpu_size = (pcpu_size + l1_size - 1) & ~(l1_size - 1);
     for (int i = 0; i < cpu_count(); ++i) {
         g_pcpu_offsets[i] = rw_end - (size_t)&_pcpu_addr;
-        kmemcpy((uint8_t *)rw_end, &_pcpu_addr, pcpu_copy);
-        kmemset((uint8_t *)rw_end + pcpu_copy, 0, pcpu_size - pcpu_copy);
+        mcopy((uint8_t *)rw_end, &_pcpu_addr, pcpu_copy);
+        mfill((uint8_t *)rw_end + pcpu_copy, 0, pcpu_size - pcpu_copy);
 
         // vmrange_t *rng = (vmrange_t *)((uint8_t *)&g_range_pcpu + g_pcpu_offsets[i]);
         add_kernel_range(&g_range_pcpu[i], (void *)rw_end, (uint8_t *)rw_end + pcpu_size, "pcpu");

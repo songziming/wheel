@@ -42,7 +42,7 @@ INIT_TEXT void console_init() {
 
     // 映射到 higher half，启动完成后低地址会取消映射
     g_vram = (uint16_t *)(DIRECT_MAP_BASE + 0xb8000);
-    kmemcpy(g_vram, g_vbuf, AREA * sizeof(uint16_t));
+    mcopy(g_vram, g_vbuf, AREA * sizeof(uint16_t));
 }
 
 static void set_caret(uint16_t idx) {
@@ -95,7 +95,7 @@ static void draw_char(char c) {
         g_start_row = g_caret_row - ROWS + 1;
         for (int r = 0; r < ROWS; ++r) {
             int offset = (g_start_row + r) % ROWS * COLS;
-            kmemcpy(&g_vram[r * COLS], &g_vbuf[offset], COLS * sizeof(uint16_t));
+            mcopy(&g_vram[r * COLS], &g_vbuf[offset], COLS * sizeof(uint16_t));
         }
     }
 }

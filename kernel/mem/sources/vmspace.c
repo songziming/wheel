@@ -95,7 +95,7 @@ void vmspace_show(vmspace_t *vm) {
         }
         last = end;
 
-        dbg_print("range:0x%016lx~0x%016lx, size:%#*lx, gap:%#*lx, %s\n",
+        klog("range:0x%016lx~0x%016lx, size:%#*lx, gap:%#*lx, %s\n",
                 rng->addr, end, size_digits + 2, rng->size, gap_digits + 2, gap, rng->desc);
     }
 }

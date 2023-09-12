@@ -13,21 +13,27 @@
 // 调试输出
 //------------------------------------------------------------------------------
 
-dbg_print_func_t g_dbg_print_func = NULL;
+static log_func_t g_log_func = NULL;
+
+void set_log_func(log_func_t func) {
+    g_log_func = func;
+}
 
 static void print_cb(void *para, const char *s, size_t n) {
     (void)para;
 
-    // TODO 将调试输出写入文件 /var/dbg
     // TODO 启动阶段，准备一段 buffer 作为临时文件缓冲区（ringbuf）
+    //      临时 buffer 满了就覆盖最早写入的内容
+    // TODO 文件系统启动之后，将调试输出写入文件磁盘
+    // TODO 提供虚拟文件 /var/dbg，包括磁盘上和 ringbuf 中的内容
 
-    if (NULL != g_dbg_print_func) {
-        g_dbg_print_func(s, n);
+    if (NULL != g_log_func) {
+        g_log_func(s, n);
     }
 }
 
 // 打印调试输出
-void dbg_print(const char *fmt, ...) {
+void klog(const char *fmt, ...) {
     char tmp[256];
     va_list args;
     va_start(args, fmt);
@@ -35,16 +41,11 @@ void dbg_print(const char *fmt, ...) {
     va_end(args);
 }
 
-void report_assert_fail(const char *file, const char *func, int line) {
-    dbg_print("Assert failed %s:%s:%d\n", file, func, line);
-}
-
 // 当内核发生无法恢复的严重错误时调用此函数
 // 打印相关信息到屏幕和文件，然后停机（不是关机）
 // 如果在虚拟环境下，则设置返回值并关闭虚拟机
-void panic(const char *fmt, ...) {
-    //
-}
+// void panic(const char *fmt, ...) {
+// }
 
 
 //------------------------------------------------------------------------------
@@ -109,7 +110,7 @@ INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num, uint32_t s
     (void)shndx;
 
     if (sizeof(Elf64_Shdr) != entsize) {
-        dbg_print("section entry size is %d\n", entsize);
+        klog("section entry size is %d\n", entsize);
         return;
     }
 
@@ -117,113 +118,114 @@ INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num, uint32_t s
 
 #if defined(DEBUG) && SHOW_ALL_SECTIONS
     // 获取 section 名称的字符串表
-    size_t secname_len = 1;
-    const char *secname_buf = "";
+    size_t shstrtab_len = 1;
+    const char *shstrtab_buf = "";
     if ((SHN_UNDEF != shndx) && (shndx < num)) {
-        secname_len = sections[shndx].sh_size;
-        secname_buf = (const char *)sections[shndx].sh_addr;
+        shstrtab_len = sections[shndx].sh_size;
+        shstrtab_buf = (const char *)sections[shndx].sh_addr;
     }
 #endif
 
     // 遍历 section，统计函数符号数量，符号名总长度
     g_symbol_num = 0;
-    int symstr_len = 0;
+    int symname_len = 0;
     for (uint32_t i = 1; i < num; ++i) {
-        uint32_t type = sections[i].sh_type;
-        uint32_t link = sections[i].sh_link;
+        uint32_t sectype = sections[i].sh_type;
+        uint32_t seclink = sections[i].sh_link;
 
 #if defined(DEBUG) && SHOW_ALL_SECTIONS
         uint32_t name_idx = sections[i].sh_name;
-        if (name_idx >= secname_len) {
-            name_idx = secname_len - 1;
+        if (name_idx >= shstrtab_len) {
+            name_idx = shstrtab_len - 1;
         }
-        dbg_print("=> section type %10s, addr=%016lx, size=%08lx, flags=%02lx, name='%s'\n",
-            elf_sec_type(type), sections[i].sh_addr,
+        klog("=> section type %10s, addr=%016lx, size=%08lx, flags=%02lx, name='%s'\n",
+            elf_sec_type(sectype), sections[i].sh_addr,
             sections[i].sh_size, sections[i].sh_flags,
-            &secname_buf[name_idx]);
+            &shstrtab_buf[name_idx]);
 #endif
 
         // 带有字符串的符号表才需要处理
-        int is_symtab = ((SHT_SYMTAB == type) || (SHT_DYNSYM == type)) &&
-            (SHN_UNDEF != link) && (link < num) &&
-            (SHT_STRTAB == sections[link].sh_type);
+        int is_symtab = ((SHT_SYMTAB == sectype) || (SHT_DYNSYM == sectype)) &&
+            (SHN_UNDEF != seclink) && (seclink < num) &&
+            (SHT_STRTAB == sections[seclink].sh_type);
         if (!is_symtab) {
             continue;
         }
 
         size_t symbol_num = sections[i].sh_size / sections[i].sh_entsize;
         Elf64_Sym *symbols = (Elf64_Sym *)sections[i].sh_addr;
-
-        size_t symname_len = sections[link].sh_size;
-        const char *symname_buf = (const char *)sections[link].sh_addr;
+        size_t strtab_len = sections[seclink].sh_size;
+        const char *strtab = (const char *)sections[seclink].sh_addr;
 
         // 遍历该表中的每个符号，只记录函数类型的符号
         for (size_t j = 1; j < symbol_num; ++j) {
-            uint32_t name_idx = symbols[j].st_name;
-            if (name_idx >= symname_len) {
+            uint32_t strtab_idx = symbols[j].st_name;
+            if (strtab_idx >= strtab_len) {
                 continue;
             }
+            const char *symstr = &strtab[strtab_idx];
 
-            unsigned char type = ELF64_ST_TYPE(symbols[j].st_info);
+            unsigned char symtype = ELF64_ST_TYPE(symbols[j].st_info);
 #if defined(DEBUG) && SHOW_ALL_SYMBOLS
-            dbg_print("  - symtype %6s, addr=%016lx, size=%08lx, name='%s'\n",
-                elf_sym_type(type), symbols[j].st_value,
-                symbols[j].st_size, &symname_buf[name_idx]);
+            klog("  - symtype %6s, addr=%016lx, size=%08lx, name='%s'\n",
+                elf_sym_type(symtype), symbols[j].st_value,
+                symbols[j].st_size, symstr);
 #endif
-            if (STT_FUNC != type) {
+            if (STT_FUNC != symtype) {
                 continue;
             }
 
             ++g_symbol_num;
-            symstr_len += kstrlen(&symname_buf[name_idx]) + 1;
+            symname_len += slen(symstr, strtab_len - strtab_idx) + 1;
         }
     }
 
     // 申请函数符号表和符号名称的空间
-    char *symstr = early_alloc_ro(symstr_len);
-    int symstr_idx = 0;
+    int symname_idx = 0;
+    char *symname = early_alloc_ro(symname_len);
+    int symbol_idx = 0;
     g_symbols = early_alloc_ro(g_symbol_num * sizeof(elf_symbol_t));
 
     // 再次遍历符号表和符号，将函数类型的符号保存下来
-    int symbol_idx = 0;
     for (uint32_t i = 1; i < num; ++i) {
-        uint32_t type = sections[i].sh_type;
-        uint32_t link = sections[i].sh_link;
-        int is_symtab = ((SHT_SYMTAB == type) || (SHT_DYNSYM == type)) &&
-            (SHN_UNDEF != link) && (link < num) &&
-            (SHT_STRTAB == sections[link].sh_type);
+        uint32_t sectype = sections[i].sh_type;
+        uint32_t seclink = sections[i].sh_link;
+        int is_symtab = ((SHT_SYMTAB == sectype) || (SHT_DYNSYM == sectype)) &&
+            (SHN_UNDEF != seclink) && (seclink < num) &&
+            (SHT_STRTAB == sections[seclink].sh_type);
         if (!is_symtab) {
             continue;
         }
 
         size_t symbol_num = sections[i].sh_size / sections[i].sh_entsize;
         Elf64_Sym *symbols = (Elf64_Sym *)sections[i].sh_addr;
-        size_t symname_len = sections[link].sh_size;
-        const char *symname_buf = (const char *)sections[link].sh_addr;
+        size_t strtab_len = sections[seclink].sh_size;
+        const char *strtab = (const char *)sections[seclink].sh_addr;
 
         for (size_t j = 1; j < symbol_num; ++j) {
-            uint32_t name_idx = symbols[j].st_name;
-            if (name_idx >= symname_len) {
+            uint32_t strtab_idx = symbols[j].st_name;
+            if (strtab_idx >= strtab_len) {
                 continue;
             }
 
-            unsigned char type = ELF64_ST_TYPE(symbols[j].st_info);
-            if (STT_FUNC != type) {
+            unsigned char symtype = ELF64_ST_TYPE(symbols[j].st_info);
+            if (STT_FUNC != symtype) {
                 continue;
             }
 
-            char *name = &symstr[symstr_idx];
-            kstrcpy(name, &symname_buf[name_idx]);
-            symstr_idx += kstrlen(name) + 1;
+            char *symdst = &symname[symname_idx];
+            const char *symstr = &strtab[strtab_idx];
+            scopy(symdst, symstr, symname_len - symname_idx);
+            symname_idx += slen(symdst, symname_len - symname_idx) + 1;
 
             elf_symbol_t *sym = &g_symbols[symbol_idx++];
-            sym->name = name;
+            sym->name = symdst;
             sym->addr = symbols[j].st_value;
             sym->size = symbols[j].st_size;
         }
     }
 
-    ASSERT(symstr_idx == symstr_len);
+    ASSERT(symname_idx == symname_len);
     ASSERT(symbol_idx == g_symbol_num);
 }
 
@@ -233,9 +235,9 @@ INIT_TEXT void symtab_show() {
     ASSERT(g_symbol_num > 0);
     ASSERT(NULL != g_symbols);
 
-    dbg_print("kernel symbols:\n");
+    klog("kernel symbols:\n");
     for (int i = 0; i < g_symbol_num; ++i) {
-        dbg_print("  - addr=%016lx, size=%08lx, name='%s'\n",
+        klog("  - addr=%016lx, size=%08lx, name='%s'\n",
             g_symbols[i].addr, g_symbols[i].size, g_symbols[i].name);
     }
 }

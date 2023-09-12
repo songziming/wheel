@@ -32,7 +32,7 @@ static int g_caret_col;     // 光标所在列号
 
 INIT_TEXT void framebuf_init(mb2_tag_framebuffer_t *fb) {
     if ((1 != fb->type) || (32 != fb->bpp)) {
-        dbg_print("framebuf only support 32-bit color mode!\n");
+        klog("framebuf only support 32-bit color mode!\n");
         return;
     }
 
@@ -45,7 +45,7 @@ INIT_TEXT void framebuf_init(mb2_tag_framebuffer_t *fb) {
     // 申请离屏缓冲区
     size_t backsize = g_px_rows * g_step;
     g_backbuf = early_alloc_rw(backsize);
-    kmemset(g_backbuf, 0, backsize);
+    mfill(g_backbuf, 0, backsize);
 
     g_px_r = ((1U << fb->r_mask_size) - 1) << fb->r_field_position;
     g_px_g = ((1U << fb->g_mask_size) - 1) << fb->g_field_position;
@@ -114,9 +114,9 @@ void framebuf_putc(char c) {
     // 超过屏幕高度，需要滚屏
     if (g_caret_row >= g_em_rows) {
         uint64_t line_size = g_font->height * g_step;
-        kmemcpy(g_backbuf, g_backbuf + line_size, (g_em_rows - 1) * line_size);
-        kmemset(g_backbuf + (g_em_rows - 1) * line_size, 0, line_size);
-        kmemcpy(g_addr, g_backbuf, g_px_rows * g_step);
+        mcopy(g_backbuf, g_backbuf + line_size, (g_em_rows - 1) * line_size);
+        mfill(g_backbuf + (g_em_rows - 1) * line_size, 0, line_size);
+        mcopy(g_addr, g_backbuf, g_px_rows * g_step);
         --g_caret_row;
     }
 }

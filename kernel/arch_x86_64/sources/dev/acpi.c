@@ -54,14 +54,14 @@ static INIT_TEXT acpi_tbl_t *check_table(uint64_t addr) {
     acpi_tbl_t *tbl = (acpi_tbl_t *)(DIRECT_MAP_BASE + addr);
 
     if (bytes_sum(tbl, tbl->length)) {
-        dbg_print("ACPI::%.4s checksum failed!\n", tbl->signature);
+        klog("ACPI::%.4s checksum failed!\n", tbl->signature);
         return NULL;
     }
 
     if (rammap_hasoverlap((size_t)tbl, tbl->length)) {
-        dbg_print("backup ACPI table %.4s\n", tbl->signature);
+        klog("backup ACPI table %.4s\n", tbl->signature);
         acpi_tbl_t *bak = early_alloc_ro(tbl->length);
-        kmemcpy(bak, tbl, tbl->length);
+        mcopy(bak, tbl, tbl->length);
         tbl = bak;
     }
 
@@ -71,13 +71,13 @@ static INIT_TEXT acpi_tbl_t *check_table(uint64_t addr) {
 // 从 RSDT 提取子表地址
 static INIT_TEXT void parse_rsdp_v1(acpi_rsdp_t *rsdp) {
     if (bytes_sum(rsdp, offsetof(acpi_rsdp_t, length))) {
-        dbg_print("ACPI::RSDP v1.0 checksum failed!\n");
+        klog("ACPI::RSDP v1.0 checksum failed!\n");
         return;
     }
 
     acpi_rsdt_t *rsdt = (acpi_rsdt_t *)(size_t)rsdp->rsdt_addr;
     if (bytes_sum(rsdt, rsdt->header.length)) {
-        dbg_print("ACPI::RSDT checksum failed!\n");
+        klog("ACPI::RSDT checksum failed!\n");
         return;
     }
 
@@ -92,13 +92,13 @@ static INIT_TEXT void parse_rsdp_v1(acpi_rsdp_t *rsdp) {
 // 从 XSDT 提取子表地址
 static INIT_TEXT void parse_rsdp_v2(acpi_rsdp_t *rsdp) {
     if (bytes_sum(rsdp, rsdp->length)) {
-        dbg_print("ACPI::RSDP v2.0 checksum failed!\n");
+        klog("ACPI::RSDP v2.0 checksum failed!\n");
         return;
     }
 
     acpi_xsdt_t *xsdt = (acpi_xsdt_t *)rsdp->xsdt_addr;
     if (bytes_sum(xsdt, xsdt->header.length)) {
-        dbg_print("ACPI::XSDT checksum failed!\n");
+        klog("ACPI::XSDT checksum failed!\n");
         return;
     }
 
@@ -130,7 +130,7 @@ acpi_tbl_t *acpi_get_table(const char sig[4]) {
         if (NULL == g_tables[i]) {
             continue;
         }
-        if (0 == kstrncmp(sig, g_tables[i]->signature, 4)) {
+        if (0 == sdiff(sig, g_tables[i]->signature, 4)) {
             return g_tables[i];
         }
     }
@@ -143,12 +143,12 @@ void acpi_show_tables() {
     ASSERT(0 != g_table_num);
     ASSERT(NULL != g_tables);
 
-    dbg_print("ACPI tables:\n");
+    klog("ACPI tables:\n");
     for (int i = 0; i < g_table_num; ++i) {
         if (NULL == g_tables[i]) {
             continue;
         }
-        dbg_print("  - %.4s at %p\n", g_tables[i]->signature, g_tables[i]);
+        klog("  - %.4s at %p\n", g_tables[i]->signature, g_tables[i]);
     }
 }
 

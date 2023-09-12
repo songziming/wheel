@@ -332,7 +332,7 @@ static INIT_TEXT int intel_parse_leaf18(uint32_t ebx, uint32_t ecx, uint32_t edx
     int ways = (ebx >> 16) & 0xffff;
     int sets = ecx;
 
-    dbg_print("level %d %s cache, %d-way, %d sets\n",
+    klog("level %d %s cache, %d-way, %d sets\n",
             level, type_name, ways, sets);
 
     return 0;
@@ -384,13 +384,13 @@ INIT_TEXT void cpu_info_detect() {
     uint32_t a, b, c, d;
 
     __asm__("cpuid" : "=b"(b), "=c"(c), "=d"(d) : "a"(0));
-    kmemcpy(g_cpu_vendor, (uint32_t[]){ b,d,c }, 12);
+    mcopy(g_cpu_vendor, (uint32_t[]){ b,d,c }, 12);
     __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000002));
-    kmemcpy(g_cpu_brand, (uint32_t[]){ a,b,c,d }, 16);
+    mcopy(g_cpu_brand, (uint32_t[]){ a,b,c,d }, 16);
     __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000003));
-    kmemcpy(&g_cpu_brand[16], (uint32_t[]){ a,b,c,d }, 16);
+    mcopy(&g_cpu_brand[16], (uint32_t[]){ a,b,c,d }, 16);
     __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000004));
-    kmemcpy(&g_cpu_brand[32], (uint32_t[]){ a,b,c,d }, 16);
+    mcopy(&g_cpu_brand[32], (uint32_t[]){ a,b,c,d }, 16);
 
     __asm__("cpuid" : "=a"(a), "=c"(c), "=d"(d) : "a"(1) : "ebx");
     g_cpu_stepping  =  a        & 0x0f;
@@ -415,12 +415,12 @@ INIT_TEXT void cpu_info_detect() {
     __asm__("cpuid" : "=a"(a) : "a"(6) : "ebx", "ecx", "edx");
     g_cpu_features |= (a & (1U << 2)) ? CPU_FEATURE_APIC_CONSTANT : 0;
 
-    if (0 == kmemcmp(g_cpu_vendor, VENDOR_INTEL, 12)) {
+    if (0 == mdiff(g_cpu_vendor, VENDOR_INTEL, 12)) {
         intel_get_cache_info();
-    } else if (0 == kmemcmp(g_cpu_vendor, VENDOR_AMD, 12)) {
+    } else if (0 == mdiff(g_cpu_vendor, VENDOR_AMD, 12)) {
         amd_get_cache_info();
     } else {
-        dbg_print("unknown vendor name '%.12s'\n", g_cpu_vendor);
+        klog("unknown vendor name '%.12s'\n", g_cpu_vendor);
     }
 }
 
@@ -447,8 +447,8 @@ INIT_TEXT void cpu_features_init() {
 #ifdef DEBUG
 
 INIT_TEXT void cpu_info_show() {
-    dbg_print("cpu vendor: '%12s'\n", g_cpu_vendor);
-    dbg_print("cpu brand: '%48s'\n", g_cpu_brand);
+    klog("cpu vendor: '%12s'\n", g_cpu_vendor);
+    klog("cpu brand: '%48s'\n", g_cpu_brand);
 
     struct {
         const char *name;
@@ -464,13 +464,13 @@ INIT_TEXT void cpu_info_show() {
     };
     size_t nfeats = sizeof(feats) / sizeof(feats[0]);
 
-    dbg_print("cpu flags:");
+    klog("cpu flags:");
     for (size_t i = 0; i < nfeats; ++i) {
         if (g_cpu_features & feats[i].mask) {
-            dbg_print(" %s", feats[i].name);
+            klog(" %s", feats[i].name);
         }
     }
-    dbg_print("\n");
+    klog("\n");
 }
 
 #endif

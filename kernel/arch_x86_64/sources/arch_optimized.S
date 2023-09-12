@@ -6,8 +6,8 @@
 
 // 如果使用 SSE、AVX 指令还能更快，但不适合在内核态使用
 
-.global kmemcpy
-.global kmemset
+.global mcopy
+.global mfill
 
 .text
 .code64
@@ -15,7 +15,7 @@
 // %rdi: dst
 // %rsi: src
 // %rdx: nbytes
-kmemcpy:
+mcopy:
     movq    %rdi, %rax
     movq    %rdx, %rcx
     rep movsb
@@ -24,7 +24,7 @@ kmemcpy:
 // %rdi: dst
 // %rsi: val
 // %rdx: bytes
-kmemset:
+mfill:
     movq    %rsi, %rax
     movq    %rdi, %rsi // 返回地址
     movq    %rdx, %rcx

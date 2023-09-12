@@ -7,7 +7,7 @@
 #define SHOW_MADT_CONTENT 1
 
 #if defined(DEBUG) && SHOW_MADT_CONTENT
-    #define MADT_PRINT(...) dbg_print(__VA_ARGS__)
+    #define MADT_PRINT(...) klog(__VA_ARGS__)
 #else
     #define MADT_PRINT(...)
 #endif
@@ -54,7 +54,7 @@ INIT_TEXT void parse_madt(madt_t *madt) {
 
 #if defined(DEBUG) && SHOW_MADT_CONTENT
     if (1 & madt->flags) {
-        dbg_print("8259 vectors must be disabled\n");
+        klog("8259 vectors must be disabled\n");
     }
 #endif
 
