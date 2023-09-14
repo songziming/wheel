@@ -16,9 +16,7 @@ INIT_TEXT void pages_init(size_t start, size_t end) {
     start  += PAGE_SIZE - 1;
     start >>= PAGE_SHIFT;
     end   >>= PAGE_SHIFT;
-#ifdef DEBUG
-    klog("allocating page descriptors for %zx~%zx\n", start, end);
-#endif
+
     if (end > INVALID_PFN) {
         end = INVALID_PFN;
     }
@@ -32,5 +30,20 @@ INIT_TEXT void pages_init(size_t start, size_t end) {
     for (pfn_t i = 0; i < g_page_num; ++i) {
         g_pages[i].prev = INVALID_PFN;
         g_pages[i].next = INVALID_PFN;
+    }
+
+    // 这样，页描述符数组就可以用常规页号访问
+    g_pages -= g_page_start;
+}
+
+INIT_TEXT void pages_add(pfn_t start, pfn_t end) {
+    ASSERT(0 != g_page_num);
+    ASSERT(NULL != g_pages);
+    ASSERT(start >= g_page_start);
+    ASSERT(end >= g_page_start);
+
+    for (pfn_t i = start; i <= end; ++i) {
+        g_pages[i].prev = i;
+        g_pages[i].next = i;
     }
 }

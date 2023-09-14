@@ -10,4 +10,6 @@ typedef struct page {
 
 INIT_TEXT void pages_init(size_t start, size_t end);
 
+INIT_TEXT void pages_add(pfn_t start, pfn_t end);
+
 #endif // PAGE_H

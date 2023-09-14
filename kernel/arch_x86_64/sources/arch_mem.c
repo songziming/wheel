@@ -60,9 +60,6 @@ INIT_TEXT void *early_alloc_rw(size_t size) {
 INIT_TEXT void early_alloc_unlock() {
     size_t rw_addr = (size_t)g_rw_area - KERNEL_TEXT_BASE;
     g_rw_buff.size = rammap_extentof(rw_addr) - rw_addr;
-#ifdef DEBUG
-    klog("growing rw-buff size to %zx\n", g_rw_buff.size);
-#endif
 }
 
 static INIT_TEXT void early_alloc_disable() {
@@ -223,22 +220,17 @@ INIT_TEXT void mem_init() {
     ASSERT(g_rammap_len > 0); // 需要知道物理内存分布
     ASSERT(cpu_count() > 0);  // 需要知道 CPU 个数
 
-    // 统计可用内存上限
+    // 统计可用内存上限，即需要管理的页范围
     size_t ramend = 0;
     for (int i = 0; i < g_rammap_len; ++i) {
-        if ((RAM_AVAILABLE != g_rammap[i].type) && (RAM_RECLAIMABLE != g_rammap[i].type)) {
+        ram_type_t type = g_rammap[i].type;
+        if ((RAM_AVAILABLE != type) && (RAM_RECLAIMABLE != type)) {
             continue;
         }
         if (ramend < g_rammap[i].end) {
             ramend = g_rammap[i].end;
         }
     }
-    // start  += PAGE_SIZE - 1;
-    // start >>= PAGE_SHIFT;
-    // end   >>= PAGE_SHIFT;
-// #ifdef DEBUG
-//     klog("managable page range: %zx\n", ramend);
-// #endif
 
     // 准备 PCPU 偏移量数组
     g_pcpu_offsets = early_alloc_ro(cpu_count() * sizeof(size_t));
@@ -248,12 +240,12 @@ INIT_TEXT void mem_init() {
     pages_init(0, ramend);
 
     // 记录当前数据段结束位置，并禁用 early_alloc
-    size_t ro_end = (size_t)early_alloc_ro(0);
-    size_t rw_end = (size_t)early_alloc_rw(0);
+    uint8_t *ro_end = early_alloc_ro(0);
+    uint8_t *rw_end = early_alloc_rw(0);
     early_alloc_disable();
-#ifdef DEBUG
-    klog("ro_end=%zx, rw_end=%zx\n", ro_end, rw_end);
-#endif
+// #ifdef DEBUG
+//     klog("ro_end=%zx, rw_end=%zx\n", ro_end, rw_end);
+// #endif
 
     // 内核虚拟地址空间
     vmspace_init(&g_kernel_vm);
@@ -261,36 +253,71 @@ INIT_TEXT void mem_init() {
     // 将几个内核 section 记录在地址空间中
     add_kernel_range(&g_range_init, &_pcpu_addr, &_init_end, "init");
     add_kernel_range(&g_range_text, &_text_addr, &_text_end, "text");
-    add_kernel_range(&g_range_rodata, &_rodata_addr, (void *)ro_end, "rodata");
-    add_kernel_range(&g_range_data, &_data_addr, (void *)rw_end, "data");
+    add_kernel_range(&g_range_rodata, &_rodata_addr, ro_end, "rodata");
+    add_kernel_range(&g_range_data, &_data_addr, rw_end, "data");
 
     // 获取 L1 一行大小，一路大小
     size_t l1_line = g_l1d_info.line_size;
     size_t l1_size = l1_line * g_l1d_info.sets;
     ASSERT(0 == (l1_line & (l1_line - 1)));
     ASSERT(0 == (l1_size & (l1_size - 1)));
-#ifdef DEBUG
-    klog("align to L1 line 0x%zx, size 0x%zx\n", l1_line, l1_size);
-#endif
+// #ifdef DEBUG
+//     klog("align to L1 line 0x%zx, size 0x%zx\n", l1_line, l1_size);
+// #endif
 
     // 划分 PCPU 区域，地址按缓存行对齐，总大小按缓存大小对齐
     // 确保不同 CPU 访问各自的 PCPU 变量时，映射到相同的 set
     // 只需考虑到 L1，因为 L2、L3 缓存是所有 CPU 共享的
     size_t pcpu_size = (size_t)(&_pcpu_bss_end  - &_pcpu_addr);
     size_t pcpu_copy = (size_t)(&_pcpu_data_end - &_pcpu_addr);
-    rw_end    = (rw_end + l1_line - 1) & ~(l1_line - 1);
+    rw_end = (uint8_t *)(((size_t)rw_end + l1_line - 1) & ~(l1_line - 1));
     pcpu_size = (pcpu_size + l1_size - 1) & ~(l1_size - 1);
     for (int i = 0; i < cpu_count(); ++i) {
-        g_pcpu_offsets[i] = rw_end - (size_t)&_pcpu_addr;
-        mcopy((uint8_t *)rw_end, &_pcpu_addr, pcpu_copy);
-        mfill((uint8_t *)rw_end + pcpu_copy, 0, pcpu_size - pcpu_copy);
-
-        // vmrange_t *rng = (vmrange_t *)((uint8_t *)&g_range_pcpu + g_pcpu_offsets[i]);
-        add_kernel_range(&g_range_pcpu[i], (void *)rw_end, (uint8_t *)rw_end + pcpu_size, "pcpu");
+        g_pcpu_offsets[i] = (size_t)rw_end - (size_t)&_pcpu_addr;
+        mcopy(rw_end, &_pcpu_addr, pcpu_copy);
+        mfill(rw_end + pcpu_copy, 0, pcpu_size - pcpu_copy);
+        add_kernel_range(&g_range_pcpu[i], rw_end, rw_end + pcpu_size, "pcpu");
         rw_end += pcpu_size;
     }
 
-#ifdef DEBUG
-    vmspace_show(&g_kernel_vm);
-#endif
+    // 获取内核占用的物理页范围
+    vmrange_t *khead = containerof(g_kernel_vm.head.next, vmrange_t, dl);
+    vmrange_t *ktail = containerof(g_kernel_vm.head.prev, vmrange_t, dl);
+    ASSERT(NULL != khead);
+    ASSERT(NULL != ktail);
+    size_t kaddr = (khead->addr - KERNEL_TEXT_BASE) >> PAGE_SHIFT;
+    size_t kend = (ktail->addr + ktail->size - KERNEL_TEXT_BASE + PAGE_SIZE - 1) >> PAGE_SHIFT;
+
+    // 遍历物理内存范围，将可用内存添加给页分配器
+    // 包括 ACPI 部分，跳过 1M 以下与内核占用的部分
+    for (int i = 0; i < g_rammap_len; ++i) {
+        ram_type_t type = g_rammap[i].type;
+        if ((RAM_AVAILABLE != type) && (RAM_RECLAIMABLE != type)) {
+            continue;
+        }
+
+        size_t addr = (g_rammap[i].addr + PAGE_SIZE - 1) >> PAGE_SHIFT;
+        size_t end = g_rammap[i].end >> PAGE_SHIFT;
+
+        if (addr < 0x100) {
+            addr = 0x100;
+        }
+        if (addr >= end) {
+            continue;
+        }
+
+        if ((addr < kaddr) && (end > kend)) {
+            pages_add(addr, kaddr);
+            pages_add(kend, end);
+            continue;
+        }
+
+        if ((addr < kend) && (end > kend)) {
+            addr = kend;
+        }
+        if ((addr < kaddr) && (end > kaddr)) {
+            end = kaddr;
+        }
+        pages_add(addr, end);
+    }
 }
