@@ -42,8 +42,14 @@ INIT_TEXT void pages_add(pfn_t start, pfn_t end) {
     ASSERT(start >= g_page_start);
     ASSERT(end >= g_page_start);
 
+    if (start == end) {
+        return;
+    }
+
     for (pfn_t i = start; i <= end; ++i) {
         g_pages[i].prev = i;
         g_pages[i].next = i;
     }
+
+    klog(">>> adding page range %x~%x\n", start, end);
 }

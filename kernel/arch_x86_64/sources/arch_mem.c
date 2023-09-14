@@ -204,17 +204,6 @@ static INIT_TEXT void add_kernel_range(vmrange_t *rng, void *addr, void *end, co
     vmspace_insert_range(&g_kernel_vm, rng);
 }
 
-// // 划分一段内存范围，返回新的 kernel_end
-// static INIT_TEXT void *alloc_kernel_range(vmrange_t *rng, void **end, size_t size, size_t align, const char *desc) {
-//     ASSERT(0 == (align & (align - 1)));
-
-//     size_t ptr = ((size_t)*end + align - 1) & ~(align - 1);
-//     *end = (void *)(ptr + size);
-//     add_kernel_range(rng, (void *)ptr, *end, desc);
-
-//     return (void *)ptr;
-// }
-
 
 INIT_TEXT void mem_init() {
     ASSERT(g_rammap_len > 0); // 需要知道物理内存分布
@@ -243,9 +232,6 @@ INIT_TEXT void mem_init() {
     uint8_t *ro_end = early_alloc_ro(0);
     uint8_t *rw_end = early_alloc_rw(0);
     early_alloc_disable();
-// #ifdef DEBUG
-//     klog("ro_end=%zx, rw_end=%zx\n", ro_end, rw_end);
-// #endif
 
     // 内核虚拟地址空间
     vmspace_init(&g_kernel_vm);
@@ -261,9 +247,6 @@ INIT_TEXT void mem_init() {
     size_t l1_size = l1_line * g_l1d_info.sets;
     ASSERT(0 == (l1_line & (l1_line - 1)));
     ASSERT(0 == (l1_size & (l1_size - 1)));
-// #ifdef DEBUG
-//     klog("align to L1 line 0x%zx, size 0x%zx\n", l1_line, l1_size);
-// #endif
 
     // 划分 PCPU 区域，地址按缓存行对齐，总大小按缓存大小对齐
     // 确保不同 CPU 访问各自的 PCPU 变量时，映射到相同的 set
@@ -280,13 +263,9 @@ INIT_TEXT void mem_init() {
         rw_end += pcpu_size;
     }
 
-    // 获取内核占用的物理页范围
-    vmrange_t *khead = containerof(g_kernel_vm.head.next, vmrange_t, dl);
-    vmrange_t *ktail = containerof(g_kernel_vm.head.prev, vmrange_t, dl);
-    ASSERT(NULL != khead);
-    ASSERT(NULL != ktail);
-    size_t kaddr = (khead->addr - KERNEL_TEXT_BASE) >> PAGE_SHIFT;
-    size_t kend = (ktail->addr + ktail->size - KERNEL_TEXT_BASE + PAGE_SIZE - 1) >> PAGE_SHIFT;
+    // 获取内核占用的物理页范围，包括 boot、init
+    size_t kstart = KERNEL_LOAD_ADDR >> PAGE_SHIFT;
+    size_t kend = ((size_t)rw_end - KERNEL_TEXT_BASE + PAGE_SIZE - 1) >> PAGE_SHIFT;
 
     // 遍历物理内存范围，将可用内存添加给页分配器
     // 包括 ACPI 部分，跳过 1M 以下与内核占用的部分
@@ -296,28 +275,29 @@ INIT_TEXT void mem_init() {
             continue;
         }
 
-        size_t addr = (g_rammap[i].addr + PAGE_SIZE - 1) >> PAGE_SHIFT;
+        size_t start = (g_rammap[i].addr + PAGE_SIZE - 1) >> PAGE_SHIFT;
         size_t end = g_rammap[i].end >> PAGE_SHIFT;
-
-        if (addr < 0x100) {
-            addr = 0x100;
+        if (start < 0x100) {
+            start = 0x100;
         }
-        if (addr >= end) {
+        if (start >= end) {
             continue;
         }
 
-        if ((addr < kaddr) && (end > kend)) {
-            pages_add(addr, kaddr);
+        // 内核占据的内存必然属于一个 range
+        if ((start <= kstart) && (end >= kend)) {
+            pages_add(start, kstart);
             pages_add(kend, end);
-            continue;
+        } else {
+            pages_add(start, end);
         }
-
-        if ((addr < kend) && (end > kend)) {
-            addr = kend;
-        }
-        if ((addr < kaddr) && (end > kaddr)) {
-            end = kaddr;
-        }
-        pages_add(addr, end);
     }
+}
+
+// 回收启动阶段占用的内存，交给页分配器
+void reclaim_init() {
+    size_t init_start = KERNEL_LOAD_ADDR >> PAGE_SHIFT;
+    size_t init_end = ((size_t)&_init_end - KERNEL_TEXT_BASE + PAGE_SIZE - 1) >> PAGE_SHIFT;
+
+    pages_add(init_start, init_end);
 }
