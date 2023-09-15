@@ -193,6 +193,7 @@ static          vmrange_t  g_range_data;    // 结束位置由 early_rw_buff 决
 static          vmrange_t *g_range_pcpu;    // 每个 PCPU 都需要专门的 range
 
 // 记录内核虚拟地址空间布局
+// TODO 全局变量应该对外公开，便于得到内核得到地址空间
 static vmspace_t g_kernel_vm;
 
 
@@ -210,14 +211,14 @@ INIT_TEXT void mem_init() {
     ASSERT(cpu_count() > 0);  // 需要知道 CPU 个数
 
     // 统计可用内存上限，即需要管理的页范围
-    size_t ramend = 0;
+    size_t ramtop = 0;
     for (int i = 0; i < g_rammap_len; ++i) {
         ram_type_t type = g_rammap[i].type;
         if ((RAM_AVAILABLE != type) && (RAM_RECLAIMABLE != type)) {
             continue;
         }
-        if (ramend < g_rammap[i].end) {
-            ramend = g_rammap[i].end;
+        if (ramtop < g_rammap[i].end) {
+            ramtop = g_rammap[i].end;
         }
     }
 
@@ -226,7 +227,7 @@ INIT_TEXT void mem_init() {
     g_range_pcpu = early_alloc_rw(cpu_count() * sizeof(vmrange_t));
 
     // 分配页描述符，初始化页分配器（这一步仍需要 early_alloc）
-    pages_init(0, ramend);
+    pages_init(0, ramtop);
 
     // 记录当前数据段结束位置，并禁用 early_alloc
     uint8_t *ro_end = early_alloc_ro(0);
@@ -300,4 +301,8 @@ void reclaim_init() {
     size_t init_end = ((size_t)&_init_end - KERNEL_TEXT_BASE + PAGE_SIZE - 1) >> PAGE_SHIFT;
 
     pages_add(init_start, init_end);
+}
+
+inline vmspace_t *kernel_vmspace() {
+    return &g_kernel_vm;
 }

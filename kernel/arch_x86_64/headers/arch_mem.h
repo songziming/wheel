@@ -23,5 +23,6 @@ INIT_TEXT void rammap_show();
 #endif
 
 INIT_TEXT void mem_init();
+void reclaim_init();
 
 #endif // ARCH_MEM_H
