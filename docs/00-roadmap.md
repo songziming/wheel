@@ -5,5 +5,7 @@
   - [x] 解析内核符号表
   - [x] 解析 framebuffer 信息并据此设置伪字符终端
 - [x] 搜索并解析 ACPI 表
-- [ ] 解析 MADT，获取 Local APIC 和 IO APIC 信息
-- [ ] 根据 CPU 数量划分 PCPU 内存区域
+- [x] 解析 MADT，获取 Local APIC 和 IO APIC 信息
+- [x] 根据 CPU 数量划分 PCPU 区域，使用 gs 快速访问当前 CPU 的变量
+- [ ] 分配页描述符数组，实现伙伴算法的物理页面管理
+- [ ] 记录内核虚拟地址布局

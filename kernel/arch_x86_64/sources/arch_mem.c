@@ -193,7 +193,7 @@ static          vmrange_t  g_range_data;    // 结束位置由 early_rw_buff 决
 static          vmrange_t *g_range_pcpu;    // 每个 PCPU 都需要专门的 range
 
 // 记录内核虚拟地址空间布局
-// TODO 全局变量应该对外公开，便于得到内核得到地址空间
+// 内核可以看作一个进程，也有自己的地址空间和页表
 static vmspace_t g_kernel_vm;
 
 
@@ -206,6 +206,8 @@ static INIT_TEXT void add_kernel_range(vmrange_t *rng, void *addr, void *end, co
 }
 
 
+// 为 PCPU 和页描述符数组分配空间
+// 配置物理页分配器，禁用 early-alloc
 INIT_TEXT void mem_init() {
     ASSERT(g_rammap_len > 0); // 需要知道物理内存分布
     ASSERT(cpu_count() > 0);  // 需要知道 CPU 个数
@@ -306,3 +308,11 @@ void reclaim_init() {
 inline vmspace_t *kernel_vmspace() {
     return &g_kernel_vm;
 }
+
+#ifdef DEBUG
+
+void kernel_vm_show() {
+    vmspace_show(&g_kernel_vm);
+}
+
+#endif

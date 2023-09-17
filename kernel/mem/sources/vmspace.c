@@ -10,7 +10,7 @@ void vmspace_init(vmspace_t *vm) {
 #ifdef DEBUG
 
 // 判断节点是否位于链表中
-static int inside(vmspace_t *vm, vmrange_t *rng) {
+static int contains(vmspace_t *vm, vmrange_t *rng) {
     for (dlnode_t *i = vm->head.next; &vm->head != i; i = i->next) {
         if (&rng->dl == i) {
             return 1;
@@ -26,7 +26,7 @@ void vmspace_insert_range(vmspace_t *vm, vmrange_t *rng) {
     ASSERT(NULL != vm);
     ASSERT(NULL != rng);
     ASSERT(0 != rng->size);
-    ASSERT(!inside(vm, rng));
+    ASSERT(!contains(vm, rng));
 
     // 在链表中寻找一个位置
     dlnode_t *node = vm->head.next;
@@ -45,7 +45,7 @@ void vmspace_insert_range(vmspace_t *vm, vmrange_t *rng) {
 void vmspace_remove_range(vmspace_t *vm, vmrange_t *rng) {
     ASSERT(NULL != vm);
     ASSERT(NULL != rng);
-    ASSERT(inside(vm, rng));
+    ASSERT(contains(vm, rng));
 
     (void)vm;
 

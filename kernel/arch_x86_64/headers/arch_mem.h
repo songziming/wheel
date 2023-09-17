@@ -25,4 +25,8 @@ INIT_TEXT void rammap_show();
 INIT_TEXT void mem_init();
 void reclaim_init();
 
+#ifdef DEBUG
+void kernel_vm_show();
+#endif
+
 #endif // ARCH_MEM_H
