@@ -32,14 +32,18 @@ OUT_IMG := $(OUT_DIR)/disk.img
 OUT_TST := $(OUT_DIR)/test
 
 # 内核各模块代码，其中 arch 要选择对应目标平台
-KERN_SUBDIRS := kernel/arch_$(ARCH)/sources
-KERN_SUBDIRS += $(filter-out $(wildcard kernel/arch_*/sources),$(wildcard kernel/*/sources))
-KERN_INCDIRS := $(patsubst %/sources,%/headers,$(KERN_SUBDIRS)) kernel/core
-KERN_SOURCES := $(foreach d,$(KERN_SUBDIRS),$(shell find $(d) -name "*.S" -o -name "*.c"))
+# KERN_SUBDIRS := kernel/arch_$(ARCH)/sources
+# KERN_SUBDIRS += $(filter-out $(wildcard kernel/arch_*/sources),$(wildcard kernel/*/sources))
+# KERN_INCDIRS := $(patsubst %/sources,%/headers,$(KERN_SUBDIRS)) kernel/core
+# KERN_SOURCES := $(foreach d,$(KERN_SUBDIRS),$(shell find $(d) -name "*.S" -o -name "*.c"))
+
+KERN_SUBDIRS := arch_$(ARCH) kernel
+KERN_SOURCES := $(foreach d,$(KERN_SUBDIRS),$(shell find $(d)/sources -name "*.S" -o -name "*.c"))
 KERN_OBJECTS := $(patsubst %,$(OUT_DIR)/%.ko,$(KERN_SOURCES))
 
 # 内核编译选项，开启链接时优化、section 引用计数
-KERN_CFLAGS  := -std=c11 -Wall -Wextra -Wshadow -Werror=implicit $(KERN_INCDIRS:%=-I%)
+KERN_CFLAGS  := -std=c11 $(KERN_SUBDIRS:%=-I%/headers)
+KERN_CFLAGS  += -Wall -Wextra -Wshadow -Werror=implicit
 KERN_CFLAGS  += -ffreestanding -fno-builtin -flto -ffunction-sections -fdata-sections
 ifeq ($(DEBUG),1)
     KERN_CFLAGS += -g -DDEBUG

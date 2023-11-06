@@ -2,7 +2,18 @@
 
 Wheel is an operating system, written from scratch.
 
-### prepare toolchain
+Features:
+- [x] 64-bit mode
+- [x] multiprocessor support
+- [ ] preemptive scheduling
+
+Limitations:
+- max CPU number: 64
+- max physical memory: 16TB-4KB
+
+## prepare toolchain
+
+Wheel uses LLVM.
 
 ```bash
 cd /path/to/llvm-project
@@ -14,4 +25,13 @@ cmake ../llvm \
     -DCMAKE_BUILD_TYPE=Release
 cmake --build . --parallel
 cmake --build . --target install
+```
+
+## build and run
+
+```bash
+make        # compile kernel elf image build/wheel.elf
+make iso    # create bootable iso image build/wheel.iso
+make test   # compile unit test binary build/test
+make cov    # run unit test and generate coverage report in build/coverage
 ```
