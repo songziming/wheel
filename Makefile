@@ -6,13 +6,16 @@ ARCH    := x86_64
 # 编译内核用的编译器和链接器
 KCC     := clang --target=$(ARCH)-pc-none-elf
 KLD     := ld.lld
+TCC     := clang
+TXX     := clang++
 
 OUT_DIR := build
 ISO_DIR := $(OUT_DIR)/iso
+COV_DIR := $(OUT_DIR)/cov
 
 OUT_ELF := $(OUT_DIR)/wheel.elf
-OUT_SYM := $(OUT_DIR)/wheel.sym
 OUT_MAP := $(OUT_DIR)/wheel.map
+OUT_TEST := $(OUT_DIR)/test
 
 
 
@@ -29,11 +32,14 @@ define all_files
 endef
 
 
+
 KDIRS := kernel_1/arch_$(ARCH)
 KDIRS += $(filter-out $(wildcard kernel_1/arch_*),$(wildcard kernel_1/*))
 KINCS := $(patsubst %,%/headers,$(KDIRS)) kernel_1
 KOBJS := $(patsubst %,$(OUT_DIR)/objs/%.ko,$(call all_files,$(KDIRS),sources))
 
+TSRCS := $(call all_files,$(KDIRS),tests) tools/kernel_test/test.c
+TOBJS := $(patsubst %,$(OUT_DIR)/objs/%.to,$(TSRCS))
 
 KCFLAGS := -std=c11 $(KINCS:%=-I%) -Wall -Wextra -Wshadow -Werror=implicit
 KCFLAGS += -ffreestanding -fno-builtin -flto -ffunction-sections -fdata-sections
@@ -43,13 +49,8 @@ else
     KCFLAGS += -O2 -DNDEBUG
 endif
 
-
 KLAYOUT := kernel_1/arch_$(ARCH)/layout.ld
 KLFLAGS := -nostdlib --gc-sections -Map=$(OUT_MAP) -T $(KLAYOUT) --no-warnings
-
-
-TSRCS := $(call all_files,$(KDIRS),tests) tools/kernel_test/test.c
-TOBJS := $(patsubst %,$(OUT_DIR)/objs/%.to,$(TSRCS))
 
 TCFLAGS := -g -DUNIT_TEST $(KINCS:%=-I%) -I tools/kernel_test
 TCFLAGS += -fsanitize=address -fprofile-arcs -ftest-coverage
@@ -70,13 +71,13 @@ include kernel_1/arch_$(ARCH)/option.mk
 
 
 
-.PHONY: debug kernel clean
+.PHONY: kernel test cov clean
 
-debug:
-	@ echo "kernel objects: $(KOBJS)"
-	@ echo "unit test objects: $(TOBJS)"
+kernel: $(OUT_ELF)
 
-kernel: $(OUT_ELF) $(OUT_SYM)
+test: $(OUT_TEST)
+
+cov: $(COV_DIR)
 
 clean:
 	@ rm -rf $(OUT_DIR)
@@ -86,18 +87,39 @@ clean:
 $(ALL_OBJS): | $(ALL_DIRS)
 
 $(ALL_DIRS):
-	mkdir -p $@
+	@ mkdir -p $@
 
 
 
+# 编译内核镜像
 $(OUT_DIR)/objs/%.S.ko: %.S
 	$(KCC) -c -DS_FILE $(KCFLAGS) $(DEPGEN) -o $@ $<
-
 $(OUT_DIR)/objs/%.c.ko: %.c
 	$(KCC) -c -DC_FILE $(KCFLAGS) $(DEPGEN) -o $@ $<
-
 $(OUT_ELF): $(KOBJS) | $(KLAYOUT)
 	$(KLD) $(KLFLAGS) -o $@ $^
 
-$(OUT_SYM): $(OUT_ELF)
-	nm $< | awk '{ print $1" "$3 }' > $@
+
+
+# 编译单元测试
+$(OUT_DIR)/objs/%.c.to: %.c
+	$(TCC) -c -DC_FILE -std=c11 $(TCFLAGS) $(DEPGEN) -o $@ $<
+$(OUT_DIR)/objs/%.cc.to: %.cc
+	$(TXX) -c -DC_FILE -std=c++14 $(TCFLAGS) $(DEPGEN) -o $@ $<
+$(OUT_TEST): $(TOBJS)
+	$(TXX) $(TCFLAGS) -o $@ $^ -lm -pthread
+
+
+
+# 生成代码覆盖率报告
+FORCE: ;
+$(GCOV_FULL): FORCE
+	lcov -d $(OUT_DIR) -b . -c -o $@
+$(GCOV_LEAN): $(GCOV_FULL)
+	lcov -r $< -o $@ '*/headers/*' '/usr/*'
+$(COV_DIR): $(GCOV_LEAN)
+	genhtml -o $@ $<
+
+
+
+-include $(ALL_DEPS)

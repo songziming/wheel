@@ -35,3 +35,17 @@ make iso    # create bootable iso image build/wheel.iso
 make test   # compile unit test binary build/test
 make cov    # run unit test and generate coverage report in build/coverage
 ```
+
+## debug using Bochs
+
+Extract symbol list from kernel image:
+
+```bash
+nm build/wheel.elf | awk '{ print $1" "$3 }' > build/wheel.sym
+```
+
+In bochs, use the following command to load symbol file:
+
+```
+ldsym global "build/wheel.sym"
+```
