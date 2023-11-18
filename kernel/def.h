@@ -35,8 +35,4 @@ typedef uint32_t pfn_t;
 #define INVALID_PFN  0xffffffffU
 #define INVALID_ADDR 0xffffffffffffffffUL
 
-// 最多支持 64 个 CPU，cpuset 定义为数组可以支持更多
-typedef uint64_t cpuset_t;
-#define MAX_CPU_NUM 64
-
 #endif // DEF_H

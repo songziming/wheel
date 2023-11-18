@@ -33,7 +33,8 @@ cmake --build . --target install
 make        # compile kernel elf image build/wheel.elf
 make iso    # create bootable iso image build/wheel.iso
 make test   # compile unit test binary build/test
-make cov    # run unit test and generate coverage report in build/coverage
+make cov    # run unit test and generate coverage report in build/cov
+python3 -m http.server -d build/cov
 ```
 
 ## debug using Bochs

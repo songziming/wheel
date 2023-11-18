@@ -2,3 +2,5 @@
 build*/
 
 *.bak
+*.profraw
+*.profdata

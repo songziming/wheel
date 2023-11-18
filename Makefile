@@ -15,6 +15,8 @@ COV_DIR := $(OUT_DIR)/cov
 
 OUT_ELF := $(OUT_DIR)/wheel.elf
 OUT_MAP := $(OUT_DIR)/wheel.map
+OUT_ISO := $(OUT_DIR)/wheel.iso
+OUT_IMG := $(OUT_DIR)/disc.img
 OUT_TEST := $(OUT_DIR)/test
 
 
@@ -32,10 +34,12 @@ define all_files
 endef
 
 
+KERNEL := kernel
 
-KDIRS := kernel_1/arch_$(ARCH)
-KDIRS += $(filter-out $(wildcard kernel_1/arch_*),$(wildcard kernel_1/*))
-KINCS := $(patsubst %,%/headers,$(KDIRS)) kernel_1
+
+KDIRS := $(KERNEL)/arch_$(ARCH)
+KDIRS += $(filter-out $(wildcard $(KERNEL)/arch_*),$(wildcard $(KERNEL)/*))
+KINCS := $(patsubst %,%/headers,$(KDIRS)) $(KERNEL) $(KERNEL)/arch_$(ARCH)
 KOBJS := $(patsubst %,$(OUT_DIR)/objs/%.ko,$(call all_files,$(KDIRS),sources))
 
 TSRCS := $(call all_files,$(KDIRS),tests) tools/kernel_test/test.c
@@ -49,14 +53,13 @@ else
     KCFLAGS += -O2 -DNDEBUG
 endif
 
-KLAYOUT := kernel_1/arch_$(ARCH)/layout.ld
-KLFLAGS := -nostdlib --gc-sections -Map=$(OUT_MAP) -T $(KLAYOUT) --no-warnings
+KLAYOUT := $(KERNEL)/arch_$(ARCH)/layout.ld
+KLFLAGS := -nostdlib --gc-sections -Map=$(OUT_MAP) -T $(KLAYOUT)
 
-TCFLAGS := -g -DUNIT_TEST $(KINCS:%=-I%) -I tools/kernel_test
-TCFLAGS += -fsanitize=address -fprofile-arcs -ftest-coverage
-
-GCOV_FULL := $(OUT_DIR)/gcov.full
-GCOV_LEAN := $(OUT_DIR)/gcov.lean
+TCFLAGS := -g -std=c11 -DUNIT_TEST $(KINCS:%=-I%) -I tools/kernel_test
+TCFLAGS += -fsanitize=address -fprofile-instr-generate -fcoverage-mapping
+COV_RAW := $(OUT_DIR)/test.profraw
+COV_DAT := $(OUT_DIR)/test.profdata
 
 
 
@@ -67,16 +70,16 @@ ALL_DIRS := $(sort $(dir $(ALL_DEPS)) $(ISO_DIR)/boot/grub)
 
 DEPGEN = -MT $@ -MMD -MP -MF $@.d
 
-include kernel_1/arch_$(ARCH)/option.mk
+include $(KERNEL)/arch_$(ARCH)/option.mk
 
 
 
-.PHONY: kernel test cov clean
+.PHONY: kernel iso img test cov clean
 
 kernel: $(OUT_ELF)
-
+iso: $(OUT_ISO)
+img: $(OUT_IMG)
 test: $(OUT_TEST)
-
 cov: $(COV_DIR)
 
 clean:
@@ -101,6 +104,18 @@ $(OUT_ELF): $(KOBJS) | $(KLAYOUT)
 
 
 
+# 创建引导介质
+$(OUT_ISO): $(OUT_ELF) tools/grub.cfg
+	@ cp $(OUT_ELF) $(ISO_DIR)/wheel.elf
+	@ cp tools/grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
+	@ grub-mkrescue -d tools/grub-i386-pc -o $@ $(ISO_DIR)
+$(OUT_IMG): $(OUT_ELF) tools/grub.cfg
+	@ tools/diskimg_create.sh $@
+	@ tools/diskimg_update.sh $(OUT_ELF) $@ wheel.elf
+	@ tools/diskimg_update.sh tools/grub.cfg $@ boot/grub/grub.cfg
+
+
+
 # 编译单元测试
 $(OUT_DIR)/objs/%.c.to: %.c
 	$(TCC) -c -DC_FILE -std=c11 $(TCFLAGS) $(DEPGEN) -o $@ $<
@@ -112,13 +127,23 @@ $(OUT_TEST): $(TOBJS)
 
 
 # 生成代码覆盖率报告
-FORCE: ;
-$(GCOV_FULL): FORCE
-	lcov -d $(OUT_DIR) -b . -c -o $@
-$(GCOV_LEAN): $(GCOV_FULL)
-	lcov -r $< -o $@ '*/headers/*' '/usr/*'
-$(COV_DIR): $(GCOV_LEAN)
-	genhtml -o $@ $<
+$(COV_RAW): $(OUT_TEST)
+	LLVM_PROFILE_FILE=$@ $<
+$(COV_DAT): $(COV_RAW)
+	llvm-profdata merge -sparse $< -o $@
+$(COV_DIR): $(COV_DAT) | $(OUT_TEST)
+	llvm-cov show $(OUT_TEST) -instr-profile=$< -format=html -o $@
+
+
+
+# # 生成代码覆盖率报告
+# FORCE: ;
+# $(GCOV_FULL): FORCE
+# 	lcov -d $(OUT_DIR) -b . -c -o $@
+# $(GCOV_LEAN): $(GCOV_FULL)
+# 	lcov -r $< -o $@ '*/headers/*' '/usr/*'
+# $(COV_DIR): $(GCOV_LEAN)
+# 	genhtml -o $@ $<
 
 
 
