@@ -31,3 +31,19 @@ int arch_unwind(void **addrs, int max, uint64_t rbp) {
 
     return i;
 }
+
+// 获取当前调用栈，返回深度
+int unwind(void **addrs, int max) {
+    uint64_t rbp;
+    __asm__("movq %%rbp, %0" : "=r"(rbp));
+    return arch_unwind(addrs, max, rbp);
+}
+
+// 退出 QEMU/Bochs 模拟器并返回值
+void vmshutdown(int ret) {
+#ifdef DEBUG
+    __asm__("outl %0, %1" :: "a"(ret), "Nd"(0xf4));
+#else
+    (void)ret;
+#endif
+}

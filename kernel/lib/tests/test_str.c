@@ -1,6 +1,6 @@
 #include <test.h>
 
-#include "../sources/strlib.c"
+#include "../sources/str.c"
 
 TEST(Str, Length) {
     EXPECT_TRUE(5 == slen("hello", 20));
@@ -9,6 +9,8 @@ TEST(Str, Length) {
 }
 
 TEST(Str, Compare) {
+    EXPECT_TRUE(0 != scmp("abc", "abcd", 5));
+    EXPECT_TRUE(0 != scmp("abcd", "abc", 5));
     EXPECT_TRUE(0 == scmp("abcd", "abce", 3));
     EXPECT_TRUE(0 != scmp("abc", "abd", 3));
     EXPECT_TRUE(0 == bcmp("abcd", "abce", 3));

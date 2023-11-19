@@ -1,5 +1,5 @@
-#ifndef STRLIB_H
-#define STRLIB_H
+#ifndef STR_H
+#define STR_H
 
 #include <def.h>
 
@@ -11,4 +11,4 @@ WEAK void  *bset(void *buf, int x, size_t n);
 WEAK int    bcmp(const void *s1, const void *s2, size_t n);
 WEAK void  *bcpy(void *dst, const void *src, size_t n);
 
-#endif // STRLIB_H
+#endif // STR_H

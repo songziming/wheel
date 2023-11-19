@@ -6,4 +6,6 @@
 
 #include <arch_config.h>
 
+#include <debug.h>
+
 #endif // WHEEL_H

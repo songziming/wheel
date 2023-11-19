@@ -1,0 +1,24 @@
+#ifndef DEBUG_H
+#define DEBUG_H
+
+#include <def.h>
+
+typedef void (*log_func_t)(const char *s, size_t n);
+void set_log_func(log_func_t func);
+PRINTF(1,2) void klog(const char *fmt, ...);
+
+#if defined(UNIT_TEST)
+    #include <assert.h>
+    #define ASSERT assert
+#elif defined(DEBUG)
+    void handle_assert_fail(const char *file, const char *func, int line);
+    #define ASSERT(x) do { \
+        if (!(x)) { \
+            handle_assert_fail(__FILE__, __func__, __LINE__); \
+        } \
+    } while (0)
+#else
+    #define ASSERT(...)
+#endif
+
+#endif // DEBUG_H
