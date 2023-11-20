@@ -7,25 +7,14 @@
 
 #include <dev/acpi.h>
 #include <dev/serial.h>
+#include <dev/console.h>
 #include <dev/framebuf.h>
 
 
 
 static INIT_DATA acpi_rsdp_t *g_rsdp = NULL;
+static INIT_DATA fb_info_t g_fb = { .rows=0, .cols=0 };
 
-typedef struct fb_info {
-    size_t   addr;
-    unsigned rows;
-    unsigned cols;
-    unsigned bpp;   // 一个像素多少比特（32）
-    unsigned pitch; // 一行多少字节，可能不是整数个像素
-    struct {
-        uint8_t mask_size;
-        uint8_t position;
-    } r, g, b;
-} fb_info_t;
-
-static INIT_DATA fb_info_t g_fb;
 
 
 static INIT_TEXT void mb1_init(uint32_t ebx) {
@@ -60,7 +49,20 @@ static INIT_TEXT void mb1_init(uint32_t ebx) {
     }
 
     if (MB1_INFO_FRAMEBUFFER_INFO & info->flags) {
-        //
+        if (1 == info->fb_type) {
+            g_fb.addr  = info->fb_addr;
+            g_fb.rows  = info->fb_height;
+            g_fb.cols  = info->fb_width;
+            g_fb.bpp   = info->fb_bpp;
+            g_fb.pitch = info->fb_pitch;
+
+            g_fb.r.position  = info->r_field_position;
+            g_fb.r.mask_size = info->r_mask_size;
+            g_fb.g.position  = info->g_field_position;
+            g_fb.g.mask_size = info->g_mask_size;
+            g_fb.b.position  = info->b_field_position;
+            g_fb.b.mask_size = info->b_mask_size;
+        }
     }
 }
 
@@ -104,29 +106,39 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
             break;
         case MB2_TAG_TYPE_FRAMEBUFFER: {
             mb2_tag_framebuffer_t *fb = (mb2_tag_framebuffer_t *)tag;
-            if (1 != fb->type) {
-                klog("warning: framebuf only support color mode!\n");
-                break;
+            if (1 == fb->type) {
+                g_fb.addr  = fb->addr;
+                g_fb.rows  = fb->height;
+                g_fb.cols  = fb->width;
+                g_fb.bpp   = fb->bpp;
+                g_fb.pitch = fb->pitch;
+
+                g_fb.r.position  = fb->r_field_position;
+                g_fb.r.mask_size = fb->r_mask_size;
+                g_fb.g.position  = fb->g_field_position;
+                g_fb.g.mask_size = fb->g_mask_size;
+                g_fb.b.position  = fb->b_field_position;
+                g_fb.b.mask_size = fb->b_mask_size;
             }
-
-            g_fb.addr = fb->addr;
-            g_fb.rows = fb->height;
-            g_fb.cols = fb->width;
-            g_fb.pitch = fb->pitch;
-            g_fb.bpp  = fb->bpp;
-
-            g_fb.r.position = fb->r_field_position;
-            g_fb.r.mask_size = fb->r_mask_size;
-            g_fb.g.position = fb->g_field_position;
-            g_fb.g.mask_size = fb->g_mask_size;
-            g_fb.b.position = fb->b_field_position;
-            g_fb.b.mask_size = fb->b_mask_size;
             break;
         }
         default:
             break;
         }
     }
+}
+
+
+// 图形终端输出回调
+static void serial_framebuf_puts(const char *s, size_t n) {
+    serial_puts(s, n);
+    framebuf_puts(s, n);
+}
+
+// 字符终端输出回调
+static void serial_console_puts(const char *s, size_t n) {
+    serial_puts(s, n);
+    console_puts(s, n);
 }
 
 
@@ -146,6 +158,16 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     rammap_show();
 #endif
 
+    // 检查是否支持图形界面，使用不同输出方式
+    // TODO 等 early_rw 限制放开再启动终端输出
+    if ((0 != g_fb.rows) && (0 != g_fb.cols)) {
+        framebuf_init(&g_fb);
+        set_log_func(serial_framebuf_puts);
+    } else {
+        console_init();
+        set_log_func(serial_console_puts);
+    }
+
     if (NULL == g_rsdp) {
         g_rsdp = acpi_find_rsdp();
     }
@@ -162,6 +184,7 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     // TODO 将重要数据备份，放开 early_alloc_rw 长度限制，再初始化图形终端
 
 end:
-    emu_exit(0);
+    // emu_exit(0);
+    cpu_halt();
     while (1) {}
 }

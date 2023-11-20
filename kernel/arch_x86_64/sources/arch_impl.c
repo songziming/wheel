@@ -3,7 +3,7 @@
 
 
 //------------------------------------------------------------------------------
-// 辅助函数
+// ARCH-API 支持函数的实现
 //------------------------------------------------------------------------------
 
 inline void cpu_halt() { __asm__("hlt"); }
@@ -38,10 +38,8 @@ typedef struct membuff {
     size_t used;
 } membuff_t;
 
-#define BUFF_ALIGN 16
-
-static SECTION(".rotail") ALIGNED(BUFF_ALIGN) uint8_t g_ro_area[EARLY_RO_BUFF_SIZE];
-static SECTION(".rwtail") ALIGNED(BUFF_ALIGN) uint8_t g_rw_area[EARLY_RW_BUFF_SIZE];
+static SECTION(".rotail") ALIGNED(16) uint8_t g_ro_area[EARLY_RO_BUFF_SIZE];
+static SECTION(".rwtail") ALIGNED(16) uint8_t g_rw_area[EARLY_RW_BUFF_SIZE];
 static INIT_DATA membuff_t g_ro_buff = { g_ro_area, EARLY_RO_BUFF_SIZE, 0 };
 static INIT_DATA membuff_t g_rw_buff = { g_rw_area, EARLY_RW_BUFF_SIZE, 0 };
 
@@ -49,8 +47,8 @@ static INIT_TEXT void *membuff_grow(membuff_t *buff, size_t size) {
     if (buff->used + size >= buff->size) {
         return NULL;
     }
-    size +=   BUFF_ALIGN - 1;
-    size &= ~(BUFF_ALIGN - 1);
+    size +=  15UL;
+    size &= ~15UL;
     uint8_t *p = &buff->ptr[buff->used];
     buff->used += size;
     return p;

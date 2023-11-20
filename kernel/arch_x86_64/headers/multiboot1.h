@@ -77,7 +77,20 @@ typedef struct mb1_info {
     uint32_t fb_height;
     uint8_t  fb_bpp; // bits per pixel
     uint8_t  fb_type;
-    uint8_t  fb_color_info[6];
+    union {
+        struct {
+            uint32_t palette_addr;
+            uint16_t palette_num_colors;
+        };
+        struct {
+            uint8_t r_field_position;
+            uint8_t r_mask_size;
+            uint8_t g_field_position;
+            uint8_t g_mask_size;
+            uint8_t b_field_position;
+            uint8_t b_mask_size;
+        };
+    };
 } PACKED mb1_info_t;
 
 enum {
