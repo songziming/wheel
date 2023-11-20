@@ -1,6 +1,6 @@
 // UART 串口输出
 
-#include <dev_serial.h>
+#include <dev/serial.h>
 #include <arch_impl.h>
 
 #define COM1_PORT 0x3f8

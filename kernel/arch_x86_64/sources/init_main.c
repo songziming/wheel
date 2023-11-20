@@ -5,7 +5,27 @@
 
 #include <arch_mem.h>
 
-#include <dev_serial.h>
+#include <dev/acpi.h>
+#include <dev/serial.h>
+#include <dev/framebuf.h>
+
+
+
+static INIT_DATA acpi_rsdp_t *g_rsdp = NULL;
+
+typedef struct fb_info {
+    size_t   addr;
+    unsigned rows;
+    unsigned cols;
+    unsigned bpp;   // 一个像素多少比特（32）
+    unsigned pitch; // 一行多少字节，可能不是整数个像素
+    struct {
+        uint8_t mask_size;
+        uint8_t position;
+    } r, g, b;
+} fb_info_t;
+
+static INIT_DATA fb_info_t g_fb;
 
 
 static INIT_TEXT void mb1_init(uint32_t ebx) {
@@ -37,6 +57,10 @@ static INIT_TEXT void mb1_init(uint32_t ebx) {
     if (MB1_INFO_ELF_SHDR & info->flags) {
         mb1_elf_sec_tbl_t *elf = &info->elf;
         symtab_init((void *)(size_t)elf->addr, elf->size, elf->num);
+    }
+
+    if (MB1_INFO_FRAMEBUFFER_INFO & info->flags) {
+        //
     }
 }
 
@@ -72,6 +96,33 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
             symtab_init(elf->sections, elf->entsize, elf->num);
             break;
         }
+        case MB2_TAG_TYPE_ACPI_OLD:
+            g_rsdp = (acpi_rsdp_t *)((mb2_tag_old_acpi_t *)tag)->rsdp;
+            break;
+        case MB2_TAG_TYPE_ACPI_NEW:
+            g_rsdp = (acpi_rsdp_t *)((mb2_tag_new_acpi_t *)tag)->rsdp;
+            break;
+        case MB2_TAG_TYPE_FRAMEBUFFER: {
+            mb2_tag_framebuffer_t *fb = (mb2_tag_framebuffer_t *)tag;
+            if (1 != fb->type) {
+                klog("warning: framebuf only support color mode!\n");
+                break;
+            }
+
+            g_fb.addr = fb->addr;
+            g_fb.rows = fb->height;
+            g_fb.cols = fb->width;
+            g_fb.pitch = fb->pitch;
+            g_fb.bpp  = fb->bpp;
+
+            g_fb.r.position = fb->r_field_position;
+            g_fb.r.mask_size = fb->r_mask_size;
+            g_fb.g.position = fb->g_field_position;
+            g_fb.g.mask_size = fb->g_mask_size;
+            g_fb.b.position = fb->b_field_position;
+            g_fb.b.mask_size = fb->b_mask_size;
+            break;
+        }
         default:
             break;
         }
@@ -88,11 +139,27 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     case MB1_BOOTLOADER_MAGIC: mb1_init(ebx); break;
     case MB2_BOOTLOADER_MAGIC: mb2_init(ebx); break;
     default:
-        klog("error: unknown multibooot magic %x\n", eax);
+        klog("fatal: unknown multibooot magic %x\n", eax);
+        goto end;
+    }
+#ifdef DEBUG
+    rammap_show();
+#endif
+
+    if (NULL == g_rsdp) {
+        g_rsdp = acpi_find_rsdp();
+    }
+    if (NULL == g_rsdp) {
+        klog("fatal: RSDP not found!\n");
         goto end;
     }
 
-    rammap_show();
+    acpi_parse_rsdp(g_rsdp);
+#ifdef DEBUG
+    acpi_show_tables();
+#endif
+
+    // TODO 将重要数据备份，放开 early_alloc_rw 长度限制，再初始化图形终端
 
 end:
     emu_exit(0);

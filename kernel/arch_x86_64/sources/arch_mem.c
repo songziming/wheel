@@ -25,7 +25,7 @@ INIT_TEXT size_t rammap_extentof(size_t addr) {
         }
     }
 
-    klog("error: address %lx not in valid ram range\n", addr);
+    klog("warning: address %lx not in valid ram range\n", addr);
     return 0;
 }
 

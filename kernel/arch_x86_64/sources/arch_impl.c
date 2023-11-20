@@ -59,8 +59,8 @@ static INIT_TEXT void *membuff_grow(membuff_t *buff, size_t size) {
 INIT_TEXT void *early_alloc_ro(size_t size) {
     void *p = membuff_grow(&g_ro_buff, size);
     if (NULL == p) {
-        klog("early ro alloc buffer overflow!\n");
-        cpu_halt();
+        klog("fatal: early ro alloc buffer overflow!\n");
+        return NULL;
     }
     return p;
 }
@@ -68,8 +68,8 @@ INIT_TEXT void *early_alloc_ro(size_t size) {
 INIT_TEXT void *early_alloc_rw(size_t size) {
     void *p = membuff_grow(&g_rw_buff, size);
     if (NULL == p) {
-        klog("early rw alloc buffer overflow!\n");
-        cpu_halt();
+        klog("fatal: early rw alloc buffer overflow!\n");
+        return NULL;
     }
     return p;
 }
