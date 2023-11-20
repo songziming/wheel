@@ -21,4 +21,8 @@ PRINTF(1,2) void klog(const char *fmt, ...);
     #define ASSERT(...)
 #endif
 
+INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num);
+size_t sym_locate(const char *name);
+const char *sym_resolve(size_t addr, size_t *rela);
+
 #endif // DEBUG_H

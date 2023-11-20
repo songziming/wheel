@@ -54,13 +54,12 @@ else
 endif
 
 KLAYOUT := $(KERNEL)/arch_$(ARCH)/layout.ld
-KLFLAGS := -nostdlib --gc-sections -Map=$(OUT_MAP) -T $(KLAYOUT)
+KLFLAGS := -nostdlib --gc-sections -Map=$(OUT_MAP) -T $(KLAYOUT)  --no-warnings
 
 TCFLAGS := -g -std=c11 -DUNIT_TEST $(KINCS:%=-I%) -I tools/kernel_test
 TCFLAGS += -fsanitize=address -fprofile-instr-generate -fcoverage-mapping
 COV_RAW := $(OUT_DIR)/test.profraw
 COV_DAT := $(OUT_DIR)/test.profdata
-
 
 
 

@@ -96,6 +96,6 @@ static inline uint64_t read_tsc() {
 // 调试支持
 //------------------------------------------------------------------------------
 
-int arch_unwind(void **addrs, int max, uint64_t rbp);
+int arch_unwind(size_t *addrs, int max, uint64_t rbp);
 
 #endif // ARCH_IMPL_H

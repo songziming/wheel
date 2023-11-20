@@ -3,17 +3,19 @@
 
 #include "def.h"
 
-void *early_alloc_ro(size_t size);
-void *early_alloc_rw(size_t size);
-
 void cpu_halt();
 void cpu_pause();
 void cpu_rfence();
 void cpu_wfence();
 void cpu_rwfence();
 
-int unwind(void **addrs, int max);
-void vmshutdown(int ret);
+void emu_break();
+void emu_exit(int ret);
+
+void *early_alloc_ro(size_t size);
+void *early_alloc_rw(size_t size);
+
+int unwind(size_t *addrs, int max);
 
 int cpu_count();
 int cpu_index();
