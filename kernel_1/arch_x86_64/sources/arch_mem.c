@@ -176,7 +176,7 @@ INIT_TEXT void rammap_show() {
 
 
 // layout.ld
-extern char _pcpu_addr, _pcpu_data_end, _pcpu_bss_end;
+// extern char _pcpu_addr, _pcpu_data_end, _pcpu_bss_end;
 extern char _init_end;
 extern char _text_addr, _text_end;
 extern char _rodata_addr;

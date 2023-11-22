@@ -11,4 +11,7 @@
 #define EARLY_RO_SIZE       0x1000      // 只读预留内存大小
 #define EARLY_RW_SIZE       0x400000    // 读写预留内存大小（需包含framebuf）
 
+#define PAGE_SIZE           0x1000
+#define PAGE_SHIFT          12
+
 #endif // ARCH_X86_64_CONFIG_H

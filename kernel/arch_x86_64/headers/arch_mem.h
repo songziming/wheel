@@ -18,13 +18,12 @@ typedef struct ram_range {
 extern CONST size_t g_rammap_len;
 extern CONST ram_range_t *g_rammap;
 
-INIT_TEXT size_t rammap_extentof(size_t addr);
 INIT_TEXT int rammap_hasoverlap(size_t addr, size_t len);
-
 #ifdef DEBUG
 INIT_TEXT void rammap_show();
 #endif
 
+INIT_TEXT void early_alloc_init();
 INIT_TEXT void early_rw_unlock();
 INIT_TEXT void mem_init();
 

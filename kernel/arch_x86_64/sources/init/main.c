@@ -147,6 +147,8 @@ static void serial_console_puts(const char *s, size_t n) {
 
 // BSP 初始化函数
 INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
+    early_alloc_init();
+
     serial_init();
     set_log_func(serial_puts);
 

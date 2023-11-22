@@ -193,16 +193,16 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
 // PCPU 数据区
 //------------------------------------------------------------------------------
 
-static CONST size_t *g_pcpu_offsets = NULL; // 由 arch_mem.c 设置
-static PCPU_BSS int g_cpu_index; // 当前 CPU 编号
+// static CONST size_t *g_pcpu_offsets = NULL; // 由 arch_mem.c 设置
+// static PCPU_BSS int g_cpu_index; // 当前 CPU 编号
 
 inline int cpu_count() {
     return g_loapic_num;
 }
 
-inline int cpu_index() {
-    return g_cpu_index;
-}
+// inline int cpu_index() {
+//     return g_cpu_index;
+// }
 
 // INIT_TEXT void pcpu_init() {
 //     ASSERT(NULL == g_pcpu_offsets);
@@ -211,6 +211,6 @@ inline int cpu_index() {
 //     g_pcpu_offsets = early_alloc_ro(g_loapic_num * sizeof(size_t));
 // }
 
-void *pcpu_ptr(int idx, void *addr) {
-    return (void *)(g_pcpu_offsets[idx] + (size_t)addr);
-}
+// void *pcpu_ptr(int idx, void *addr) {
+//     return (void *)(g_pcpu_offsets[idx] + (size_t)addr);
+// }
