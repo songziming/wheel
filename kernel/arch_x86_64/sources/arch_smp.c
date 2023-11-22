@@ -17,8 +17,8 @@ typedef struct ioapic {
 
 
 CONST size_t g_loapic_addr;
-CONST int    g_loapic_num;
-CONST int    g_ioapic_num;
+CONST int    g_loapic_num = 0;
+CONST int    g_ioapic_num = 0;
 
 static CONST loapic_t *g_loapics = NULL;
 static CONST ioapic_t *g_ioapics = NULL;
@@ -31,6 +31,12 @@ static CONST uint32_t *g_irq_to_gsi = NULL;
 static CONST uint8_t  *g_gsi_to_irq = NULL;
 static CONST uint16_t *g_gsi_flags  = NULL;
 
+
+
+inline int cpu_count() {
+    ASSERT(0 != g_loapic_num);
+    return g_loapic_num;
+}
 
 
 INIT_TEXT void parse_madt(const madt_t *madt) {
@@ -187,30 +193,3 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
     }
 }
 
-
-
-//------------------------------------------------------------------------------
-// PCPU 数据区
-//------------------------------------------------------------------------------
-
-// static CONST size_t *g_pcpu_offsets = NULL; // 由 arch_mem.c 设置
-// static PCPU_BSS int g_cpu_index; // 当前 CPU 编号
-
-inline int cpu_count() {
-    return g_loapic_num;
-}
-
-// inline int cpu_index() {
-//     return g_cpu_index;
-// }
-
-// INIT_TEXT void pcpu_init() {
-//     ASSERT(NULL == g_pcpu_offsets);
-//     ASSERT(0 != g_loapic_num);
-
-//     g_pcpu_offsets = early_alloc_ro(g_loapic_num * sizeof(size_t));
-// }
-
-// void *pcpu_ptr(int idx, void *addr) {
-//     return (void *)(g_pcpu_offsets[idx] + (size_t)addr);
-// }

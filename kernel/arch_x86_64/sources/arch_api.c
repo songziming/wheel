@@ -28,58 +28,6 @@ void emu_exit(int ret) {
 }
 
 
-
-//------------------------------------------------------------------------------
-// 启动阶段内存分配，不释放
-//------------------------------------------------------------------------------
-
-// typedef struct buff {
-//     uint8_t *ptr;
-//     size_t size;
-//     size_t used;
-// } buff_t;
-
-// static SECTION(".rotail") ALIGNED(16) uint8_t g_ro_area[EARLY_RO_SIZE];
-// static SECTION(".rwtail") ALIGNED(16) uint8_t g_rw_area[EARLY_RW_SIZE];
-// static INIT_DATA buff_t g_ro_buff = { g_ro_area, EARLY_RO_SIZE, 0 };
-// static INIT_DATA buff_t g_rw_buff = { g_rw_area, EARLY_RW_SIZE, 0 };
-
-// static INIT_TEXT void *buff_grow(buff_t *buff, size_t size) {
-//     if (buff->used + size >= buff->size) {
-//         return NULL;
-//     }
-//     size +=  15UL;
-//     size &= ~15UL;
-//     uint8_t *p = &buff->ptr[buff->used];
-//     buff->used += size;
-//     return p;
-// }
-
-// INIT_TEXT void *early_alloc_ro(size_t size) {
-//     void *p = buff_grow(&g_ro_buff, size);
-//     if (NULL == p) {
-//         klog("fatal: early ro alloc buffer overflow!\n");
-//         return NULL;
-//     }
-//     return p;
-// }
-
-// INIT_TEXT void *early_alloc_rw(size_t size) {
-//     void *p = buff_grow(&g_rw_buff, size);
-//     if (NULL == p) {
-//         klog("fatal: early rw alloc buffer overflow!\n");
-//         return NULL;
-//     }
-//     return p;
-// }
-
-// INIT_TEXT void early_rw_unlock() {
-//     size_t rw_addr = (size_t)g_rw_area - KERNEL_TEXT_ADDR;
-//     g_rw_buff.size = rammap_extentof(rw_addr) - rw_addr;
-// }
-
-
-
 //------------------------------------------------------------------------------
 // 堆栈展开
 //------------------------------------------------------------------------------

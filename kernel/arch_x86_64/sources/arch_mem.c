@@ -1,6 +1,7 @@
 #include <arch_mem.h>
 #include <arch_cpu.h>
 #include <arch_smp.h>
+#include <arch_api_p.h>
 
 #include <wheel.h>
 #include <vmspace.h>
@@ -143,14 +144,37 @@ INIT_TEXT void early_rw_unlock() {
 // per-CPU 数据区
 //------------------------------------------------------------------------------
 
-static CONST void  **g_pcpu_areas = NULL;
-static CONST size_t *g_pcpu_offsets = NULL;
+static CONST uint8_t **g_pcpu_areas = NULL;
+static CONST size_t   *g_pcpu_offsets = NULL;
 
+static PCPU_BSS int g_cpu_index; // 每个 CPU 的编号
 
 void *pcpu_ptr(int idx, void *addr) {
     ASSERT(idx < cpu_count());
     ASSERT(NULL != g_pcpu_offsets);
     return (void *)(g_pcpu_offsets[idx] + (size_t)addr);
+}
+
+// 设置 this-cpu 指针，并且设置 CPU 编号
+INIT_TEXT void gsbase_init(int idx) {
+    ASSERT(NULL != g_pcpu_offsets);
+    ASSERT(idx < cpu_count());
+
+    write_gsbase(g_pcpu_offsets[idx]);
+    __asm__("movl %0, %%gs:%1" :: "r"(idx), "m"(g_cpu_index));
+}
+
+// 依赖 gsbase
+inline int cpu_index() {
+    int idx;
+    __asm__("movl %%gs:%1, %0" : "=a"(idx) : "m"(g_cpu_index));
+    return idx;
+}
+
+// 依赖 gsbase
+inline void *this_ptr(void *ptr) {
+    ASSERT(NULL != g_pcpu_offsets);
+    return (uint8_t *)ptr + read_gsbase();
 }
 
 
@@ -174,7 +198,6 @@ static CONST    vmrange_t g_range_text;
 static CONST    vmrange_t g_range_rodata;   // 结束位置由 g_ro_buff 决定
 static CONST    vmrange_t g_range_data;     // 结束位置由 g_rw_buff 决定
 static PCPU_BSS vmrange_t g_range_pcpu;     // 每个 PCPU 都需要专门的 range
-static PCPU_BSS int       g_cpu_index;      // 每个 CPU 的编号
 
 static INIT_TEXT void add_range(vmrange_t *rng, void *addr, void *end, const char *desc) {
     rng->addr = (size_t)addr;
@@ -202,13 +225,14 @@ INIT_TEXT void mem_init() {
     klog("memory limit %zx\n", ramtop);
 
     // 提前划分 pcpu 指针
-    g_pcpu_areas = early_alloc_ro(cpu_count() * sizeof(void *));
+    g_pcpu_areas = early_alloc_ro(cpu_count() * sizeof(uint8_t *));
     g_pcpu_offsets = early_alloc_ro(cpu_count() * sizeof(size_t));
 
     // 禁用临时内存分配
     g_ro_buff.end = g_ro_buff.ptr;
     g_rw_buff.end = g_rw_buff.ptr;
 
+    // 记录内核的地址空间布局，也是后面建立页表的依据
     vmspace_init(&g_kernel_vm);
     add_range(&g_range_init, &_pcpu_addr, &_init_end, "init");
     add_range(&g_range_text, &_text_addr, &_text_end, "text");
@@ -235,7 +259,7 @@ INIT_TEXT void mem_init() {
     // TODO 相邻 per-CPU 之间需要保留 guard page
 
     for (int i = 0; i < cpu_count(); ++i) {
-        g_pcpu_areas[i] = (void *)rw_end;
+        g_pcpu_areas[i] = (uint8_t *)rw_end;
         g_pcpu_offsets[i] = rw_end - (size_t)(&_pcpu_addr);
         bcpy(g_pcpu_areas[i], &_pcpu_addr, pcpu_copy);
         rw_end += pcpu_skip;
