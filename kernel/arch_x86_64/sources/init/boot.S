@@ -5,9 +5,9 @@
 .extern sys_init
 
 
-#include <multiboot1.h>
-#include <multiboot2.h>
 #include <arch_config.h>
+#include <init/multiboot1.h>
+#include <init/multiboot2.h>
 
 
 //------------------------------------------------------------------------------

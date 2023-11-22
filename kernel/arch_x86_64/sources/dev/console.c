@@ -2,7 +2,7 @@
 
 #include <dev/console.h>
 #include <wheel.h>
-#include <arch_impl.h>
+#include <arch_api_p.h>
 #include <str.h>
 
 
@@ -14,13 +14,12 @@
 // 默认宽高
 #define ROWS 25
 #define COLS 80
-#define AREA (ROWS*COLS)
 
 
 // 显存读取速度很慢，因此内存中预留离屏缓冲区
 // 数据先写入缓冲区，再拷贝到现存
-static uint16_t  g_vbuf[AREA];
-static uint16_t *g_vram;
+static CONST uint16_t *g_vram = NULL;
+static CONST uint16_t *g_vbuf = NULL;
 
 static uint8_t  g_text_color;
 static unsigned g_caret_row;    // 光标所在行（g_vbuf）
@@ -28,23 +27,27 @@ static unsigned g_caret_col;    // 光标所在列
 static unsigned g_start_row;    // g_vram 首行在 g_vbuf 中的行号
 
 INIT_TEXT void console_init() {
+    ASSERT(NULL == g_vram);
+    ASSERT(NULL == g_vbuf);
+
     g_text_color = 0x0f; // 黑底白字
     g_caret_row = 0;
     g_caret_col = 0;
     g_start_row = 0;
 
     // 两屏内容清空
+    g_vbuf = early_alloc_rw(ROWS * COLS * sizeof(uint16_t));
     uint64_t *dst = (uint64_t *)g_vbuf;
     uint64_t fill = (uint64_t)' ' | ((uint64_t)g_text_color << 8);
     fill |= fill << 16;
     fill |= fill << 32;
-    for (int i = 0; i < AREA / 4; ++i) {
+    for (int i = 0; i < ROWS * COLS / 4; ++i) {
         dst[i] = fill;
     }
 
     // 映射到 higher half，启动完成后低地址会取消映射
     g_vram = (uint16_t *)(DIRECT_MAP_ADDR + 0xb8000);
-    bcpy(g_vram, g_vbuf, AREA * sizeof(uint16_t));
+    bcpy(g_vram, g_vbuf, ROWS*COLS * sizeof(uint16_t));
 }
 
 static void set_caret(uint16_t idx) {

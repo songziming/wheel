@@ -1,4 +1,4 @@
-// 优化版本的标准库函数，替代 libk_string.c 的默认实现
+// 优化版本的标准库函数，替代 str.c 的默认实现
 
 // 处理器支持 fast-string operation（P6 开始，Nehalem 改进）
 // 能自动按 16 字节执行字符串操作，即使指令为 movsb、stosb

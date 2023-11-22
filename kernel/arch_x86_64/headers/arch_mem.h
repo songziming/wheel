@@ -25,4 +25,7 @@ INIT_TEXT int rammap_hasoverlap(size_t addr, size_t len);
 INIT_TEXT void rammap_show();
 #endif
 
+INIT_TEXT void early_rw_unlock();
+INIT_TEXT void mem_init();
+
 #endif // ARCH_MEM_H

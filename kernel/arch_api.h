@@ -1,5 +1,5 @@
-#ifndef ARCH_H
-#define ARCH_H
+#ifndef ARCH_API_H
+#define ARCH_API_H
 
 #include "def.h"
 
@@ -23,4 +23,4 @@ int cpu_index();
 void *pcpu_ptr(int idx, void *ptr);
 void *this_ptr(void *ptr);
 
-#endif // ARCH_H
+#endif // ARCH_API_H

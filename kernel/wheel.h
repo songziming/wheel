@@ -2,8 +2,7 @@
 #define WHEEL_H
 
 #include "def.h"
-#include "arch.h"
-
+#include "arch_api.h"
 #include <arch_config.h>
 
 // core

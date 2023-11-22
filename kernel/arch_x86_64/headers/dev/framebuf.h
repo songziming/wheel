@@ -23,7 +23,7 @@ typedef struct font_data {
     const uint8_t *data;
 } font_data_t;
 
-INIT_TEXT void framebuf_init(fb_info_t *fb);
+INIT_TEXT void framebuf_init(const fb_info_t *fb);
 void framebuf_putc(char c);
 void framebuf_puts(const char *s, size_t n);
 

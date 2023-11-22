@@ -26,7 +26,7 @@ static int g_caret_row;     // 光标所在行号
 static int g_caret_col;     // 光标所在列号
 
 
-INIT_TEXT void framebuf_init(fb_info_t *fb) {
+INIT_TEXT void framebuf_init(const fb_info_t *fb) {
     ASSERT(NULL == g_addr);
     ASSERT(NULL == g_back);
 

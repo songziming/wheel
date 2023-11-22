@@ -1,4 +1,7 @@
 #include <arch_mem.h>
+#include <arch_cpu.h>
+#include <arch_smp.h>
+
 #include <wheel.h>
 
 
@@ -72,3 +75,109 @@ INIT_TEXT void rammap_show() {
 }
 
 #endif // DEBUG
+
+
+
+//------------------------------------------------------------------------------
+// 启动阶段内存分配，不释放
+//------------------------------------------------------------------------------
+
+typedef struct buff {
+    uint8_t *ptr;
+    uint8_t *end;
+} buff_t;
+
+static SECTION(".rotail") ALIGNED(16) uint8_t g_ro_area[EARLY_RO_SIZE];
+static SECTION(".rwtail") ALIGNED(16) uint8_t g_rw_area[EARLY_RW_SIZE];
+static INIT_DATA buff_t g_ro_buff = { g_ro_area, g_ro_area + EARLY_RO_SIZE };
+static INIT_DATA buff_t g_rw_buff = { g_rw_area, g_rw_area + EARLY_RW_SIZE };
+
+static INIT_TEXT void *buff_grow(buff_t *buff, size_t size) {
+    if (buff->ptr + size >= buff->end) {
+        return NULL;
+    }
+    size +=  15UL;
+    size &= ~15UL;
+    uint8_t *p = buff->ptr;
+    buff->ptr += size;
+    return p;
+}
+
+INIT_TEXT void *early_alloc_ro(size_t size) {
+    void *p = buff_grow(&g_ro_buff, size);
+    if (NULL == p) {
+        klog("fatal: early ro alloc buffer overflow!\n");
+        return NULL;
+    }
+    return p;
+}
+
+INIT_TEXT void *early_alloc_rw(size_t size) {
+    void *p = buff_grow(&g_rw_buff, size);
+    if (NULL == p) {
+        klog("fatal: early rw alloc buffer overflow!\n");
+        return NULL;
+    }
+    return p;
+}
+
+INIT_TEXT void early_rw_unlock() {
+    size_t ptr = (size_t)g_rw_buff.ptr - KERNEL_TEXT_ADDR;
+    size_t end = rammap_extentof(ptr) + KERNEL_TEXT_ADDR;
+    klog("extending early buff from %p to %zx\n", g_rw_buff.end, end);
+    g_rw_buff.end = (uint8_t *)end;
+}
+
+
+
+//------------------------------------------------------------------------------
+// per-CPU 数据区
+//------------------------------------------------------------------------------
+
+// static CONST void **g_pcpu_areas
+static CONST size_t *g_pcpu_offsets = NULL;
+
+// layout.ld
+extern char _pcpu_addr;
+extern char _pcpu_data_end;
+extern char _pcpu_bss_end;
+
+INIT_TEXT void pcpu_init() {
+    ASSERT(NULL == g_pcpu_offsets);
+    ASSERT(0 != g_loapic_num);
+
+    // 获取 L1 一行大小，一路大小
+    size_t l1_line = g_l1d_info.line_size;
+    size_t l1_size = l1_line * g_l1d_info.sets;
+    ASSERT(0 == (l1_line & (l1_line - 1)));
+    ASSERT(0 == (l1_size & (l1_size - 1)));
+
+    size_t pcpu_size = (size_t)(&_pcpu_bss_end  - &_pcpu_addr);
+    size_t pcpu_copy = (size_t)(&_pcpu_data_end - &_pcpu_addr);
+    klog("pcpu size %zu %zu\n", pcpu_size, pcpu_copy);
+}
+
+
+
+//------------------------------------------------------------------------------
+// 划分内存布局
+//------------------------------------------------------------------------------
+
+INIT_TEXT void mem_init() {
+    ASSERT(g_rammap_len > 0); // 需要知道物理内存分布
+    ASSERT(cpu_count() > 0);  // 需要知道 CPU 个数
+
+    // 统计可用内存上限
+    size_t ramtop = 0;
+    for (size_t i = 0; i < g_rammap_len; ++i) {
+        ram_type_t type = g_rammap[i].type;
+        if ((RAM_AVAILABLE != type) && (RAM_RECLAIMABLE != type)) {
+            continue;
+        }
+        if (ramtop < g_rammap[i].end) {
+            ramtop = g_rammap[i].end;
+        }
+    }
+
+    klog("memory limit %zx\n", ramtop);
+}

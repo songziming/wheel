@@ -1,5 +1,5 @@
-#ifndef MULTIBOOT2_H
-#define MULTIBOOT2_H
+#ifndef INIT_MULTIBOOT2_H
+#define INIT_MULTIBOOT2_H
 
 // multiboot specification version 2
 // https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html
@@ -312,4 +312,4 @@ typedef struct mb2_tag_load_base_addr {
 
 #endif // C_FILE
 
-#endif // MULTIBOOT2_H
+#endif // INIT_MULTIBOOT2_H

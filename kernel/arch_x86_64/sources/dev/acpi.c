@@ -1,6 +1,6 @@
 #include <dev/acpi.h>
 #include <wheel.h>
-#include <arch_impl.h>
+#include <arch_api_p.h>
 #include <arch_mem.h>
 #include <str.h>
 

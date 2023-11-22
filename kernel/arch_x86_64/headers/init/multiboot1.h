@@ -1,5 +1,5 @@
-#ifndef MULTIBOOT1_H
-#define MULTIBOOT1_H
+#ifndef INIT_MULTIBOOT1_H
+#define INIT_MULTIBOOT1_H
 
 // multiboot specification version 1
 // https://www.gnu.org/software/grub/manual/multiboot/multiboot.html
@@ -117,4 +117,4 @@ typedef struct mb1_mod_list {
 
 #endif // C_FILE
 
-#endif // MULTIBOOT1_H
+#endif // INIT_MULTIBOOT1_H

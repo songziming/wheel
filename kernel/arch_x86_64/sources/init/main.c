@@ -1,14 +1,16 @@
 #include <wheel.h>
-
-#include <multiboot1.h>
-#include <multiboot2.h>
-
+#include <arch_api_p.h>
 #include <arch_mem.h>
+#include <arch_smp.h>
+#include <arch_cpu.h>
 
 #include <dev/acpi.h>
 #include <dev/serial.h>
 #include <dev/console.h>
 #include <dev/framebuf.h>
+
+#include <init/multiboot1.h>
+#include <init/multiboot2.h>
 
 
 
@@ -142,6 +144,7 @@ static void serial_console_puts(const char *s, size_t n) {
 }
 
 
+
 // BSP 初始化函数
 INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     serial_init();
@@ -176,12 +179,33 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
         goto end;
     }
 
+    // 寻找 ACPI 表
     acpi_parse_rsdp(g_rsdp);
 #ifdef DEBUG
     acpi_show_tables();
 #endif
 
-    // TODO 将重要数据备份，放开 early_alloc_rw 长度限制，再初始化图形终端
+    // 解析 MADT，获取多核信息
+    madt_t *madt = (madt_t *)acpi_get_table("APIC");
+    if (NULL == madt) {
+        klog("fatal: MADT not found!\n");
+        goto end;
+    }
+    parse_madt(madt);
+
+    // 重要数据已备份，放开 early_rw 长度限制
+    early_rw_unlock();
+
+    // TODO early_rw 已经放开限制，在这里配置字符或图形终端
+
+    cpu_info_detect(); // 检测 CPU 特性
+    cpu_features_init(); // 开启 CPU 功能
+#ifdef DEBUG
+    cpu_info_show();
+#endif
+
+    // 划分内存布局
+    mem_init();
 
 end:
     // emu_exit(0);
