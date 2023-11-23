@@ -48,7 +48,7 @@ TOBJS := $(patsubst %,$(OUT_DIR)/objs/%.to,$(TSRCS))
 KCFLAGS := -std=c11 $(KINCS:%=-I%) -Wall -Wextra -Wshadow -Werror=implicit
 KCFLAGS += -ffreestanding -fno-builtin -flto -ffunction-sections -fdata-sections
 ifeq ($(DEBUG),1)
-    KCFLAGS += -g -DDEBUG
+    KCFLAGS += -g -DDEBUG -fstack-protector
 else
     KCFLAGS += -O2 -DNDEBUG
 endif
@@ -63,11 +63,11 @@ COV_DAT := $(OUT_DIR)/test.profdata
 
 
 
+DEP_GEN = -MT $@ -MMD -MP -MF $@.d
+
 ALL_OBJS := $(KOBJS) $(TOBJS)
 ALL_DEPS := $(patsubst %,%.d,$(ALL_OBJS))
 ALL_DIRS := $(sort $(dir $(ALL_DEPS)) $(ISO_DIR)/boot/grub)
-
-DEPGEN = -MT $@ -MMD -MP -MF $@.d
 
 include $(KERNEL)/arch_$(ARCH)/option.mk
 
@@ -95,9 +95,9 @@ $(ALL_DIRS):
 
 # 编译内核镜像
 $(OUT_DIR)/objs/%.S.ko: %.S
-	$(KCC) -c -DS_FILE $(KCFLAGS) $(DEPGEN) -o $@ $<
+	$(KCC) -c -DS_FILE $(KCFLAGS) $(DEP_GEN) -o $@ $<
 $(OUT_DIR)/objs/%.c.ko: %.c
-	$(KCC) -c -DC_FILE $(KCFLAGS) $(DEPGEN) -o $@ $<
+	$(KCC) -c -DC_FILE $(KCFLAGS) $(DEP_GEN) -o $@ $<
 $(OUT_ELF): $(KOBJS) | $(KLAYOUT)
 	$(KLD) $(KLFLAGS) -o $@ $^
 
@@ -117,9 +117,9 @@ $(OUT_IMG): $(OUT_ELF) tools/grub.cfg
 
 # 编译单元测试
 $(OUT_DIR)/objs/%.c.to: %.c
-	$(TCC) -c -DC_FILE -std=c11 $(TCFLAGS) $(DEPGEN) -o $@ $<
+	$(TCC) -c -DC_FILE -std=c11 $(TCFLAGS) $(DEP_GEN) -o $@ $<
 $(OUT_DIR)/objs/%.cc.to: %.cc
-	$(TXX) -c -DC_FILE -std=c++14 $(TCFLAGS) $(DEPGEN) -o $@ $<
+	$(TXX) -c -DC_FILE -std=c++14 $(TCFLAGS) $(DEP_GEN) -o $@ $<
 $(OUT_TEST): $(TOBJS)
 	$(TXX) $(TCFLAGS) -o $@ $^ -lm -pthread
 

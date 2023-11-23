@@ -10,7 +10,7 @@ void cpu_wfence();
 void cpu_rwfence();
 
 void emu_break();
-void emu_exit(int ret);
+NORETURN void emu_exit(int ret);
 
 void *early_alloc_ro(size_t size);
 void *early_alloc_rw(size_t size);

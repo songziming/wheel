@@ -28,11 +28,11 @@ typedef struct pglist {
 
 // 全局页描述符数组，每个物理页面都对应一个结构体
 static CONST pfn_t g_page_num = 0;
-static CONST page_t *g_pages;
+static CONST page_t *g_pages = NULL;
 
 
 
-static int pglist_contains(pglist_t *pl, pfn_t blk) {
+int pglist_contains(pglist_t *pl, pfn_t blk) {
     for (pfn_t i = pl->head; INVALID_PFN != i; i = g_pages[i].next) {
         if (blk == i) {
             return 1;
@@ -140,6 +140,12 @@ void pglist_remove(pglist_t *pl, pfn_t blk) {
 
 
 INIT_TEXT void page_init(size_t num) {
+    ASSERT(0 == g_page_num);
+    ASSERT(NULL == g_pages);
+
+    if (num > INVALID_PFN) {
+        num = INVALID_PFN;
+    }
     g_page_num = (pfn_t)num;
     g_pages = (page_t *)early_alloc_rw(g_page_num * sizeof(page_t *));
 
@@ -153,9 +159,15 @@ INIT_TEXT void page_init(size_t num) {
 // 将一段内存标记为可用范围
 // TODO 同时指定使用情况，即当前为 FREE 还是 BUSY
 INIT_TEXT void page_add(pfn_t start, pfn_t end) {
-    ASSERT(start < end);
-    ASSERT(end <= g_page_num);
+    ASSERT(0 != g_page_num);
+    ASSERT(NULL != g_pages);
 
+    if (end > g_page_num) {
+        end = g_page_num;
+    }
+    if (start >= end) {
+        return;
+    }
     for (pfn_t i = start; i < end; ++i) {
         g_pages[i].type = PT_FREE;
     }

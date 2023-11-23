@@ -25,7 +25,8 @@ int dl_is_lastone(dlnode_t *node) {
 int dl_contains(dlnode_t *head, dlnode_t *node) {
     ASSERT(NULL != head);
     ASSERT(NULL != node);
-    for (dlnode_t *i = head; head != i; i = i->next) {
+    ASSERT(head != node);
+    for (dlnode_t *i = head->next; head != i; i = i->next) {
         if (node == i) {
             return 1;
         }

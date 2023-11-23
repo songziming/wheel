@@ -220,3 +220,25 @@ void handle_assert_fail(const char *file, const char *func, int line) {
 
     emu_exit(1);
 }
+
+
+
+//------------------------------------------------------------------------------
+// 处理栈溢出
+//------------------------------------------------------------------------------
+
+const uintptr_t __stack_chk_guard = 0x595e9fbd94fda766ULL;
+
+NORETURN void __stack_chk_fail() {
+    klog("fatal: stack smashing detected\n");
+
+    size_t frames[32];
+    int depth = unwind(frames, 32);
+    for (int i = 1; i < depth; ++i) {
+        size_t rela;
+        const char *name = sym_resolve(frames[i], &rela);
+        klog(" frame %2d: %s + 0x%zu\n", i, name, rela);
+    }
+
+    emu_exit(1);
+}

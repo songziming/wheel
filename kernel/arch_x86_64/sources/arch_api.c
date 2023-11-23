@@ -19,12 +19,15 @@ void emu_break() {
 }
 
 // 退出 QEMU/Bochs 模拟器并返回值
-void emu_exit(int ret) {
+NORETURN void emu_exit(int ret) {
 #ifdef DEBUG
     __asm__("outl %0, %1" :: "a"(ret), "Nd"(0xf4));
 #else
     (void)ret;
 #endif
+    while (1) {
+        cpu_halt();
+    }
 }
 
 

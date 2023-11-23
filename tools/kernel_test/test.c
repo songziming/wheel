@@ -2,6 +2,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <setjmp.h>
+// #include <execinfo.h>
 
 #include "test.h"
 
@@ -32,6 +33,10 @@ void report_test_fail(const char *file, const char *func, int line, const char *
     va_start(args, msg);
     vfprintf(stdout, msg, args);
     va_end(args);
+
+    // void *frames[32];
+    // int depth = backtrace(frames, 32);
+    // backtrace_symbols_fd(frames, depth, 2); // 2 = stderr
 
     longjmp(curr_env, 1);
 }

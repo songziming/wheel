@@ -22,7 +22,8 @@ cmake ../llvm \
     -DCMAKE_INSTALL_PREFIX=/path/to/cross \
     -DLLVM_ENABLE_PROJECTS="clang;lld;compiler-rt;lldb" \
     -DLLVM_TARGETS_TO_BUILD=X86 \
-    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_BUILD_TYPE=Release \
+    -DLLDB_ENABLE_LIBEDIT=On
 cmake --build . --parallel
 cmake --build . --target install
 ```
