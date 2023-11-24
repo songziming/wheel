@@ -199,6 +199,7 @@ static CONST    vmrange_t g_range_rodata;   // 结束位置由 g_ro_buff 决定
 static CONST    vmrange_t g_range_data;     // 结束位置由 g_rw_buff 决定
 static PCPU_BSS vmrange_t g_range_pcpu;     // 每个 PCPU 都需要专门的 range
 
+// 将一段内存标记为内核占用
 static INIT_TEXT void add_range(vmrange_t *rng, void *addr, void *end, const char *desc) {
     rng->addr = (size_t)addr;
     rng->size = (size_t)end - (size_t)addr;

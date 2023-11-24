@@ -34,11 +34,13 @@ static myitem_t *new_item(int val) {
 }
 
 static myitem_t *push_head(myitem_t *item) {
+    EXPECT_TRUE(!dl_contains(&myhead, &item->dl));
     dl_insert_after(&item->dl, &myhead);
     return item;
 }
 
 static myitem_t *push_tail(myitem_t *item) {
+    EXPECT_TRUE(!dl_contains(&myhead, &item->dl));
     dl_insert_before(&item->dl, &myhead);
     return item;
 }
@@ -60,9 +62,11 @@ static myitem_t *pop_tail() {
 }
 
 myitem_t *insert_before(myitem_t *item, myitem_t *ref) {
+    EXPECT_TRUE(!dl_contains(&myhead, &item->dl));
     if (NULL == ref) {
         dl_insert_before(&item->dl, &myhead);
     } else {
+        EXPECT_TRUE(dl_contains(&myhead, &ref->dl));
         dl_insert_before(&item->dl, &ref->dl);
     }
     return item;

@@ -20,7 +20,7 @@ static CONST uint8_t  g_cpu_type;
 static CONST uint8_t  g_cpu_ex_model;
 static CONST uint8_t  g_cpu_ex_family;
 
-static CONST uint32_t g_cpu_features;
+CONST uint32_t g_cpu_features;
 
 CONST cache_info_t g_l1d_info;
 CONST cache_info_t g_l1i_info;

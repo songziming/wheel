@@ -12,6 +12,8 @@
 #define CPU_FEATURE_ERMS            0x0040  // enhanced rep movsb/stosb
 #define CPU_FEATURE_INVPCID         0x0080
 
+extern CONST uint32_t g_cpu_features;
+
 typedef struct cache_info {
     size_t line_size;
     size_t sets;        // 有多少个 set
