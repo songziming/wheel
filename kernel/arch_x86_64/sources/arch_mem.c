@@ -144,15 +144,21 @@ INIT_TEXT void early_rw_unlock() {
 // per-CPU 数据区
 //------------------------------------------------------------------------------
 
+// 这几个函数与 arch_smp.c 也有关系
+
+extern char _pcpu_addr, _pcpu_data_end, _pcpu_bss_end;
+
 static CONST uint8_t **g_pcpu_areas = NULL;
 static CONST size_t   *g_pcpu_offsets = NULL;
 
 static PCPU_BSS int g_cpu_index; // 每个 CPU 的编号
 
-void *pcpu_ptr(int idx, void *addr) {
+void *pcpu_ptr(int idx, void *ptr) {
     ASSERT(idx < cpu_count());
     ASSERT(NULL != g_pcpu_offsets);
-    return (void *)(g_pcpu_offsets[idx] + (size_t)addr);
+    ASSERT((char *)ptr >= &_pcpu_addr);
+    ASSERT((char *)ptr < &_pcpu_bss_end);
+    return (void *)(g_pcpu_offsets[idx] + (size_t)ptr);
 }
 
 // 设置 this-cpu 指针，并且设置 CPU 编号
@@ -174,6 +180,8 @@ inline int cpu_index() {
 // 依赖 gsbase
 inline void *this_ptr(void *ptr) {
     ASSERT(NULL != g_pcpu_offsets);
+    ASSERT((char *)ptr >= &_pcpu_addr);
+    ASSERT((char *)ptr < &_pcpu_bss_end);
     return (uint8_t *)ptr + read_gsbase();
 }
 
@@ -184,7 +192,6 @@ inline void *this_ptr(void *ptr) {
 //------------------------------------------------------------------------------
 
 // layout.ld
-extern char _pcpu_addr, _pcpu_data_end, _pcpu_bss_end;
 extern char _init_end;
 extern char _text_addr, _text_end;
 extern char _rodata_addr;
@@ -207,6 +214,8 @@ static INIT_TEXT void add_range(vmrange_t *rng, void *addr, void *end, const cha
     vmspace_add(&g_kernel_vm, rng);
 }
 
+
+// 划分内存，停用 early-alloc，启用物理页分配
 INIT_TEXT void mem_init() {
     ASSERT(g_rammap_len > 0); // 需要知道物理内存分布
     ASSERT(cpu_count() > 0);  // 需要知道 CPU 个数
