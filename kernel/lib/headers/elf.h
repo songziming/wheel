@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 
+
 typedef uint16_t Elf32_Half;
 typedef uint16_t Elf64_Half;
 
@@ -29,6 +30,7 @@ typedef uint16_t Elf64_Section;
 
 typedef Elf32_Half Elf32_Versym;
 typedef Elf64_Half Elf64_Versym;
+
 
 
 //------------------------------------------------------------------------------
@@ -319,6 +321,7 @@ typedef struct {
 #define EV_NUM      2
 
 
+
 //------------------------------------------------------------------------------
 // Section header.
 //------------------------------------------------------------------------------
@@ -443,6 +446,7 @@ typedef struct {
 
 // Section group handling.
 #define GRP_COMDAT  0x1     // Mark group as COMDAT.
+
 
 
 //------------------------------------------------------------------------------
@@ -580,6 +584,7 @@ typedef struct {
 #define ELF64_R_SYM(i) ((i) >> 32)
 #define ELF64_R_TYPE(i) ((i) & 0xffffffff)
 #define ELF64_R_INFO(sym,type) ((((Elf64_Xword) (sym)) << 32) + (type))
+
 
 
 //------------------------------------------------------------------------------

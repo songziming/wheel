@@ -15,7 +15,7 @@ typedef struct ram_range {
     size_t end;
 } ram_range_t;
 
-extern CONST size_t g_rammap_len;
+extern CONST int g_rammap_len;
 extern CONST ram_range_t *g_rammap;
 
 INIT_TEXT int rammap_hasoverlap(size_t addr, size_t len);

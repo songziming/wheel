@@ -4,13 +4,6 @@
 #include <wheel.h>
 
 
-// 物理页类型
-typedef enum page_type {
-    PT_INVALID  = 0,    // 不存在
-    PT_FREE,            // 未分配的可用内存
-    PT_KERNEL,          // 被内核代码数据占用
-} page_type_t;
-
 // 页描述符
 typedef struct page {
     pfn_t prev;
@@ -37,7 +30,7 @@ static CONST page_t *g_pages = NULL;
 
 // 未分配的页块按不同大小组成链表
 #define RANK_NUM 16
-static pglist_t g_free_blocks[RANK_NUM];
+static pglist_t g_blocks[RANK_NUM];
 
 
 
@@ -49,7 +42,7 @@ static pglist_t g_free_blocks[RANK_NUM];
 // 返回页所在的块
 static pfn_t block_head(pfn_t pfn) {
     ASSERT(pfn < g_page_num);
-    while (0 == g_pages[pfn].head) {
+    while (g_pages[pfn].head && pfn) {
         pfn &= pfn - 1;
     }
     return pfn;
@@ -102,11 +95,17 @@ static pfn_t block_merge(pfn_t a, pfn_t b) {
 //------------------------------------------------------------------------------
 
 int pglist_contains(pglist_t *pl, pfn_t blk) {
+    ASSERT(NULL != pl);
+
     for (pfn_t i = pl->head; INVALID_PFN != i; i = g_pages[i].next) {
+        ASSERT(i < g_page_num);
+        ASSERT(g_pages[i].head);
+
         if (blk == i) {
             return 1;
         }
     }
+
     return 0;
 }
 
@@ -203,10 +202,10 @@ void pglist_remove(pglist_t *pl, pfn_t blk) {
 }
 
 
+
 //------------------------------------------------------------------------------
 // 物理页面分配/回收
 //------------------------------------------------------------------------------
-
 
 // 回收一个页块
 static void block_free(pfn_t blk) {
@@ -232,14 +231,14 @@ static void block_free(pfn_t blk) {
         }
 
         // 将伙伴从 free-list 中移除，合并为更大的块
-        pglist_remove(&g_free_blocks[rank], sib);
+        pglist_remove(&g_blocks[rank], sib);
         blk = block_merge(blk, sib);
     }
 
     // 已经合并到最大，标记为 FREE
     // 将合并之后的 block 添加到链表（的开头）
     g_pages[blk].type = PT_FREE;
-    pglist_push_head(&g_free_blocks[rank], blk);
+    pglist_push_head(&g_blocks[rank], blk);
 }
 
 // 申请一个页块，起始页号必须是 N*period+phase
@@ -257,7 +256,7 @@ static pfn_t block_alloc(uint8_t rank, pfn_t period, pfn_t phase) {
         pfn_t blk_phase = phase & ~(size - 1);
 
         // 遍历本层的 free block，寻找目标 color
-        pfn_t blk = g_free_blocks[blk_rank].head;
+        pfn_t blk = g_blocks[blk_rank].head;
         for (; INVALID_PFN != blk; blk = g_pages[blk].next) {
             if ((blk & (period - 1)) == blk_phase) {
                 break;
@@ -269,7 +268,7 @@ static pfn_t block_alloc(uint8_t rank, pfn_t period, pfn_t phase) {
         }
 
         // 将这个 block 标记为已分配
-        pglist_remove(&g_free_blocks[blk_rank], blk);
+        pglist_remove(&g_blocks[blk_rank], blk);
         g_pages[blk].type = PT_KERNEL;
 
         // 如果这个块超过所需，则将 block 分割为两个子块，返回不需要的部分
@@ -290,7 +289,6 @@ static pfn_t block_alloc(uint8_t rank, pfn_t period, pfn_t phase) {
 
     return INVALID_PFN;
 }
-
 
 
 
@@ -315,23 +313,27 @@ INIT_TEXT void page_init(size_t end) {
         g_pages[i].prev = INVALID_PFN;
         g_pages[i].next = INVALID_PFN;
         g_pages[i].type = PT_INVALID;
-        g_pages[i].head = 0;
+        g_pages[i].head = 1;
+        g_pages[i].rank = 0;
     }
 
     for (int i = 0; i < RANK_NUM; ++i) {
-        g_free_blocks[i].head = INVALID_PFN;
-        g_free_blocks[i].tail = INVALID_PFN;
+        g_blocks[i].head = INVALID_PFN;
+        g_blocks[i].tail = INVALID_PFN;
     }
 }
 
-// 将一段内存标记为可用范围
+// 将一段内存标记为有效内存
 // TODO 同时指定使用情况，即当前为 FREE 还是 BUSY
-INIT_TEXT void page_add(size_t start, size_t end) {
+INIT_TEXT void page_add(size_t start, size_t end, page_type_t type) {
     ASSERT(0 != g_page_num);
     ASSERT(NULL != g_pages);
+    // ASSERT(0 == (start & (PAGE_SIZE - 1)));
+    // ASSERT(0 == (end & (PAGE_SIZE - 1)));
 
     start = (start + PAGE_SIZE - 1) >> PAGE_SHIFT;
     end = end >> PAGE_SHIFT;
+    klog("adding page 0x%lx .. 0x%lx\n", start, end);
 
     if (end > g_page_num) {
         end = g_page_num;
@@ -339,12 +341,12 @@ INIT_TEXT void page_add(size_t start, size_t end) {
     if (start >= end) {
         return;
     }
-    // for (size_t i = start; i < end; ++i) {
-    //     g_pages[i].type = PT_FREE;
-    // }
+    for (size_t i = start; i < end; ++i) {
+        ASSERT(g_pages[i].type == PT_INVALID);
+        g_pages[i].head = 0;
+    }
 
-    // 这一段内存不一定是按块对齐的
-    // 尽可能使用更大的块
+    // 这一段内存不一定是按块对齐的，尽可能使用更大的块
     while (start < end) {
         int rank = __builtin_ctz(start);
         if ((rank >= RANK_NUM) || (start == 0)) {
@@ -357,7 +359,10 @@ INIT_TEXT void page_add(size_t start, size_t end) {
         // 创建一个块，并将其回收
         g_pages[start].head = 1;
         g_pages[start].rank = rank;
-        block_free(start);
+        g_pages[start].type = type;
+        if (PT_FREE == type) {
+            block_free(start);
+        }
         start += (1UL << rank);
     }
 }
@@ -365,7 +370,7 @@ INIT_TEXT void page_add(size_t start, size_t end) {
 // 申请一个物理页
 size_t page_alloc() {
     pfn_t pg = block_alloc(0, 1, 0);
-    if (INVALID_PFN) {
+    if (INVALID_PFN == pg) {
         return INVALID_ADDR;
     }
     return (size_t)pg << PAGE_SHIFT;
@@ -376,8 +381,10 @@ void page_free(size_t pa) {
     ASSERT(0 == (pa & (PAGE_SIZE - 1)));
 
     pa >>= PAGE_SHIFT;
-    ASSERT(PT_FREE != g_pages[pa].type);
+    ASSERT(pa < g_page_num);
+    ASSERT(g_pages[pa].head);
     ASSERT(0 == g_pages[pa].rank);
+    ASSERT(PT_FREE != g_pages[pa].type);
 
     block_free((pfn_t)pa);
 }
@@ -385,5 +392,9 @@ void page_free(size_t pa) {
 page_info_t *page_info(size_t pa) {
     ASSERT(0 == (pa & (PAGE_SIZE - 1)));
 
-    return &g_pages[pa >> PAGE_SHIFT].info;
+    pa >>= PAGE_SHIFT;
+    ASSERT(pa < g_page_num);
+    ASSERT(g_pages[pa].head);
+
+    return &g_pages[pa].info;
 }

@@ -4,6 +4,14 @@
 #include <def.h>
 
 
+// 物理页类型
+typedef enum page_type {
+    PT_INVALID  = 0,    // 不存在
+    PT_FREE,            // 未分配的可用内存
+    PT_KERNEL,          // 被内核代码数据占用
+} page_type_t;
+
+
 // 每个物理页都有这个结构体，记录相关信息
 typedef union page_info_ {
     struct {
@@ -15,7 +23,7 @@ typedef union page_info_ {
 
 
 INIT_TEXT void page_init(size_t end);
-INIT_TEXT void page_add(size_t start, size_t end);
+INIT_TEXT void page_add(size_t start, size_t end, page_type_t type);
 
 
 

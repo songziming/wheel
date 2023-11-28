@@ -38,6 +38,18 @@ make cov    # run unit test and generate coverage report in build/cov
 python3 -m http.server -d build/cov
 ```
 
+## debug using Qemu and gdb
+
+Launch qemu with `./run_iso.sh`.
+
+And run gdb in another terminal (requires newer version):
+
+```bash
+(gdb) target remote localhost:4444
+(gdb) file build/wheel.elf
+(gdb) b handle_assert_fail
+```
+
 ## debug using Bochs
 
 Extract symbol list from kernel image:

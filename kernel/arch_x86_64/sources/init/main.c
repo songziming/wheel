@@ -1,4 +1,6 @@
 #include <wheel.h>
+#include <page.h>
+
 #include <arch_api_p.h>
 #include <arch_mem.h>
 #include <arch_smp.h>
@@ -81,9 +83,10 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
         switch (tag->type) {
         case MB2_TAG_TYPE_MMAP: {
             mb2_tag_mmap_t *mmap = (mb2_tag_mmap_t *)tag;
-            g_rammap_len = (mmap->tag.size - sizeof(mb2_tag_mmap_t)) / mmap->entry_size;
+            uint32_t mmap_len = mmap->tag.size - sizeof(mb2_tag_mmap_t);
+            g_rammap_len = (int)(mmap_len / mmap->entry_size);
             g_rammap = early_alloc_ro(g_rammap_len * sizeof(ram_range_t));
-            for (size_t i = 0; i < g_rammap_len; ++i) {
+            for (int i = 0; i < g_rammap_len; ++i) {
                 mb2_mmap_entry_t *ent = &mmap->entries[i];
                 switch (ent->type) {
                 case MB2_MEMORY_AVAILABLE:        g_rammap[i].type = RAM_AVAILABLE;   break;
@@ -206,8 +209,14 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     cpu_info_show();
 #endif
 
-    // 划分内存布局
+    // 划分内存布局，启用物理页面管理
     mem_init();
+
+    size_t pages[5];
+    for (int i = 0; i < 5; ++i) {
+        pages[i] = page_alloc();
+        klog("- alloc page[%d] 0x%lx\n", i, pages[i]);
+    }
 
 end:
     // emu_exit(0);
