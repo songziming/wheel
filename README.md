@@ -46,7 +46,7 @@ And run gdb in another terminal (requires newer version):
 
 ```bash
 (gdb) target remote localhost:4444
-(gdb) file build/wheel.elf
+(gdb) symbol-file build/wheel.elf
 (gdb) b handle_assert_fail
 ```
 

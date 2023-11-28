@@ -307,7 +307,7 @@ INIT_TEXT void page_init(size_t end) {
         end = INVALID_PFN;
     }
     g_page_num = (pfn_t)end;
-    g_pages = (page_t *)early_alloc_rw(g_page_num * sizeof(page_t *));
+    g_pages = (page_t *)early_alloc_rw(g_page_num * sizeof(page_t));
 
     for (pfn_t i = 0; i < g_page_num; ++i) {
         g_pages[i].prev = INVALID_PFN;
@@ -333,7 +333,6 @@ INIT_TEXT void page_add(size_t start, size_t end, page_type_t type) {
 
     start = (start + PAGE_SIZE - 1) >> PAGE_SHIFT;
     end = end >> PAGE_SHIFT;
-    klog("adding page 0x%lx .. 0x%lx\n", start, end);
 
     if (end > g_page_num) {
         end = g_page_num;
