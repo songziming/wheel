@@ -243,10 +243,12 @@ static void block_free(pfn_t blk) {
 
 // 申请一个页块，起始页号必须是 N*period+phase
 // 限制起始页号可以实现页面着色，优化缓存性能
-static pfn_t block_alloc(uint8_t rank, pfn_t period, pfn_t phase) {
+static pfn_t block_alloc(uint8_t rank, pfn_t period, pfn_t phase, page_type_t type) {
     ASSERT(rank < RANK_NUM);
     ASSERT(0 == (period & (period - 1)));
     ASSERT(phase < period);
+    ASSERT(PT_INVALID != type);
+    ASSERT(PT_FREE != type);
 
     pfn_t size = 1 << rank;
     ASSERT(0 == (phase & (size - 1)));
@@ -269,7 +271,7 @@ static pfn_t block_alloc(uint8_t rank, pfn_t period, pfn_t phase) {
 
         // 将这个 block 标记为已分配
         pglist_remove(&g_blocks[blk_rank], blk);
-        g_pages[blk].type = PT_KERNEL;
+        g_pages[blk].type = type;
 
         // 如果这个块超过所需，则将 block 分割为两个子块，返回不需要的部分
         // 根据 phase 决定每一级回收前一半还是后一半
@@ -367,8 +369,8 @@ INIT_TEXT void page_add(size_t start, size_t end, page_type_t type) {
 }
 
 // 申请一个物理页
-size_t page_alloc() {
-    pfn_t pg = block_alloc(0, 1, 0);
+size_t page_alloc(page_type_t type) {
+    pfn_t pg = block_alloc(0, 1, 0, type);
     if (INVALID_PFN == pg) {
         return INVALID_ADDR;
     }

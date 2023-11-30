@@ -10,6 +10,19 @@ void *early_alloc_rw(size_t size) {
     return malloc(size);
 }
 
+
+static void setup() {
+    page_init(1000 << PAGE_SHIFT);
+}
+
+static void teardown() {
+    free(g_pages);
+    g_pages = NULL;
+    g_page_num = 0;
+}
+
+
+// 检查块结构是否正常
 void walk_pages() {
     pfn_t blk = 0;
     while (blk < g_page_num) {
@@ -23,16 +36,30 @@ void walk_pages() {
 }
 
 
-
-static void setup() {
-    page_init(1000);
+TEST_F(Page, BuildBlocks, setup, teardown) {
+    walk_pages();
+    page_add(10 << PAGE_SHIFT, 20 << PAGE_SHIFT, PT_FREE);
+    page_add(30 << PAGE_SHIFT, 40 << PAGE_SHIFT, PT_KERNEL);
+    page_add(50 << PAGE_SHIFT, 60 << PAGE_SHIFT, PT_FREE);
+    walk_pages();
+    page_add(20 << PAGE_SHIFT, 30 << PAGE_SHIFT, PT_FREE);
+    page_add(40 << PAGE_SHIFT, 50 << PAGE_SHIFT, PT_KERNEL);
+    page_add(60 << PAGE_SHIFT, 70 << PAGE_SHIFT, PT_FREE);
+    walk_pages();
 }
 
-static void teardown() {
-    free(g_pages);
+TEST_F(Page, AllocPages, setup, teardown) {
+    page_add(10 << PAGE_SHIFT, 20 << PAGE_SHIFT, PT_FREE);
+
+    int num = 0;
+    while (1) {
+        size_t pa = page_alloc(PT_KERNEL);
+        if (INVALID_ADDR == pa) {
+            break;
+        }
+        ++num;
+    }
+
+    EXPECT_TRUE(10 == num);
 }
 
-
-TEST_F(Page, Basic, setup, teardown) {
-    //
-}

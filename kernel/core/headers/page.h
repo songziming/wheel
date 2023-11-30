@@ -27,8 +27,7 @@ INIT_TEXT void page_add(size_t start, size_t end, page_type_t type);
 
 
 
-size_t page_alloc();    // 申请一个物理页，返回物理地址
-
+size_t page_alloc(page_type_t type);    // 申请一个物理页，返回物理地址
 void page_free(size_t pa);
 
 // 为了安全，可以将 page_info 复制一份返回，避免外部代码直接修改页描述符

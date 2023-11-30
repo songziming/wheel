@@ -214,7 +214,7 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
 
     size_t pages[5];
     for (int i = 0; i < 5; ++i) {
-        pages[i] = page_alloc();
+        pages[i] = page_alloc(PT_KERNEL);
         klog("- alloc page[%d] 0x%lx\n", i, pages[i]);
     }
 

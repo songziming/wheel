@@ -92,12 +92,17 @@ uint64_t *get_subtbl(uint64_t *tbl, uint64_t idx) {
 //  - cr4.PCID=1，cr3 低 12-bit 表示当前的 PCID
 
 
+// Intel 线性地址包含 protection key，位于最后一级页表条目符号扩展部分。
+// 启用 protection key 的条件是 cr4.PKE=1，cr4.PKS=1
+
 
 
 // 查询虚拟地址映射的物理地址，同时返回页面属性
 // 多级页表中，各级表项都有属性位，不能只看最末一级
 // 这部分行为要看 Intel 文档，AMD 文档说的不清楚
-// 各级 U/S 都是 1，线性地址才是 USER
+// 各级 U/S 都是 1，线性地址才是用户态可读的（特权代码一直可读）
+// 各级 R/W 都是 1，线性地址才是用户态可读可写的（特权代码是否可写取决于 cr0.WP）
+// 各级 NX 都是 0，线性地址才是可执行的
 
 uint64_t mmu_translate(uint64_t tbl, uint64_t va, uint64_t *attrs) {
     uint64_t *pml4 = (uint64_t *)(tbl | DIRECT_MAP_ADDR);
