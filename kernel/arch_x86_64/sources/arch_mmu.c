@@ -57,7 +57,7 @@
 
 // 创建一个空的页表
 uint64_t pagetbl_create() {
-    uint64_t  pa = page_alloc();
+    uint64_t  pa = page_alloc(PT_PGTBL);
     uint64_t *va = (uint64_t *)(pa | DIRECT_MAP_ADDR);
     bset(va, 0, PAGE_SIZE);
     return pa;
@@ -72,7 +72,7 @@ uint64_t *get_subtbl(uint64_t *tbl, uint64_t idx) {
         return (uint64_t *)((tbl[idx] & MMU_ADDR) | DIRECT_MAP_ADDR);
     }
 
-    uint64_t  pa = page_alloc();
+    uint64_t  pa = page_alloc(PT_PGTBL);
     uint64_t *va = (uint64_t *)(pa | DIRECT_MAP_ADDR);
     tbl[idx] = (pa & MMU_ADDR) | MMU_P | MMU_RW | MMU_RW;
     bset(va, 0, PAGE_SIZE);

@@ -40,7 +40,7 @@ static pglist_t g_blocks[RANK_NUM];
 //------------------------------------------------------------------------------
 
 // 返回页所在的块
-static pfn_t block_head(pfn_t pfn) {
+pfn_t page_block_head(pfn_t pfn) {
     ASSERT(pfn < g_page_num);
     while (g_pages[pfn].head && pfn) {
         pfn &= pfn - 1;
@@ -49,10 +49,20 @@ static pfn_t block_head(pfn_t pfn) {
 }
 
 // 返回块大小
-static pfn_t block_size(pfn_t blk) {
+pfn_t page_block_size(pfn_t blk) {
     ASSERT(blk < g_page_num);
     ASSERT(g_pages[blk].head);
     return 1 << g_pages[blk].rank;
+}
+
+page_info_t *page_block_info(size_t pa) {
+    ASSERT(0 == (pa & (PAGE_SIZE - 1)));
+
+    pa >>= PAGE_SHIFT;
+    ASSERT(pa < g_page_num);
+    ASSERT(g_pages[pa].head);
+
+    return &g_pages[pa].info;
 }
 
 // 将一个块分割为两个大小相等的块，返回后一个块的编号
@@ -80,7 +90,7 @@ static pfn_t block_merge(pfn_t a, pfn_t b) {
     ASSERT(g_pages[b].head);
     ASSERT(g_pages[a].rank < RANK_NUM - 1);
     ASSERT(g_pages[a].rank == g_pages[b].rank);
-    ASSERT((a ^ b) == block_size(a));
+    ASSERT((a ^ b) == page_block_size(a));
 
     g_pages[a & b].rank++;
     g_pages[a | b].head = 0;
@@ -388,14 +398,4 @@ void page_free(size_t pa) {
     ASSERT(PT_FREE != g_pages[pa].type);
 
     block_free((pfn_t)pa);
-}
-
-page_info_t *page_info(size_t pa) {
-    ASSERT(0 == (pa & (PAGE_SIZE - 1)));
-
-    pa >>= PAGE_SHIFT;
-    ASSERT(pa < g_page_num);
-    ASSERT(g_pages[pa].head);
-
-    return &g_pages[pa].info;
 }

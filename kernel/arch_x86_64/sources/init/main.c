@@ -209,14 +209,12 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     cpu_info_show();
 #endif
 
+    // 准备 gdt、idt、tss
+    // 需要根据 cpu 个数分配 gdt 和 tss 的空间
+    idt_init();
+
     // 划分内存布局，启用物理页面管理
     mem_init();
-
-    size_t pages[5];
-    for (int i = 0; i < 5; ++i) {
-        pages[i] = page_alloc(PT_KERNEL);
-        klog("- alloc page[%d] 0x%lx\n", i, pages[i]);
-    }
 
 end:
     // emu_exit(0);

@@ -49,6 +49,7 @@ KCFLAGS := -std=c11 $(KINCS:%=-I%) -Wall -Wextra -Wshadow -Werror=implicit
 KCFLAGS += -ffreestanding -fno-builtin -flto -ffunction-sections -fdata-sections
 ifeq ($(DEBUG),1)
     KCFLAGS += -g -DDEBUG -fstack-protector
+    KCFLAGS += -fsanitize=undefined
     # KCFLAGS += -fsanitize=kernel-address -fno-omit-frame-pointer
 else
     KCFLAGS += -O2 -DNDEBUG

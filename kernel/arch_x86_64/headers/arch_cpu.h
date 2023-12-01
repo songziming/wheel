@@ -33,4 +33,7 @@ INIT_TEXT void cpu_info_show();
 #endif
 
 
+INIT_TEXT void idt_init();
+
+
 #endif // ARCH_CPU_H
