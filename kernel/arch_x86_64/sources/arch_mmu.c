@@ -39,11 +39,6 @@
 #define OFFSET_2M(x)    ((x) & (SIZE_2M - 1))
 #define OFFSET_1G(x)    ((x) & (SIZE_1G - 1))
 
-// // 简单地映射，参考 DIRECT_MAP_ADDR
-// #define VIRT(x)         ((x) |  0xffff800000000000UL)
-// #define PHYS(x)         ((x) & ~0xffff800000000000UL)
-
-
 // 属性位
 #define MMU_ATTRS   MMU_NX | MMU_US | MMU_RW
 

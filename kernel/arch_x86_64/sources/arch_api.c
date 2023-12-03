@@ -13,6 +13,18 @@ inline void cpu_rfence() { __asm__("lfence" ::: "memory"); }
 inline void cpu_wfence() { __asm__("sfence" ::: "memory"); }
 inline void cpu_rwfence() { __asm__("mfence" ::: "memory"); }
 
+inline int cpu_int_lock() {
+    uint64_t key;
+    __asm__("pushfq; cli; popq %0" : "=r"(key));
+    return (key & 0x200) ? 1 : 0;
+}
+
+inline void cpu_int_unlock(int key) {
+    if (key) {
+        __asm__("sti");
+    }
+}
+
 // bochs magic breakpoint
 void emu_break() {
     __asm__("xchgw %bx, %bx");

@@ -154,7 +154,6 @@ INIT_TEXT void *early_alloc_rw(size_t size) {
 INIT_TEXT void early_rw_unlock() {
     size_t ptr = (size_t)g_rw_buff.ptr - KERNEL_TEXT_ADDR;
     size_t end = rammap_extentof(ptr) + KERNEL_TEXT_ADDR;
-    klog("extending early buff from %p to %zx\n", g_rw_buff.end, end);
     g_rw_buff.end = (uint8_t *)end;
 }
 
@@ -268,7 +267,6 @@ INIT_TEXT void mem_init() {
     size_t l1_size = l1_line * g_l1d_info.sets;
     ASSERT(0 == (l1_line & (l1_line - 1)));
     ASSERT(0 == (l1_size & (l1_size - 1)));
-    klog("L1 line size %lx, L1 set size %lx\n", l1_line, l1_size);
 
     // PCPU 大小按 L1 一路对齐，PCPU 地址按 L1 一行对齐
     size_t pcpu_copy = (size_t)(&_pcpu_data_end - &_pcpu_addr);

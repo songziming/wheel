@@ -9,6 +9,9 @@ void cpu_rfence();
 void cpu_wfence();
 void cpu_rwfence();
 
+int cpu_int_lock();
+void cpu_int_unlock(int key);
+
 void emu_break();
 NORETURN void emu_exit(int ret);
 

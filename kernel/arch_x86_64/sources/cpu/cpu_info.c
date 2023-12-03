@@ -376,7 +376,7 @@ static INIT_TEXT void intel_get_cache_info() {
 
 
 //------------------------------------------------------------------------------
-// 公开函数
+// 检测处理器型号信息
 //------------------------------------------------------------------------------
 
 INIT_TEXT void cpu_info_detect() {
@@ -423,17 +423,21 @@ INIT_TEXT void cpu_info_detect() {
     }
 }
 
-INIT_TEXT void cpu_features_init() {
-    if (CPU_FEATURE_NX & g_cpu_features) {
-        uint64_t efer = read_msr(MSR_EFER);
-        efer |= 1UL << 11;  // NXE
-        write_msr(MSR_EFER, efer);
-    }
 
+//------------------------------------------------------------------------------
+// 设置功能开关
+//------------------------------------------------------------------------------
+
+// arch_entries.S
+void syscall_entry();
+
+INIT_TEXT void cpu_features_init() {
+    // 设置 cr0
     uint64_t cr0 = read_cr0();
     cr0 |=  (1UL << 16); // WP 分页写保护
     write_cr0(cr0);
 
+    // 设置 cr4
     uint64_t cr4 = read_cr4();
     cr4 |= 1UL << 2; // time stamp counter
     cr4 |= 1UL << 7; // PGE 全局页（不会从 TLB 中清除）
@@ -441,6 +445,21 @@ INIT_TEXT void cpu_features_init() {
         cr4 |= 1UL << 17; // PCIDE 上下文标识符
     }
     write_cr4(cr4);
+
+    // 设置 efer
+    uint64_t efer = read_msr(MSR_EFER);
+    if (CPU_FEATURE_NX & g_cpu_features) {
+        efer |= 1UL << 11;  // NXE
+    }
+    if (0 == bcmp(g_cpu_vendor, VENDOR_INTEL, 12)) {
+        efer |= (1UL <<  0); // SCE，启用快速系统调用指令 syscall/sysret
+    }
+    write_msr(MSR_EFER, efer);
+
+    // 设置系统调用相关 MSR（只允许 64-bit 模式下的系统调用入口）
+    write_msr(MSR_STAR, 0x001b0008UL << 32);    // STAR
+    // write_msr(MSR_LSTAR, (uint64_t)syscall_entry); // LSTAR
+    write_msr(MSR_SFMASK, 0UL);                     // SFMASK
 }
 
 #ifdef DEBUG
@@ -448,6 +467,9 @@ INIT_TEXT void cpu_features_init() {
 INIT_TEXT void cpu_info_show() {
     klog("cpu vendor: '%12s'\n", g_cpu_vendor);
     klog("cpu brand: '%48s'\n", g_cpu_brand);
+
+    klog("L1-code line=%zu, nsets=%zu, nways=%zu\n", g_l1i_info.line_size, g_l1i_info.sets, g_l1i_info.ways);
+    klog("L1-data line=%zu, nsets=%zu, nways=%zu\n", g_l1d_info.line_size, g_l1d_info.sets, g_l1d_info.ways);
 
     struct {
         const char *name;

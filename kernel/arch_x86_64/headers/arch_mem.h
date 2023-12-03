@@ -25,6 +25,8 @@ INIT_TEXT void rammap_show();
 
 INIT_TEXT void early_alloc_init();
 INIT_TEXT void early_rw_unlock();
+
+INIT_TEXT void gsbase_init(int idx);
 INIT_TEXT void mem_init();
 
 #endif // ARCH_MEM_H

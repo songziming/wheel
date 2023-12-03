@@ -215,14 +215,18 @@ const char *sym_resolve(size_t addr, size_t *rela) {
     return "(null)";
 }
 
-void print_stacktrace() {
-    size_t frames[32];
-    int depth = unwind(frames, 32);
-    for (int i = 1; i < depth; ++i) {
+void print_frames(const size_t *frames, int num) {
+    for (int i = 0; i < num; ++i) {
         size_t rela;
         const char *name = sym_resolve(frames[i], &rela);
         klog(" -> frame %2d: %s + 0x%zx\n", i, name, rela);
     }
+}
+
+void print_stacktrace() {
+    size_t frames[32];
+    int depth = unwind(frames, 32);
+    print_frames(&frames[1], depth - 1);
 }
 
 

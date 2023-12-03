@@ -12,7 +12,6 @@
 #define CPU_FEATURE_ERMS            0x0040  // enhanced rep movsb/stosb
 #define CPU_FEATURE_INVPCID         0x0080
 
-extern CONST uint32_t g_cpu_features;
 
 typedef struct cache_info {
     size_t line_size;
@@ -26,6 +25,9 @@ extern CONST cache_info_t g_l1i_info;
 extern CONST cache_info_t g_l2_info;
 extern CONST cache_info_t g_l3_info;
 
+extern CONST uint32_t g_cpu_features;
+
+
 INIT_TEXT void cpu_info_detect();
 INIT_TEXT void cpu_features_init();
 #ifdef DEBUG
@@ -33,7 +35,10 @@ INIT_TEXT void cpu_info_show();
 #endif
 
 
+INIT_TEXT void gdt_init();
+INIT_TEXT void gdt_load();
 INIT_TEXT void idt_init();
-
+INIT_TEXT void idt_load();
+INIT_TEXT void tss_init_load();
 
 #endif // ARCH_CPU_H

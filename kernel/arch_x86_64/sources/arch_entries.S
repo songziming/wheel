@@ -1,16 +1,9 @@
 // 中断异常入口、系统调用入口
 
-// 发生中断时的栈结构，向低地址生长，最后的 RAX 是我们压栈的
-// High |    SS    |
-//      |   RSP    |
-//      |  RFLAGS  |
-//      |    CS    | <-- %rsp + 0x18
-//      |   RIP    |
-//      | ERR CODE |
-// Low  |   RAX    | <-- %rsp
-
 .global isr_entries
 
+.extern handle_exception
+.extern handle_interrupt
 
 
 // 必须开启这个模式
@@ -42,38 +35,38 @@ isr_entries:
 .code64
 
 // 所有寄存器入栈（除了 RAX）
-#define save_regs_except_rax    \
-    pushq   %rbx;               \
-    pushq   %rcx;               \
-    pushq   %rdx;               \
-    pushq   %rdi;               \
-    pushq   %rsi;               \
-    pushq   %rbp;               \
-    pushq   %r8;                \
-    pushq   %r9;                \
-    pushq   %r10;               \
-    pushq   %r11;               \
-    pushq   %r12;               \
-    pushq   %r13;               \
-    pushq   %r14;               \
+#define save_regs   \
+    pushq   %rbx;   \
+    pushq   %rcx;   \
+    pushq   %rdx;   \
+    pushq   %rdi;   \
+    pushq   %rsi;   \
+    pushq   %rbp;   \
+    pushq   %r8;    \
+    pushq   %r9;    \
+    pushq   %r10;   \
+    pushq   %r11;   \
+    pushq   %r12;   \
+    pushq   %r13;   \
+    pushq   %r14;   \
     pushq   %r15;
 
 // 所有寄存器出栈（包括 RAX）
-#define restore_all_regs        \
-    popq    %r15;               \
-    popq    %r14;               \
-    popq    %r13;               \
-    popq    %r12;               \
-    popq    %r11;               \
-    popq    %r10;               \
-    popq    %r9;                \
-    popq    %r8;                \
-    popq    %rbp;               \
-    popq    %rsi;               \
-    popq    %rdi;               \
-    popq    %rdx;               \
-    popq    %rcx;               \
-    popq    %rbx;               \
+#define load_regs   \
+    popq    %r15;   \
+    popq    %r14;   \
+    popq    %r13;   \
+    popq    %r12;   \
+    popq    %r11;   \
+    popq    %r10;   \
+    popq    %r9;    \
+    popq    %r8;    \
+    popq    %rbp;   \
+    popq    %rsi;   \
+    popq    %rdi;   \
+    popq    %rdx;   \
+    popq    %rcx;   \
+    popq    %rbx;   \
     popq    %rax;
 
 // 没有异常码的异常入口，以及中断入口
@@ -114,10 +107,77 @@ isr_\vec:
 
 
 
-// 所有异常的通用处理流程
+// 发生中断时的栈结构，向低地址生长，最后的 RAX 是我们压栈的
+// High |    SS    |
+//      |   RSP    |
+//      |  RFLAGS  |
+//      |    CS    | <-- %rsp + 0x18
+//      |   RIP    |
+//      | ERR CODE |
+// Low  |   RAX    | <-- %rsp
+
+
+// 中断/异常处理过程会占用大量栈空间，特别是保存寄存器，可能溢出
+// 如果寄存器压栈过程溢出，就会导致 double-fault
+// 有什么办法避免中断/异常时栈溢出？
+//  - 如果来自 ring3，则自动切换到 tss->rsp3，一般将 tss->rsp3 设为 TCB 结构体
+//  - 如果设置了 ist，则自动切换到 tss->ist[i]，每个 cpu 最多可以设置七个 ist
+//      ist 机制常用于 NMI、double-fault、machine-check，其他的异常如果溢出，还能在 double-fault 中处理
+//      如果 double-fault 内部又溢出，三重异常，机器就只能重启了
+//      带有 ist 的异常处理流程中，要避免重入相同的异常，这会导致栈被覆盖
+//  - 剩下的情况，来自内核代码。只能保证栈空间足够，发生异常也不会溢出。
+//      内核代码流程可控
+
+
+
+// 异常处理流程，不允许重入，不切换中断栈，不切换任务
+// TODO 异常更像是被动的函数调用，无需备份所有寄存器，只要将 abi 规定的 caller-saved regs 保存即可
+//      包括：rdi, rsi, rdx, rcx, r8, r9, rax, r10, r11
 exception_stub:
+    pushq   %rdi
+    pushq   %rsi
+    pushq   %rdx
+    pushq   %rcx
+    pushq   %r8
+    pushq   %r9
+    pushq   %r10
+    pushq   %r11
+
+    // TODO 所有寄存器已经入栈，应该切换到专门的异常栈
+
+    // 函数参数
+    movq    %rax, %rdi  // 向量号
+    movq    %rsp, %rsi  // 当前栈帧
+
+    // 需要建立一个新的栈帧
+    pushq   80(%rsi)   // 返回地址（即发生异常的 rip）
+    pushq   %rbp // 外层栈帧的 rbp
+    movq    %rsp, %rbp // rbp 指向现在的栈帧
+
+    // 调用 C 函数处理异常
+    call    handle_exception
+
+    // 恢复栈，撤销当前栈帧
+    movq    %rbp, %rsp
+    addq    $16, %rsp
+
+    popq    %r11
+    popq    %r10
+    popq    %r9
+    popq    %r8
+    popq    %rcx
+    popq    %rdx
+    popq    %rsi
+    popq    %rdi
+    popq    %rax
+
+    addq    $8, %rsp    // 跳过错误码
     iretq
 
-// 所有中断的通用处理流程
+
+// 中断处理流程，允许重入，切换中断栈，可以切换任务
 interrupt_stub:
+    save_regs
+    load_regs
+    addq    $8, %rsp    // 跳过错误码
     iretq

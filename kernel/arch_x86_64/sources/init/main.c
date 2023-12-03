@@ -150,11 +150,12 @@ static void serial_console_puts(const char *s, size_t n) {
 
 // BSP 初始化函数
 INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
+    // 设置临时内存分配、临时串口输出
     early_alloc_init();
-
     serial_init();
     set_log_func(serial_puts);
 
+    // 解析 multiboot 信息
     switch (eax) {
     case MB1_BOOTLOADER_MAGIC: mb1_init(ebx); break;
     case MB2_BOOTLOADER_MAGIC: mb2_init(ebx); break;
@@ -162,20 +163,8 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
         klog("fatal: unknown multibooot magic %x\n", eax);
         goto end;
     }
-#ifdef DEBUG
-    rammap_show();
-#endif
 
-    // 检查是否支持图形界面，使用不同输出方式
-    // TODO 等 early_rw 限制放开再启动终端输出
-    if ((0 != g_fb.rows) && (0 != g_fb.cols)) {
-        framebuf_init(&g_fb);
-        set_log_func(serial_framebuf_puts);
-    } else {
-        console_init();
-        set_log_func(serial_console_puts);
-    }
-
+    // 寻找 RSDP，并找出所有 ACPI 表
     if (NULL == g_rsdp) {
         g_rsdp = acpi_find_rsdp();
     }
@@ -183,12 +172,7 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
         klog("fatal: RSDP not found!\n");
         goto end;
     }
-
-    // 寻找 ACPI 表
     acpi_parse_rsdp(g_rsdp);
-#ifdef DEBUG
-    acpi_show_tables();
-#endif
 
     // 解析 MADT，获取多核信息
     madt_t *madt = (madt_t *)acpi_get_table("APIC");
@@ -201,7 +185,14 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     // 重要数据已备份，放开 early_rw 长度限制
     early_rw_unlock();
 
-    // TODO early_rw 已经放开限制，在这里配置字符或图形终端
+    // 检查是否支持图形界面，使用不同输出方式
+    if ((0 != g_fb.rows) && (0 != g_fb.cols)) {
+        framebuf_init(&g_fb);
+        set_log_func(serial_framebuf_puts);
+    } else {
+        console_init();
+        set_log_func(serial_console_puts);
+    }
 
     cpu_info_detect(); // 检测 CPU 特性
     cpu_features_init(); // 开启 CPU 功能
@@ -209,12 +200,20 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     cpu_info_show();
 #endif
 
-    // 准备 gdt、idt、tss
-    // 需要根据 cpu 个数分配 gdt 和 tss 的空间
+    // 切换正式 gdt，加载 idt
+    gdt_init();
+    gdt_load();
     idt_init();
+    idt_load();
 
     // 划分内存布局，启用物理页面管理
     mem_init();
+    gsbase_init(0);
+
+    // 加载 tss（依赖 pcpu，需要等 gsbase 之后）
+    tss_init_load();
+
+    __asm__("ud2");
 
 end:
     // emu_exit(0);

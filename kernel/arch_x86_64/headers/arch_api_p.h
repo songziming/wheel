@@ -64,9 +64,16 @@ DEFINE_WRITE_CR(4) // write_cr4
 
 enum {
     MSR_EFER    = 0xc0000080U,
+
+    MSR_STAR    = 0xc0000081U,
+    MSR_LSTAR   = 0xc0000082U,
+    MSR_CSTAR   = 0xc0000083U,
+    MSR_SFMASK  = 0xc0000084U,
+
     MSR_FSBASE  = 0xc0000100U,
     MSR_GSBASE  = 0xc0000101U,
     MSR_KGSBASE = 0xc0000102U,
+
     MSR_MISC    = 0x000001a0U,
 };
 
