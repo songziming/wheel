@@ -2,6 +2,7 @@
 
 .global isr_entries
 
+// arch_int.c
 .extern handle_exception
 .extern handle_interrupt
 

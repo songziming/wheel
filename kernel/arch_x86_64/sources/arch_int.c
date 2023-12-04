@@ -1,14 +1,25 @@
 // 中断和异常处理
 
+#include <arch_int.h>
 #include <wheel.h>
 #include <arch_api_p.h>
+#include <arch_cpu.h>
 
 
 
 // TODO 中断栈应该使用 page-alloc 动态申请，再映射到内存空间
 //      中断栈之前保留 guard page，这样可以检测到栈溢出
-static PCPU_BSS uint8_t int_stack[INT_STACK_SIZE]; // 每个 CPU 独享的中断栈
-static PCPU_DATA int g_int_depth = 0;
+PCPU_BSS uint8_t int_stack[INT_STACK_SIZE]; // 每个 CPU 独享的中断栈
+PCPU_DATA int g_int_depth = 0;
+
+
+//------------------------------------------------------------------------------
+// 准备中断处理机制
+//------------------------------------------------------------------------------
+
+// void int_init() {
+//     tss_set_rsp
+// }
 
 
 //------------------------------------------------------------------------------

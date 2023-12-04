@@ -13,7 +13,8 @@
 typedef struct idt_ent {
     uint16_t offset_low;
     uint16_t selector;
-    uint16_t attr;
+    uint8_t  ist;
+    uint8_t  attr;
     uint16_t offset_mid;
     uint32_t offset_high;
     uint32_t reserved;
@@ -21,28 +22,36 @@ typedef struct idt_ent {
 
 typedef struct tss {
     uint32_t reserved1;
-    uint32_t rsp0_lower;
-    uint32_t rsp0_upper;
-    uint32_t rsp1_lower;
-    uint32_t rsp1_upper;
-    uint32_t rsp2_lower;
-    uint32_t rsp2_upper;
-    uint32_t reserved2;
-    uint32_t reserved3;
-    uint32_t ist1_lower;
-    uint32_t ist1_upper;
-    uint32_t ist2_lower;
-    uint32_t ist2_upper;
-    uint32_t ist3_lower;
-    uint32_t ist3_upper;
-    uint32_t ist4_lower;
-    uint32_t ist4_upper;
-    uint32_t ist5_lower;
-    uint32_t ist5_upper;
-    uint32_t ist6_lower;
-    uint32_t ist6_upper;
-    uint32_t ist7_lower;
-    uint32_t ist7_upper;
+    // uint32_t rsp0_lower;
+    // uint32_t rsp0_upper;
+    // uint32_t rsp1_lower;
+    // uint32_t rsp1_upper;
+    // uint32_t rsp2_lower;
+    // uint32_t rsp2_upper;
+    struct {
+        uint32_t lower;
+        uint32_t upper;
+    } rsp[3]; // 0,1,2
+    // uint32_t reserved2;
+    // uint32_t reserved3;
+    // uint32_t ist1_lower;
+    // uint32_t ist1_upper;
+    // uint32_t ist2_lower;
+    // uint32_t ist2_upper;
+    // uint32_t ist3_lower;
+    // uint32_t ist3_upper;
+    // uint32_t ist4_lower;
+    // uint32_t ist4_upper;
+    // uint32_t ist5_lower;
+    // uint32_t ist5_upper;
+    // uint32_t ist6_lower;
+    // uint32_t ist6_upper;
+    // uint32_t ist7_lower;
+    // uint32_t ist7_upper;
+    struct {
+        uint32_t lower;
+        uint32_t upper;
+    } ist[8]; // 0..7，其中 ist[0] 保留
     uint32_t reserved4;
     uint32_t reserved5;
     uint16_t reserved6;
@@ -56,9 +65,9 @@ typedef struct tbl_ptr {
 
 
 
-static CONST    uint64_t *g_gdt = NULL;
-static CONST    idt_ent_t g_idt[256];
-static PCPU_BSS tss_t     g_tss;
+static CONST     uint64_t *g_gdt = NULL;
+static CONST     idt_ent_t g_idt[256];
+static PCPU_DATA tss_t     g_tss = {0};
 
 
 // arch_entries.S
@@ -95,14 +104,19 @@ INIT_TEXT void gdt_load() {
 }
 
 
+// 64-bit IDT 只允许中断门和陷阱门，没有调用门
+// 中断门和陷阱门有 ist，调用门没有
+// 调用门可以放在 GDT、LDT 内部
+
 INIT_TEXT void idt_init() {
+    bset(g_idt, 0, sizeof(g_idt));
+
     for (int i = 0; i < 256; ++i) {
-        g_idt[i].attr        = 0x8e00;  // dpl = 0
-        g_idt[i].selector    = 0x08;    // 内核代码段
+        g_idt[i].attr        = 0x8e; // dpl=0，type=E，中断门
+        g_idt[i].selector    = 0x08; // 内核代码段
         g_idt[i].offset_low  =  isr_entries[i]        & 0xffff;
         g_idt[i].offset_mid  = (isr_entries[i] >> 16) & 0xffff;
         g_idt[i].offset_high = (isr_entries[i] >> 32) & 0xffffffff;
-        g_idt[i].reserved    = 0;
     }
 }
 
@@ -117,10 +131,7 @@ INIT_TEXT void idt_load() {
 INIT_TEXT void tss_init_load() {
     ASSERT(NULL != g_gdt);
 
-    tss_t *tss = this_ptr(&g_tss);
-    bset(tss, 0, sizeof(tss_t));
-
-    uint64_t addr = (uint64_t)tss;
+    uint64_t addr = (uint64_t)this_ptr(&g_tss);
     uint64_t size = sizeof(tss_t);
 
     uint64_t lower = 0UL;
@@ -138,3 +149,29 @@ INIT_TEXT void tss_init_load() {
     load_tr(((2 * idx + 6) << 3) | 3);
 }
 
+void idt_set_ist(int vec, int idx) {
+    ASSERT(vec >= 0);
+    ASSERT(vec < 256);
+    ASSERT(idx > 0);
+    ASSERT(idx < 8);
+
+    g_idt[vec].ist = idx & 7;
+}
+
+void tss_set_rsp(int idx, uint64_t addr) {
+    ASSERT(idx >= 0);
+    ASSERT(idx < 3);
+
+    tss_t *tss = this_ptr(&g_tss);
+    tss->rsp[idx].lower = addr & 0xffffffff;
+    tss->rsp[idx].upper = (addr >> 32) & 0xffffffff;
+}
+
+void tss_set_ist(int idx, uint64_t addr) {
+    ASSERT(idx > 0);
+    ASSERT(idx < 8);
+
+    tss_t *tss = this_ptr(&g_tss);
+    tss->ist[idx].lower = addr & 0xffffffff;
+    tss->ist[idx].upper = (addr >> 32) & 0xffffffff;
+}
