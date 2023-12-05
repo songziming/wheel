@@ -5,6 +5,7 @@
 #include <arch_mem.h>
 #include <arch_smp.h>
 #include <arch_cpu.h>
+#include <arch_int.h>
 
 #include <dev/acpi.h>
 #include <dev/serial.h>
@@ -212,6 +213,9 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 加载 tss（依赖 pcpu，需要等 gsbase 之后）
     tss_init_load();
+
+    // 启用中断异常机制
+    int_init();
 
     __asm__("ud2");
 

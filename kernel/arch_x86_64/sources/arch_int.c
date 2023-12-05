@@ -9,17 +9,23 @@
 
 // TODO 中断栈应该使用 page-alloc 动态申请，再映射到内存空间
 //      中断栈之前保留 guard page，这样可以检测到栈溢出
-PCPU_BSS uint8_t int_stack[INT_STACK_SIZE]; // 每个 CPU 独享的中断栈
-PCPU_DATA int g_int_depth = 0;
+PCPU_BSS uint8_t  g_int_stack[INT_STACK_SIZE]; // 每个 CPU 独享的中断栈
+PCPU_BSS int      g_int_depth;
+PCPU_BSS uint64_t g_int_rsp;
 
 
 //------------------------------------------------------------------------------
 // 准备中断处理机制
 //------------------------------------------------------------------------------
 
-// void int_init() {
-//     tss_set_rsp
-// }
+// 为每个 CPU 分配异常处理专用栈，并映射到内核虚拟地址
+// TODO 需要让每个 CPU 的中断栈按 L1 对齐
+void int_init() {
+    for (int i = 0; i < cpu_count(); ++i) {
+        *(int *)pcpu_ptr(i, &g_int_depth) = 0;
+        *(uint64_t *)pcpu_ptr(i, &g_int_rsp) = (uint64_t)pcpu_ptr(i, &g_int_stack[INT_STACK_SIZE]);
+    }
+}
 
 
 //------------------------------------------------------------------------------
