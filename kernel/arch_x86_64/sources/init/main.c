@@ -183,6 +183,10 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     }
     parse_madt(madt);
 
+    // SRAT 可以获取 NUMA 信息
+    acpi_tbl_t *srat = acpi_get_table("SRAT");
+    klog("SRAT at %p\n", srat);
+
     // 重要数据已备份，放开 early_rw 长度限制
     early_rw_unlock();
 
@@ -213,6 +217,9 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 加载 tss（依赖 pcpu，需要等 gsbase 之后）
     tss_init_load();
+
+    // 创建并加载内核页表
+    ctx_init();
 
     // 启用中断异常机制
     int_init();

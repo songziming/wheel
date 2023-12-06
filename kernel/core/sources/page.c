@@ -4,6 +4,9 @@
 #include <wheel.h>
 
 
+// TODO 除了管理物理页，还要记录页面颜色直方图
+//      提供 first-level-cache 和 last-level-cache 的颜色数量
+
 // 页描述符
 typedef struct page {
     pfn_t prev;

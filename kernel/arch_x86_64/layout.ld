@@ -47,6 +47,7 @@ SECTIONS {
     .init.bss (NOLOAD) : AT(ADDR(.init.bss) - TEXT_ADDR) { *(.init.bss) } : init
     _init_end = .;
 
+    . += 4K;
     .text ALIGN(4K) : AT(ADDR(.text) - TEXT_ADDR) {
         _text_addr = .;
         *(.text)
@@ -54,6 +55,7 @@ SECTIONS {
         _text_end = .;
     } : text = 0x90
 
+    . += 4K;
     .rodata ALIGN(4K) : AT(ADDR(.rodata) - TEXT_ADDR) {
         _rodata_addr = .;
         *(.rodata)
@@ -64,6 +66,7 @@ SECTIONS {
         *(.rotail)
     } : rodata = 0
 
+    . += 4K;
     .data ALIGN(4K) : AT(ADDR(.data) - TEXT_ADDR) {
         _data_addr = .;
         *(.data)

@@ -27,6 +27,10 @@ INIT_TEXT void early_alloc_init();
 INIT_TEXT void early_rw_unlock();
 
 INIT_TEXT void gsbase_init(int idx);
+
 INIT_TEXT void mem_init();
+INIT_TEXT void ctx_init();
+
+void reclaim_init();
 
 #endif // ARCH_MEM_H

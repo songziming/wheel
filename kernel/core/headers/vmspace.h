@@ -7,7 +7,7 @@
 typedef struct vmrange {
     dlnode_t    dl;
     size_t      addr;   // 虚拟地址
-    size_t      size;
+    size_t      end;
     const char *desc;
 } vmrange_t;
 

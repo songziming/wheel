@@ -9,7 +9,12 @@
 
 // TODO 中断栈应该使用 page-alloc 动态申请，再映射到内存空间
 //      中断栈之前保留 guard page，这样可以检测到栈溢出
-PCPU_BSS uint8_t  g_int_stack[INT_STACK_SIZE]; // 每个 CPU 独享的中断栈
+// 也可以将多占用一个页，将低地址页释放，标记为无效，当作 guard-page
+// 如果预留连续内存，再释放其中一个页，会破坏内核地址空间连续的页表项
+// 导致内核无法统一使用 2M 页表项
+PCPU_BSS uint8_t  g_int_stack[INT_STACK_SIZE+PAGE_SIZE] ALIGNED(PAGE_SIZE);
+
+
 PCPU_BSS int      g_int_depth;
 PCPU_BSS uint64_t g_int_rsp;
 
@@ -51,6 +56,7 @@ typedef struct exp_frame {
 } PACKED exp_frame_t;
 
 void handle_exception(int vec, exp_frame_t *f) {
+    klog("frame addr %p\n", f);
     klog("exception %d from rip=%lx\n", vec, f->rip);
 
     size_t rela;

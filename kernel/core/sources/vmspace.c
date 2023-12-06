@@ -17,7 +17,7 @@ void vmspace_add(vmspace_t *vm, vmrange_t *rng) {
     for (; &vm->head != node; node = node->next) {
         vmrange_t *cur = containerof(node, vmrange_t, dl);
         if (rng->addr < cur->addr) {
-            ASSERT(rng->addr + rng->size <= cur->addr);
+            ASSERT(rng->end <= cur->addr);
             break;
         }
     }
@@ -32,6 +32,6 @@ void vmspace_show(vmspace_t *vm) {
     klog("virtual mem space:\n");
     for (dlnode_t *i = vm->head.next; &vm->head != i; i = i->next) {
         vmrange_t *rng = containerof(i, vmrange_t, dl);
-        klog(" - 0x%zx..0x%zx %s\n", rng->addr, rng->addr + rng->size, rng->desc);
+        klog(" - 0x%zx..0x%zx %s\n", rng->addr, rng->end, rng->desc);
     }
 }

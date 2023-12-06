@@ -382,6 +382,7 @@ static INIT_TEXT void intel_get_cache_info() {
 INIT_TEXT void cpu_info_detect() {
     uint32_t a, b, c, d;
 
+    // 获取生产商和型号字符串
     __asm__("cpuid" : "=b"(b), "=c"(c), "=d"(d) : "a"(0));
     bcpy(g_cpu_vendor, (uint32_t[]){ b,d,c }, 12);
     __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000002));
@@ -404,8 +405,11 @@ INIT_TEXT void cpu_info_detect() {
     g_cpu_features |= (d & (1U <<  4)) ? CPU_FEATURE_TSC    : 0;
 
     __asm__("cpuid" : "=b"(b) : "a"(7), "c"(0) : "edx");
-    g_cpu_features |= (b & (1U <<  9)) ? CPU_FEATURE_ERMS    : 0;
-    g_cpu_features |= (b & (1U << 10)) ? CPU_FEATURE_INVPCID : 0;
+    g_cpu_features |= (b &  1)         ? CPU_FEATURE_FSGSBASE : 0;
+    g_cpu_features |= (b & (1U <<  7)) ? CPU_FEATURE_SMEP     : 0;
+    g_cpu_features |= (b & (1U <<  9)) ? CPU_FEATURE_ERMS     : 0;
+    g_cpu_features |= (b & (1U << 10)) ? CPU_FEATURE_INVPCID  : 0;
+    g_cpu_features |= (b & (1U << 20)) ? CPU_FEATURE_SMAP     : 0;
 
     __asm__("cpuid" : "=d"(d) : "a"(0x80000001) : "ebx", "ecx");
     g_cpu_features |= (d & (1U << 20)) ? CPU_FEATURE_NX : 0;
@@ -414,6 +418,7 @@ INIT_TEXT void cpu_info_detect() {
     __asm__("cpuid" : "=a"(a) : "a"(6) : "ebx", "ecx", "edx");
     g_cpu_features |= (a & (1U << 2)) ? CPU_FEATURE_APIC_CONSTANT : 0;
 
+    // 获取各级缓存信息，
     if (0 == bcmp(g_cpu_vendor, VENDOR_INTEL, 12)) {
         intel_get_cache_info();
     } else if (0 == bcmp(g_cpu_vendor, VENDOR_AMD, 12)) {
@@ -440,9 +445,19 @@ INIT_TEXT void cpu_features_init() {
     // 设置 cr4
     uint64_t cr4 = read_cr4();
     cr4 |= 1UL << 2; // time stamp counter
-    cr4 |= 1UL << 7; // PGE 全局页（不会从 TLB 中清除）
+    cr4 |= 1UL << 5; // PAE（应该已经开启了）
+    cr4 |= 1UL << 7; // PGE 全局页（标记为 global 的页表项不会从 TLB 中清除）
+    if (CPU_FEATURE_FSGSBASE & g_cpu_features) {
+        cr4 |= 1UL << 16; // FSGSBASE 启用读写 fs.base、gs.base 的指令
+    }
     if (CPU_FEATURE_PCID & g_cpu_features) {
         cr4 |= 1UL << 17; // PCIDE 上下文标识符
+    }
+    if (CPU_FEATURE_SMEP & g_cpu_features) {
+        cr4 |= 1UL << 20; // SMEP
+    }
+    if (CPU_FEATURE_SMAP & g_cpu_features) {
+        cr4 |= 1UL << 21; // SMAP
     }
     write_cr4(cr4);
 
@@ -458,7 +473,7 @@ INIT_TEXT void cpu_features_init() {
 
     // 设置系统调用相关 MSR（只允许 64-bit 模式下的系统调用入口）
     write_msr(MSR_STAR, 0x001b0008UL << 32);    // STAR
-    // write_msr(MSR_LSTAR, (uint64_t)syscall_entry); // LSTAR
+    write_msr(MSR_LSTAR, (uint64_t)syscall_entry); // LSTAR
     write_msr(MSR_SFMASK, 0UL);                     // SFMASK
 }
 
@@ -471,24 +486,35 @@ INIT_TEXT void cpu_info_show() {
     klog("L1-code line=%zu, nsets=%zu, nways=%zu\n", g_l1i_info.line_size, g_l1i_info.sets, g_l1i_info.ways);
     klog("L1-data line=%zu, nsets=%zu, nways=%zu\n", g_l1d_info.line_size, g_l1d_info.sets, g_l1d_info.ways);
 
-    struct {
+    ASSERT(g_l1d_info.line_size * g_l1d_info.sets * g_l1d_info.ways == g_l1d_info.total_size);
+    ASSERT(g_l2_info.line_size * g_l2_info.sets * g_l2_info.ways == g_l2_info.total_size);
+    ASSERT(g_l3_info.line_size * g_l3_info.sets * g_l3_info.ways == g_l3_info.total_size);
+
+    klog("L1 #color %zu\n", g_l1d_info.line_size * g_l1d_info.sets >> PAGE_SHIFT);
+    klog("L2 #color %zu\n", g_l2_info.line_size * g_l2_info.sets >> PAGE_SHIFT);
+    klog("L3 #color %zu\n", g_l3_info.line_size * g_l3_info.sets >> PAGE_SHIFT);
+
+    static const struct {
         const char *name;
         uint32_t mask;
-    } feats[] = {
-        { "pcid",    CPU_FEATURE_PCID          },
-        { "x2apic",  CPU_FEATURE_X2APIC        },
-        { "tsc",     CPU_FEATURE_TSC           },
-        { "nx",      CPU_FEATURE_NX            },
-        { "pdpe1gb", CPU_FEATURE_1G            },
-        { "fixfreq", CPU_FEATURE_APIC_CONSTANT },
-        { "incpcid", CPU_FEATURE_INVPCID       }
+    } FEATS[] = {
+        { "pcid",     CPU_FEATURE_PCID          },
+        { "x2apic",   CPU_FEATURE_X2APIC        },
+        { "tsc",      CPU_FEATURE_TSC           },
+        { "nx",       CPU_FEATURE_NX            },
+        { "pdpe1gb",  CPU_FEATURE_1G            },
+        { "fixfreq",  CPU_FEATURE_APIC_CONSTANT },
+        { "incpcid",  CPU_FEATURE_INVPCID       },
+        { "smep",     CPU_FEATURE_SMEP          },
+        { "smap",     CPU_FEATURE_SMAP          },
+        { "fsgsbase", CPU_FEATURE_FSGSBASE      }
     };
-    size_t nfeats = sizeof(feats) / sizeof(feats[0]);
+    size_t nfeats = sizeof(FEATS) / sizeof(FEATS[0]);
 
     klog("cpu flags:");
     for (size_t i = 0; i < nfeats; ++i) {
-        if (g_cpu_features & feats[i].mask) {
-            klog(" %s", feats[i].name);
+        if (g_cpu_features & FEATS[i].mask) {
+            klog(" %s", FEATS[i].name);
         }
     }
     klog("\n");

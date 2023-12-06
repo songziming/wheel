@@ -1,5 +1,6 @@
 #include <arch_mem.h>
 #include <arch_cpu.h>
+#include <arch_mmu.h>
 #include <arch_smp.h>
 #include <arch_api_p.h>
 
@@ -13,20 +14,20 @@
 // 本机物理内存布局
 //------------------------------------------------------------------------------
 
-CONST int g_rammap_len = 0;
 CONST ram_range_t *g_rammap = NULL;
+CONST int g_rammap_len = 0;
 
 // 获取本机物理内存上限
 static INIT_TEXT size_t rammap_top() {
-    ASSERT(0 != g_rammap_len);
     ASSERT(NULL != g_rammap);
+    ASSERT(0 != g_rammap_len);
 
     for (int i = g_rammap_len - 1; i >= 0; --i) {
         ram_type_t type = g_rammap[i].type;
         if ((RAM_AVAILABLE != type) && (RAM_RECLAIMABLE != type)) {
             continue;
         }
-        return g_rammap[i].end;
+        return g_rammap[i].end & ~(PAGE_SIZE - 1);
     }
 
     return 0;
@@ -35,8 +36,8 @@ static INIT_TEXT size_t rammap_top() {
 // 返回 addr 所在的内存范围的截止地址，用于确定 early_alloc_buff 的增长极限
 // 此时 ACPI 内存尚未回收，只考虑 AVAILABLE 类型的内存范围
 static INIT_TEXT size_t rammap_extentof(size_t addr) {
-    ASSERT(0 != g_rammap_len);
     ASSERT(NULL != g_rammap);
+    ASSERT(0 != g_rammap_len);
 
     for (int i = 0; i < g_rammap_len; ++i) {
         if (RAM_AVAILABLE != g_rammap[i].type) {
@@ -56,8 +57,8 @@ static INIT_TEXT size_t rammap_extentof(size_t addr) {
 // 检查一段内存是否与可用内存范围重叠，用于判断 ACPI 表是否需要备份（acpi.c）
 // 要考虑到 RECLAIMABLE 内存
 INIT_TEXT int rammap_hasoverlap(size_t addr, size_t len) {
-    ASSERT(0 != g_rammap_len);
     ASSERT(NULL != g_rammap);
+    ASSERT(0 != g_rammap_len);
 
     size_t end = addr + len;
 
@@ -85,8 +86,8 @@ static INIT_TEXT const char *ram_type_str(ram_type_t type) {
 }
 
 INIT_TEXT void rammap_show() {
-    ASSERT(0 != g_rammap_len);
     ASSERT(NULL != g_rammap);
+    ASSERT(0 != g_rammap_len);
 
     klog("ram ranges:\n");
     for (int i = 0; i < g_rammap_len; ++i) {
@@ -167,8 +168,8 @@ INIT_TEXT void early_rw_unlock() {
 
 extern char _pcpu_addr, _pcpu_data_end, _pcpu_bss_end;
 
-static CONST uint8_t **g_pcpu_areas = NULL;
-static CONST size_t   *g_pcpu_offsets = NULL;
+// static CONST uint8_t **g_pcpu_areas = NULL;
+static CONST size_t *g_pcpu_offsets = NULL;
 
 static PCPU_BSS int g_cpu_index; // 每个 CPU 的编号
 
@@ -217,35 +218,45 @@ extern char _text_addr, _text_end;
 extern char _rodata_addr;
 extern char _data_addr;
 
-// 内核虚拟地址空间布局
+// 内核虚拟地址空间和页表
 static vmspace_t g_kernel_vm;
+static uint64_t g_kernel_cr3 = INVALID_ADDR;
 
-static INIT_BSS vmrange_t g_range_init;     // 初始化代码数据，还有 PCPU 模板、实模式代码
-static CONST    vmrange_t g_range_text;
-static CONST    vmrange_t g_range_rodata;   // 结束位置由 g_ro_buff 决定
-static CONST    vmrange_t g_range_data;     // 结束位置由 g_rw_buff 决定
-static PCPU_BSS vmrange_t g_range_pcpu;     // 每个 PCPU 都需要专门的 range
+static INIT_BSS vmrange_t  g_range_init;     // 初始化代码数据，还有 PCPU 模板、实模式代码
+static CONST    vmrange_t  g_range_text;
+static CONST    vmrange_t  g_range_rodata;   // 结束位置由 g_ro_buff 决定
+static CONST    vmrange_t  g_range_data;     // 结束位置由 g_rw_buff 决定
+static CONST    vmrange_t *g_range_pcpu;     // 每个 PCPU 都需要专门的 range
 
 
 // 将一段内存标记为内核占用，记录在地址空间里，也记录在物理内存管理器中
 // 地址必须按页对齐，因为涉及到物理页管理
 static INIT_TEXT void add_range(vmrange_t *rng, void *addr, void *end, const char *desc) {
     rng->addr = (size_t)addr;
-    rng->size = (size_t)end - (size_t)addr;
+    rng->end  = (size_t)end;
     rng->desc = desc;
+
+    rng->addr &= ~(PAGE_SIZE - 1);
+    rng->end  +=   PAGE_SIZE - 1;
+    rng->end  &= ~(PAGE_SIZE - 1);
+
+    // klog("adding kernel vm range %zx~%zx, %s\n", rng->addr, rng->end, desc);
     vmspace_add(&g_kernel_vm, rng);
-    page_add((size_t)addr - KERNEL_TEXT_ADDR, (size_t)end - KERNEL_TEXT_ADDR, PT_KERNEL);
+    page_add(rng->addr - KERNEL_TEXT_ADDR, rng->end - KERNEL_TEXT_ADDR, PT_KERNEL);
 }
 
 
 // 划分内存，停用 early-alloc，启用物理页分配
 INIT_TEXT void mem_init() {
-    ASSERT(g_rammap_len > 0); // 需要知道物理内存分布
-    ASSERT(cpu_count() > 0);  // 需要知道 CPU 个数
+    ASSERT(NULL != g_rammap);
+    ASSERT(0 != g_rammap_len);
+
+    int ncpu = cpu_count();
+    ASSERT(ncpu > 0);
 
     // 提前划分 pcpu 指针
-    g_pcpu_areas = early_alloc_ro(cpu_count() * sizeof(uint8_t *));
-    g_pcpu_offsets = early_alloc_ro(cpu_count() * sizeof(size_t));
+    g_pcpu_offsets = early_alloc_ro(ncpu * sizeof(size_t));
+    g_range_pcpu = early_alloc_ro(ncpu * sizeof(vmrange_t));
 
     // 分配页描述符
     page_init(rammap_top());
@@ -263,29 +274,30 @@ INIT_TEXT void mem_init() {
     add_range(&g_range_data, &_data_addr, g_rw_buff.end, "data");
 
     // 获取 L1 一行大小，一路大小
-    size_t l1_line = g_l1d_info.line_size;
-    size_t l1_size = l1_line * g_l1d_info.sets;
-    ASSERT(0 == (l1_line & (l1_line - 1)));
-    ASSERT(0 == (l1_size & (l1_size - 1)));
+    // size_t l1_line = g_l1d_info.line_size;
+    // ASSERT(0 == (l1_line & (l1_line - 1)));
+    size_t l1size = g_l1d_info.line_size * g_l1d_info.sets;
+    if (0 == l1size) {
+        l1size = PAGE_SIZE;
+    }
+    ASSERT(0 == (l1size & (l1size - 1)));
 
     // PCPU 大小按 L1 一路对齐，PCPU 地址按 L1 一行对齐
     size_t pcpu_copy = (size_t)(&_pcpu_data_end - &_pcpu_addr);
     size_t pcpu_size = (size_t)(&_pcpu_bss_end  - &_pcpu_addr);
-    size_t pcpu_skip = (pcpu_size + l1_size - 1) & ~(l1_size - 1);
-    size_t rw_end = ((size_t)g_rw_buff.end + l1_line - 1) & ~(l1_line - 1);
+    size_t pcpu_skip = (pcpu_size + PAGE_SIZE + l1size - 1) & ~(l1size - 1);
+    size_t rw_end = ((size_t)g_rw_buff.end + PAGE_SIZE + l1size - 1) & ~(l1size - 1);
 
     // 划分每个 PCPU 的空间
     // PCPU 和 kernel-data 是连在一起的，不算两个 section
     for (int i = 0; i < cpu_count(); ++i) {
-        g_pcpu_areas[i] = (uint8_t *)rw_end;
-        g_pcpu_offsets[i] = rw_end - (size_t)(&_pcpu_addr);
-        bcpy(g_pcpu_areas[i], &_pcpu_addr, pcpu_copy);
+        bcpy((uint8_t *)rw_end, &_pcpu_addr, pcpu_copy);
+        add_range(&g_range_pcpu[i], (uint8_t *)rw_end, (uint8_t *)(rw_end + pcpu_size), "pcpu");
+        g_pcpu_offsets[i] = rw_end - (size_t)&_pcpu_addr;
         rw_end += pcpu_skip;
-
-        vmrange_t *rng = pcpu_ptr(i, &g_range_pcpu);
-        add_range(rng, g_pcpu_areas[i], g_pcpu_areas[i] + pcpu_size, "pcpu");
     }
 
+    // 显示内核地址空间布局
     vmspace_show(&g_kernel_vm);
 
     // 遍历物理内存范围，将可用内存添加给页分配器
@@ -314,6 +326,35 @@ INIT_TEXT void mem_init() {
             page_add(start, end, PT_FREE);
         }
     }
+
+    // 相邻的 vmrange 之间还有空隙，虚拟地址保留作为 guard page，但是物理页可以回收
+}
+
+
+static void map_range(const vmrange_t *rng, mmu_attr_t attrs) {
+    mmu_map(g_kernel_cr3, rng->addr, rng->end, rng->addr - KERNEL_TEXT_ADDR, attrs);
+}
+
+
+// 创建内核页表
+INIT_TEXT void ctx_init() {
+    ASSERT(INVALID_ADDR == g_kernel_cr3);
+
+    g_kernel_cr3 = mmu_table_create();
+
+    map_range(&g_range_init, MMU_WRITE|MMU_EXEC);
+    map_range(&g_range_text, MMU_EXEC);
+    map_range(&g_range_rodata, 0);
+    map_range(&g_range_data, MMU_WRITE);
+
+    for (int i = 0; i < cpu_count(); ++i) {
+        map_range(&g_range_pcpu[i], MMU_WRITE);
+    }
+
+    // 将所有物理内存映射到内核地址空间
+    mmu_map(g_kernel_cr3, DIRECT_MAP_ADDR, DIRECT_MAP_ADDR + rammap_top(), 0, MMU_WRITE);
+
+    write_cr3(g_kernel_cr3);
 }
 
 

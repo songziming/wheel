@@ -1,6 +1,7 @@
 // 中断异常入口、系统调用入口
 
 .global isr_entries
+.global syscall_entry
 
 // arch_int.c
 .extern handle_exception
@@ -182,3 +183,7 @@ interrupt_stub:
     load_regs
     addq    $8, %rsp    // 跳过错误码
     iretq
+
+
+syscall_entry:
+    ret
