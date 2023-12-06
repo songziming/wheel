@@ -201,7 +201,9 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
 
     cpu_info_detect(); // 检测 CPU 特性
     cpu_features_init(); // 开启 CPU 功能
+
 #ifdef DEBUG
+    rammap_show();
     cpu_info_show();
 #endif
 

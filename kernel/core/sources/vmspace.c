@@ -32,6 +32,6 @@ void vmspace_show(vmspace_t *vm) {
     klog("virtual mem space:\n");
     for (dlnode_t *i = vm->head.next; &vm->head != i; i = i->next) {
         vmrange_t *rng = containerof(i, vmrange_t, dl);
-        klog(" - 0x%zx..0x%zx %s\n", rng->addr, rng->end, rng->desc);
+        klog("  - 0x%zx..0x%zx %s\n", rng->addr, rng->end, rng->desc);
     }
 }

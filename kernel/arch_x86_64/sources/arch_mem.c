@@ -17,27 +17,11 @@
 CONST ram_range_t *g_rammap = NULL;
 CONST int g_rammap_len = 0;
 
-// 获取本机物理内存上限
-static INIT_TEXT size_t rammap_top() {
-    ASSERT(NULL != g_rammap);
-    ASSERT(0 != g_rammap_len);
-
-    for (int i = g_rammap_len - 1; i >= 0; --i) {
-        ram_type_t type = g_rammap[i].type;
-        if ((RAM_AVAILABLE != type) && (RAM_RECLAIMABLE != type)) {
-            continue;
-        }
-        return g_rammap[i].end & ~(PAGE_SIZE - 1);
-    }
-
-    return 0;
-}
-
 // 返回 addr 所在的内存范围的截止地址，用于确定 early_alloc_buff 的增长极限
 // 此时 ACPI 内存尚未回收，只考虑 AVAILABLE 类型的内存范围
 static INIT_TEXT size_t rammap_extentof(size_t addr) {
     ASSERT(NULL != g_rammap);
-    ASSERT(0 != g_rammap_len);
+    ASSERT(g_rammap_len > 0);
 
     for (int i = 0; i < g_rammap_len; ++i) {
         if (RAM_AVAILABLE != g_rammap[i].type) {
@@ -58,7 +42,7 @@ static INIT_TEXT size_t rammap_extentof(size_t addr) {
 // 要考虑到 RECLAIMABLE 内存
 INIT_TEXT int rammap_hasoverlap(size_t addr, size_t len) {
     ASSERT(NULL != g_rammap);
-    ASSERT(0 != g_rammap_len);
+    ASSERT(g_rammap_len > 0);
 
     size_t end = addr + len;
 
@@ -87,7 +71,7 @@ static INIT_TEXT const char *ram_type_str(ram_type_t type) {
 
 INIT_TEXT void rammap_show() {
     ASSERT(NULL != g_rammap);
-    ASSERT(0 != g_rammap_len);
+    ASSERT(g_rammap_len > 0);
 
     klog("ram ranges:\n");
     for (int i = 0; i < g_rammap_len; ++i) {
@@ -249,7 +233,7 @@ static INIT_TEXT void add_range(vmrange_t *rng, void *addr, void *end, const cha
 // 划分内存，停用 early-alloc，启用物理页分配
 INIT_TEXT void mem_init() {
     ASSERT(NULL != g_rammap);
-    ASSERT(0 != g_rammap_len);
+    ASSERT(g_rammap_len > 0);
 
     int ncpu = cpu_count();
     ASSERT(ncpu > 0);
@@ -259,7 +243,16 @@ INIT_TEXT void mem_init() {
     g_range_pcpu = early_alloc_ro(ncpu * sizeof(vmrange_t));
 
     // 分配页描述符
-    page_init(rammap_top());
+    size_t ramtop = 0;
+    for (int i = g_rammap_len - 1; i >= 0; --i) {
+        ram_type_t type = g_rammap[i].type;
+        if ((RAM_AVAILABLE != type) && (RAM_RECLAIMABLE != type)) {
+            continue;
+        }
+        ramtop = g_rammap[i].end & ~(PAGE_SIZE - 1);
+        break;
+    }
+    page_init(ramtop);
 
     // 禁用临时内存分配
     g_ro_buff.end = g_ro_buff.ptr;
@@ -328,6 +321,11 @@ INIT_TEXT void mem_init() {
     }
 
     // 相邻的 vmrange 之间还有空隙，虚拟地址保留作为 guard page，但是物理页可以回收
+    for (dlnode_t *i = g_kernel_vm.head.next->next; i != &g_kernel_vm.head; i = i->next) {
+        vmrange_t *prev = containerof(i->prev, vmrange_t, dl);
+        vmrange_t *curr = containerof(i, vmrange_t, dl);
+        page_add(prev->end, curr->addr, PT_FREE);
+    }
 }
 
 
@@ -352,7 +350,10 @@ INIT_TEXT void ctx_init() {
     }
 
     // 将所有物理内存映射到内核地址空间
-    mmu_map(g_kernel_cr3, DIRECT_MAP_ADDR, DIRECT_MAP_ADDR + rammap_top(), 0, MMU_WRITE);
+    // 至少映射 4GB，因为涉及到 APIC、framebuf 等硬件设备
+    // 物理内存布局中，不仅会列出 ram，还包硬件映射
+    uint64_t maplen = g_rammap[g_rammap_len - 1].end;
+    mmu_map(g_kernel_cr3, DIRECT_MAP_ADDR, DIRECT_MAP_ADDR + maplen, 0, MMU_WRITE);
 
     write_cr3(g_kernel_cr3);
 }

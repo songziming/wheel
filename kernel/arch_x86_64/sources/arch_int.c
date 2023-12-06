@@ -56,7 +56,6 @@ typedef struct exp_frame {
 } PACKED exp_frame_t;
 
 void handle_exception(int vec, exp_frame_t *f) {
-    klog("frame addr %p\n", f);
     klog("exception %d from rip=%lx\n", vec, f->rip);
 
     size_t rela;
