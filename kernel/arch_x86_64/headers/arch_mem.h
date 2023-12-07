@@ -2,6 +2,7 @@
 #define ARCH_MEM_H
 
 #include <def.h>
+#include <vmspace.h>
 
 
 // 临时内存分配
@@ -25,13 +26,9 @@ typedef struct pmrange {
     size_t end;
 } pmrange_t;
 
-extern CONST int g_pmmap_len;
-extern CONST pmrange_t *g_pmmap;
-
 INIT_TEXT void pmmap_init_mb1(uint32_t mmap, uint32_t len);
 INIT_TEXT void pmmap_init_mb2(void *tag);
-
-INIT_TEXT pmrange_t *pmmap_locate(size_t ptr);
+pmrange_t *pmmap_locate(size_t ptr);
 
 #ifdef DEBUG
 INIT_TEXT void pmmap_show();
@@ -41,7 +38,15 @@ INIT_TEXT void pmmap_show();
 
 // Per-CPU
 
-INIT_TEXT size_t pcpu_init(size_t end);
+extern CONST vmrange_t *g_range_pcpu_vars;
+extern CONST vmrange_t *g_range_pcpu_nmi;
+extern CONST vmrange_t *g_range_pcpu_df;
+extern CONST vmrange_t *g_range_pcpu_pf;
+extern CONST vmrange_t *g_range_pcpu_mc;
+extern CONST vmrange_t *g_range_pcpu_int;
+
+INIT_TEXT void pcpu_prepare();
+INIT_TEXT size_t pcpu_allocate(size_t kernel_end, vmspace_t *vm);
 INIT_TEXT void gsbase_init(int idx);
 
 
@@ -49,7 +54,6 @@ INIT_TEXT void gsbase_init(int idx);
 
 INIT_TEXT void mem_init();
 INIT_TEXT void ctx_init();
-
 void reclaim_init();
 
 #endif // ARCH_MEM_H

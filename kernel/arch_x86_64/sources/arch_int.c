@@ -4,32 +4,44 @@
 #include <wheel.h>
 #include <arch_api_p.h>
 #include <arch_cpu.h>
+#include <arch_mem.h>
 
 
-
-// TODO 中断栈应该使用 page-alloc 动态申请，再映射到内存空间
-//      中断栈之前保留 guard page，这样可以检测到栈溢出
-// 也可以将多占用一个页，将低地址页释放，标记为无效，当作 guard-page
-// 如果预留连续内存，再释放其中一个页，会破坏内核地址空间连续的页表项
-// 导致内核无法统一使用 2M 页表项
-PCPU_BSS uint8_t  g_int_stack[INT_STACK_SIZE+PAGE_SIZE] ALIGNED(PAGE_SIZE);
-
-
-PCPU_BSS int      g_int_depth;
-PCPU_BSS uint64_t g_int_rsp;
+PCPU_DATA int g_int_depth = 0;
+// PCPU_BSS uint64_t g_int_rsp;
 
 
 //------------------------------------------------------------------------------
 // 准备中断处理机制
 //------------------------------------------------------------------------------
 
+// mem/pcpu.c 已经分配了每个 CPU 的异常栈和中断栈
+
 // 为每个 CPU 分配异常处理专用栈，并映射到内核虚拟地址
 // TODO 需要让每个 CPU 的中断栈按 L1 对齐
 void int_init() {
+    ASSERT(NULL != g_range_pcpu_vars);
+    ASSERT(NULL != g_range_pcpu_nmi);
+    ASSERT(NULL != g_range_pcpu_df);
+    ASSERT(NULL != g_range_pcpu_pf);
+    ASSERT(NULL != g_range_pcpu_mc);
+    ASSERT(NULL != g_range_pcpu_int);
+
+    // 每个 CPU 可以设置最多 7 个 IST，编号 1~7
+    // TSS 里面记录的是栈顶，也就是结束地址
     for (int i = 0; i < cpu_count(); ++i) {
-        *(int *)pcpu_ptr(i, &g_int_depth) = 0;
-        *(uint64_t *)pcpu_ptr(i, &g_int_rsp) = (uint64_t)pcpu_ptr(i, &g_int_stack[INT_STACK_SIZE]);
+        tss_set_ist(i, 1, g_range_pcpu_nmi[i].end);
+        tss_set_ist(i, 2, g_range_pcpu_df[i].end);
+        tss_set_ist(i, 3, g_range_pcpu_pf[i].end);
+        tss_set_ist(i, 4, g_range_pcpu_mc[i].end);
+        tss_set_ist(i, 5, g_range_pcpu_int[i].end);
     }
+
+    // IDT 是所有 CPU 共享的
+    idt_set_ist(2,  1); // NMI
+    idt_set_ist(8,  2); // #DF
+    idt_set_ist(14, 3); // #PF
+    idt_set_ist(18, 4); // #MC
 }
 
 
@@ -56,7 +68,7 @@ typedef struct exp_frame {
 } PACKED exp_frame_t;
 
 void handle_exception(int vec, exp_frame_t *f) {
-    klog("exception %d from rip=%lx\n", vec, f->rip);
+    klog("exception %d from rip=%lx, frame=%p\n", vec, f->rip, f);
 
     size_t rela;
     const char *name = sym_resolve(f->rip, &rela);

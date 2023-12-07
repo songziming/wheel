@@ -6,7 +6,6 @@
 
 
 
-
 // typedef enum pmtype {
 //     PM_RESERVED = 0,
 //     PM_AVAILABLE,
@@ -82,7 +81,7 @@ INIT_TEXT void pmmap_init_mb2(void *tag) {
 //     return &g_pmmap[idx];
 // }
 
-INIT_TEXT pmrange_t *pmmap_locate(size_t ptr) {
+pmrange_t *pmmap_locate(size_t ptr) {
     ASSERT(NULL != g_pmmap);
     ASSERT(g_pmmap_len > 0);
 

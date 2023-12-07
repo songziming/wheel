@@ -1,4 +1,4 @@
-// 启动过程中，内存管理启用前，临时内存分配方案
+// 启动阶段的临时内存分配方案
 // 永久分配，不回收
 
 #include <arch_mem.h>
@@ -57,9 +57,6 @@ INIT_TEXT void *early_alloc_rw(size_t size) {
 
 // 将 early_rw 可分配范围延长到所在内存的上限
 INIT_TEXT void early_rw_unlock() {
-    ASSERT(NULL != g_pmmap);
-    ASSERT(g_pmmap_len > 0);
-
     size_t ptr = (size_t)g_rw_buff.ptr - KERNEL_TEXT_ADDR;
     pmrange_t *rng = pmmap_locate(ptr);
     ASSERT(NULL != rng);

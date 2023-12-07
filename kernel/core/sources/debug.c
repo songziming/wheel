@@ -235,7 +235,7 @@ void print_stacktrace() {
 //------------------------------------------------------------------------------
 
 void handle_assert_fail(const char *file, const char *func, int line) {
-    klog("Assert failed %s:%s:%d\n", file, func, line);
+    klog("Assert failed %s:%d, function %s\n", file, line, func);
     print_stacktrace();
     emu_exit(1);
 }

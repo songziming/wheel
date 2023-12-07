@@ -127,6 +127,15 @@ INIT_TEXT void idt_load() {
     load_idtr(&idtr);
 }
 
+INIT_TEXT void idt_set_ist(int vec, int idx) {
+    ASSERT(vec >= 0);
+    ASSERT(vec < 256);
+    ASSERT(idx > 0);
+    ASSERT(idx < 8);
+
+    g_idt[vec].ist = idx & 7;
+}
+
 
 INIT_TEXT void tss_init_load() {
     ASSERT(NULL != g_gdt);
@@ -149,29 +158,20 @@ INIT_TEXT void tss_init_load() {
     load_tr(((2 * idx + 6) << 3) | 3);
 }
 
-void idt_set_ist(int vec, int idx) {
-    ASSERT(vec >= 0);
-    ASSERT(vec < 256);
-    ASSERT(idx > 0);
-    ASSERT(idx < 8);
-
-    g_idt[vec].ist = idx & 7;
-}
-
-void tss_set_rsp(int idx, uint64_t addr) {
+INIT_TEXT void tss_set_rsp(int cpu, int idx, uint64_t addr) {
     ASSERT(idx >= 0);
     ASSERT(idx < 3);
 
-    tss_t *tss = this_ptr(&g_tss);
+    tss_t *tss = pcpu_ptr(cpu, &g_tss);
     tss->rsp[idx].lower = addr & 0xffffffff;
     tss->rsp[idx].upper = (addr >> 32) & 0xffffffff;
 }
 
-void tss_set_ist(int idx, uint64_t addr) {
+INIT_TEXT void tss_set_ist(int cpu, int idx, uint64_t addr) {
     ASSERT(idx > 0);
     ASSERT(idx < 8);
 
-    tss_t *tss = this_ptr(&g_tss);
+    tss_t *tss = pcpu_ptr(cpu, &g_tss);
     tss->ist[idx].lower = addr & 0xffffffff;
     tss->ist[idx].upper = (addr >> 32) & 0xffffffff;
 }

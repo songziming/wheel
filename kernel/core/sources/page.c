@@ -343,11 +343,12 @@ INIT_TEXT void page_init(size_t end) {
 INIT_TEXT void page_add(size_t start, size_t end, page_type_t type) {
     ASSERT(0 != g_page_num);
     ASSERT(NULL != g_pages);
-    // ASSERT(0 == (start & (PAGE_SIZE - 1)));
-    // ASSERT(0 == (end & (PAGE_SIZE - 1)));
+    ASSERT(0 == (start & (PAGE_SIZE - 1)));
+    ASSERT(0 == (end & (PAGE_SIZE - 1)));
 
     start = (start + PAGE_SIZE - 1) >> PAGE_SHIFT;
     end = end >> PAGE_SHIFT;
+    // klog(" >> adding page %zx~%zx\n", start, end);
 
     if (end > g_page_num) {
         end = g_page_num;

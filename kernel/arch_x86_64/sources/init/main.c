@@ -27,26 +27,6 @@ static INIT_TEXT void mb1_init(uint32_t ebx) {
 
     if (MB1_INFO_MEM_MAP & info->flags) {
         pmmap_init_mb1(info->mmap_addr, info->mmap_length);
-        // g_pmmap_len = 0;
-        // for (uint32_t off = 0; off < info->mmap_length;) {
-        //     mb1_mmap_entry_t *ent = (mb1_mmap_entry_t *)(size_t)(info->mmap_addr + off);
-        //     off += ent->size + sizeof(ent->size);
-        //     ++g_pmmap_len;
-        // }
-
-        // g_pmmap = early_alloc_ro(g_pmmap_len * sizeof(pmrange_t));
-
-        // for (uint32_t off = 0, i = 0; off < info->mmap_length; ++i) {
-        //     mb1_mmap_entry_t *ent = (mb1_mmap_entry_t *)(size_t)(info->mmap_addr + off);
-        //     off += ent->size + sizeof(ent->size);
-        //     if (MB1_MEMORY_AVAILABLE == ent->type) {
-        //         g_pmmap[i].type = PM_AVAILABLE;
-        //     } else {
-        //         g_pmmap[i].type = PM_RESERVED;
-        //     }
-        //     g_pmmap[i].addr = ent->addr;
-        //     g_pmmap[i].end  = ent->addr + ent->len;
-        // }
     }
 
     if (MB1_INFO_ELF_SHDR & info->flags) {
@@ -83,24 +63,9 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
         offset += (tag->size + 7) & ~7;
 
         switch (tag->type) {
-        case MB2_TAG_TYPE_MMAP: {
+        case MB2_TAG_TYPE_MMAP:
             pmmap_init_mb2(tag);
-            // mb2_tag_mmap_t *mmap = (mb2_tag_mmap_t *)tag;
-            // uint32_t mmap_len = mmap->tag.size - sizeof(mb2_tag_mmap_t);
-            // g_pmmap_len = (int)(mmap_len / mmap->entry_size);
-            // g_pmmap = early_alloc_ro(g_pmmap_len * sizeof(pmrange_t));
-            // for (int i = 0; i < g_pmmap_len; ++i) {
-            //     mb2_mmap_entry_t *ent = &mmap->entries[i];
-            //     switch (ent->type) {
-            //     case MB2_MEMORY_AVAILABLE:        g_pmmap[i].type = PM_AVAILABLE;   break;
-            //     case MB2_MEMORY_ACPI_RECLAIMABLE: g_pmmap[i].type = PM_RECLAIMABLE; break;
-            //     default:                          g_pmmap[i].type = PM_RESERVED;    break;
-            //     }
-            //     g_pmmap[i].addr = ent->addr;
-            //     g_pmmap[i].end  = ent->addr + ent->len;
-            // }
             break;
-        }
         case MB2_TAG_TYPE_ELF_SECTIONS: {
             mb2_tag_elf_sections_t *elf = (mb2_tag_elf_sections_t *)tag;
             symtab_init(elf->sections, elf->entsize, elf->num);
@@ -221,13 +186,17 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     // 加载 tss（依赖 pcpu，需要等 gsbase 之后）
     tss_init_load();
 
-    // 创建并加载内核页表
-    ctx_init();
-
     // 启用中断异常机制
     int_init();
 
+    // 创建并加载内核页表，启用内存保护
+    ctx_init();
+
+    // 引发一个异常
+    char *cstr = "this is immutable";
+    cstr[0] = 'T';
     __asm__("ud2");
+
 
 end:
     // emu_exit(0);
