@@ -58,14 +58,15 @@ static INIT_TEXT acpi_tbl_t *check_table(uint64_t addr) {
         return NULL;
     }
 
-    if (rammap_hasoverlap((size_t)tbl, tbl->length)) {
-        klog("backup ACPI table %.4s\n", tbl->signature);
-        acpi_tbl_t *bak = early_alloc_ro(tbl->length);
-        bcpy(bak, tbl, tbl->length);
-        tbl = bak;
+    pmrange_t *rng = pmmap_locate((size_t)tbl);
+    if (!rng || (PM_RESERVED == rng->type)) {
+        return tbl;
     }
 
-    return tbl;
+    klog("backup ACPI table %.4s\n", tbl->signature);
+    acpi_tbl_t *bak = early_alloc_ro(tbl->length);
+    bcpy(bak, tbl, tbl->length);
+    return bak;
 }
 
 // 从 RSDT 提取子表地址
