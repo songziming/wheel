@@ -63,6 +63,8 @@ static INIT_TEXT void add_kernel_gap(vmrange_t *prev, vmrange_t *curr) {
 
 
 static void map_kernel_range(const vmrange_t *rng, mmu_attr_t attrs) {
+    ASSERT(INVALID_ADDR != g_kernel_cr3);
+
     size_t from = rng->addr & ~(PAGE_SIZE - 1);
     size_t to = (rng->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     mmu_map(g_kernel_cr3, from, to, from - KERNEL_TEXT_ADDR, attrs);

@@ -7,8 +7,8 @@
 #include <arch_mem.h>
 
 
+
 PCPU_DATA int g_int_depth = 0;
-// PCPU_BSS uint64_t g_int_rsp;
 
 
 //------------------------------------------------------------------------------
@@ -17,8 +17,6 @@ PCPU_DATA int g_int_depth = 0;
 
 // mem/pcpu.c 已经分配了每个 CPU 的异常栈和中断栈
 
-// 为每个 CPU 分配异常处理专用栈，并映射到内核虚拟地址
-// TODO 需要让每个 CPU 的中断栈按 L1 对齐
 void int_init() {
     ASSERT(NULL != g_range_pcpu_vars);
     ASSERT(NULL != g_range_pcpu_nmi);

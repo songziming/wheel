@@ -155,7 +155,7 @@ sys_boot:
     addl    $8, %edi
     loop    .pde
 
-    // 加载页表
+    // 加载临时页表
     movl    $pml4, %eax
     movl    %eax, %cr3
 

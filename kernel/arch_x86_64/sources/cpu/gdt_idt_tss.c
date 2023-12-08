@@ -22,32 +22,10 @@ typedef struct idt_ent {
 
 typedef struct tss {
     uint32_t reserved1;
-    // uint32_t rsp0_lower;
-    // uint32_t rsp0_upper;
-    // uint32_t rsp1_lower;
-    // uint32_t rsp1_upper;
-    // uint32_t rsp2_lower;
-    // uint32_t rsp2_upper;
     struct {
         uint32_t lower;
         uint32_t upper;
     } rsp[3]; // 0,1,2
-    // uint32_t reserved2;
-    // uint32_t reserved3;
-    // uint32_t ist1_lower;
-    // uint32_t ist1_upper;
-    // uint32_t ist2_lower;
-    // uint32_t ist2_upper;
-    // uint32_t ist3_lower;
-    // uint32_t ist3_upper;
-    // uint32_t ist4_lower;
-    // uint32_t ist4_upper;
-    // uint32_t ist5_lower;
-    // uint32_t ist5_upper;
-    // uint32_t ist6_lower;
-    // uint32_t ist6_upper;
-    // uint32_t ist7_lower;
-    // uint32_t ist7_upper;
     struct {
         uint32_t lower;
         uint32_t upper;

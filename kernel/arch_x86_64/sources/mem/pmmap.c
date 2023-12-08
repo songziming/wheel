@@ -6,20 +6,9 @@
 
 
 
-// typedef enum pmtype {
-//     PM_RESERVED = 0,
-//     PM_AVAILABLE,
-//     PM_RECLAIMABLE,
-// } pmtype_t;
-
-// typedef struct pmrange {
-//     pmtype_t type;
-//     size_t addr;
-//     size_t end;
-// } pmrange_t;
-
 CONST pmrange_t *g_pmmap = NULL;
 CONST int g_pmmap_len = 0;
+
 
 INIT_TEXT void pmmap_init_mb1(uint32_t mmap, uint32_t len) {
     ASSERT(NULL == g_pmmap);
@@ -69,18 +58,6 @@ INIT_TEXT void pmmap_init_mb2(void *tag) {
     }
 }
 
-
-// INIT_TEXT int pmmap_length() {
-//     return g_pmmap_len;
-// }
-
-// INIT_TEXT pmrange_t *pmmap_get(int idx) {
-//     ASSERT(idx >= 0);
-//     ASSERT(idx < g_pmmap_len);
-
-//     return &g_pmmap[idx];
-// }
-
 pmrange_t *pmmap_locate(size_t ptr) {
     ASSERT(NULL != g_pmmap);
     ASSERT(g_pmmap_len > 0);
@@ -95,20 +72,6 @@ pmrange_t *pmmap_locate(size_t ptr) {
 
     return NULL;
 }
-
-// INIT_TEXT size_t pmmap_top_valid() {
-//     ASSERT(NULL != g_pmmap);
-//     ASSERT(g_pmmap_len > 0);
-
-//     for (int i = g_pmmap_len - 1; i >= 0; --i) {
-//         pmtype_t type = g_pmmap[i].type;
-//         if ((PM_AVAILABLE != type) && (PM_RECLAIMABLE != type)) {
-//             continue;
-//         }
-//         return g_pmmap[i].end;
-//     }
-// }
-
 
 
 #ifdef DEBUG

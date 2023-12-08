@@ -5,6 +5,8 @@
 #define KERNEL_TEXT_ADDR    0xffffffff80000000UL    // -2G
 #define KERNEL_REAL_ADDR    0x8000  // 32K，实模式启动代码位置
 
+#define AP_BOOT_MAGIC       0xdeadbeef
+
 #define DIRECT_MAP_ADDR     0xffff800000000000UL
 
 #define INIT_STACK_SIZE     0x1000      // 初始化阶段使用的栈的大小
