@@ -1,0 +1,18 @@
+#ifndef SPIN_H
+#define SPIN_H
+
+#include <base.h>
+
+typedef struct spin {
+    uint32_t ticket;
+    uint32_t service;
+} spin_t;
+
+#define SPIN_INIT ((spin_t){ 0, 0 })
+
+void spin_take(spin_t *lock);
+void spin_give(spin_t *lock);
+int  irq_spin_take(spin_t *lock);
+void irq_spin_give(spin_t *lock, int key);
+
+#endif // SPIN_H

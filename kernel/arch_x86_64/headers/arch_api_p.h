@@ -46,15 +46,17 @@ DEFINE_READ_CR(0) // read_cr0
 DEFINE_READ_CR(2) // read_cr2
 DEFINE_READ_CR(3) // read_cr3
 DEFINE_READ_CR(4) // read_cr4
+#undef DEFINE_READ_CR
 
 #define DEFINE_WRITE_CR(n)                      \
 static inline void write_cr ## n (uint64_t x) { \
-    __asm__("movq %0, %%cr" #n :: "r"(x));     \
+    __asm__("movq %0, %%cr" #n :: "r"(x));      \
 }
 DEFINE_WRITE_CR(0) // write_cr0
 DEFINE_WRITE_CR(2) // write_cr2
 DEFINE_WRITE_CR(3) // write_cr3
 DEFINE_WRITE_CR(4) // write_cr4
+#undef DEFINE_WRITE_CR
 
 
 
