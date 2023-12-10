@@ -8,6 +8,11 @@
 
 
 
+//            PML4 --> PDP --> PD --> PT
+// entry size           1G     2M     4K
+
+// 混合使用不同大小的页
+
 
 //------------------------------------------------------------------------------
 // 定义这些宏，便于单元测试 mock
@@ -69,38 +74,6 @@
 
 
 
-
-
-
-// 页描述符中，记录页表的表项数量，作为引用计数
-// 页表层次：PML4 --> PDP --> PD --> PT
-
-// AMD64 可以使用多种大小的页：4K、2M、1G
-// 为了节省空间，优先使用更大的页
-// 但是随着修改，不断映射、清除、再映射，页表碎片化逐渐严重
-// 我们需要识别以下情况：
-//  - 一张页表，如果所有表项都无效，则这张页表可以删除
-//  - 一张页表，如果所有表项都存在，且映射的物理地址连续，属性一致，则这张页表可以合并为一个更大的页
-
-
-// 64-bit 工作模式下：CR0.PG=1，CR4.PAE=1，IA32_EFER.LME=1
-// 此时有两种分页机制：
-//  - cr4.LA57=0，使用四级分页，48-bit 线性地址映射到 52-bit 物理地址
-//  - cr4.LA57=1，使用五级分页，57-bit 线性地址映射到 52-bit 物理地址（支持更大的物理内存）
-
-// 最顶层的页表都是由 cr3 保存地址，但 cr3[11:0] 的取值有不同含义：
-//  - cr4.PCID=0，包含两个属性位 PWT、PCD，控制访问页表时的缓存策略
-//  - cr4.PCID=1，cr3 低 12-bit 表示当前的 PCID
-
-// 各级 U/S 都是 1，线性地址才是用户态可读的（特权代码一直可读）
-// 各级 R/W 都是 1，线性地址才是用户态可读可写的（特权代码是否可写取决于 cr0.WP）
-// 各级 NX 都是 0，线性地址才是可执行的
-
-// Intel 线性地址包含 protection key，位于最后一级页表条目符号扩展部分。
-// 启用 protection key 的条件是 cr4.PKE=1，cr4.PKS=1
-
-
-
 // 创建一张空的页表，返回物理地址
 static uint64_t alloc_table() {
     uint64_t pa = PAGE_ALLOC();
@@ -128,6 +101,309 @@ static uint64_t alloc_table() {
 
 
 
+// 分别实现各级页表的函数：
+//  - free 删除这一级页表
+//  - map 建立映射，返回映射的大小
+//  - unmap 取消映射，返回取消映射范围的结束位置
+
+
+//------------------------------------------------------------------------------
+// 页表，每个表项对应 4K
+//------------------------------------------------------------------------------
+
+// 末级页表，没有更次一级，可以直接释放页面
+static void pt_free(uint64_t pt) {
+    ASSERT(0 == OFFSET_4K(pt));
+    PAGE_FREE(pt);
+}
+
+static uint64_t pt_map(uint64_t pt, uint64_t va, uint64_t end, uint64_t pa, uint64_t attrs) {
+    ASSERT(0 == OFFSET_4K(pt));
+    ASSERT(0 == OFFSET_4K(va));
+    ASSERT(0 == OFFSET_4K(end));
+    ASSERT(va <= end);
+    ASSERT(0 == OFFSET_4K(pa));
+    ASSERT(0 == (attrs & ~MMU_ATTRS));
+
+    page_info_t *info = PAGE_INFO(pt);
+    uint64_t *tbl = VIRT(pt);
+
+    uint64_t start = va;
+    for (int i = (va >> 12) & 0x1ff; (i < 512) && (va < end); ++i) {
+        if (0 == (tbl[i] & MMU_P)) {
+            ++info->ent_num;
+        }
+        tbl[i] = (pa & MMU_ADDR) | MMU_P | attrs;
+        va += PAGE_SIZE;
+        pa += PAGE_SIZE;
+    }
+
+    return va - start;
+}
+
+#if 0
+// 判断 PT 能否合并为一个 2M 页
+int pt_contiuous(uint64_t pt) {
+    ASSERT(0 == OFFSET_4K(pt));
+
+    page_info_t *info = PAGE_INFO(pt);
+    if (512 != info->ent_num) {
+        return 0;
+    }
+
+    uint64_t *tbl = VIRT(pt);
+    uint64_t pa = tbl[0] & MMU_ADDR;
+    if (OFFSET_2M(pa)) {
+        return 0;
+    }
+
+    pa += SIZE_4K;
+    uint64_t attrs = tbl[0] & MMU_ADDR;
+    for (int i = 1; i < 512; ++i, pa += SIZE_4K) {
+        if (pa != (tbl[i] & MMU_ADDR)) {
+            return 0;
+        }
+        if (attrs != (tbl[i] & MMU_ADDR)) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+#endif
+
+static uint64_t pt_unmap(uint64_t pt, uint64_t va, uint64_t end) {
+    ASSERT(0 == OFFSET_4K(pt));
+    ASSERT(0 == OFFSET_4K(va));
+    ASSERT(0 == OFFSET_4K(end));
+    ASSERT(va <= end);
+
+    page_info_t *info = PAGE_INFO(pt);
+    uint64_t *tbl = VIRT(pt);
+
+    for (int i = (va >> 12) & 0x1ff; (i < 512) && (va < end); ++i) {
+        if (tbl[i] & MMU_P) {
+            --info->ent_num;
+        }
+        tbl[i] = 0;
+        va += SIZE_4K;
+    }
+
+    return va;
+}
+
+
+
+//------------------------------------------------------------------------------
+// 页目录表，表项可以指向 PT，也可以直接映射 2M
+//------------------------------------------------------------------------------
+
+// PDE 可能指向 PT，也可能是 2M 表项
+static void pd_free(uint64_t pd) {
+    ASSERT(0 == OFFSET_4K(pd));
+
+    // 如果页表内容为空，则无需遍历，可以直接释放
+    page_info_t *info = PAGE_INFO(pd);
+    if (0 == info->ent_num) {
+        PAGE_FREE(pd);
+    }
+
+    uint64_t *tbl = VIRT(pd);
+    for (int i = 0; i < 512; ++i) {
+        if ((tbl[i] & MMU_P) && !(tbl[i] & MMU_PS)) {
+            pt_free(tbl[i] & MMU_ADDR);
+        }
+    }
+}
+
+static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint64_t attrs) {
+    ASSERT(0 == OFFSET_4K(pd));
+    ASSERT(0 == OFFSET_4K(va));
+    ASSERT(0 == OFFSET_4K(end));
+    ASSERT(va <= end);
+    ASSERT(0 == OFFSET_4K(pa));
+    ASSERT(0 == (attrs & ~MMU_ATTRS));
+
+    page_info_t *info = PAGE_INFO(pd);
+    uint64_t *tbl = VIRT(pd);
+
+    uint64_t start = va;
+    for (int i = (va >> 21) & 0x1ff; (i < 512) && (va < end); ++i) {
+        // 判断能否使用 2M 表项，首选按 2M 映射
+        if ((0 == OFFSET_2M(va | pa)) && (va + SIZE_2M <= end)) {
+            if (0 == (tbl[i] & MMU_P)) {
+                ++info->ent_num;
+            } else if (0 == (tbl[i] & MMU_PS)) {
+                pt_free(tbl[i] & MMU_ADDR); // 将原本映射的下级 PT 删除
+            }
+
+            tbl[i] = (pa & MMU_ADDR) | MMU_P | MMU_PS | attrs;
+            va += SIZE_2M;
+            pa += SIZE_2M;
+            continue;
+        }
+
+        // 无法使用 2M 表项，需要建立下一级表结构
+        uint64_t pt = tbl[i] & MMU_ADDR;
+
+        if (0 == (tbl[i] & MMU_P)) {
+            // 原本没有表项，需要创建新的
+            ++info->ent_num;
+            pt = alloc_table();
+        } else if (tbl[i] & MMU_PS) {
+            // 将 2M 表项拆分
+            uint64_t old_va = va - OFFSET_2M(va);
+            uint64_t old_pa = pt;
+            ASSERT(0 == OFFSET_2M(old_pa));
+
+            pt = alloc_table();
+            if (old_va != va) {
+                pt_map(pt, old_va, va, old_pa, tbl[i] & MMU_ATTRS);
+            }
+            if (end < old_va + SIZE_2M) {
+                pt_map(pt, end, old_va + SIZE_2M, end - old_va + old_pa, tbl[i] & MMU_ATTRS);
+            }
+        }
+
+        tbl[i] = (pt & MMU_ADDR) | MMU_P | MMU_RW | MMU_US; // 不是末级表项，使用最宽松的权限
+        uint64_t len = pt_map(pt, va, end, pa, attrs);
+        va += len;
+        pa += len;
+    }
+
+    return va - start;
+}
+
+uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
+    ASSERT(0 == OFFSET_4K(pd));
+    ASSERT(0 == OFFSET_4K(va));
+    ASSERT(0 == OFFSET_4K(end));
+    ASSERT(va <= end);
+
+    page_info_t *info = PAGE_INFO(pd);
+    uint64_t *tbl = VIRT(pd);
+
+    for (int i = (va >> 21) & 0x1ff; (i < 512) && (va < end); ++i) {
+        if (0 == (tbl[i] & MMU_P)) {
+            va +=   SIZE_2M - 1;
+            va &= ~(SIZE_2M - 1);
+            continue;
+        }
+
+        // 如果 unmap 范围涵盖了完整 2M
+        if ((0 == OFFSET_2M(va)) && (va + SIZE_2M <= end)) {
+            if (0 == (tbl[i] & MMU_PS)) {
+                pt_free(tbl[i] & MMU_ADDR);
+            }
+            --info->ent_num;
+            tbl[i] = 0;
+            va += SIZE_2M;
+            continue;
+        }
+
+        // unmap 范围不能覆盖完整的 2M
+        uint64_t pt = tbl[i] & MMU_ADDR;
+
+        // 原本是 2M 页，unmap 没有完整清除这 2M，还要保留一些
+        if (tbl[i] & MMU_PS) {
+            uint64_t old_va = va - OFFSET_2M(va);
+            uint64_t old_pa = pt;
+            ASSERT(0 == OFFSET_2M(old_pa));
+
+            pt = alloc_table();
+
+            if (old_va != va) {
+                pt_map(pt, old_va, va, old_pa, tbl[i] & MMU_ATTRS);
+            }
+            if (end < old_va + SIZE_2M) {
+                pt_map(pt, end, old_va + SIZE_2M, end - old_va + old_pa, tbl[i] & MMU_ATTRS);
+            }
+
+            tbl[i] = (pt & MMU_ADDR) | MMU_P | MMU_US | MMU_RW;
+        }
+
+        va = pt_unmap(pt, va, end);
+
+        // 如果次级页表内容为空，则可以将页表删除
+        if (0 == PAGE_INFO(pt)->ent_num) {
+            pt_free(pt);
+            tbl[i] = 0;
+        }
+    }
+
+    return va;
+}
+
+#if 0
+// 判断 PD 能否合并为一个 1G 页
+int pd_continuous(uint64_t pd) {
+    ASSERT(0 == OFFSET_4K(pd));
+
+    page_info_t *info = PAGE_INFO(pd);
+    if (512 != info->ent_num) {
+        return 0;
+    }
+
+    uint64_t *tbl = VIRT(pd);
+    uint64_t pa = tbl[0] & MMU_PS;
+    uint64_t attrs = tbl[0] & MMU_ATTRS;
+
+    if (0 == (tbl[0] & MMU_PS)) {
+        if (!pt_contiuous(pa)) {
+            return 0;
+        }
+        uint64_t *pt = VIRT(pa);
+        pa = pt[0] & MMU_ADDR;
+        attrs = pt[0] & MMU_ATTRS;
+    }
+
+    if (OFFSET_1G(pa)) {
+        return 0;
+    }
+
+    pa += SIZE_2M;
+    for (int i = 1; i < 512; ++i, pa += SIZE_2M) {
+        uint64_t this_addr = tbl[i] & MMU_ADDR;
+        uint64_t this_attrs = tbl[i] & MMU_ATTRS;
+
+        if (0 == (tbl[i] & MMU_PS)) {
+            if (!pt_contiuous(this_addr)) {
+                return 0;
+            }
+            uint64_t *pt = VIRT(this_addr);
+            this_addr = pt[0] & MMU_ADDR;
+            this_attrs = pt[0] & MMU_ATTRS;
+        }
+
+        if (pa != this_addr) {
+            return 0;
+        }
+        if (attrs != this_attrs) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+#endif
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//------------------------------------------------------------------------------
+//
+//------------------------------------------------------------------------------
 
 // 创建一套新的页表
 uint64_t mmu_table_create() {
@@ -200,30 +476,6 @@ uint64_t mmu_translate(uint64_t tbl, uint64_t va, mmu_attr_t *attrs) {
 // 逐级删除页表
 //------------------------------------------------------------------------------
 
-// 末级页表，没有更次一级，可以直接释放页面
-static void pt_free(uint64_t pt) {
-    ASSERT(0 == OFFSET_4K(pt));
-    PAGE_FREE(pt);
-}
-
-// PDE 可能指向 PT，也可能是 2M 表项
-static void pd_free(uint64_t pd) {
-    ASSERT(0 == OFFSET_4K(pd));
-
-    // 如果页表内容为空，则无需遍历，可以直接释放
-    page_info_t *info = PAGE_INFO(pd);
-    if (0 == info->ent_num) {
-        PAGE_FREE(pd);
-    }
-
-    uint64_t *tbl = VIRT(pd);
-    for (int i = 0; i < 512; ++i) {
-        if ((tbl[i] & MMU_P) && !(tbl[i] & MMU_PS)) {
-            pt_free(tbl[i] & MMU_ADDR);
-        }
-    }
-}
-
 // PDPE 可能指向 PD，也可能是 1G 表项
 static void pdp_free(uint64_t pdp) {
     ASSERT(0 == OFFSET_4K(pdp));
@@ -270,168 +522,6 @@ void mmu_table_delete(uint64_t tbl) {
 // 各级函数返回成功建立映射关系的大小
 // 可能覆盖现有 mapping
 
-static uint64_t pt_map(uint64_t pt, uint64_t va, uint64_t end, uint64_t pa, uint64_t attrs) {
-    ASSERT(0 == OFFSET_4K(pt));
-    ASSERT(0 == OFFSET_4K(va));
-    ASSERT(0 == OFFSET_4K(end));
-    ASSERT(va <= end);
-    ASSERT(0 == OFFSET_4K(pa));
-    ASSERT(0 == (attrs & ~MMU_ATTRS));
-
-    page_info_t *info = PAGE_INFO(pt);
-    uint64_t *tbl = VIRT(pt);
-
-    uint64_t start = va;
-    for (int i = (va >> 12) & 0x1ff; (i < 512) && (va < end); ++i) {
-        if (0 == (tbl[i] & MMU_P)) {
-            ++info->ent_num;
-        }
-        tbl[i] = (pa & MMU_ADDR) | MMU_P | attrs;
-        va += PAGE_SIZE;
-        pa += PAGE_SIZE;
-    }
-
-    return va - start;
-}
-
-// 判断 PT 能否合并为一个 2M 页
-int pt_contiuous(uint64_t pt) {
-    ASSERT(0 == OFFSET_4K(pt));
-
-    page_info_t *info = PAGE_INFO(pt);
-    if (512 != info->ent_num) {
-        return 0;
-    }
-
-    uint64_t *tbl = VIRT(pt);
-    uint64_t pa = tbl[0] & MMU_ADDR;
-    if (OFFSET_2M(pa)) {
-        return 0;
-    }
-
-    pa += SIZE_4K;
-    uint64_t attrs = tbl[0] & MMU_ADDR;
-    for (int i = 1; i < 512; ++i, pa += SIZE_4K) {
-        if (pa != (tbl[i] & MMU_ADDR)) {
-            return 0;
-        }
-        if (attrs != (tbl[i] & MMU_ADDR)) {
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
-static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint64_t attrs) {
-    ASSERT(0 == OFFSET_4K(pd));
-    ASSERT(0 == OFFSET_4K(va));
-    ASSERT(0 == OFFSET_4K(end));
-    ASSERT(va <= end);
-    ASSERT(0 == OFFSET_4K(pa));
-    ASSERT(0 == (attrs & ~MMU_ATTRS));
-
-    page_info_t *info = PAGE_INFO(pd);
-    uint64_t *tbl = VIRT(pd);
-
-    uint64_t start = va;
-    for (int i = (va >> 21) & 0x1ff; (i < 512) && (va < end); ++i) {
-        // 判断能否使用 2M 表项，首选按 2M 映射
-        if ((0 == OFFSET_2M(va | pa)) && (va + SIZE_2M <= end)) {
-            if (0 == (tbl[i] & MMU_P)) {
-                ++info->ent_num;
-            } else if (0 == (tbl[i] & MMU_PS)) {
-                pt_free(tbl[i] & MMU_ADDR); // 将原本映射的下级 PT 删除
-            }
-
-            tbl[i] = (pa & MMU_ADDR) | MMU_P | MMU_PS | attrs;
-            va += SIZE_2M;
-            pa += SIZE_2M;
-            continue;
-        }
-
-        // 无法使用 2M 表项，需要建立下一级表结构
-        uint64_t pt = tbl[i] & MMU_ADDR;
-
-        if (0 == (tbl[i] & MMU_P)) {
-            // 原本没有表项，需要创建新的
-            ++info->ent_num;
-            pt = alloc_table();
-        } else if (tbl[i] & MMU_PS) {
-            // 原本是 2M，且 mapping 没有完整覆盖这 2M，还要保留一部分
-            // 保留的部分可以是开头，也可以是结尾
-            uint64_t old_va = va - OFFSET_2M(va);
-            uint64_t old_pa = pt;
-            ASSERT(0 == OFFSET_2M(old_pa));
-
-            pt = alloc_table();
-            if (old_va != va) {
-                pt_map(pt, old_va, va, old_pa, tbl[i] & MMU_ATTRS);
-            }
-            if (end < old_va + SIZE_2M) {
-                pt_map(pt, end, old_va + SIZE_2M, end - old_va + old_pa, tbl[i] & MMU_ATTRS);
-            }
-        }
-
-        tbl[i] = (pt & MMU_ADDR) | MMU_P | MMU_RW | MMU_US; // 不是末级表项，使用最宽松的权限
-        uint64_t len = pt_map(pt, va, end, pa, attrs);
-        va += len;
-        pa += len;
-    }
-
-    return va - start;
-}
-
-// 判断 PD 能否合并为一个 1G 页
-int pd_continuous(uint64_t pd) {
-    ASSERT(0 == OFFSET_4K(pd));
-
-    page_info_t *info = PAGE_INFO(pd);
-    if (512 != info->ent_num) {
-        return 0;
-    }
-
-    uint64_t *tbl = VIRT(pd);
-    uint64_t pa = tbl[0] & MMU_PS;
-    uint64_t attrs = tbl[0] & MMU_ATTRS;
-
-    if (0 == (tbl[0] & MMU_PS)) {
-        if (!pt_contiuous(pa)) {
-            return 0;
-        }
-        uint64_t *pt = VIRT(pa);
-        pa = pt[0] & MMU_ADDR;
-        attrs = pt[0] & MMU_ATTRS;
-    }
-
-    if (OFFSET_1G(pa)) {
-        return 0;
-    }
-
-    pa += SIZE_2M;
-    for (int i = 1; i < 512; ++i, pa += SIZE_2M) {
-        uint64_t this_addr = tbl[i] & MMU_ADDR;
-        uint64_t this_attrs = tbl[i] & MMU_ATTRS;
-
-        if (0 == (tbl[i] & MMU_PS)) {
-            if (!pt_contiuous(this_addr)) {
-                return 0;
-            }
-            uint64_t *pt = VIRT(this_addr);
-            this_addr = pt[0] & MMU_ADDR;
-            this_attrs = pt[0] & MMU_ATTRS;
-        }
-
-        if (pa != this_addr) {
-            return 0;
-        }
-        if (attrs != this_attrs) {
-            return 0;
-        }
-    }
-
-    return 1;
-}
 
 static uint64_t pdp_map(uint64_t pdp, uint64_t va, uint64_t end, uint64_t pa, uint64_t attrs) {
     ASSERT(0 == OFFSET_4K(pdp));
@@ -539,88 +629,4 @@ void mmu_map(uint64_t tbl, uint64_t va, uint64_t end, uint64_t pa, mmu_attr_t at
 //------------------------------------------------------------------------------
 
 // 每个函数返回解除映射后的结束地址，而不是长度
-
-static uint64_t pt_unmap(uint64_t pt, uint64_t va, uint64_t end) {
-    ASSERT(0 == OFFSET_4K(pt));
-    ASSERT(0 == OFFSET_4K(va));
-    ASSERT(0 == OFFSET_4K(end));
-    ASSERT(va <= end);
-
-    page_info_t *info = PAGE_INFO(pt);
-    uint64_t *tbl = VIRT(pt);
-
-    for (int i = (va >> 12) & 0x1ff; (i < 512) && (va < end); ++i) {
-        if (tbl[i] & MMU_P) {
-            --info->ent_num;
-        }
-        tbl[i] = 0;
-        va += SIZE_4K;
-    }
-
-    return va;
-}
-
-uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
-    ASSERT(0 == OFFSET_4K(pd));
-    ASSERT(0 == OFFSET_4K(va));
-    ASSERT(0 == OFFSET_4K(end));
-    ASSERT(va <= end);
-
-    page_info_t *info = PAGE_INFO(pd);
-    uint64_t *tbl = VIRT(pd);
-
-    for (int i = (va >> 21) & 0x1ff; (i < 512) && (va < end); ++i) {
-        if (0 == (tbl[i] & MMU_P)) {
-            va +=   SIZE_2M - 1;
-            va &= ~(SIZE_2M - 1);
-            continue;
-        }
-
-        // 如果 unmap 范围涵盖了完整 2M
-        if ((0 == OFFSET_2M(va)) && (va + SIZE_2M <= end)) {
-            if (0 == (tbl[i] & MMU_PS)) {
-                pt_free(tbl[i] & MMU_ADDR);
-            }
-            --info->ent_num;
-            tbl[i] = 0;
-            va += SIZE_2M;
-            continue;
-        }
-
-        // unmap 范围不能覆盖完整的 2M
-        uint64_t pt = tbl[i] & MMU_ADDR;
-
-        // 原本是 2M 页，unmap 没有完整清除这 2M，还要保留一些
-        if (tbl[i] & MMU_PS) {
-            uint64_t old_va = va - OFFSET_2M(va);
-            uint64_t old_pa = pt;
-            ASSERT(0 == OFFSET_2M(old_pa));
-
-            pt = alloc_table();
-
-            if (old_va != va) {
-                pt_map(pt, old_va, va, old_pa, tbl[i] & MMU_ATTRS);
-            }
-            if (end < old_va + SIZE_2M) {
-                pt_map(pt, end, old_va + SIZE_2M, end - old_va + old_pa, tbl[i] & MMU_ATTRS);
-            //     va = end;
-            // } else {
-            //     va +=   SIZE_2M - 1;
-            //     va &= ~(SIZE_2M - 1);
-            }
-
-            tbl[i] = (pt & MMU_ADDR) | MMU_P | MMU_US | MMU_RW;
-        }
-
-        va = pt_unmap(pt, va, end);
-
-        // 如果次级页表内容为空，则可以将页表删除
-        if (0 == PAGE_INFO(pt)->ent_num) {
-            pt_free(pt);
-            tbl[i] = 0;
-        }
-    }
-
-    return va;
-}
 

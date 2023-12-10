@@ -1,5 +1,6 @@
 #include <wheel.h>
 #include <arch_smp.h>
+#include <arch_api_p.h>
 
 // 操作 Local APIC 有两种方式：
 //  - MMIO，所有寄存器都位于 16-byte 对齐的位置
@@ -17,7 +18,6 @@
 // REG_ICR 是64位寄存器，xAPIC 对应两个32-bit寄存器，x2APIC 只需要一个 msr
 // REG_DFR 不能在 x2APIC 模式下使用
 // REG_SELF_IPI 只能在 x2APIC 模式下使用
-
 
 typedef enum loapic_reg {
     REG_ID          = 0x002,    // local APIC id
