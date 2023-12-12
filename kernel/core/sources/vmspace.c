@@ -7,7 +7,7 @@ void vmspace_init(vmspace_t *vm) {
     dl_init_circular(&vm->head);
 }
 
-void vmspace_add(vmspace_t *vm, vmrange_t *rng) {
+void vmspace_insert(vmspace_t *vm, vmrange_t *rng) {
     ASSERT(NULL != vm);
     ASSERT(NULL != rng);
     ASSERT(!dl_contains(&vm->head, &rng->dl));
@@ -24,6 +24,31 @@ void vmspace_add(vmspace_t *vm, vmrange_t *rng) {
 
     // 将新的节点放入链表（此时 node 可能为头节点）
     dl_insert_before(&rng->dl, node);
+}
+
+void vmspace_remove(vmspace_t *vm, vmrange_t *rng) {
+    ASSERT(NULL != vm);
+    ASSERT(NULL != rng);
+    ASSERT(dl_contains(&vm->head, &rng->dl));
+
+    (void)vm;
+
+    dl_remove(&rng->dl);
+}
+
+// 返回目标虚拟地址所在的 range
+// 该函数可能用在中断处理函数中
+vmrange_t *vmspace_locate(vmspace_t *vm, size_t va) {
+    ASSERT(NULL != vm);
+
+    for (dlnode_t *i = vm->head.next; &vm->head != i; i = i->next) {
+        vmrange_t *rng = containerof(i, vmrange_t, dl);
+        if ((rng->addr <= va) && (va < rng->end)) {
+            return rng;
+        }
+    }
+
+    return NULL;
 }
 
 void vmspace_show(vmspace_t *vm) {

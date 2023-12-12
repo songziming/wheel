@@ -73,9 +73,6 @@ pmrange_t *pmmap_locate(size_t ptr) {
     return NULL;
 }
 
-
-#ifdef DEBUG
-
 static INIT_TEXT const char *pmtype_str(pmtype_t type) {
     switch (type) {
     case PM_RESERVED: return "reserved";
@@ -84,7 +81,7 @@ static INIT_TEXT const char *pmtype_str(pmtype_t type) {
     }
 }
 
-INIT_TEXT void pmmap_show() {
+void pmmap_show() {
     ASSERT(NULL != g_pmmap);
     ASSERT(g_pmmap_len > 0);
 
@@ -96,5 +93,3 @@ INIT_TEXT void pmmap_show() {
         klog("  - ram range: addr=0x%016zx, end=0x%016zx, type=%s\n", addr, end, type);
     }
 }
-
-#endif // DEBUG

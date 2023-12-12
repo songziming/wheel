@@ -2,7 +2,7 @@
 #define ARCH_SMP_H
 
 #include <def.h>
-#include <dev/acpi.h>
+#include <dev/acpi_madt.h>
 
 extern CONST size_t g_loapic_addr;
 extern CONST int    g_loapic_num;

@@ -8,6 +8,7 @@
 #include <arch_int.h>
 
 #include <dev/acpi.h>
+#include <dev/acpi_madt.h>
 #include <dev/serial.h>
 #include <dev/console.h>
 #include <dev/framebuf.h>
@@ -17,7 +18,7 @@
 
 
 
-static INIT_DATA acpi_rsdp_t *g_rsdp = NULL;
+static INIT_DATA size_t g_rsdp = INVALID_ADDR;
 static INIT_DATA fb_info_t g_fb = { .rows=0, .cols=0 };
 
 
@@ -72,10 +73,10 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
             break;
         }
         case MB2_TAG_TYPE_ACPI_OLD:
-            g_rsdp = (acpi_rsdp_t *)((mb2_tag_old_acpi_t *)tag)->rsdp;
+            g_rsdp = (size_t)((mb2_tag_old_acpi_t *)tag)->rsdp;
             break;
         case MB2_TAG_TYPE_ACPI_NEW:
-            g_rsdp = (acpi_rsdp_t *)((mb2_tag_new_acpi_t *)tag)->rsdp;
+            g_rsdp = (size_t)((mb2_tag_new_acpi_t *)tag)->rsdp;
             break;
         case MB2_TAG_TYPE_FRAMEBUFFER: {
             mb2_tag_framebuffer_t *fb = (mb2_tag_framebuffer_t *)tag;
@@ -132,10 +133,10 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     }
 
     // 寻找 RSDP，并找出所有 ACPI 表
-    if (NULL == g_rsdp) {
+    if (INVALID_ADDR == g_rsdp) {
         g_rsdp = acpi_find_rsdp();
     }
-    if (NULL == g_rsdp) {
+    if (INVALID_ADDR == g_rsdp) {
         klog("fatal: RSDP not found!\n");
         goto end;
     }
@@ -169,6 +170,7 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     cpu_features_init(); // 开启 CPU 功能
 
 #ifdef DEBUG
+    acpi_show_tables();
     pmmap_show();
     cpu_info_show();
 #endif

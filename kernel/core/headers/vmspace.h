@@ -16,7 +16,9 @@ typedef struct vmspace {
 } vmspace_t;
 
 void vmspace_init(vmspace_t *vm);
-void vmspace_add(vmspace_t *vm, vmrange_t *rng);
+void vmspace_insert(vmspace_t *vm, vmrange_t *rng);
+void vmspace_remove(vmspace_t *vm, vmrange_t *rng);
+vmrange_t *vmspace_locate(vmspace_t *vm, size_t va);
 void vmspace_show(vmspace_t *vm);
 
 #endif // VMSPACE_H

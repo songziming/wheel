@@ -96,7 +96,7 @@ static INIT_TEXT size_t add_pcpu_range(vmspace_t *vm, vmrange_t *rng, size_t add
     rng->addr = addr;
     rng->end  = addr + size;
     rng->desc = desc;
-    vmspace_add(vm, rng);
+    vmspace_insert(vm, rng);
 
     size_t from = addr & ~(PAGE_SIZE - 1);
     size_t to = (rng->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);

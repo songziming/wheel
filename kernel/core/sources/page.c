@@ -12,9 +12,9 @@ typedef struct page {
     pfn_t prev;
     pfn_t next;
 
-    size_t head : 1;    // 是不是块中第一个页
-    size_t rank : 4;   // 所在块的大小，head==1 才有效
-    size_t type : 4;   // 所在块的类型，head==1 才有效
+    uint32_t head : 1;   // 是不是块中第一个页
+    uint32_t rank : 4;   // 所在块的大小，head==1 才有效
+    uint32_t type : 4;   // 所在块的类型，head==1 才有效
 
     page_info_t info;
 } page_t;
