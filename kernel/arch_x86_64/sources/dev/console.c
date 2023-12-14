@@ -51,10 +51,10 @@ INIT_TEXT void console_init() {
 }
 
 static void set_caret(uint16_t idx) {
-    out_byte(VGA_CRTC_ADDR, 0x0f);              // caret location low
-    out_byte(VGA_CRTC_DATA, idx & 0xff);
-    out_byte(VGA_CRTC_ADDR, 0x0e);              // caret location high
-    out_byte(VGA_CRTC_DATA, (idx >> 8) & 0xff);
+    out8(VGA_CRTC_ADDR, 0x0f);              // caret location low
+    out8(VGA_CRTC_DATA, idx & 0xff);
+    out8(VGA_CRTC_ADDR, 0x0e);              // caret location high
+    out8(VGA_CRTC_DATA, (idx >> 8) & 0xff);
 }
 
 // 显示一个字符，并更新 state

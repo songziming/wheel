@@ -16,14 +16,24 @@ int arch_unwind(size_t *addrs, int max, uint64_t rbp);
 // 端口 IO
 //------------------------------------------------------------------------------
 
-static inline uint8_t in_byte(uint16_t port) {
+static inline uint8_t in8(uint16_t port) {
     uint8_t data;
     __asm__("inb %1, %0" : "=a"(data) : "Nd"(port));
     return data;
 }
 
-static inline void out_byte(uint16_t port, uint8_t data) {
+static inline void out8(uint16_t port, uint8_t data) {
     __asm__("outb %0, %1" :: "a"(data), "Nd"(port));
+}
+
+static inline uint16_t in16(uint16_t port) {
+    uint16_t data;
+    __asm__("inw %1, %0" : "=a"(data) : "Nd"(port));
+    return data;
+}
+
+static inline void out16(uint16_t port, uint16_t data) {
+    __asm__("outw %0, %1" :: "a"(data), "Nd"(port));
 }
 
 static inline void io_wait() {

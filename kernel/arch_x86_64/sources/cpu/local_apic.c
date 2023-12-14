@@ -1,6 +1,7 @@
 #include <wheel.h>
 #include <arch_smp.h>
 #include <arch_api_p.h>
+#include <arch_cpu.h>
 
 // 操作 Local APIC 有两种方式：
 //  - MMIO，所有寄存器都位于 16-byte 对齐的位置
@@ -146,9 +147,24 @@ static void     (*g_write)    (loapic_reg_t reg, uint32_t val) = x_write;
 static uint64_t (*g_read_icr) ()                               = x_read_icr;
 static void     (*g_write_icr)(uint64_t val)                   = x_write_icr;
 
-INIT_TEXT void loapic_init() {
-    g_read = x2_read;
-    g_write = x2_write;
-    g_read_icr = x2_read_icr;
-    g_write_icr = x2_write_icr;
+// 仅在 BSP 运行，校准 local apic timer
+INIT_TEXT void local_apic_init() {
+    uint64_t msr_base = read_msr(IA32_APIC_BASE);
+
+    // 如果 MSR 记录的值和 MADT 规定的映射地址不一致，则重新映射
+    if (g_loapic_addr != (msr_base & LOAPIC_MSR_BASE)) {
+        msr_base = (g_loapic_addr & LOAPIC_MSR_BASE) | (msr_base & ~LOAPIC_MSR_BASE);
+        write_msr(IA32_APIC_BASE, msr_base);
+    }
+
+    // 如果支持 x2APIC，则启用
+    if (g_cpu_features & CPU_FEATURE_X2APIC) {
+        g_read = x2_read;
+        g_write = x2_write;
+        g_read_icr = x2_read_icr;
+        g_write_icr = x2_write_icr;
+
+        msr_base |= LOAPIC_MSR_EXTD;
+        write_msr(IA32_APIC_BASE, msr_base);
+    }
 }

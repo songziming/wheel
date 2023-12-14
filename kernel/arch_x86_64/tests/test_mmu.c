@@ -66,5 +66,11 @@ TEST(MMU, Map) {
     EXPECT_TRUE(mmu_translate(tbl, 5*M + 100, &attrs) == 3*M + 100);
     EXPECT_TRUE(mmu_translate(tbl, 5*K + 100, &attrs) == 9*K + 100);
 
+    // 重新 map，拆分原有大页
+    mmu_map(tbl, 2*G+8*M, 3*G-8*M, 8*M, MMU_NONE);
+    EXPECT_TRUE(mmu_translate(tbl, 2*G+10*M, &attrs) == 10 *M);
+    EXPECT_TRUE(mmu_translate(tbl, 2*G+6*M, &attrs) == 1*G+6*M); // 开头剩余
+    EXPECT_TRUE(mmu_translate(tbl, 3*G-6*M, &attrs) == 2*G-6*M); // 结尾剩余
+
     mmu_table_delete(tbl);
 }
