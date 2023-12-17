@@ -1,7 +1,7 @@
 // 使用 cpuid 检测支持的特性，设置 MSR 开启相关功能
 
 #include <arch_cpu.h>
-#include <arch_api_p.h>
+#include <cpu/rw.h>
 #include <wheel.h>
 #include <str.h>
 

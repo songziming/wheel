@@ -10,6 +10,38 @@
 
 PCPU_DATA int g_int_depth = 0;
 
+void *g_handlers[256] = { NULL };
+
+
+
+//------------------------------------------------------------------------------
+// 默认 handler
+//------------------------------------------------------------------------------
+
+// 通用异常处理
+void handle_exception(int vec, exp_frame_t *f) {
+    klog("exception %d from rip=%lx, frame=%p\n", vec, f->rip, f);
+
+    size_t rela;
+    const char *name = sym_resolve(f->rip, &rela);
+    klog("exception from %s + 0x%lx\n", name, rela);
+
+    print_stacktrace();
+
+    // 如果要返回，调整 rip 到后一条指令，跳过这个出错的 ud2
+
+    cpu_halt();
+}
+
+// 通用中断处理
+void handle_interrupt(int vec, int_frame_t *f) {
+    klog("interrupt %d\n", vec);
+
+    size_t frames[32];
+    int depth = arch_unwind(frames, 32, f->rbp);
+    print_frames(frames, depth);
+}
+
 
 //------------------------------------------------------------------------------
 // 准备中断处理机制
@@ -40,78 +72,24 @@ void int_init() {
     idt_set_ist(8,  2); // #DF
     idt_set_ist(14, 3); // #PF
     idt_set_ist(18, 4); // #MC
+
+    // 设置中断处理函数
+    for (int i = 0; i < 32; ++i) {
+        g_handlers[i] = handle_exception;
+    }
+    for (int i = 32; i < 256; ++i) {
+        g_handlers[i] = handle_interrupt;
+    }
 }
 
-
-//------------------------------------------------------------------------------
-// 异常处理函数
-//------------------------------------------------------------------------------
-
-typedef struct exp_frame {
-    uint64_t r11;
-    uint64_t r10;
-    uint64_t r9;
-    uint64_t r8;
-    uint64_t rcx;
-    uint64_t rdx;
-    uint64_t rsi;
-    uint64_t rdi;
-    uint64_t rax;
-    uint64_t errcode;
-    uint64_t rip;
-    uint64_t cs;
-    uint64_t rflags;
-    uint64_t rsp;
-    uint64_t ss;
-} PACKED exp_frame_t;
-
-void handle_exception(int vec, exp_frame_t *f) {
-    klog("exception %d from rip=%lx, frame=%p\n", vec, f->rip, f);
-
-    size_t rela;
-    const char *name = sym_resolve(f->rip, &rela);
-    klog("exception from %s + 0x%lx\n", name, rela);
-
-    print_stacktrace();
-
-    // 如果要返回，调整 rip 到后一条指令，跳过这个出错的 ud2
-
-    cpu_halt();
+void set_exp_handler(int vec, exp_handler_t handler) {
+    ASSERT(vec >= 0);
+    ASSERT(vec < 32);
+    g_handlers[vec] = handler;
 }
 
-
-//------------------------------------------------------------------------------
-// 中断处理函数
-//------------------------------------------------------------------------------
-
-typedef struct int_frame {
-    uint64_t r15;
-    uint64_t r14;
-    uint64_t r13;
-    uint64_t r12;
-    uint64_t r11;
-    uint64_t r10;
-    uint64_t r9;
-    uint64_t r8;
-    uint64_t rbp;
-    uint64_t rsi;
-    uint64_t rdi;
-    uint64_t rdx;
-    uint64_t rcx;
-    uint64_t rbx;
-    uint64_t rax;
-    uint64_t errcode;
-    uint64_t rip;
-    uint64_t cs;
-    uint64_t rflags;
-    uint64_t rsp;
-    uint64_t ss;
-} PACKED int_frame_t;
-
-void handle_interrupt(int vec, int_frame_t *f) {
-    klog("interrupt %d\n", vec);
-
-    size_t frames[32];
-    int depth = arch_unwind(frames, 32, f->rbp);
-    print_frames(frames, depth);
+void set_int_handler(int vec, int_handler_t handler) {
+    ASSERT(vec >= 32);
+    ASSERT(vec < 256);
+    g_handlers[vec] = handler;
 }

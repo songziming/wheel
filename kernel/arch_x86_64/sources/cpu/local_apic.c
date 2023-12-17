@@ -1,7 +1,10 @@
+#include <cpu/local_apic.h>
+
 #include <wheel.h>
 #include <arch_smp.h>
-#include <arch_api_p.h>
+#include <cpu/rw.h>
 #include <arch_cpu.h>
+#include <arch_int.h>
 
 // 操作 Local APIC 有两种方式：
 //  - MMIO，所有寄存器都位于 16-byte 对齐的位置
@@ -88,7 +91,7 @@ typedef enum loapic_reg {
 
 
 //------------------------------------------------------------------------------
-// xAPIC 读写函数
+// xAPIC、x2APIC 的寄存器读写函数
 //------------------------------------------------------------------------------
 
 static uint32_t x_read(loapic_reg_t reg) {
@@ -114,11 +117,6 @@ static void x_write_icr(uint64_t val) {
     x_write(REG_ICR_LO, val & 0xffffffff);
 }
 
-
-//------------------------------------------------------------------------------
-// x2APIC 读写函数
-//------------------------------------------------------------------------------
-
 static uint32_t x2_read(loapic_reg_t reg) {
     ASSERT(REG_DFR != reg);
     return (uint32_t)(read_msr(0x800 + reg) & 0xffffffff);
@@ -139,6 +137,23 @@ static void x2_write_icr(uint64_t val) {
 
 
 //------------------------------------------------------------------------------
+// 中断处理函数
+//------------------------------------------------------------------------------
+
+static void handle_spurious(int vec, int_frame_t *f) {
+    (void)vec;
+    (void)f;
+    klog("this cannot happen!\n");
+}
+
+static void handle_timer(int vec, int_frame_t *f) {
+    (void)vec;
+    (void)f;
+    klog("loapic timer tick!\n");
+}
+
+
+//------------------------------------------------------------------------------
 // 用函数指针来统一 xAPIC、x2APIC 两种访问模式
 //------------------------------------------------------------------------------
 
@@ -147,14 +162,22 @@ static void     (*g_write)    (loapic_reg_t reg, uint32_t val) = x_write;
 static uint64_t (*g_read_icr) ()                               = x_read_icr;
 static void     (*g_write_icr)(uint64_t val)                   = x_write_icr;
 
-// 仅在 BSP 运行，校准 local apic timer
-INIT_TEXT void local_apic_init() {
+
+// 仅在 BSP 运行，包括：
+//  - 选择合适的寄存器读写函数
+//  - 设置中断处理函数
+//  - 校准 local apic timer
+INIT_TEXT void local_apic_init_bsp() {
     uint64_t msr_base = read_msr(IA32_APIC_BASE);
+
+    if (0 == (msr_base & LOAPIC_MSR_BSP)) {
+        klog("warning: this is not loapic for BSP\n");
+    }
 
     // 如果 MSR 记录的值和 MADT 规定的映射地址不一致，则重新映射
     if (g_loapic_addr != (msr_base & LOAPIC_MSR_BASE)) {
-        msr_base = (g_loapic_addr & LOAPIC_MSR_BASE) | (msr_base & ~LOAPIC_MSR_BASE);
-        write_msr(IA32_APIC_BASE, msr_base);
+        msr_base &= ~LOAPIC_MSR_BASE;
+        msr_base |= g_loapic_addr & LOAPIC_MSR_BASE;
     }
 
     // 如果支持 x2APIC，则启用
@@ -163,8 +186,34 @@ INIT_TEXT void local_apic_init() {
         g_write = x2_write;
         g_read_icr = x2_read_icr;
         g_write_icr = x2_write_icr;
-
         msr_base |= LOAPIC_MSR_EXTD;
-        write_msr(IA32_APIC_BASE, msr_base);
+    } else {
+        // TODO 将映射的内存，标记为不可缓存
+        //      通过页表属性位或 mtrr 实现
     }
+
+    // 开启 loapic（尚未真的启用，还要设置 spurious reg）
+    msr_base |= LOAPIC_MSR_EN;
+    write_msr(IA32_APIC_BASE, msr_base);
+
+
+    // 注册中断处理函数
+    set_int_handler(VEC_LOAPIC_SPURIOUS, handle_spurious);
+    set_int_handler(VEC_LOAPIC_TIMER, handle_timer);
+
+
+    // 设置时钟相关的寄存器
+    if (0 == (g_cpu_features & CPU_FEATURE_X2APIC)) {
+        //
+    }
+
+
+    // 屏蔽所有中断
+    g_write(REG_LVT_CMCI,    LOAPIC_INT_MASK);
+    g_write(REG_LVT_TIMER,   LOAPIC_INT_MASK);
+    g_write(REG_LVT_THERMAL, LOAPIC_INT_MASK);
+    g_write(REG_LVT_PMC,     LOAPIC_INT_MASK);
+    g_write(REG_LVT_LINT0,   LOAPIC_INT_MASK);
+    g_write(REG_LVT_LINT1,   LOAPIC_INT_MASK);
+    g_write(REG_LVT_ERROR,   LOAPIC_INT_MASK);
 }

@@ -13,6 +13,8 @@
 #include <dev/console.h>
 #include <dev/framebuf.h>
 
+#include <cpu/local_apic.h>
+
 #include <init/multiboot1.h>
 #include <init/multiboot2.h>
 
@@ -190,6 +192,8 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 启用中断异常机制
     int_init();
+
+    local_apic_init_bsp();
 
     // 创建并加载内核页表，启用内存保护
     ctx_init();

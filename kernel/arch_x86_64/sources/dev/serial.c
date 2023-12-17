@@ -1,7 +1,7 @@
 // UART 串口输出
 
 #include <dev/serial.h>
-#include <arch_api_p.h>
+#include <cpu/rw.h>
 
 #define COM1_PORT 0x3f8
 #define BOCHS_PORT 0xe9

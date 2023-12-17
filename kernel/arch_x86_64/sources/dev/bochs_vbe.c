@@ -2,7 +2,7 @@
 // 参考 Bochs 源码中的文件 bochs/iodev/display/vga.h
 
 #include <wheel.h>
-#include <arch_api_p.h>
+#include <cpu/rw.h>
 
 
 #define VBE_PORT_INDEX  0x01ce
@@ -75,7 +75,7 @@ static void vbe_write(uint16_t reg, uint16_t val) {
     out16(VBE_PORT_DATA, val);
 }
 
-INIT_TEXT bga_init() {
+INIT_TEXT void bga_init() {
     if (VBE_DISPI_ID5 != vbe_read(VBE_INDEX_ID)) {
         return;
     }

@@ -1,5 +1,5 @@
 #include <arch_mem.h>
-#include <arch_api_p.h>
+#include <cpu/rw.h>
 #include <arch_cpu.h>
 
 #include <wheel.h>

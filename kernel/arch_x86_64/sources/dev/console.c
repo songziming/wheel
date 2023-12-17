@@ -2,7 +2,7 @@
 
 #include <dev/console.h>
 #include <wheel.h>
-#include <arch_api_p.h>
+#include <cpu/rw.h>
 #include <str.h>
 
 
