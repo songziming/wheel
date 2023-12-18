@@ -31,6 +31,13 @@ static CONST uint32_t *g_irq_to_gsi = NULL;
 static CONST uint8_t  *g_gsi_to_irq = NULL;
 static CONST uint16_t *g_gsi_flags  = NULL;
 
+// NMI 连接到哪个 IO APIC
+static CONST uint32_t g_nmi_gsi = -1;   // -1 表示不经过 IO APIC，直接连接 Local APIC
+
+// NMI 直接连接到哪个处理器的哪个 LINT 引脚
+static CONST uint32_t g_nmi_cpu = -1;   // 0xffffffff 表示连接到所有处理器
+static CONST uint8_t  g_nmi_lint = 0;
+
 
 
 inline int cpu_count() {
@@ -118,6 +125,7 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
     // 再次遍历 MADT，创建设备
     int loapic_idx = 0;
     int ioapic_idx = 0;
+    klog("MADT processor info:\n");
     for (size_t i = sizeof(madt_t); i < madt->header.length;) {
         acpi_subtbl_t *sub = (acpi_subtbl_t *)((size_t)madt + i);
         i += sub->length;
@@ -126,6 +134,7 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
         case MADT_TYPE_LOCAL_APIC: {
             madt_loapic_t *lo = (madt_loapic_t *)sub;
             if (1 & lo->loapic_flags) {
+                klog("  * CPU apicId=%u, processorId=%u\n", lo->id, lo->processor_id);
                 g_loapics[loapic_idx].apic_id      = lo->id;
                 g_loapics[loapic_idx].processor_id = lo->processor_id;
                 g_loapics[loapic_idx].flags        = lo->loapic_flags;
@@ -136,6 +145,7 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
         case MADT_TYPE_LOCAL_X2APIC: {
             madt_lox2apic_t *lo = (madt_lox2apic_t *)sub;
             if (1 & lo->loapic_flags) {
+                klog("  * CPU (x2) apicId=%u, processorId=%u\n", lo->id, lo->processor_id);
                 g_loapics[loapic_idx].apic_id      = lo->id;
                 g_loapics[loapic_idx].processor_id = lo->processor_id;
                 g_loapics[loapic_idx].flags        = lo->loapic_flags;
@@ -145,6 +155,7 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
         }
         case MADT_TYPE_IO_APIC: {
             madt_ioapic_t *io = (madt_ioapic_t *)sub;
+            klog("  * IO APIC apicId=%u, gsi=%u, addr=0x%x\n", io->id, io->gsi_base, io->address);
             g_ioapics[ioapic_idx].apic_id  = io->id;
             g_ioapics[ioapic_idx].gsi_base = io->gsi_base;
             g_ioapics[ioapic_idx].address  = io->address;
@@ -155,7 +166,7 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
             madt_int_override_t *override = (madt_int_override_t *)sub;
             g_irq_to_gsi[override->source] = override->gsi;
             g_gsi_to_irq[override->gsi] = override->source;
-            g_gsi_flags [override->gsi] = override->inti_flags;
+            g_gsi_flags[override->gsi] = override->inti_flags;
             break;
         }
         default:
@@ -171,20 +182,35 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
 
         switch (sub->type) {
         case MADT_TYPE_NMI_SOURCE: {
+            // 描述了 NMI 连接到哪个 IO APIC，以及连接到哪个引脚
             madt_nmi_t *nmi = (madt_nmi_t *)sub;
             klog("  - NMI_SOURCE gsi=%u\n", nmi->gsi);
+            g_nmi_gsi = nmi->gsi;
             break;
         }
         case MADT_TYPE_LOCAL_APIC_NMI: {
+            // 描述了 NMI 连接到哪个 Local APIC 的哪个 LINT 引脚，不经过 IO APIC
             madt_loapic_nmi_t *nmi = (madt_loapic_nmi_t *)sub;
             klog("  - LOCAL_APIC_NMI proc-id=%d, lint=%d\n",
                 nmi->processor_id, nmi->lint);
+            if (0xff == nmi->processor_id) {
+                g_nmi_cpu = -1;
+            } else {
+                g_nmi_cpu = nmi->processor_id;
+            }
+            g_nmi_lint = nmi->lint;
             break;
         }
         case MADT_TYPE_LOCAL_X2APIC_NMI: {
             madt_lox2apic_nmi_t *nmi = (madt_lox2apic_nmi_t *)sub;
             klog("  - LOCAL_X2APIC_NMI proc-id=%d, lint=%d\n",
                 nmi->processor_id, nmi->lint);
+            if (0xffffffff == nmi->processor_id) {
+                g_nmi_cpu = -1;
+            } else {
+                g_nmi_cpu = nmi->processor_id;
+            }
+            g_nmi_lint = nmi->lint;
             break;
         }
         default:

@@ -1,13 +1,6 @@
-// 控制 CPU 相关表结构
-
 #include <arch_cpu.h>
 #include <wheel.h>
 #include <str.h>
-
-
-
-
-
 
 
 typedef struct idt_ent {

@@ -140,10 +140,17 @@ static void x2_write_icr(uint64_t val) {
 // 中断处理函数
 //------------------------------------------------------------------------------
 
+// 这类中断一般不发生
 static void handle_spurious(int vec, int_frame_t *f) {
     (void)vec;
     (void)f;
     klog("this cannot happen!\n");
+}
+
+// corrected machine check error
+static void handle_cmci(int vec, int_frame_t *f) {
+    (void)vec;
+    (void)f;
 }
 
 static void handle_timer(int vec, int_frame_t *f) {
@@ -151,6 +158,36 @@ static void handle_timer(int vec, int_frame_t *f) {
     (void)f;
     klog("loapic timer tick!\n");
 }
+
+// 核心温度超过危险值时触发该中断，温度再高就会关闭核心
+static void handle_thermal_monitor(int vec, int_frame_t *f) {
+    (void)vec;
+    (void)f;
+}
+
+static void handle_performance_counter(int vec, int_frame_t *f) {
+    (void)vec;
+    (void)f;
+}
+
+static void handle_lint0(int vec, int_frame_t *f) {
+    (void)vec;
+    (void)f;
+}
+
+static void handle_lint1(int vec, int_frame_t *f) {
+    (void)vec;
+    (void)f;
+}
+
+// APIC 发生错误
+static void handle_error(int vec, int_frame_t *f) {
+    (void)vec;
+    (void)f;
+    klog("fatal: Local APIC internal error!\n");
+}
+
+
 
 
 //------------------------------------------------------------------------------
