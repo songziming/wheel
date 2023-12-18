@@ -135,12 +135,17 @@ static void x2_write_icr(uint64_t val) {
     write_msr(0x800 + REG_ICR_LO, val);
 }
 
+// 虚函数接口
+static uint32_t (*g_read)     (loapic_reg_t reg)               = x_read;
+static void     (*g_write)    (loapic_reg_t reg, uint32_t val) = x_write;
+static uint64_t (*g_read_icr) ()                               = x_read_icr;
+static void     (*g_write_icr)(uint64_t val)                   = x_write_icr;
 
 //------------------------------------------------------------------------------
 // 中断处理函数
 //------------------------------------------------------------------------------
 
-// 这类中断一般不发生
+// 这类中断一般不发生，无需发送 EOI
 static void handle_spurious(int vec, int_frame_t *f) {
     (void)vec;
     (void)f;
@@ -157,6 +162,7 @@ static void handle_timer(int vec, int_frame_t *f) {
     (void)vec;
     (void)f;
     klog("loapic timer tick!\n");
+    g_write(REG_EOI, 0);
 }
 
 // 核心温度超过危险值时触发该中断，温度再高就会关闭核心
@@ -191,14 +197,8 @@ static void handle_error(int vec, int_frame_t *f) {
 
 
 //------------------------------------------------------------------------------
-// 用函数指针来统一 xAPIC、x2APIC 两种访问模式
+// 初始化
 //------------------------------------------------------------------------------
-
-static uint32_t (*g_read)     (loapic_reg_t reg)               = x_read;
-static void     (*g_write)    (loapic_reg_t reg, uint32_t val) = x_write;
-static uint64_t (*g_read_icr) ()                               = x_read_icr;
-static void     (*g_write_icr)(uint64_t val)                   = x_write_icr;
-
 
 // 仅在 BSP 运行，包括：
 //  - 选择合适的寄存器读写函数
@@ -230,6 +230,7 @@ INIT_TEXT void local_apic_init_bsp() {
     }
 
     // 开启 loapic（尚未真的启用，还要设置 spurious reg）
+    msr_base |= LOAPIC_MSR_BSP;
     msr_base |= LOAPIC_MSR_EN;
     write_msr(IA32_APIC_BASE, msr_base);
 
@@ -237,6 +238,24 @@ INIT_TEXT void local_apic_init_bsp() {
     // 注册中断处理函数
     set_int_handler(VEC_LOAPIC_SPURIOUS, handle_spurious);
     set_int_handler(VEC_LOAPIC_TIMER, handle_timer);
+
+    // 填写 LVT，设置中断处理方式
+    g_write(REG_LVT_TIMER, LOAPIC_PERIODIC | LOAPIC_FIXED | VEC_LOAPIC_TIMER);
+
+    // 判断 NMI 是否连接到自己，以及连接到哪个 lint
+    // NMI 的触发条件必然是 edge，无需设置
+    // TODO intel SDM 要求 LINT1一定设为 edge-trigger，而且NMI也暗含了edge-trigger
+    //      但检测MADT发现NMI定义为 level-trigger，且连接到所有处理器的LINT1
+    switch (nmi_lint(0)) {
+    case 0:
+        g_write(REG_LVT_LINT0, LOAPIC_NMI);
+        break;
+    case 1:
+        g_write(REG_LVT_LINT1, LOAPIC_NMI);
+        break;
+    default:
+        break;
+    }
 
 
     // 设置时钟相关的寄存器

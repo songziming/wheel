@@ -37,6 +37,7 @@ static CONST uint32_t g_nmi_gsi = -1;   // -1 表示不经过 IO APIC，直接�
 // NMI 直接连接到哪个处理器的哪个 LINT 引脚
 static CONST uint32_t g_nmi_cpu = -1;   // 0xffffffff 表示连接到所有处理器
 static CONST uint8_t  g_nmi_lint = 0;
+static CONST uint8_t  g_nmi_inti = 0;   // 触发模式（edge/level、low/high）
 
 
 
@@ -45,6 +46,45 @@ inline int cpu_count() {
     return g_loapic_num;
 }
 
+// 判断 NMI 连接到指定 CPU 的哪个 LINT 引脚，返回 -1 表示没有连接到此 CPU
+INIT_TEXT int nmi_lint(int cpu) {
+    ASSERT(cpu >= 0);
+    ASSERT(cpu < cpu_count());
+
+    if (-1 != g_nmi_gsi) {
+        return -1;
+    }
+
+    if ((-1 == g_nmi_cpu) || (g_loapics[cpu].processor_id == g_nmi_cpu)) {
+        return g_nmi_lint;
+    }
+
+    return -1;
+}
+
+// 解析 MPS INTI flags，描述中断触发条件
+void show_inti_flags(uint16_t flags) {
+    const char *trigger = "confirm";
+    const char *polarity = "confirm";
+
+    switch (TRIGMODE_MASK) {
+    case TRIGMODE_EDGE: trigger = "edge"; break;
+    case TRIGMODE_LEVEL: trigger = "level"; break;
+    case TRIGMODE_CONFIRM:
+    default:
+        break;
+    }
+
+    switch (POLARITY_MASK & flags) {
+    case POLARITY_LOW: polarity = "low"; break;
+    case POLARITY_HIGH: polarity = "high"; break;
+    case POLARITY_CONFIRM:
+    default:
+        break;
+    }
+
+    klog("%s-triggered, active-%s\n", trigger, polarity);
+}
 
 INIT_TEXT void parse_madt(const madt_t *madt) {
     ASSERT(NULL == g_loapics);
@@ -120,6 +160,8 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
     }
     for (uint32_t i = 0; (i < g_gsi_max) && (i <= UINT8_MAX); ++i) {
         g_gsi_to_irq[i] = i;
+        // TODO 设置传统 IRQ 的默认触发条件
+        g_gsi_flags[i] = TRIGMODE_EDGE;
     }
 
     // 再次遍历 MADT，创建设备
@@ -167,6 +209,8 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
             g_irq_to_gsi[override->source] = override->gsi;
             g_gsi_to_irq[override->gsi] = override->source;
             g_gsi_flags[override->gsi] = override->inti_flags;
+            klog("  * override %d to %u, ", override->source, override->gsi);
+            show_inti_flags(override->inti_flags);
             break;
         }
         default:
@@ -191,26 +235,28 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
         case MADT_TYPE_LOCAL_APIC_NMI: {
             // 描述了 NMI 连接到哪个 Local APIC 的哪个 LINT 引脚，不经过 IO APIC
             madt_loapic_nmi_t *nmi = (madt_loapic_nmi_t *)sub;
-            klog("  - LOCAL_APIC_NMI proc-id=%d, lint=%d\n",
-                nmi->processor_id, nmi->lint);
+            klog("  - LOCAL_APIC_NMI proc-id=%d, lint=%d, ", nmi->processor_id, nmi->lint);
+            show_inti_flags(nmi->inti_flags);
             if (0xff == nmi->processor_id) {
                 g_nmi_cpu = -1;
             } else {
                 g_nmi_cpu = nmi->processor_id;
             }
             g_nmi_lint = nmi->lint;
+            g_nmi_inti = nmi->inti_flags;
             break;
         }
         case MADT_TYPE_LOCAL_X2APIC_NMI: {
             madt_lox2apic_nmi_t *nmi = (madt_lox2apic_nmi_t *)sub;
-            klog("  - LOCAL_X2APIC_NMI proc-id=%d, lint=%d\n",
-                nmi->processor_id, nmi->lint);
+            klog("  - LOCAL_X2APIC_NMI proc-id=%d, lint=%d, ", nmi->processor_id, nmi->lint);
+            show_inti_flags(nmi->inti_flags);
             if (0xffffffff == nmi->processor_id) {
                 g_nmi_cpu = -1;
             } else {
                 g_nmi_cpu = nmi->processor_id;
             }
             g_nmi_lint = nmi->lint;
+            g_nmi_inti = nmi->inti_flags;
             break;
         }
         default:

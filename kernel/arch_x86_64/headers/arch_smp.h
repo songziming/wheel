@@ -8,6 +8,7 @@ extern CONST size_t g_loapic_addr;
 extern CONST int    g_loapic_num;
 extern CONST int    g_ioapic_num;
 
+INIT_TEXT int nmi_lint(int cpu);
 INIT_TEXT void parse_madt(const madt_t *madt);
 
 #endif // ARCH_SMP_H
