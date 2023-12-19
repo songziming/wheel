@@ -203,7 +203,7 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     // cstr[0] = 'T';
     // __asm__("ud2");
 
-    __asm__("sti");
+    // __asm__("sti");
 
 
 end:

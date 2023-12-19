@@ -4,8 +4,8 @@
 .global syscall_entry
 
 // arch_int.c
-.extern handle_exception
-.extern handle_interrupt
+.extern g_handlers
+.extern g_int_depth
 
 
 // 必须开启这个模式
@@ -136,7 +136,6 @@ isr_\vec:
 // TODO 异常更像是被动的函数调用，无需备份所有寄存器，只要将 abi 规定的 caller-saved regs 保存即可
 //      包括：rdi, rsi, rdx, rcx, r8, r9, rax, r10, r11
 exception_stub:
-interrupt_stub:
     pushq   %rdi
     pushq   %rsi
     pushq   %rdx
@@ -152,13 +151,16 @@ interrupt_stub:
     movq    %rax, %rdi  // 向量号
     movq    %rsp, %rsi  // 当前栈帧
 
-    // 需要建立一个新的栈帧
-    pushq   80(%rsi)   // 返回地址（即发生异常的 rip）
-    pushq   %rbp // 外层栈帧的 rbp
-    movq    %rsp, %rbp // rbp 指向现在的栈帧
+    // // 需要建立一个新的栈帧
+    // pushq   80(%rsi)   // 返回地址（即发生异常的 rip）
+    // pushq   %rbp // 外层栈帧的 rbp
+    // movq    %rsp, %rbp // rbp 指向现在的栈帧
 
     // 调用 C 函数处理异常
-    call    handle_exception
+    // call    handle_exception
+    movq    $g_handlers, %rax
+    movq    (%rax, %rdi, 8), %rax
+    call    *%rax
 
     // 恢复栈，撤销当前栈帧
     movq    %rbp, %rsp
@@ -179,9 +181,25 @@ interrupt_stub:
 
 
 // 中断处理流程，允许重入，切换中断栈，可以切换任务
-interrupt_stub2:
+interrupt_stub:
+    // TODO 判断是否来自 ring3，决定是否执行 swapgs
     save_regs
 
+    incl    %gs:(g_int_depth)
+    // TODO 判断是否重入，决定是否切换中断栈
+
+    // 函数参数
+    movq    %rax, %rdi  // 向量号
+    movq    %rsp, %rsi  // 当前栈帧
+
+    // 调用 C 函数
+    movq    $g_handlers, %rax
+    movq    (%rax, %rdi, 8), %rax
+    call    *%rax
+
+    decl    %gs:(g_int_depth)
+    // TODO 判断是否退出最后一层中断，决定是否切换到原式栈
+    // TODO 判断是否即将回到 ring3，决定是否执行 swapgs
 
     load_regs
     addq    $8, %rsp    // 跳过错误码
