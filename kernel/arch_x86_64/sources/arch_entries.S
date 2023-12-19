@@ -136,6 +136,7 @@ isr_\vec:
 // TODO 异常更像是被动的函数调用，无需备份所有寄存器，只要将 abi 规定的 caller-saved regs 保存即可
 //      包括：rdi, rsi, rdx, rcx, r8, r9, rax, r10, r11
 exception_stub:
+interrupt_stub:
     pushq   %rdi
     pushq   %rsi
     pushq   %rdx
@@ -178,8 +179,10 @@ exception_stub:
 
 
 // 中断处理流程，允许重入，切换中断栈，可以切换任务
-interrupt_stub:
+interrupt_stub2:
     save_regs
+
+
     load_regs
     addq    $8, %rsp    // 跳过错误码
     iretq

@@ -49,6 +49,9 @@ void handle_interrupt(int vec, int_frame_t *f) {
 
 // mem/pcpu.c 已经分配了每个 CPU 的异常栈和中断栈
 
+// TODO 我们在 local_apic.c 中，配置了只有 BSP 接收 NMI，因此只有 BSP 需要 NMI 栈
+//      但是现在，为每个处理器都分配了相同大小的栈
+
 void int_init() {
     ASSERT(NULL != g_range_pcpu_vars);
     ASSERT(NULL != g_range_pcpu_nmi);

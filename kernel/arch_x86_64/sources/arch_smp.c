@@ -32,10 +32,10 @@ static CONST uint8_t  *g_gsi_to_irq = NULL;
 static CONST uint16_t *g_gsi_flags  = NULL;
 
 // NMI 连接到哪个 IO APIC
-static CONST uint32_t g_nmi_gsi = -1;   // -1 表示不经过 IO APIC，直接连接 Local APIC
+static CONST uint32_t g_nmi_gsi = UINT32_MAX; // -1 表示不经过 IO APIC，直接连接 Local APIC
 
 // NMI 直接连接到哪个处理器的哪个 LINT 引脚
-static CONST uint32_t g_nmi_cpu = -1;   // 0xffffffff 表示连接到所有处理器
+static CONST uint32_t g_nmi_cpu = UINT32_MAX; // -1 表示连接到所有处理器
 static CONST uint8_t  g_nmi_lint = 0;
 static CONST uint8_t  g_nmi_inti = 0;   // 触发模式（edge/level、low/high）
 
@@ -51,11 +51,11 @@ INIT_TEXT int nmi_lint(int cpu) {
     ASSERT(cpu >= 0);
     ASSERT(cpu < cpu_count());
 
-    if (-1 != g_nmi_gsi) {
+    if (UINT32_MAX != g_nmi_gsi) {
         return -1;
     }
 
-    if ((-1 == g_nmi_cpu) || (g_loapics[cpu].processor_id == g_nmi_cpu)) {
+    if ((UINT32_MAX == g_nmi_cpu) || (g_loapics[cpu].processor_id == g_nmi_cpu)) {
         return g_nmi_lint;
     }
 
@@ -67,7 +67,7 @@ void show_inti_flags(uint16_t flags) {
     const char *trigger = "confirm";
     const char *polarity = "confirm";
 
-    switch (TRIGMODE_MASK) {
+    switch (TRIGMODE_MASK & flags) {
     case TRIGMODE_EDGE: trigger = "edge"; break;
     case TRIGMODE_LEVEL: trigger = "level"; break;
     case TRIGMODE_CONFIRM:

@@ -198,10 +198,12 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     // 创建并加载内核页表，启用内存保护
     ctx_init();
 
-    // 引发一个异常
-    char *cstr = "this is immutable";
-    cstr[0] = 'T';
-    __asm__("ud2");
+    // // 引发一个异常
+    // char *cstr = "this is immutable";
+    // cstr[0] = 'T';
+    // __asm__("ud2");
+
+    __asm__("sti");
 
 
 end:

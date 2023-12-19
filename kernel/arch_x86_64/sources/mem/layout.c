@@ -171,7 +171,7 @@ INIT_TEXT void ctx_init() {
     // 切换到新页表
     write_cr3(g_kernel_cr3);
 
-    mmu_walk(g_kernel_cr3);
+    // mmu_walk(g_kernel_cr3);
 }
 
 

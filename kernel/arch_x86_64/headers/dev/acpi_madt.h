@@ -72,6 +72,7 @@ typedef struct madt_nmi {
 #define POLARITY_CONFIRM    0
 #define POLARITY_HIGH       1   // active high
 #define POLARITY_LOW        3   // active low
+
 #define TRIGMODE_MASK       12
 #define TRIGMODE_CONFIRM    0
 #define TRIGMODE_EDGE       4   // edge-triggered
