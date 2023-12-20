@@ -24,11 +24,7 @@ void handle_exception(int vec, exp_frame_t *f) {
 
     size_t rela;
     const char *name = sym_resolve(f->rip, &rela);
-    klog("exception from %s + 0x%lx\n", name, rela);
-
-    print_stacktrace();
-
-    // 如果要返回，调整 rip 到后一条指令，跳过这个出错的 ud2
+    klog("from %s + 0x%lx\n", name, rela);
 
     cpu_halt();
 }
@@ -40,6 +36,8 @@ void handle_interrupt(int vec, int_frame_t *f) {
     size_t frames[32];
     int depth = arch_unwind(frames, 32, f->rbp);
     print_frames(frames, depth);
+
+    cpu_halt();
 }
 
 

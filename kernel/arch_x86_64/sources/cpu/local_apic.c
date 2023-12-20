@@ -312,7 +312,7 @@ INIT_TEXT void local_apic_init_bsp() {
     if (0 == (CPU_FEATURE_X2APIC & g_cpu_features)) {
         g_write(REG_DFR, 0xffffffff);
     }
-    g_write(REG_TPR, 16);   // 屏蔽中断号 0~15
+    g_write(REG_TPR, 16);   // 屏蔽中断号 0~31
     g_write(REG_TIMER_ICR, 0);
     g_write(REG_TIMER_DIV, 0);
 

@@ -36,40 +36,47 @@ isr_entries:
 .text
 .code64
 
-// 所有寄存器入栈（除了 RAX）
-#define save_regs   \
-    pushq   %rbx;   \
-    pushq   %rcx;   \
-    pushq   %rdx;   \
-    pushq   %rdi;   \
-    pushq   %rsi;   \
-    pushq   %rbp;   \
-    pushq   %r8;    \
-    pushq   %r9;    \
-    pushq   %r10;   \
-    pushq   %r11;   \
-    pushq   %r12;   \
-    pushq   %r13;   \
-    pushq   %r14;   \
-    pushq   %r15;
+// 保存异常寄存器（caller-save 寄存器无需保存, rax 已经保存）
+#define save_exp_regs   \
+    pushq   %rdi;       \
+    pushq   %rsi;       \
+    pushq   %rdx;       \
+    pushq   %rcx;       \
+    pushq   %r8;        \
+    pushq   %r9;        \
+    pushq   %r10;       \
+    pushq   %r11
 
-// 所有寄存器出栈（包括 RAX）
-#define load_regs   \
+// 保存中断寄存器（全部都要保存）
+#define save_int_regs   \
+    save_exp_regs;      \
+    pushq   %rbx;       \
+    pushq   %rbp;       \
+    pushq   %r12;       \
+    pushq   %r13;       \
+    pushq   %r14;       \
+    pushq   %r15
+
+#define load_exp_regs   \
+    popq    %r11;       \
+    popq    %r10;       \
+    popq    %r9;        \
+    popq    %r8;        \
+    popq    %rcx;       \
+    popq    %rdx;       \
+    popq    %rsi;       \
+    popq    %rdi;       \
+    popq    %rax
+
+#define load_int_regs   \
     popq    %r15;   \
     popq    %r14;   \
     popq    %r13;   \
     popq    %r12;   \
-    popq    %r11;   \
-    popq    %r10;   \
-    popq    %r9;    \
-    popq    %r8;    \
     popq    %rbp;   \
-    popq    %rsi;   \
-    popq    %rdi;   \
-    popq    %rdx;   \
-    popq    %rcx;   \
     popq    %rbx;   \
-    popq    %rax;
+    load_exp_regs
+
 
 // 没有异常码的异常入口，以及中断入口
 .macro isr_no_err vec, stub
@@ -136,14 +143,7 @@ isr_\vec:
 // TODO 异常更像是被动的函数调用，无需备份所有寄存器，只要将 abi 规定的 caller-saved regs 保存即可
 //      包括：rdi, rsi, rdx, rcx, r8, r9, rax, r10, r11
 exception_stub:
-    pushq   %rdi
-    pushq   %rsi
-    pushq   %rdx
-    pushq   %rcx
-    pushq   %r8
-    pushq   %r9
-    pushq   %r10
-    pushq   %r11
+    save_exp_regs   // 保存寄存器
 
     // TODO 所有寄存器已经入栈，应该切换到专门的异常栈
 
@@ -157,7 +157,6 @@ exception_stub:
     // movq    %rsp, %rbp // rbp 指向现在的栈帧
 
     // 调用 C 函数处理异常
-    // call    handle_exception
     movq    $g_handlers, %rax
     movq    (%rax, %rdi, 8), %rax
     call    *%rax
@@ -166,16 +165,7 @@ exception_stub:
     movq    %rbp, %rsp
     addq    $16, %rsp
 
-    popq    %r11
-    popq    %r10
-    popq    %r9
-    popq    %r8
-    popq    %rcx
-    popq    %rdx
-    popq    %rsi
-    popq    %rdi
-    popq    %rax
-
+    load_exp_regs   // 恢复寄存器
     addq    $8, %rsp    // 跳过错误码
     iretq
 
@@ -183,7 +173,7 @@ exception_stub:
 // 中断处理流程，允许重入，切换中断栈，可以切换任务
 interrupt_stub:
     // TODO 判断是否来自 ring3，决定是否执行 swapgs
-    save_regs
+    save_int_regs
 
     incl    %gs:(g_int_depth)
     // TODO 判断是否重入，决定是否切换中断栈
@@ -201,7 +191,7 @@ interrupt_stub:
     // TODO 判断是否退出最后一层中断，决定是否切换到原式栈
     // TODO 判断是否即将回到 ring3，决定是否执行 swapgs
 
-    load_regs
+    load_int_regs
     addq    $8, %rsp    // 跳过错误码
     iretq
 
