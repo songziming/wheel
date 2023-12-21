@@ -6,6 +6,10 @@
 #include <arch_cpu.h>
 #include <arch_int.h>
 
+#include <str.h>
+
+
+
 // 操作 Local APIC 有两种方式：
 //  - MMIO，所有寄存器都位于 16-byte 对齐的位置
 //  - MSR，速度更快，编号连续，x2APIC 引入
@@ -231,8 +235,14 @@ static void handle_cmci(int vec, int_frame_t *f) {
 static void handle_timer(int vec, int_frame_t *f) {
     (void)vec;
     (void)f;
-    klog("loapic timer tick!\n");
+
+    // 首先发送 EOI，这样才能重入
     g_write(REG_EOI, 0);
+
+    int_frame_t bak;
+    bcpy(&bak, f, sizeof(int_frame_t));
+
+    klog("loapic timer tick! frame=%p, local=%p\n", f, &bak);
 }
 
 // 核心温度超过危险值时触发该中断，温度再高就会关闭核心
@@ -242,16 +252,6 @@ static void handle_thermal_monitor(int vec, int_frame_t *f) {
 }
 
 static void handle_performance_counter(int vec, int_frame_t *f) {
-    (void)vec;
-    (void)f;
-}
-
-static void handle_lint0(int vec, int_frame_t *f) {
-    (void)vec;
-    (void)f;
-}
-
-static void handle_lint1(int vec, int_frame_t *f) {
     (void)vec;
     (void)f;
 }
@@ -306,6 +306,7 @@ INIT_TEXT void local_apic_init_bsp() {
 
     // 注册中断处理函数
     set_int_handler(VEC_LOAPIC_TIMER, handle_timer);
+    set_int_handler(VEC_LOAPIC_ERROR, handle_error);
     set_int_handler(VEC_LOAPIC_SPURIOUS, handle_spurious);
 
     // 设置 DFR、LDR、TPR
@@ -324,6 +325,7 @@ INIT_TEXT void local_apic_init_bsp() {
 
     // 填写 LVT，设置中断处理方式
     g_write(REG_LVT_TIMER, LOAPIC_PERIODIC | LOAPIC_DM_FIXED | VEC_LOAPIC_TIMER);
+    g_write(REG_LVT_ERROR, VEC_LOAPIC_ERROR);
 
     // // 屏蔽其他的中断
     // g_write(REG_LVT_CMCI,    LOAPIC_INT_MASK);

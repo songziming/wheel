@@ -7,10 +7,15 @@
 #include <arch_mem.h>
 
 
+// 每个异常/中断的处理函数指针
+void *g_handlers[256] = { NULL };
 
+// 每个CPU的当前中断嵌套深度
 PCPU_DATA int g_int_depth = 0;
 
-void *g_handlers[256] = { NULL };
+// 需要切换到的中断栈地址
+// TODO 可以直接访问 vmrange
+PCPU_DATA size_t g_int_stack;
 
 
 
@@ -65,7 +70,9 @@ void int_init() {
         tss_set_ist(i, 2, g_range_pcpu_df[i].end);
         tss_set_ist(i, 3, g_range_pcpu_pf[i].end);
         tss_set_ist(i, 4, g_range_pcpu_mc[i].end);
-        tss_set_ist(i, 5, g_range_pcpu_int[i].end);
+
+        // 中断栈不使用 IST，因为 IST 不能重入，而中断可以
+        *(size_t *)pcpu_ptr(i, &g_int_stack) = g_range_pcpu_int[i].end;
     }
 
     // IDT 是所有 CPU 共享的
@@ -75,6 +82,7 @@ void int_init() {
     idt_set_ist(18, 4); // #MC
 
     // 设置中断处理函数
+    // TODO 填入几个重要异常的处理函数（PF），或者等相关模块自己设置
     for (int i = 0; i < 32; ++i) {
         g_handlers[i] = handle_exception;
     }
