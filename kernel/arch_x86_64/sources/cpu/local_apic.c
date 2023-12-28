@@ -220,44 +220,47 @@ static INIT_TEXT uint32_t calibrate_using_pit_03() {
 //------------------------------------------------------------------------------
 
 // 这类中断一般不发生，无需发送 EOI
-static void handle_spurious(int vec, int_frame_t *f) {
+static void handle_spurious(int vec, arch_regs_t *f) {
     (void)vec;
     (void)f;
     klog("this cannot happen!\n");
 }
 
-// corrected machine check error
-static void handle_cmci(int vec, int_frame_t *f) {
-    (void)vec;
-    (void)f;
-}
-
-static void handle_timer(int vec, int_frame_t *f) {
+static void handle_timer(int vec, arch_regs_t *f) {
     (void)vec;
     (void)f;
 
     // 首先发送 EOI，这样才能重入
     g_write(REG_EOI, 0);
 
-    int_frame_t bak;
-    bcpy(&bak, f, sizeof(int_frame_t));
+    arch_regs_t bak;
+    bcpy(&bak, f, sizeof(arch_regs_t));
 
-    klog("loapic timer tick! frame=%p, local=%p\n", f, &bak);
+    static int counter = 0;
+    klog("loapic timer tick %d! frame=%p, local=%p\n", ++counter, f, &bak);
+}
+
+#if 0
+// corrected machine check error
+static void handle_cmci(int vec, arch_regs_t *f) {
+    (void)vec;
+    (void)f;
 }
 
 // 核心温度超过危险值时触发该中断，温度再高就会关闭核心
-static void handle_thermal_monitor(int vec, int_frame_t *f) {
+static void handle_thermal_monitor(int vec, arch_regs_t *f) {
     (void)vec;
     (void)f;
 }
 
-static void handle_performance_counter(int vec, int_frame_t *f) {
+static void handle_performance_counter(int vec, arch_regs_t *f) {
     (void)vec;
     (void)f;
 }
+#endif
 
 // APIC 发生错误
-static void handle_error(int vec, int_frame_t *f) {
+static void handle_error(int vec, arch_regs_t *f) {
     (void)vec;
     (void)f;
     klog("fatal: Local APIC internal error!\n");

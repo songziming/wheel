@@ -1,6 +1,7 @@
 #include <arch_api_p.h>
 #include <wheel.h>
 #include <arch_mem.h>
+#include <str.h>
 
 
 //------------------------------------------------------------------------------
@@ -74,4 +75,32 @@ int unwind(size_t *addrs, int max) {
     uint64_t rbp;
     __asm__("movq %%rbp, %0" : "=r"(rbp));
     return arch_unwind(addrs, max, rbp);
+}
+
+
+//------------------------------------------------------------------------------
+// 多任务支持
+//------------------------------------------------------------------------------
+
+
+void arch_tcb_init(arch_tcb_t *tcb, void *entry, size_t stacktop) {
+    ASSERT(NULL != tcb);
+    ASSERT(NULL != entry);
+    ASSERT(0 != stacktop);
+
+    stacktop &= ~7UL;   // 栈顶需要按 8 字节对齐
+
+    tcb->rsp0 = stacktop;
+    tcb->regs = (arch_regs_t *)(stacktop - sizeof(arch_regs_t));
+    bset(tcb->regs, 0, sizeof(arch_regs_t));
+
+    tcb->regs->cs     = 0x08UL;             // 内核数据段
+    tcb->regs->ss     = 0x10UL;             // 内核代码段
+    tcb->regs->rflags = 0x0200UL;           // 开启中断
+    tcb->regs->rip    = (uint64_t)entry;
+    tcb->regs->rsp    = (uint64_t)stacktop;
+    // tcb->regs->rdi    = (uint64_t)args[0];
+    // tcb->regs->rsi    = (uint64_t)args[1];
+    // tcb->regs->rdx    = (uint64_t)args[2];
+    // tcb->regs->rcx    = (uint64_t)args[3];
 }

@@ -1,0 +1,16 @@
+- [x] 引导：使用 multiboot 1&2 引导，进入 64-bit mode，跳转到 higher-half
+- [x] 输出：格式化字符串，打印调试输出
+- 解析 multiboot 信息
+  - [x] 解析物理内存布局
+  - [x] 解析内核符号表
+  - [x] 解析 framebuffer 信息并据此设置伪字符终端
+- [x] 搜索并解析 ACPI 表
+- [x] 解析 MADT，获取 Local APIC 和 IO APIC 信息
+- [x] 根据 CPU 数量划分 PCPU 区域，使用 gs 快速访问当前 CPU 的变量
+- [x] 分配页描述符数组，实现伙伴算法的物理页面管理
+- [x] 记录内核虚拟地址布局
+- [x] 开发 MMU 控制器，实现对映射方式的动态调整
+- [x] 根据 CPU 数量划分中断栈，专用异常栈，保留 stack-guard
+- [x] 中断异常处理，记录中断深度，切换中断栈，切换 gsbase
+- [x] 配置 Local APIC，使用 PIT 校准 Local APIC Timer，启用时钟中断
+- [ ] 开始执行任务，通过时钟中断实现任务切换

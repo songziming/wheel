@@ -2,6 +2,7 @@
 #define ARCH_API_H
 
 #include "def.h"
+#include <arch_types.h>
 
 void cpu_halt();
 void cpu_pause();
@@ -38,5 +39,7 @@ void   mmu_table_delete(size_t tbl);
 size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs);
 void   mmu_map(size_t tbl, size_t va, size_t end, size_t pa, mmu_attr_t attrs);
 void   mmu_unmap(size_t tbl, size_t va, size_t end);
+
+void arch_tcb_init(arch_tcb_t *tcb, void *entry, size_t stacktop);
 
 #endif // ARCH_API_H

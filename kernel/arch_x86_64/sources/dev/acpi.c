@@ -1,6 +1,5 @@
 #include <dev/acpi.h>
 #include <dev/acpi_fadt.h>
-#include <arch_api_p.h>
 #include <arch_mem.h>
 
 #include <wheel.h>

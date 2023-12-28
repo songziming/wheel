@@ -86,6 +86,64 @@ void show_inti_flags(uint16_t flags) {
     klog("%s-triggered, active-%s\n", trigger, polarity);
 }
 
+#if 0
+static void print_madt(const madt_t *madt) {
+    int len = madt->header.length;
+    uint8_t *arr = (uint8_t *)madt;
+    for (int i = 0; i < len; ++i) {
+        klog("%02x", arr[i]);
+    }
+    klog("\n");
+
+    klog("madt flags=%x\n", madt->flags);
+    klog("madt loapic_addr=%x\n", madt->loapic_addr);
+
+    for (size_t i = sizeof(madt_t); i < madt->header.length;) {
+        acpi_subtbl_t *sub = (acpi_subtbl_t *)((size_t)madt + i);
+        i += sub->length;
+        switch (sub->type) {
+        case MADT_TYPE_LOCAL_APIC_OVERRIDE:
+            klog("Local APIC Address Override, addr=0x%lx\n",
+                ((madt_loapic_override_t *)sub)->address);
+            break;
+        case MADT_TYPE_LOCAL_APIC: {
+            madt_loapic_t *lo = (madt_loapic_t *)sub;
+            klog("Processor Local APIC, processor-id=%u, apic-id=%u, flags=0x%x\n",
+                lo->processor_id, lo->id, lo->loapic_flags);
+            break;
+        }
+        case MADT_TYPE_IO_APIC: {
+            madt_ioapic_t *io = (madt_ioapic_t *)sub;
+            klog("IO APIC, io_apic_id=%d, addr=%x, global_system_interrupt_base=%u\n",
+                io->id, io->address, io->gsi_base);
+            break;
+        }
+        case MADT_TYPE_INTERRUPT_OVERRIDE: {
+            madt_int_override_t *override = (madt_int_override_t *)sub;
+            klog("Interrupt Source Override, bus=%d, source=%d, global_system_interrupt=%u, flags=0x%x\n",
+                override->bus, override->source, override->gsi, override->inti_flags);
+            break;
+        }
+        case MADT_TYPE_NMI_SOURCE: {
+            madt_nmi_t *nmi = (madt_nmi_t *)sub;
+            klog("NMI Source, global_system_interrupt=%u, flags=0x%x\n",
+                nmi->gsi, nmi->inti_flags);
+            break;
+        }
+        case MADT_TYPE_LOCAL_APIC_NMI: {
+            madt_loapic_nmi_t *nmi = (madt_loapic_nmi_t *)sub;
+            klog("Local APIC NMI, processor-id=%u, flags=0x%x, lint=%d\n",
+                nmi->processor_id, nmi->inti_flags, nmi->lint);
+            break;
+        }
+        default:
+            klog("unknown subtable %u\n", sub->type);
+            break;
+        }
+    }
+}
+#endif
+
 INIT_TEXT void parse_madt(const madt_t *madt) {
     ASSERT(NULL == g_loapics);
     ASSERT(NULL == g_ioapics);
@@ -93,6 +151,8 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
     ASSERT(NULL == g_gsi_to_irq);
     ASSERT(NULL == g_gsi_flags);
     ASSERT(NULL != madt);
+
+    // print_madt(madt);
 
     g_loapic_addr = madt->loapic_addr;
     g_loapic_num = 0;

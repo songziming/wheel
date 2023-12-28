@@ -1,7 +1,7 @@
 #include <wheel.h>
 #include <page.h>
+#include <sched.h>
 
-#include <arch_api_p.h>
 #include <arch_mem.h>
 #include <arch_smp.h>
 #include <arch_cpu.h>
@@ -119,6 +119,14 @@ static void serial_console_puts(const char *s, size_t n) {
 
 
 
+
+static task_t root_tcb;
+
+static uint8_t root_stack[PAGE_SIZE * 4];
+
+void root_proc();
+
+
 // BSP 初始化函数
 INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     // 临时串口输出
@@ -203,12 +211,45 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     // cstr[0] = 'T';
     // __asm__("ud2");
 
-    // 打开外部中断，测试 Local APIC timer
+    task_t dummy;
+    *(task_t **)this_ptr(&g_tid_prev) = &dummy;
+
+    // 准备创建新任务
+    size_t root_sp = (size_t)root_stack + sizeof(root_stack);
+    arch_tcb_init(&root_tcb, root_proc, root_sp);
+    *(task_t **)this_ptr(&g_tid_next) = &root_tcb;
+
+    // 打开外部中断，接收 Local APIC timer，自动切换到根任务
     __asm__("sti");
 
 
 end:
     // emu_exit(0);
+    cpu_halt();
+    while (1) {}
+}
+
+
+
+void dummy_wait() {
+    for (int i = 0; i < 10000; ++i) {
+        for (int j = 0; j < 10000; ++j) {
+            __asm__ volatile("nop");
+        }
+    }
+}
+
+// 第一个开始运行的任务
+void root_proc() {
+    klog("running on root proc\n");
+
+    int iter = 0;
+
+    while (1) {
+        dummy_wait();
+        klog("running in root proc iter %d\n", ++iter);
+    }
+
     cpu_halt();
     while (1) {}
 }

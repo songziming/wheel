@@ -24,7 +24,7 @@ PCPU_DATA size_t g_int_stack;
 //------------------------------------------------------------------------------
 
 // 通用异常处理
-void handle_exception(int vec, exp_frame_t *f) {
+void handle_exception(int vec, arch_regs_t *f) {
     klog("exception %d from rip=%lx, frame=%p\n", vec, f->rip, f);
 
     size_t rela;
@@ -35,7 +35,7 @@ void handle_exception(int vec, exp_frame_t *f) {
 }
 
 // 通用中断处理
-void handle_interrupt(int vec, int_frame_t *f) {
+void handle_interrupt(int vec, arch_regs_t *f) {
     klog("interrupt %d\n", vec);
 
     size_t frames[32];
@@ -91,14 +91,14 @@ void int_init() {
     }
 }
 
-void set_exp_handler(int vec, exp_handler_t handler) {
-    ASSERT(vec >= 0);
-    ASSERT(vec < 32);
-    g_handlers[vec] = handler;
-}
+// void set_exp_handler(int vec, exp_handler_t handler) {
+//     ASSERT(vec >= 0);
+//     ASSERT(vec < 32);
+//     g_handlers[vec] = handler;
+// }
 
 void set_int_handler(int vec, int_handler_t handler) {
-    ASSERT(vec >= 32);
+    ASSERT(vec >= 0);
     ASSERT(vec < 256);
     g_handlers[vec] = handler;
 }

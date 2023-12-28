@@ -8,6 +8,10 @@
 .extern g_int_depth
 .extern g_int_stack
 
+// sched.c
+.extern g_tid_prev
+.extern g_tid_next
+
 
 // 必须开启这个模式
 .altmacro
@@ -141,35 +145,25 @@ isr_\vec:
 
 
 // 异常处理流程，不允许重入，不切换中断栈，不切换任务
-// TODO 异常更像是被动的函数调用，无需备份所有寄存器，只要将 abi 规定的 caller-saved regs 保存即可
-//      包括：rdi, rsi, rdx, rcx, r8, r9, rax, r10, r11
+// 异常更像是被动的函数调用，只要将 ABI 规定的 caller-saved regs 保存即可
 exception_stub:
     testl   $3, 0x18(%rsp)  // 检查 CPL
     jz      exp_from_kernel // 如果 CPL=0，说明来自 ring0
     swapgs                  // 如果来自用户态，需要交换 gsbase
 exp_from_kernel:
-    save_exp_regs   // 保存寄存器
-
-    // TODO 所有寄存器已经入栈，应该切换到专门的异常栈
+    save_exp_regs           // 保存寄存器
+    subq    $48, %rsp       // 跳过 6 个 callee-save regs
 
     // 函数参数
-    movq    %rax, %rdi  // 向量号
-    movq    %rsp, %rsi  // 当前栈帧
-
-    // // 需要建立一个新的栈帧
-    // pushq   80(%rsi)   // 返回地址（即发生异常的 rip）
-    // pushq   %rbp // 外层栈帧的 rbp
-    // movq    %rsp, %rbp // rbp 指向现在的栈帧
+    movq    %rax, %rdi      // 向量号
+    movq    %rsp, %rsi      // 当前栈帧
 
     // 调用 C 函数处理异常
     movq    $g_handlers, %rax
     movq    (%rax, %rdi, 8), %rax
     call    *%rax
 
-    // 恢复栈，撤销当前栈帧
-    movq    %rbp, %rsp
-    addq    $16, %rsp
-
+    addq    $48, %rsp       // 跳过 6 个 callee-save regs
     load_exp_regs           // 恢复寄存器
     addq    $8, %rsp        // 跳过错误码
 
@@ -178,6 +172,7 @@ exp_from_kernel:
     swapgs                  // 返回到用户态
 exp_to_kernel:
     iretq
+
 
 
 // 中断处理流程，允许重入，切换中断栈，可以切换任务
@@ -189,28 +184,38 @@ int_from_kernel:
     save_int_regs
 
     // 准备函数参数
-    movq    %rax, %rdi  // 向量号
-    movq    %rsp, %rsi  // 当前栈帧
-
-    // 用 rbp 保存原始栈帧，rbp 原值已经保存在 int_frame_t
-    movq    %rsp, %rbp
+    movq    %rax, %rdi      // 向量号
+    movq    %rsp, %rsi      // 当前栈帧
+    // movq    %rsp, %rbp      // 当前栈顶也保存在 rbp 中
 
     incl    %gs:(g_int_depth)
     cmpl    $1, %gs:(g_int_depth)
-    cmovzq  %gs:(g_int_stack), %rsp // 只有第一次中断，才需要切换中断栈
+    jne     int_nested_enter
 
+    // 只有最外层中断才需要切换到中断栈
+    movq    %gs:(g_tid_prev), %rax
+    movq    %rsp, (%rax)            // g_tid_prev->arch.regs = %rsp
+    movq    %gs:(g_int_stack), %rsp
+
+int_nested_enter:
     // 调用 C 函数
     movq    $g_handlers, %rax
     movq    (%rax, %rdi, 8), %rax
     call    *%rax
 
-    // 无需判断我们退出的是不是最后一层中断，只要加载本次中断前的栈，就不会有错误
-    // TODO 但是我们可以根据是否为最后一层中断，决定要不要切换任务，执行调度
+    // 判断是否退出最后一层中断，如果是，需要执行任务切换
     decl    %gs:(g_int_depth)
-    movq    %rbp, %rsp
+    cmpl    $0, %gs:(g_int_depth)
+    jne     int_nested_return
 
+    // 切换到新任务的栈顶
+    movq    %gs:(g_tid_next), %rdi
+    movq    %rdi, %gs:(g_tid_prev)
+    movq    (%rdi), %rsp
+
+int_nested_return:
     load_int_regs
-    addq    $8, %rsp    // 跳过错误码
+    addq    $8, %rsp        // 跳过错误码
 
     testl   $3, 8(%rsp)     // 检查返回地址的 RPL，判断是否即将返回到 ring3
     jz      int_to_kernel   // 返回到内核态

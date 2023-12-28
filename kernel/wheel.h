@@ -4,6 +4,7 @@
 #include "def.h"
 #include "arch_api.h"
 #include <arch_config.h>
+#include <arch_types.h>
 
 // core
 #include <debug.h>
