@@ -8,22 +8,22 @@
 
 // 必须保证分配的地址是页对齐的
 // 除了分配一个页面，还要附带一个描述符
-static size_t mock_page_alloc() {
+static size_t mock_pages_alloc() {
     size_t addr = (size_t)aligned_alloc(PAGE_SIZE, PAGE_SIZE);
     mock_info_set(addr);
     // printf("mock alloc page %lx\n", addr);
     return addr;
 }
 
-static void mock_page_free(size_t addr) {
+static void mock_pages_free(size_t addr) {
     // printf("mock free page %lx\n", addr);
     free((void *)addr);
     mock_info_clear(addr);
 }
 
 #define VIRT(pa) (void *)(pa)
-#define PAGE_ALLOC() mock_page_alloc()
-#define PAGE_FREE(p) mock_page_free(p)
+#define PAGE_ALLOC() mock_pages_alloc()
+#define PAGE_FREE(p) mock_pages_free(p)
 #define PAGE_INFO(p) mock_info_get(p)
 #define SUPPORT_1G 1
 #define SUPPORT_NX 1

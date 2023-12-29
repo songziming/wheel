@@ -70,10 +70,10 @@ static uint16_t vbe_read(uint16_t reg) {
     return in16(VBE_PORT_DATA);
 }
 
-static void vbe_write(uint16_t reg, uint16_t val) {
-    out16(VBE_PORT_INDEX, reg);
-    out16(VBE_PORT_DATA, val);
-}
+// static void vbe_write(uint16_t reg, uint16_t val) {
+//     out16(VBE_PORT_INDEX, reg);
+//     out16(VBE_PORT_DATA, val);
+// }
 
 INIT_TEXT void bga_init() {
     if (VBE_DISPI_ID5 != vbe_read(VBE_INDEX_ID)) {

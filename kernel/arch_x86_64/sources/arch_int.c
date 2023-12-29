@@ -14,7 +14,6 @@ void *g_handlers[256] = { NULL };
 PCPU_DATA int g_int_depth = 0;
 
 // 需要切换到的中断栈地址
-// TODO 可以直接访问 vmrange
 PCPU_DATA size_t g_int_stack;
 
 
@@ -90,12 +89,6 @@ void int_init() {
         g_handlers[i] = handle_interrupt;
     }
 }
-
-// void set_exp_handler(int vec, exp_handler_t handler) {
-//     ASSERT(vec >= 0);
-//     ASSERT(vec < 32);
-//     g_handlers[vec] = handler;
-// }
 
 void set_int_handler(int vec, int_handler_t handler) {
     ASSERT(vec >= 0);

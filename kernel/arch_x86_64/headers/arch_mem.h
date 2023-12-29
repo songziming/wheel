@@ -47,7 +47,7 @@ void mmu_walk(uint64_t tbl);
 
 // 内存布局初始化
 INIT_TEXT void mem_init();
-INIT_TEXT void ctx_init();
+INIT_TEXT void kernel_proc_init();
 void reclaim_init();
 
 #endif // ARCH_MEM_H

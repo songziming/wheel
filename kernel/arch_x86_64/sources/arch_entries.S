@@ -2,6 +2,7 @@
 
 .global isr_entries
 .global syscall_entry
+.global arch_task_yield
 
 // arch_int.c
 .extern g_handlers
@@ -74,12 +75,12 @@ isr_entries:
     popq    %rax
 
 #define load_int_regs   \
-    popq    %r15;   \
-    popq    %r14;   \
-    popq    %r13;   \
-    popq    %r12;   \
-    popq    %rbp;   \
-    popq    %rbx;   \
+    popq    %r15;       \
+    popq    %r14;       \
+    popq    %r13;       \
+    popq    %r12;       \
+    popq    %rbp;       \
+    popq    %rbx;       \
     load_exp_regs
 
 
@@ -143,8 +144,10 @@ isr_\vec:
 //      内核代码流程可控
 
 
-
+//------------------------------------------------------------------------------
 // 异常处理流程，不允许重入，不切换中断栈，不切换任务
+//------------------------------------------------------------------------------
+
 // 异常更像是被动的函数调用，只要将 ABI 规定的 caller-saved regs 保存即可
 exception_stub:
     testl   $3, 0x18(%rsp)  // 检查 CPL
@@ -174,8 +177,10 @@ exp_to_kernel:
     iretq
 
 
-
+//------------------------------------------------------------------------------
 // 中断处理流程，允许重入，切换中断栈，可以切换任务
+//------------------------------------------------------------------------------
+
 interrupt_stub:
     testl   $3, 0x18(%rsp)  // 检查栈上 CS 最后选择子的特权级，判断是否来自 ring3
     jz      int_from_kernel // 如果 CPL=0，说明来自 ring0
@@ -186,7 +191,6 @@ int_from_kernel:
     // 准备函数参数
     movq    %rax, %rdi      // 向量号
     movq    %rsp, %rsi      // 当前栈帧
-    // movq    %rsp, %rbp      // 当前栈顶也保存在 rbp 中
 
     incl    %gs:(g_int_depth)
     cmpl    $1, %gs:(g_int_depth)
@@ -210,6 +214,7 @@ int_nested_enter:
 
     // 切换到新任务的栈顶
     movq    %gs:(g_tid_next), %rdi
+load_tid_next:
     movq    %rdi, %gs:(g_tid_prev)
     movq    (%rdi), %rsp
 
@@ -223,6 +228,52 @@ int_nested_return:
 int_to_kernel:
     iretq
 
+
+
+//------------------------------------------------------------------------------
+// 主动任务切换，来自内核态，正在使用内核栈
+//------------------------------------------------------------------------------
+
+// 模拟发生一次中断，切换到 g_tid_next
+arch_task_yield:
+    pushfq
+    cli
+    popq    %rax
+
+    cmpq    $0, %gs:(g_int_depth)
+    jne     no_yield    // 处于中断上下文，不许切换任务（中断退出时会自动切换）
+
+    movq    %gs:(g_tid_prev), %rsi
+    movq    %gs:(g_tid_next), %rdi
+    cmpq    %rdi, %rsi
+    je      no_yield    // 目标任务相同，不用切换
+
+    // 模拟中断
+    movq    %rsp, %r8
+    andq    $-16, %rsp      // 栈帧按 16 字节对齐
+    pushq   $0x10           // ss
+    pushq   %r8             // rsp
+    pushq   %rax            // rflags
+    pushq   $0x08           // cs
+    pushq   $yield_resume   // rip
+    pushq   $0              // 错误码
+    pushq   $0              // rax
+    save_int_regs
+    movq    %rsp, (%rsi)    // g_tid_prev->arch.regs = %rsp
+
+    jmp     load_tid_next
+
+no_yield:
+    pushq   %rax
+    popfq
+yield_resume:
+    ret
+
+
+
+//------------------------------------------------------------------------------
+// 系统调用入口，来自用户态
+//------------------------------------------------------------------------------
 
 syscall_entry:
     ret

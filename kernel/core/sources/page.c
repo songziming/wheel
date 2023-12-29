@@ -339,7 +339,6 @@ INIT_TEXT void page_init(size_t end) {
 }
 
 // 将一段内存标记为有效内存
-// TODO 同时指定使用情况，即当前为 FREE 还是 BUSY
 INIT_TEXT void page_add(size_t start, size_t end, page_type_t type) {
     ASSERT(0 != g_page_num);
     ASSERT(NULL != g_pages);
@@ -348,7 +347,6 @@ INIT_TEXT void page_add(size_t start, size_t end, page_type_t type) {
 
     start = (start + PAGE_SIZE - 1) >> PAGE_SHIFT;
     end = end >> PAGE_SHIFT;
-    // klog(" >> adding page %zx~%zx\n", start, end);
 
     if (end > g_page_num) {
         end = g_page_num;
@@ -383,8 +381,12 @@ INIT_TEXT void page_add(size_t start, size_t end, page_type_t type) {
 }
 
 // 申请一个物理页
-size_t page_alloc(page_type_t type) {
-    pfn_t pg = block_alloc(0, 1, 0, type);
+size_t pages_alloc(int rank, page_type_t type) {
+    ASSERT(rank >= 0);
+    ASSERT(rank < RANK_NUM);
+    ASSERT(PT_INVALID != type);
+
+    pfn_t pg = block_alloc(rank, 1, 0, type);
     if (INVALID_PFN == pg) {
         return INVALID_ADDR;
     }
@@ -392,13 +394,12 @@ size_t page_alloc(page_type_t type) {
 }
 
 // 回收一个物理页
-void page_free(size_t pa) {
+void pages_free(size_t pa) {
     ASSERT(0 == (pa & (PAGE_SIZE - 1)));
 
     pa >>= PAGE_SHIFT;
     ASSERT(pa < g_page_num);
     ASSERT(g_pages[pa].head);
-    ASSERT(0 == g_pages[pa].rank);
     ASSERT(PT_FREE != g_pages[pa].type);
 
     block_free((pfn_t)pa);

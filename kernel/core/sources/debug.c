@@ -37,8 +37,7 @@ void klog(const char *fmt, ...) {
     va_end(args);
 }
 
-// TODO 严重错误时打印
-// void panic() {}
+
 
 
 

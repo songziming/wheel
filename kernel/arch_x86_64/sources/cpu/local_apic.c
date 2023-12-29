@@ -229,15 +229,7 @@ static void handle_spurious(int vec, arch_regs_t *f) {
 static void handle_timer(int vec, arch_regs_t *f) {
     (void)vec;
     (void)f;
-
-    // 首先发送 EOI，这样才能重入
     g_write(REG_EOI, 0);
-
-    arch_regs_t bak;
-    bcpy(&bak, f, sizeof(arch_regs_t));
-
-    static int counter = 0;
-    klog("loapic timer tick %d! frame=%p, local=%p\n", ++counter, f, &bak);
 }
 
 #if 0
@@ -298,8 +290,7 @@ INIT_TEXT void local_apic_init_bsp() {
         g_write_icr = x2_write_icr;
         msr_base |= LOAPIC_MSR_EXTD;
     } else {
-        // TODO 将映射的内存，标记为不可缓存
-        //      通过页表属性位或 mtrr 实现
+        // TODO 将映射的内存，标记为不可缓存，通过页表属性位或 mtrr 实现
     }
 
     // 开启 loapic（尚未真的启用，还要设置 spurious reg）

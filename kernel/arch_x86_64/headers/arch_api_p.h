@@ -5,6 +5,4 @@
 
 int arch_unwind(size_t *addrs, int max, uint64_t rbp);
 
-// TODO 还有平台相关的 TCB 结构体
-
 #endif // ARCH_API_P_H

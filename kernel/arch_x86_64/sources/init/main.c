@@ -1,6 +1,6 @@
 #include <wheel.h>
 #include <page.h>
-#include <sched.h>
+#include <task.h>
 
 #include <arch_mem.h>
 #include <arch_smp.h>
@@ -120,11 +120,12 @@ static void serial_console_puts(const char *s, size_t n) {
 
 
 
+
+static void root_proc();
+static void app_proc();
+
 static task_t root_tcb;
-
-static uint8_t root_stack[PAGE_SIZE * 4];
-
-void root_proc();
+static task_t app_tcb;
 
 
 // BSP 初始化函数
@@ -204,7 +205,7 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     local_apic_init_bsp();
 
     // 创建并加载内核页表，启用内存保护
-    ctx_init();
+    kernel_proc_init();
 
     // // 引发一个异常
     // char *cstr = "this is immutable";
@@ -215,12 +216,18 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     *(task_t **)this_ptr(&g_tid_prev) = &dummy;
 
     // 准备创建新任务
-    size_t root_sp = (size_t)root_stack + sizeof(root_stack);
-    arch_tcb_init(&root_tcb, root_proc, root_sp);
+    // size_t root_sp = (size_t)root_stack + sizeof(root_stack);
+    // arch_tcb_init(&root_tcb.arch, root_proc, root_sp);
+
+    task_create(&root_tcb, "root", root_proc, NULL);
+    task_create(&app_tcb, "app", app_proc, NULL);
     *(task_t **)this_ptr(&g_tid_next) = &root_tcb;
 
+
+
     // 打开外部中断，接收 Local APIC timer，自动切换到根任务
-    __asm__("sti");
+    // __asm__("sti");
+    arch_task_yield();
 
 
 end:
@@ -240,14 +247,31 @@ void dummy_wait() {
 }
 
 // 第一个开始运行的任务
-void root_proc() {
+static void root_proc() {
     klog("running on root proc\n");
 
     int iter = 0;
 
     while (1) {
+        klog(" R%d", ++iter);
         dummy_wait();
-        klog("running in root proc iter %d\n", ++iter);
+        *(task_t **)this_ptr(&g_tid_next) = &app_tcb;
+        // arch_task_yield();
+    }
+
+    cpu_halt();
+    while (1) {}
+}
+
+
+static void app_proc() {
+    int iter = 0;
+    while (1) {
+        klog(" A%d", ++iter);
+        dummy_wait();
+        dummy_wait();
+        *(task_t **)this_ptr(&g_tid_next) = &root_tcb;
+        // arch_task_yield();
     }
 
     cpu_halt();

@@ -30,11 +30,11 @@
 #endif
 
 #ifndef PAGE_ALLOC
-#define PAGE_ALLOC() page_alloc(PT_PGTBL)
+#define PAGE_ALLOC() pages_alloc(0, PT_PGTBL)
 #endif
 
 #ifndef PAGE_FREE
-#define PAGE_FREE(p) page_free(p)
+#define PAGE_FREE(p) pages_free(p)
 #endif
 
 #ifndef PAGE_INFO

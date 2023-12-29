@@ -3,6 +3,8 @@
 
 #include "def.h"
 #include <arch_types.h>
+#include <vmspace.h>
+
 
 void cpu_halt();
 void cpu_pause();
@@ -12,6 +14,9 @@ void cpu_rwfence();
 
 int cpu_int_lock();
 void cpu_int_unlock(int key);
+
+uint32_t atomic32_get(uint32_t *ptr);
+uint32_t atomic32_inc(uint32_t *ptr);
 
 void emu_break();
 NORETURN void emu_exit(int ret);
@@ -27,6 +32,9 @@ int cpu_index();
 void *pcpu_ptr(int idx, void *ptr);
 void *this_ptr(void *ptr);
 
+
+// 内存管理
+
 typedef enum mmu_attr {
     MMU_NONE    = 0,
     MMU_USER    = 1,    // 用户态可以访问
@@ -40,6 +48,10 @@ size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs);
 void   mmu_map(size_t tbl, size_t va, size_t end, size_t pa, mmu_attr_t attrs);
 void   mmu_unmap(size_t tbl, size_t va, size_t end);
 
+
+// 多任务支持
+
 void arch_tcb_init(arch_tcb_t *tcb, void *entry, size_t stacktop);
+void arch_task_yield();
 
 #endif // ARCH_API_H

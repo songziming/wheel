@@ -93,9 +93,7 @@ INIT_TEXT void pcpu_prepare() {
 // 记录一段 PCPU 区域，标记物理页，返回对齐的结束地址
 // 类似 arch_mem.c 里面的 add_kernel_range
 static INIT_TEXT size_t add_pcpu_range(vmspace_t *vm, vmrange_t *rng, size_t addr, size_t size, const char *desc) {
-    rng->addr = addr;
-    rng->end  = addr + size;
-    rng->desc = desc;
+    vmrange_init(rng, addr, addr + size, desc);
     vmspace_insert(vm, rng);
 
     size_t from = addr & ~(PAGE_SIZE - 1);

@@ -35,4 +35,10 @@ typedef uint32_t pfn_t;
 #define INVALID_PFN  0xffffffffU
 #define INVALID_ADDR 0xffffffffffffffffUL
 
+typedef enum rc {
+    RC_OK = 0,
+    RC_NO_FREE_PAGE,    // 无法分配物理内存
+    RC_NO_FREE_RANGE,   // 无法预留虚拟内存
+} rc_t;
+
 #endif // DEF_H
