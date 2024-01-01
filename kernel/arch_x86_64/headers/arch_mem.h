@@ -28,7 +28,6 @@ pmrange_t *pmmap_locate(size_t ptr);
 void pmmap_show();
 
 
-
 // Per-CPU
 extern CONST vmrange_t *g_range_pcpu_vars;
 extern CONST vmrange_t *g_range_pcpu_nmi;

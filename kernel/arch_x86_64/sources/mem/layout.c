@@ -29,6 +29,8 @@ static CONST    vmrange_t g_range_text;
 static CONST    vmrange_t g_range_rodata;   // 结束位置由 g_ro_buff 决定
 static CONST    vmrange_t g_range_data;     // 结束位置由 g_rw_buff 决定
 
+// TODO 内核虚拟地址空间应该由专门的全局变量保存，不适合放在 process 中
+
 
 
 // 将一段内存标记为内核占用，记录在地址空间里，也记录在物理内存管理器中
@@ -146,7 +148,7 @@ INIT_TEXT void kernel_proc_init() {
     ASSERT(g_pmmap_len > 0);
 
     // 创建页表
-    g_kernel_proc.table = mmu_table_create();
+    g_kernel_proc.table = mmu_get_kernel_table();
 
     // 映射内核代码数据段
     map_kernel_range(&g_range_init, MMU_WRITE|MMU_EXEC);

@@ -20,6 +20,9 @@
 
 // 内核 PDP 为空也不能删除，因为内核 PDP 被所有进程的 PML4 引用
 
+// 记录内核页表
+CONST static uint64_t g_kernel_table = INVALID_ADDR;
+
 
 //------------------------------------------------------------------------------
 // 定义这些宏，便于单元测试 mock
@@ -84,6 +87,12 @@
 // 创建一张空的页表，返回物理地址
 static uint64_t alloc_table() {
     uint64_t pa = PAGE_ALLOC();
+    if (INVALID_ADDR == pa) {
+        klog("fatal: cannot allocate page for page table!\n");
+        cpu_halt();
+        // TODO panic
+    }
+
     page_info_t *info = PAGE_INFO(pa);
     info->ent_num = 0;
 
@@ -91,20 +100,6 @@ static uint64_t alloc_table() {
     bset(va, 0, PAGE_SIZE);
     return pa;
 }
-
-// // 获取下一级页表，如果不存在则创建
-// static uint64_t get_subtbl(uint64_t *tbl, uint64_t idx) {
-//     ASSERT(NULL != tbl);
-//     ASSERT(idx < 512);
-
-//     if (tbl[idx] & MMU_P) {
-//         return tbl[idx] & MMU_ADDR;
-//     }
-
-//     uint64_t pa = alloc_table();
-//     tbl[idx] = (pa & MMU_ADDR) | MMU_P | MMU_RW | MMU_RW;
-//     return pa;
-// }
 
 
 
@@ -540,7 +535,10 @@ static void pml4_free(uint64_t pml4) {
     ASSERT(0 == OFFSET_4K(pml4));
 
     uint64_t *tbl = VIRT(pml4);
-    for (int i = 0; i < 512; ++i) {
+
+    // 只能删除前 256 个条目，因为后半部分是内核地址空间
+    // 所有进程共享，这里不能删除
+    for (int i = 0; i < 256; ++i) {
         if (tbl[i] & MMU_P) {
             pdp_free(tbl[i] & MMU_ADDR);
         }
@@ -597,10 +595,10 @@ static uint64_t pml4_unmap(uint64_t pml4, uint64_t va, uint64_t end) {
         uint64_t pdp = tbl[i] & MMU_ADDR;
         va = pdp_unmap(pdp, va, end);
 
-        // TODO 需要判断这个 PDP 是不是内核地址范围
-        //      如果是内核空间的 PDP，即使有效元素为零也不能删除
-        //      因为内核 PDP 被所有进程的 PML4 引用
-        if (0 == PAGE_INFO(pdp)->ent_num) {
+        // 需要判断这个 PDP 是不是内核地址范围
+        // 如果是内核空间的 PDP，即使有效元素为零也不能删除
+        // 因为内核 PDP 被所有进程的 PML4 引用
+        if ((i >= 256) && (0 == PAGE_INFO(pdp)->ent_num)) {
             pdp_free(pdp);
             tbl[i] = 0;
             --info->ent_num;
@@ -620,13 +618,36 @@ static uint64_t pml4_unmap(uint64_t pml4, uint64_t va, uint64_t end) {
 // 公开 API
 //------------------------------------------------------------------------------
 
-// 创建一套新的页表
-size_t mmu_table_create() {
-    return alloc_table();
+// 创建内核页表，只包括 canonical hole 之后的部分，被所有进程的页表共享
+static INIT_TEXT size_t mmu_create_kernel_table() {
+    ASSERT(INVALID_ADDR == g_kernel_table);
+    g_kernel_table = alloc_table();
+    // TODO 填充后面的 256 个条目
+    return g_kernel_table;
 }
 
-// 删除一套页表
+// 获取内核页表
+size_t mmu_get_kernel_table() {
+    if (INVALID_ADDR == g_kernel_table) {
+        mmu_create_kernel_table();
+    }
+    return g_kernel_table;
+}
+
+// 创建一套新的页表，内核部分继承
+size_t mmu_create_process_table() {
+    ASSERT(INVALID_ADDR != g_kernel_table);
+    size_t tbl = alloc_table();
+    uint64_t *pml4 = VIRT(tbl);
+    uint64_t *kernel_pml4 = VIRT(g_kernel_table);
+    bcpy(&pml4[256], &kernel_pml4[256], 256 * sizeof(uint64_t));
+    return tbl;
+}
+
+// 删除一套页表，只能删除进程页表
 void mmu_table_delete(size_t tbl) {
+    ASSERT(INVALID_ADDR != g_kernel_table);
+    // ASSERT(tbl != g_kernel_table);
     pml4_free(tbl);
 }
 

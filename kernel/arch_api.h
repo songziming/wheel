@@ -42,7 +42,8 @@ typedef enum mmu_attr {
     MMU_EXEC    = 4,    // 可执行
 } mmu_attr_t;
 
-size_t mmu_table_create();
+size_t mmu_get_kernel_table();
+size_t mmu_create_process_table();
 void   mmu_table_delete(size_t tbl);
 size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs);
 void   mmu_map(size_t tbl, size_t va, size_t end, size_t pa, mmu_attr_t attrs);

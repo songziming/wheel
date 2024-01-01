@@ -50,12 +50,12 @@ void klog(const char *fmt, ...) {
 }
 
 TEST(MMU, Build) {
-    size_t tbl = mmu_table_create();
+    size_t tbl = mmu_create_kernel_table();
     mmu_table_delete(tbl);
 }
 
 TEST(MMU, Map) {
-    size_t tbl = mmu_table_create();
+    size_t tbl = mmu_create_kernel_table();
 
     mmu_map(tbl, 2*G, 3*G, 1*G, MMU_NONE);  // 2G~3G --> 1G
     mmu_map(tbl, 4*M, 6*M, 2*M, MMU_NONE);  // 4M~6M --> 2M
