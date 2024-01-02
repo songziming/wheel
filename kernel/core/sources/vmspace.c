@@ -5,14 +5,29 @@
 
 // vmspace_t g_kernel_proc.space;
 
+static vmspace_t g_kernel_vm = {
+    .head = {
+       .next = NULL,
+       .prev = NULL,
+    },
+};
+
 
 void vmspace_init(vmspace_t *vm) {
     ASSERT(NULL != vm);
     dl_init_circular(&vm->head);
 }
 
+vmspace_t *kernel_vmspace() {
+    if ((NULL == g_kernel_vm.head.prev) || (NULL == g_kernel_vm.head.next)) {
+        vmspace_init(&g_kernel_vm);
+    }
+    return &g_kernel_vm;
+}
+
 void vmrange_init(vmrange_t *rng, size_t addr, size_t end, const char *desc) {
     ASSERT(NULL != rng);
+    ASSERT(addr < end);
 
     rng->addr = addr;
     rng->end  = end;

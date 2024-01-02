@@ -3,6 +3,7 @@
 
 #include <def.h>
 
+
 #define CPU_FEATURE_PCID            0x0001
 #define CPU_FEATURE_X2APIC          0x0002
 #define CPU_FEATURE_TSC             0x0004
@@ -36,7 +37,6 @@ INIT_TEXT void cpu_features_init();
 #ifdef DEBUG
 INIT_TEXT void cpu_info_show();
 #endif
-
 
 INIT_TEXT void gdt_init();
 INIT_TEXT void gdt_load();

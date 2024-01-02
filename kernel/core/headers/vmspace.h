@@ -16,8 +16,7 @@ typedef struct vmspace {
 } vmspace_t;
 
 
-// extern vmspace_t g_kernel_proc.space;
-
+vmspace_t *kernel_vmspace();
 
 void vmspace_init(vmspace_t *vm);
 void vmrange_init(vmrange_t *rng, size_t addr, size_t end, const char *desc);

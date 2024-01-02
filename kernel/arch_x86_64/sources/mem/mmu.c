@@ -23,6 +23,10 @@
 // 记录内核页表
 CONST static uint64_t g_kernel_table = INVALID_ADDR;
 
+// // 预留内核页表的前两级，不必动态申请
+// static uint8_t g_kernel_pml4[PAGE_SIZE] ALIGNED(PAGE_SIZE);
+// static uint8_t g_kernel_pdp[PAGE_SIZE * 256] ALIGNED(PAGE_SIZE);
+
 
 //------------------------------------------------------------------------------
 // 定义这些宏，便于单元测试 mock
@@ -621,8 +625,17 @@ static uint64_t pml4_unmap(uint64_t pml4, uint64_t va, uint64_t end) {
 // 创建内核页表，只包括 canonical hole 之后的部分，被所有进程的页表共享
 static INIT_TEXT size_t mmu_create_kernel_table() {
     ASSERT(INVALID_ADDR == g_kernel_table);
+
     g_kernel_table = alloc_table();
-    // TODO 填充后面的 256 个条目
+    uint64_t *pml4 = (uint64_t *)VIRT(g_kernel_table);
+
+    for (int i = 256; i < 512; ++i) {
+        uint64_t pdp = alloc_table();
+        pml4[i] = (pdp & MMU_ADDR) | MMU_G | MMU_P | MMU_US | MMU_RW;
+    }
+
+    PAGE_INFO(g_kernel_table)->ent_num = 256;
+
     return g_kernel_table;
 }
 

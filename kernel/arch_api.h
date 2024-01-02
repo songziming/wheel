@@ -1,10 +1,15 @@
 #ifndef ARCH_API_H
 #define ARCH_API_H
 
+// 这里定义的接口需要各 arch 模块实现
+
 #include "def.h"
 #include <arch_types.h>
-#include <vmspace.h>
 
+
+//------------------------------------------------------------------------------
+// 基本
+//------------------------------------------------------------------------------
 
 void cpu_halt();
 void cpu_pause();
@@ -18,13 +23,28 @@ void cpu_int_unlock(int key);
 uint32_t atomic32_get(uint32_t *ptr);
 uint32_t atomic32_inc(uint32_t *ptr);
 
+
+//------------------------------------------------------------------------------
+// 调试
+//------------------------------------------------------------------------------
+
 void emu_break();
 NORETURN void emu_exit(int ret);
 
-void *early_alloc_ro(size_t size);
-void *early_alloc_rw(size_t size);
-
 int unwind(size_t *addrs, int max);
+
+
+//------------------------------------------------------------------------------
+// 早期内存分配
+//------------------------------------------------------------------------------
+
+INIT_TEXT void *early_alloc_ro(size_t size);
+INIT_TEXT void *early_alloc_rw(size_t size);
+
+
+//------------------------------------------------------------------------------
+// 多核
+//------------------------------------------------------------------------------
 
 int cpu_count();
 int cpu_index();
@@ -33,7 +53,9 @@ void *pcpu_ptr(int idx, void *ptr);
 void *this_ptr(void *ptr);
 
 
-// 内存管理
+//------------------------------------------------------------------------------
+// 页表操作
+//------------------------------------------------------------------------------
 
 typedef enum mmu_attr {
     MMU_NONE    = 0,
@@ -50,7 +72,9 @@ void   mmu_map(size_t tbl, size_t va, size_t end, size_t pa, mmu_attr_t attrs);
 void   mmu_unmap(size_t tbl, size_t va, size_t end);
 
 
+//------------------------------------------------------------------------------
 // 多任务支持
+//------------------------------------------------------------------------------
 
 void arch_tcb_init(arch_tcb_t *tcb, void *entry, size_t stacktop);
 void arch_task_yield();
