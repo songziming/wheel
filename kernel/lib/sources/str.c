@@ -5,13 +5,13 @@
 #include <str.h>
 #include <wheel.h>
 
-WEAK size_t slen(const char *s, size_t n) {
+WEAK size_t kstrlen(const char *s, size_t n) {
     const char *p = s;
     for (; *p && n; ++p, --n) {}
     return (size_t)(p - s);
 }
 
-WEAK int scmp(const char *s1, const char *s2, size_t n) {
+WEAK int kstrcmp(const char *s1, const char *s2, size_t n) {
     for (; (*s1 || *s2) && n; ++s1, ++s2, --n) {
         if (*s1 != *s2) {
             return (int)*s1 - (int)*s2;
@@ -23,9 +23,9 @@ WEAK int scmp(const char *s1, const char *s2, size_t n) {
 // n 是输出字符串 dst 的最大长度，包含结尾的 '\0'
 // 如果 src 过长，dst 结尾会缺少终止字符 '\0'
 // 如果 src 过短，dst 剩余部分会填充 '\0'
-WEAK char *scpy(char *dst, const char *src, size_t n) {
+WEAK char *kstrcpy(char *dst, const char *src, size_t n) {
     ASSERT(n > 0);
-    ASSERT((dst <= src) || (dst > src + slen(src, n)));
+    ASSERT((dst <= src) || (dst > src + kstrlen(src, n)));
     char *bak = dst;
     for (; *src && n; ++src, ++dst, --n) {
         *dst = *src;
@@ -36,7 +36,7 @@ WEAK char *scpy(char *dst, const char *src, size_t n) {
     return bak;
 }
 
-WEAK void *bset(void *buf, int x, size_t n) {
+WEAK void *kmemset(void *buf, int x, size_t n) {
     uint8_t v = x;
     uint8_t *d = (uint8_t *)buf;
     for (; n > 0; ++d, --n) {
@@ -45,7 +45,7 @@ WEAK void *bset(void *buf, int x, size_t n) {
     return buf;
 }
 
-WEAK int bcmp(const void *s1, const void *s2, size_t n) {
+WEAK int kmemcmp(const void *s1, const void *s2, size_t n) {
     const uint8_t *p1 = (const uint8_t *)s1;
     const uint8_t *p2 = (const uint8_t *)s2;
     for (; n > 0; ++p1, ++p2, --n) {
@@ -57,7 +57,7 @@ WEAK int bcmp(const void *s1, const void *s2, size_t n) {
 }
 
 // 类似 memcpy，不考虑内存重叠的情况
-WEAK void *bcpy(void *dst, const void *src, size_t n) {
+WEAK void *kmemcpy(void *dst, const void *src, size_t n) {
     uint8_t *d = (uint8_t *)dst;
     const uint8_t *s = (const uint8_t *)src;
     ASSERT((d <= s) || (d >= s + n));

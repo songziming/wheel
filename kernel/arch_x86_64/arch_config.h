@@ -12,7 +12,7 @@
 #define STACK_AREA_END      0xffffa00000000000UL
 
 #define INIT_STACK_SIZE     0x1000      // 初始化阶段使用的栈的大小
-#define EARLY_RO_SIZE       0x2000      // 只读预留内存大小
+#define EARLY_RO_SIZE       0x3000      // 只读预留内存大小
 #define EARLY_RW_SIZE       0x2000      // 读写预留内存大小
 
 #define PAGE_SIZE           0x1000

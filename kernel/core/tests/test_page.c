@@ -53,7 +53,7 @@ TEST_F(Page, AllocPages, setup, teardown) {
 
     int num = 0;
     while (1) {
-        size_t pa = pages_alloc(PT_KERNEL);
+        size_t pa = pages_alloc(0, PT_KERNEL);
         if (INVALID_ADDR == pa) {
             break;
         }

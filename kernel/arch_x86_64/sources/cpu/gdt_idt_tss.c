@@ -80,7 +80,7 @@ INIT_TEXT void gdt_load() {
 // 调用门可以放在 GDT、LDT 内部
 
 INIT_TEXT void idt_init() {
-    bset(g_idt, 0, sizeof(g_idt));
+    kmemset(g_idt, 0, sizeof(g_idt));
 
     for (int i = 0; i < 256; ++i) {
         g_idt[i].attr        = 0x8e; // dpl=0，type=E，中断门

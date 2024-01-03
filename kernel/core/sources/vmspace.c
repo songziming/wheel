@@ -3,8 +3,6 @@
 
 
 
-// vmspace_t g_kernel_proc.space;
-
 static vmspace_t g_kernel_vm = {
     .head = {
        .next = NULL,
@@ -18,26 +16,22 @@ void vmspace_init(vmspace_t *vm) {
     dl_init_circular(&vm->head);
 }
 
-vmspace_t *kernel_vmspace() {
+vmspace_t *get_kernel_vmspace() {
     if ((NULL == g_kernel_vm.head.prev) || (NULL == g_kernel_vm.head.next)) {
         vmspace_init(&g_kernel_vm);
     }
     return &g_kernel_vm;
 }
 
-void vmrange_init(vmrange_t *rng, size_t addr, size_t end, const char *desc) {
+void vmspace_insert(vmspace_t *vm, vmrange_t *rng, size_t addr, size_t end, const char *desc) {
+    ASSERT(NULL != vm);
     ASSERT(NULL != rng);
     ASSERT(addr < end);
+    ASSERT(!dl_contains(&vm->head, &rng->dl));
 
     rng->addr = addr;
     rng->end  = end;
     rng->desc = desc;
-}
-
-void vmspace_insert(vmspace_t *vm, vmrange_t *rng) {
-    ASSERT(NULL != vm);
-    ASSERT(NULL != rng);
-    ASSERT(!dl_contains(&vm->head, &rng->dl));
 
     // 在链表中寻找一个位置
     dlnode_t *node = vm->head.next;

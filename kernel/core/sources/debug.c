@@ -77,7 +77,7 @@ INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num) {
     size_t symname_len = 0;
     for (uint32_t i = 1; i < num; ++i) {
         Elf64_Shdr sh;
-        bcpy(&sh, &sections[i], sizeof(Elf64_Shdr));
+        kmemcpy(&sh, &sections[i], sizeof(Elf64_Shdr));
         if ((SHT_SYMTAB != sh.sh_type) && (SHT_DYNSYM != sh.sh_type)) {
             continue;
         }
@@ -86,7 +86,7 @@ INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num) {
         }
 
         Elf64_Shdr link;
-        bcpy(&link, &sections[sh.sh_link], sizeof(Elf64_Shdr));
+        kmemcpy(&link, &sections[sh.sh_link], sizeof(Elf64_Shdr));
         if (SHT_STRTAB != link.sh_type) {
             continue;
         }
@@ -99,7 +99,7 @@ INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num) {
         // 遍历该表中的每个符号，只记录函数类型的符号
         for (size_t j = 1; j < symbol_num; ++j) {
             Elf64_Sym st;
-            bcpy(&st, &symbols[j], sizeof(Elf64_Sym));
+            kmemcpy(&st, &symbols[j], sizeof(Elf64_Sym));
 
             uint32_t strtab_idx = st.st_name;
             if (strtab_idx >= strtab_len) {
@@ -113,7 +113,7 @@ INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num) {
             }
 
             ++g_symbol_num;
-            size_t symlen = slen(symstr, strtab_len - strtab_idx) + 1;
+            size_t symlen = kstrlen(symstr, strtab_len - strtab_idx) + 1;
             if (symlen > g_symlen_max) {
                 g_symlen_max = symlen;
             }
@@ -130,7 +130,7 @@ INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num) {
     // 再次遍历符号表和符号，将函数类型的符号保存下来
     for (uint32_t i = 1; i < num; ++i) {
         Elf64_Shdr sh;
-        bcpy(&sh, &sections[i], sizeof(Elf64_Shdr));
+        kmemcpy(&sh, &sections[i], sizeof(Elf64_Shdr));
         if ((SHT_SYMTAB != sh.sh_type) && (SHT_DYNSYM != sh.sh_type)) {
             continue;
         }
@@ -139,7 +139,7 @@ INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num) {
         }
 
         Elf64_Shdr link;
-        bcpy(&link, &sections[sh.sh_link], sizeof(Elf64_Shdr));
+        kmemcpy(&link, &sections[sh.sh_link], sizeof(Elf64_Shdr));
         if (SHT_STRTAB != link.sh_type) {
             continue;
         }
@@ -151,7 +151,7 @@ INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num) {
 
         for (size_t j = 1; j < symbol_num; ++j) {
             Elf64_Sym st;
-            bcpy(&st, &symbols[j], sizeof(Elf64_Sym));
+            kmemcpy(&st, &symbols[j], sizeof(Elf64_Sym));
 
             uint32_t strtab_idx = st.st_name;
             if (strtab_idx >= strtab_len) {
@@ -165,8 +165,8 @@ INIT_TEXT void symtab_init(void *ptr, uint32_t entsize, uint32_t num) {
 
             char *symdst = &symname[symname_idx];
             const char *symstr = &strtab[strtab_idx];
-            scpy(symdst, symstr, symname_len - symname_idx);
-            symname_idx += slen(symdst, symname_len - symname_idx) + 1;
+            kstrcpy(symdst, symstr, symname_len - symname_idx);
+            symname_idx += kstrlen(symdst, symname_len - symname_idx) + 1;
 
             elf_symbol_t *sym = &g_symbols[symbol_idx++];
             sym->name = symdst;
@@ -185,7 +185,7 @@ size_t sym_locate(const char *name) {
     ASSERT(NULL != g_symbols);
 
     for (int i = 0; i < g_symbol_num; ++i) {
-        if (scmp(name, g_symbols[i].name, g_symlen_max)) {
+        if (kstrcmp(name, g_symbols[i].name, g_symlen_max)) {
             continue;
         }
         return g_symbols[i].addr;

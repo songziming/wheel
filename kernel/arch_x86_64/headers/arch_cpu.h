@@ -4,17 +4,17 @@
 #include <def.h>
 
 
-#define CPU_FEATURE_PCID            0x0001
-#define CPU_FEATURE_X2APIC          0x0002
-#define CPU_FEATURE_TSC             0x0004
-#define CPU_FEATURE_NX              0x0008
-#define CPU_FEATURE_1G              0x0010
-#define CPU_FEATURE_APIC_CONSTANT   0x0020  // APIC Timer 频率固定，与处理器睿频无关
-#define CPU_FEATURE_ERMS            0x0040  // enhanced rep movsb/stosb
-#define CPU_FEATURE_FSGSBASE        0x0080  // 支持读写 fsbase、gsbase 的专用指令
-#define CPU_FEATURE_INVPCID         0x0100
-#define CPU_FEATURE_SMEP            0x0200  // 特权模式禁止执行用户页面的指令（防代码注入）
-#define CPU_FEATURE_SMAP            0x0400  // 特权模式禁止访问用户页面的数据（防数据注入）
+#define CPU_FEATURE_PCID        0x0001
+#define CPU_FEATURE_X2APIC      0x0002
+#define CPU_FEATURE_TSC         0x0004
+#define CPU_FEATURE_NX          0x0008
+#define CPU_FEATURE_1G          0x0010
+#define CPU_FEATURE_ARAT        0x0020  // APIC Timer 频率固定，与处理器睿频无关（即使处在 deep-C 状态）
+#define CPU_FEATURE_ERMS        0x0040  // enhanced rep movsb/stosb
+#define CPU_FEATURE_FSGSBASE    0x0080  // 支持读写 fsbase、gsbase 的专用指令
+#define CPU_FEATURE_INVPCID     0x0100
+#define CPU_FEATURE_SMEP        0x0200  // 特权模式禁止执行用户页面的指令（防代码注入）
+#define CPU_FEATURE_SMAP        0x0400  // 特权模式禁止访问用户页面的数据（防数据注入）
 
 
 typedef struct cache_info {

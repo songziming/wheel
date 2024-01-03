@@ -93,8 +93,7 @@ INIT_TEXT void pcpu_prepare() {
 // 记录一段 PCPU 区域，标记物理页，返回对齐的结束地址
 // 类似 arch_mem.c 里面的 add_kernel_range
 static INIT_TEXT size_t add_pcpu_range(vmspace_t *vm, vmrange_t *rng, size_t addr, size_t size, const char *desc) {
-    vmrange_init(rng, addr, addr + size, desc);
-    vmspace_insert(vm, rng);
+    vmspace_insert(vm, rng, addr, addr + size, desc);
 
     size_t from = addr & ~(PAGE_SIZE - 1);
     size_t to = (rng->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
@@ -144,7 +143,7 @@ INIT_TEXT size_t pcpu_allocate(size_t kernel_end, vmspace_t *vm) {
     kernel_end = (kernel_end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     for (int i = 0; i < ncpu; ++i) {
         kernel_end = add_pcpu_range(vm, &g_range_pcpu_vars[i], kernel_end + PAGE_SIZE, vars_size, "pcpu vars");
-        bcpy((void *)g_range_pcpu_vars[i].addr, &_pcpu_addr, copy_size);
+        kmemcpy((void *)g_range_pcpu_vars[i].addr, &_pcpu_addr, copy_size);
 
         kernel_end = add_pcpu_range(vm, &g_range_pcpu_nmi[i], kernel_end + PAGE_SIZE, INT_STACK_SIZE, "pcpu NMI stack");
         kernel_end = add_pcpu_range(vm, &g_range_pcpu_df[i],  kernel_end + PAGE_SIZE, INT_STACK_SIZE, "pcpu #DF stack");

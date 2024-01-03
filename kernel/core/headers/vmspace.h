@@ -15,13 +15,10 @@ typedef struct vmspace {
     dlnode_t    head;
 } vmspace_t;
 
-
-vmspace_t *kernel_vmspace();
-
 void vmspace_init(vmspace_t *vm);
-void vmrange_init(vmrange_t *rng, size_t addr, size_t end, const char *desc);
+vmspace_t *get_kernel_vmspace();
 
-void vmspace_insert(vmspace_t *vm, vmrange_t *rng);
+void vmspace_insert(vmspace_t *vm, vmrange_t *rng, size_t addr, size_t end, const char *desc);
 void vmspace_remove(vmspace_t *vm, vmrange_t *rng);
 
 vmrange_t *vmspace_locate(vmspace_t *vm, size_t va);

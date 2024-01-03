@@ -1,6 +1,7 @@
 #include <wheel.h>
 #include <page.h>
 #include <task.h>
+#include <str.h>
 
 #include <arch_mem.h>
 #include <arch_smp.h>
@@ -130,6 +131,11 @@ static task_t app_tcb;
 
 // BSP 初始化函数
 INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
+    if (AP_BOOT_MAGIC == eax) {
+        klog("running in another processor!\n");
+        cpu_halt();
+    }
+
     // 临时串口输出
     serial_init();
     set_log_func(serial_puts);
@@ -202,33 +208,20 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     // 启用中断异常机制
     int_init();
 
+    // 设置中断控制器，包含时钟
     local_apic_init_bsp();
 
     // 创建并加载内核页表，启用内存保护
     kernel_proc_init();
 
-    // // 引发一个异常
-    // char *cstr = "this is immutable";
-    // cstr[0] = 'T';
-    // __asm__("ud2");
-
+    // 首次中断保存上下文
     task_t dummy;
     *(task_t **)this_ptr(&g_tid_prev) = &dummy;
 
-    // 准备创建新任务
-    // size_t root_sp = (size_t)root_stack + sizeof(root_stack);
-    // arch_tcb_init(&root_tcb.arch, root_proc, root_sp);
-
+    // 启动第一个任务
     task_create(&root_tcb, "root", root_proc, NULL);
-    task_create(&app_tcb, "app", app_proc, NULL);
     *(task_t **)this_ptr(&g_tid_next) = &root_tcb;
-
-
-
-    // 打开外部中断，接收 Local APIC timer，自动切换到根任务
-    // __asm__("sti");
     arch_task_yield();
-
 
 end:
     // emu_exit(0);
@@ -246,18 +239,50 @@ void dummy_wait() {
     }
 }
 
+
+// layout.ld
+char _real_addr;
+char _real_end;
+
 // 第一个开始运行的任务
 static void root_proc() {
-    klog("running on root proc\n");
+    klog("greeting from root proc\n");
 
-    int iter = 0;
+    // 将实模式启动代码复制到 1M 以下
+    char *from = &_real_addr;
+    char *to = (char *)KERNEL_REAL_ADDR + KERNEL_TEXT_ADDR;
+    kmemcpy(to, from, &_real_end - from);
 
-    while (1) {
-        klog(" R%d", ++iter);
-        dummy_wait();
-        *(task_t **)this_ptr(&g_tid_next) = &app_tcb;
-        // arch_task_yield();
+    // 启动代码地址
+    int vec = KERNEL_REAL_ADDR >> 12;
+
+    for (int i = 1; i < cpu_count(); ++i) {
+        local_apic_emit_init(i);        // 发送 INIT
+        local_apic_busywait(10000);     // 等待 10ms
+        local_apic_emit_sipi(i, vec);   // 发送 SIPI
+        local_apic_busywait(200);       // 等待 200us
+        local_apic_emit_sipi(i, vec);   // 再次发送 SIPI again
+        local_apic_busywait(200);       // 等待 200us
+
+        // 每个 AP 使用相同的栈，必须等前一个 AP 启动完成再启动下一个
+        break;
+
+        // // same boot stack is used, have to start cpus one-by-one
+        // while ((percpu_var(i, tid_prev) == NULL) ||
+        //        (percpu_var(i, tid_prev)->priority > PRIORITY_IDLE)) {
+        //     tick_delay(10);
+        // }
     }
+
+    // int iter = 0;
+    // task_create(&app_tcb, "app", app_proc, NULL);
+
+    // while (1) {
+    //     klog(" R%d", ++iter);
+    //     dummy_wait();
+    //     *(task_t **)this_ptr(&g_tid_next) = &app_tcb;
+    //     // arch_task_yield();
+    // }
 
     cpu_halt();
     while (1) {}

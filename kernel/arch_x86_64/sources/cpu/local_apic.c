@@ -110,15 +110,18 @@ static void x_write(loapic_reg_t reg, uint32_t val) {
     *(volatile uint32_t *)map = val;
 }
 
-static uint64_t x_read_icr() {
-    uint32_t lo = x_read(REG_ICR_LO);
-    uint32_t hi = x_read(REG_ICR_HI);
-    return ((uint64_t)hi << 32) | lo;
-}
+// static uint64_t x_read_icr() {
+//     uint32_t lo = x_read(REG_ICR_LO);
+//     uint32_t hi = x_read(REG_ICR_HI);
+//     return ((uint64_t)hi << 32) | lo;
+// }
 
-static void x_write_icr(uint64_t val) {
-    x_write(REG_ICR_HI, (val >> 32) & 0xffffffff);
-    x_write(REG_ICR_LO, val & 0xffffffff);
+// xAPIC 模式的目标 ID 只有 8-bit
+static void x_write_icr(uint32_t dst, uint32_t lo) {
+    ASSERT(dst < 0x100);
+    dst <<= 24;
+    x_write(REG_ICR_HI, dst);
+    x_write(REG_ICR_LO, lo);
 }
 
 static uint32_t x2_read(loapic_reg_t reg) {
@@ -131,19 +134,20 @@ static void x2_write(loapic_reg_t reg, uint32_t val) {
     write_msr(0x800 + reg, val);
 }
 
-static uint64_t x2_read_icr() {
-    return read_msr(0x800 + REG_ICR_LO);
-}
+// static uint64_t x2_read_icr() {
+//     return read_msr(0x800 + REG_ICR_LO);
+// }
 
-static void x2_write_icr(uint64_t val) {
+static void x2_write_icr(uint32_t id, uint32_t lo) {
+    uint64_t val = (uint64_t)id << 32 | lo;
     write_msr(0x800 + REG_ICR_LO, val);
 }
 
 // 虚函数接口
 static uint32_t (*g_read)     (loapic_reg_t reg)               = x_read;
 static void     (*g_write)    (loapic_reg_t reg, uint32_t val) = x_write;
-static uint64_t (*g_read_icr) ()                               = x_read_icr;
-static void     (*g_write_icr)(uint64_t val)                   = x_write_icr;
+// static uint64_t (*g_read_icr) ()                               = x_read_icr;
+static void     (*g_write_icr)(uint32_t id, uint32_t lo)       = x_write_icr;
 
 
 //------------------------------------------------------------------------------
@@ -212,6 +216,46 @@ static INIT_TEXT uint32_t calibrate_using_pit_03() {
     // 禁用 PIT channel 2，返回 APIC Timer 频率
     out8(0x61, in8(0x61) & ~1);
     return (start_count - end_count) * 20;  // 1s = 20 * 50ms
+}
+
+
+//------------------------------------------------------------------------------
+// 时钟
+//------------------------------------------------------------------------------
+
+// 一秒对应多少周期
+uint32_t g_timer_freq = 0;
+
+// 忙等待
+INIT_TEXT void local_apic_busywait(int us) {
+    ASSERT(0 != g_timer_freq);
+
+    uint32_t start  = g_read(REG_TIMER_CCR);
+    uint32_t period = g_read(REG_TIMER_ICR);
+    uint64_t delay  = ((uint64_t)g_timer_freq * us + 500000) / 1000000;
+
+    // 如果等待时间大于一个完整周期
+    while (delay > period) {
+        while (g_read(REG_TIMER_CCR) <= start) {
+            cpu_pause();
+        }
+        while (g_read(REG_TIMER_CCR) >= start) {
+            cpu_pause();
+        }
+        delay -= period;
+    }
+
+    uint64_t end = start - delay;
+    if (delay > start) {
+        while (g_read(REG_TIMER_CCR) <= start) {
+            cpu_pause();
+        }
+        end = start + period - delay;
+    }
+
+    while (g_read(REG_TIMER_CCR) >= end) {
+        cpu_pause();
+    }
 }
 
 
@@ -286,7 +330,7 @@ INIT_TEXT void local_apic_init_bsp() {
     if (CPU_FEATURE_X2APIC & g_cpu_features) {
         g_read = x2_read;
         g_write = x2_write;
-        g_read_icr = x2_read_icr;
+        // g_read_icr = x2_read_icr;
         g_write_icr = x2_write_icr;
         msr_base |= LOAPIC_MSR_EXTD;
     } else {
@@ -334,10 +378,30 @@ INIT_TEXT void local_apic_init_bsp() {
     // 更保险的方法是检查 IRR，里面有多少个 1 就发送多少次 EOI
     g_write(REG_EOI, 0);
 
-    uint32_t timer_freq = calibrate_using_pit_03();
-    klog("local apic timer freq %u\n", timer_freq);
+    g_timer_freq = calibrate_using_pit_03();
+    klog("local apic timer freq %u\n", g_timer_freq);
 
     // 启动 Timer，周期性发送中断
     g_write(REG_TIMER_DIV, 0x0b); // divide by 1
-    g_write(REG_TIMER_ICR, timer_freq);
+    g_write(REG_TIMER_ICR, g_timer_freq);
+}
+
+// 向目标处理器发送 INIT-IPI
+INIT_TEXT void local_apic_emit_init(int cpu) {
+    ASSERT(cpu >= 0);
+    ASSERT(cpu < cpu_count());
+
+    uint32_t lo = LOAPIC_DM_INIT | LOAPIC_EDGE | LOAPIC_ASSERT;
+    g_write_icr(g_loapics[cpu].apic_id, lo);
+}
+
+// 向目标处理器发送 startup-IPI
+INIT_TEXT void local_apic_emit_sipi(int cpu, int vec) {
+    ASSERT(cpu >= 0);
+    ASSERT(cpu < cpu_count());
+    ASSERT(vec >= 0);
+    ASSERT(vec < 256);
+
+    uint32_t lo = (vec & 0xff) | LOAPIC_DM_STARTUP | LOAPIC_EDGE | LOAPIC_ASSERT;
+    g_write_icr(g_loapics[cpu].apic_id, lo);
 }

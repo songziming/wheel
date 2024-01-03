@@ -4,11 +4,14 @@
 #include <vmspace.h>
 
 typedef struct process {
-    vmspace_t space;
-    size_t    table;
+    vmspace_t space; // 用户态虚拟地址空间布局
+    size_t    table; // 用户态地址映射
+    dlnode_t  proc_head;
 } process_t;
 
-extern process_t g_kernel_proc;
+process_t *get_kernel_process();
+
+void process_create(process_t *proc);
 
 
 #endif // PROCESS_H

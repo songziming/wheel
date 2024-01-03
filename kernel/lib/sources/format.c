@@ -56,7 +56,7 @@ static inline PURE int fmt_toupper(int c) {
 
 // 格式化字符串
 static void fmt_string(fmt_context_t *ctx, const char *str, uint32_t flags, int width, int precision) {
-    int len = slen(str, -1);
+    int len = kstrlen(str, -1);
     if ((0 <= precision) && (precision < len)) {
         len = precision;
     }

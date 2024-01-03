@@ -27,6 +27,9 @@ CONST cache_info_t g_l1i_info;
 CONST cache_info_t g_l2_info;
 CONST cache_info_t g_l3_info;
 
+CONST uint32_t g_tsc_ratio[2]; // TSC/core_crystal 的倍率，分子/分母
+CONST uint32_t g_core_freq; // 核心频率
+
 
 //------------------------------------------------------------------------------
 // AMD 获取缓存信息
@@ -384,13 +387,13 @@ INIT_TEXT void cpu_info_detect() {
 
     // 获取生产商和型号字符串
     __asm__("cpuid" : "=b"(b), "=c"(c), "=d"(d) : "a"(0));
-    bcpy(g_cpu_vendor, (uint32_t[]){ b,d,c }, 12);
+    kmemcpy(g_cpu_vendor, (uint32_t[]){ b,d,c }, 12);
     __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000002));
-    bcpy(g_cpu_brand, (uint32_t[]){ a,b,c,d }, 16);
+    kmemcpy(g_cpu_brand, (uint32_t[]){ a,b,c,d }, 16);
     __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000003));
-    bcpy(&g_cpu_brand[16], (uint32_t[]){ a,b,c,d }, 16);
+    kmemcpy(&g_cpu_brand[16], (uint32_t[]){ a,b,c,d }, 16);
     __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000004));
-    bcpy(&g_cpu_brand[32], (uint32_t[]){ a,b,c,d }, 16);
+    kmemcpy(&g_cpu_brand[32], (uint32_t[]){ a,b,c,d }, 16);
 
     __asm__("cpuid" : "=a"(a), "=c"(c), "=d"(d) : "a"(1) : "ebx");
     g_cpu_stepping  =  a        & 0x0f;
@@ -415,13 +418,20 @@ INIT_TEXT void cpu_info_detect() {
     g_cpu_features |= (d & (1U << 20)) ? CPU_FEATURE_NX : 0;
     g_cpu_features |= (d & (1U << 26)) ? CPU_FEATURE_1G : 0;
 
+    // thermal and power
     __asm__("cpuid" : "=a"(a) : "a"(6) : "ebx", "ecx", "edx");
-    g_cpu_features |= (a & (1U << 2)) ? CPU_FEATURE_APIC_CONSTANT : 0;
+    g_cpu_features |= (a & (1U << 2)) ? CPU_FEATURE_ARAT : 0;
 
-    // 获取各级缓存信息，
-    if (0 == bcmp(g_cpu_vendor, VENDOR_INTEL, 12)) {
+    // core crystal clock
+    __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c) : "a"(0x15) : "edx");
+    g_core_freq = c;
+    g_tsc_ratio[0] = b;
+    g_tsc_ratio[1] = a;
+
+    // 获取各级缓存信息
+    if (0 == kmemcmp(g_cpu_vendor, VENDOR_INTEL, 12)) {
         intel_get_cache_info();
-    } else if (0 == bcmp(g_cpu_vendor, VENDOR_AMD, 12)) {
+    } else if (0 == kmemcmp(g_cpu_vendor, VENDOR_AMD, 12)) {
         amd_get_cache_info();
     } else {
         klog("unknown vendor name '%.12s'\n", g_cpu_vendor);
@@ -466,7 +476,7 @@ INIT_TEXT void cpu_features_init() {
     if (CPU_FEATURE_NX & g_cpu_features) {
         efer |= 1UL << 11;  // NXE
     }
-    if (0 == bcmp(g_cpu_vendor, VENDOR_INTEL, 12)) {
+    if (0 == kmemcmp(g_cpu_vendor, VENDOR_INTEL, 12)) {
         efer |= (1UL <<  0); // SCE，启用快速系统调用指令 syscall/sysret
     }
     write_msr(MSR_EFER, efer);
@@ -494,20 +504,22 @@ INIT_TEXT void cpu_info_show() {
     klog("L2 #color %zu\n", g_l2_info.line_size * g_l2_info.sets >> PAGE_SHIFT);
     klog("L3 #color %zu\n", g_l3_info.line_size * g_l3_info.sets >> PAGE_SHIFT);
 
+    klog("core crystal freq %u, TSC ratio %u/%u\n", g_core_freq, g_tsc_ratio[0], g_tsc_ratio[1]);
+
     static const struct {
         const char *name;
         uint32_t mask;
     } FEATS[] = {
-        { "pcid",     CPU_FEATURE_PCID          },
-        { "x2apic",   CPU_FEATURE_X2APIC        },
-        { "tsc",      CPU_FEATURE_TSC           },
-        { "nx",       CPU_FEATURE_NX            },
-        { "pdpe1gb",  CPU_FEATURE_1G            },
-        { "fixfreq",  CPU_FEATURE_APIC_CONSTANT },
-        { "incpcid",  CPU_FEATURE_INVPCID       },
-        { "smep",     CPU_FEATURE_SMEP          },
-        { "smap",     CPU_FEATURE_SMAP          },
-        { "fsgsbase", CPU_FEATURE_FSGSBASE      }
+        { "pcid",     CPU_FEATURE_PCID      },
+        { "x2apic",   CPU_FEATURE_X2APIC    },
+        { "tsc",      CPU_FEATURE_TSC       },
+        { "nx",       CPU_FEATURE_NX        },
+        { "pdpe1gb",  CPU_FEATURE_1G        },
+        { "arat",     CPU_FEATURE_ARAT      },
+        { "incpcid",  CPU_FEATURE_INVPCID   },
+        { "smep",     CPU_FEATURE_SMEP      },
+        { "smap",     CPU_FEATURE_SMAP      },
+        { "fsgsbase", CPU_FEATURE_FSGSBASE  }
     };
     size_t nfeats = sizeof(FEATS) / sizeof(FEATS[0]);
 

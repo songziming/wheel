@@ -38,7 +38,7 @@ INIT_TEXT void framebuf_init(const fb_info_t *fb) {
     g_addr = (uint8_t *)(DIRECT_MAP_ADDR + fb->addr);
 
     g_back = early_alloc_rw(g_rows * g_step);
-    bset(g_back, 0, g_rows * g_step);
+    kmemset(g_back, 0, g_rows * g_step);
 
     g_px_r = ((1U << fb->r.mask_size) - 1) << fb->r.position;
     g_px_g = ((1U << fb->g.mask_size) - 1) << fb->g.position;
@@ -106,9 +106,9 @@ void framebuf_putc(char c) {
     // 超过屏幕高度，需要滚屏
     if (g_caret_row >= g_em_rows) {
         uint64_t line_size = g_font->height * g_step;
-        bcpy(g_back, g_back + line_size, (g_em_rows - 1) * line_size);
-        bset(g_back + (g_em_rows - 1) * line_size, 0, line_size);
-        bcpy(g_addr, g_back, g_rows * g_step);
+        kmemcpy(g_back, g_back + line_size, (g_em_rows - 1) * line_size);
+        kmemset(g_back + (g_em_rows - 1) * line_size, 0, line_size);
+        kmemcpy(g_addr, g_back, g_rows * g_step);
         --g_caret_row;
     }
 }

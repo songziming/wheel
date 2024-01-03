@@ -2,26 +2,12 @@
 #include <wheel.h>
 
 
-
-typedef struct loapic {
-    uint32_t apic_id;
-    uint32_t processor_id;
-    uint32_t flags;
-} loapic_t;
-
-typedef struct ioapic {
-    uint32_t apic_id;
-    uint32_t gsi_base;
-    size_t   address;   // 映射的虚拟地址
-} ioapic_t;
-
-
 CONST size_t g_loapic_addr;
 CONST int    g_loapic_num = 0;
 CONST int    g_ioapic_num = 0;
 
-static CONST loapic_t *g_loapics = NULL;
-static CONST ioapic_t *g_ioapics = NULL;
+CONST loapic_t *g_loapics = NULL;
+CONST ioapic_t *g_ioapics = NULL;
 
 // IRQ 与 GSI 的映射表
 // 这里的 irq_max、gsi_max 指的是映射表条目数量，并非中断向量的个数

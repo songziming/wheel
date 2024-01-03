@@ -82,7 +82,6 @@ int unwind(size_t *addrs, int max) {
 // 多任务支持
 //------------------------------------------------------------------------------
 
-
 void arch_tcb_init(arch_tcb_t *tcb, void *entry, size_t stacktop) {
     ASSERT(NULL != tcb);
     ASSERT(NULL != entry);
@@ -92,7 +91,7 @@ void arch_tcb_init(arch_tcb_t *tcb, void *entry, size_t stacktop) {
 
     tcb->rsp0 = stacktop;
     tcb->regs = (arch_regs_t *)(stacktop - sizeof(arch_regs_t));
-    bset(tcb->regs, 0, sizeof(arch_regs_t));
+    kmemset(tcb->regs, 0, sizeof(arch_regs_t));
 
     tcb->regs->cs     = 0x08UL;             // 内核数据段
     tcb->regs->ss     = 0x10UL;             // 内核代码段

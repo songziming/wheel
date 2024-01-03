@@ -39,7 +39,7 @@ static INIT_TEXT void *buff_grow(buff_t *buff, size_t size) {
 INIT_TEXT void *early_alloc_ro(size_t size) {
     void *p = buff_grow(&g_ro_buff, size);
     if (NULL == p) {
-        klog("fatal: early ro alloc buffer overflow!\n");
+        klog("fatal: early ro alloc %zu overflow!\n", size);
         return NULL;
     }
     return p;
@@ -48,7 +48,7 @@ INIT_TEXT void *early_alloc_ro(size_t size) {
 INIT_TEXT void *early_alloc_rw(size_t size) {
     void *p = buff_grow(&g_rw_buff, size);
     if (NULL == p) {
-        klog("fatal: early rw alloc buffer overflow!\n");
+        klog("fatal: early rw alloc %zu overflow!\n", size);
         return NULL;
     }
     return p;

@@ -10,6 +10,10 @@
 #define VEC_LOAPIC_ERROR    0xfe
 #define VEC_LOAPIC_SPURIOUS 0xff    // spurious 向量号最后 4bit 必须是 f
 
+INIT_TEXT void local_apic_busywait(int us);
+
 INIT_TEXT void local_apic_init_bsp();
+INIT_TEXT void local_apic_emit_init(int cpu);
+INIT_TEXT void local_apic_emit_sipi(int cpu, int vec);
 
 #endif // CPU_LOCAL_APIC_H
