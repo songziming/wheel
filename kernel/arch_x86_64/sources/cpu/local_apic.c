@@ -210,11 +210,14 @@ static INIT_TEXT uint32_t calibrate_using_pit_03() {
         }
     }
 
+    // 禁用 PIT channel 2
+    out8(0x61, in8(0x61) & ~1);
+
+    // TSC 频率可以保存下来，也许有用
     int64_t g_tsc_freq = (end_tsc - start_tsc) * 20;
     klog("tsc freq = %ld\n", g_tsc_freq);
 
-    // 禁用 PIT channel 2，返回 APIC Timer 频率
-    out8(0x61, in8(0x61) & ~1);
+    // 返回 APIC Timer 频率
     return (start_count - end_count) * 20;  // 1s = 20 * 50ms
 }
 
@@ -309,36 +312,37 @@ static void handle_error(int vec, arch_regs_t *f) {
 // 初始化
 //------------------------------------------------------------------------------
 
-// 仅在 BSP 运行，包括：
-//  - 选择合适的寄存器读写函数
-//  - 设置中断处理函数
-//  - 校准 local apic timer
-INIT_TEXT void local_apic_init_bsp() {
-    uint64_t msr_base = read_msr(IA32_APIC_BASE);
+INIT_TEXT void local_apic_init(int isbsp) {
+    // uint64_t msr_base = read_msr(IA32_APIC_BASE);
 
-    if (0 == (LOAPIC_MSR_BSP & msr_base)) {
-        klog("warning: this is not loapic for BSP\n");
-    }
+    // if (0 == (LOAPIC_MSR_BSP & msr_base)) {
+    //     klog("warning: this is not loapic for BSP\n");
+    // }
 
-    // 如果 MSR 记录的值和 MADT 规定的映射地址不一致，则重新映射
-    if (g_loapic_addr != (LOAPIC_MSR_BASE & msr_base)) {
-        msr_base &= ~LOAPIC_MSR_BASE;
-        msr_base |= g_loapic_addr & LOAPIC_MSR_BASE;
-    }
+    // // 如果 MSR 记录的值和 MADT 规定的映射地址不一致，则重新映射
+    // if (g_loapic_addr != (LOAPIC_MSR_BASE & msr_base)) {
+    //     msr_base &= ~LOAPIC_MSR_BASE;
+    //     msr_base |= g_loapic_addr & LOAPIC_MSR_BASE;
+    // }
+
+    uint64_t msr_base = g_loapic_addr & LOAPIC_MSR_BASE;
 
     // 如果支持 x2APIC，则启用
     if (CPU_FEATURE_X2APIC & g_cpu_features) {
-        g_read = x2_read;
-        g_write = x2_write;
-        // g_read_icr = x2_read_icr;
-        g_write_icr = x2_write_icr;
+        if (isbsp) {
+            g_read = x2_read;
+            g_write = x2_write;
+            g_write_icr = x2_write_icr;
+        }
         msr_base |= LOAPIC_MSR_EXTD;
     } else {
         // TODO 将映射的内存，标记为不可缓存，通过页表属性位或 mtrr 实现
     }
 
     // 开启 loapic（尚未真的启用，还要设置 spurious reg）
-    msr_base |= LOAPIC_MSR_BSP;
+    if (isbsp) {
+        msr_base |= LOAPIC_MSR_BSP;
+    }
     msr_base |= LOAPIC_MSR_EN;
     write_msr(IA32_APIC_BASE, msr_base);
 
@@ -378,8 +382,10 @@ INIT_TEXT void local_apic_init_bsp() {
     // 更保险的方法是检查 IRR，里面有多少个 1 就发送多少次 EOI
     g_write(REG_EOI, 0);
 
-    g_timer_freq = calibrate_using_pit_03();
-    klog("local apic timer freq %u\n", g_timer_freq);
+    if (0 == g_timer_freq) {
+        g_timer_freq = calibrate_using_pit_03();
+        klog("local apic timer freq %u\n", g_timer_freq);
+    }
 
     // 启动 Timer，周期性发送中断
     g_write(REG_TIMER_DIV, 0x0b); // divide by 1

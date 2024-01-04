@@ -10,8 +10,8 @@
 #define VENDOR_INTEL "GenuineIntel"
 #define VENDOR_AMD   "AuthenticAMD"
 
-static CONST char g_cpu_vendor[12];
-static CONST char g_cpu_brand[48];
+static CONST char g_cpu_vendor[12 + 1];
+static CONST char g_cpu_brand[48 + 1];
 
 static CONST uint8_t  g_cpu_stepping;
 static CONST uint8_t  g_cpu_model;
@@ -395,6 +395,18 @@ INIT_TEXT void cpu_info_detect() {
     __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000004));
     kmemcpy(&g_cpu_brand[32], (uint32_t[]){ a,b,c,d }, 16);
 
+    g_cpu_vendor[12] = '\0';
+    g_cpu_brand[48] = '\0';
+
+    // trim brand
+    for (int i = 0; i < 48; ++i) {
+        if (' ' != g_cpu_brand[i]) {
+            kmemcpy(g_cpu_brand, g_cpu_brand + i, 48 - i);
+            g_cpu_brand[48 - i] = '\0';
+            break;
+        }
+    }
+
     __asm__("cpuid" : "=a"(a), "=c"(c), "=d"(d) : "a"(1) : "ebx");
     g_cpu_stepping  =  a        & 0x0f;
     g_cpu_model     = (a >>  4) & 0x0f;
@@ -490,21 +502,20 @@ INIT_TEXT void cpu_features_init() {
 #ifdef DEBUG
 
 INIT_TEXT void cpu_info_show() {
-    klog("cpu vendor: '%12s'\n", g_cpu_vendor);
-    klog("cpu brand: '%48s'\n", g_cpu_brand);
-
-    klog("L1-code line=%zu, nsets=%zu, nways=%zu\n", g_l1i_info.line_size, g_l1i_info.sets, g_l1i_info.ways);
-    klog("L1-data line=%zu, nsets=%zu, nways=%zu\n", g_l1d_info.line_size, g_l1d_info.sets, g_l1d_info.ways);
+    klog("cpu info:\n");
+    klog("  - vendor '%s', brand '%s'\n", g_cpu_vendor, g_cpu_brand);
+    klog("  - L1I line=%zu, nsets=%zu, nways=%zu\n", g_l1i_info.line_size, g_l1i_info.sets, g_l1i_info.ways);
+    klog("  - L1D line=%zu, nsets=%zu, nways=%zu\n", g_l1d_info.line_size, g_l1d_info.sets, g_l1d_info.ways);
 
     ASSERT(g_l1d_info.line_size * g_l1d_info.sets * g_l1d_info.ways == g_l1d_info.total_size);
     ASSERT(g_l2_info.line_size * g_l2_info.sets * g_l2_info.ways == g_l2_info.total_size);
     ASSERT(g_l3_info.line_size * g_l3_info.sets * g_l3_info.ways == g_l3_info.total_size);
 
-    klog("L1 #color %zu\n", g_l1d_info.line_size * g_l1d_info.sets >> PAGE_SHIFT);
-    klog("L2 #color %zu\n", g_l2_info.line_size * g_l2_info.sets >> PAGE_SHIFT);
-    klog("L3 #color %zu\n", g_l3_info.line_size * g_l3_info.sets >> PAGE_SHIFT);
+    klog("  - L1 cache #color %zu\n", g_l1d_info.line_size * g_l1d_info.sets >> PAGE_SHIFT);
+    klog("  - L2 cache #color %zu\n", g_l2_info.line_size * g_l2_info.sets >> PAGE_SHIFT);
+    klog("  - L3 cache #color %zu\n", g_l3_info.line_size * g_l3_info.sets >> PAGE_SHIFT);
 
-    klog("core crystal freq %u, TSC ratio %u/%u\n", g_core_freq, g_tsc_ratio[0], g_tsc_ratio[1]);
+    klog("  - core crystal freq %u, TSC ratio %u/%u\n", g_core_freq, g_tsc_ratio[0], g_tsc_ratio[1]);
 
     static const struct {
         const char *name;
@@ -523,7 +534,7 @@ INIT_TEXT void cpu_info_show() {
     };
     size_t nfeats = sizeof(FEATS) / sizeof(FEATS[0]);
 
-    klog("cpu flags:");
+    klog("  - features:");
     for (size_t i = 0; i < nfeats; ++i) {
         if (g_cpu_features & FEATS[i].mask) {
             klog(" %s", FEATS[i].name);

@@ -1,6 +1,8 @@
 #ifndef ARCH_CPU_H
 #define ARCH_CPU_H
 
+// TODO 此头文件适合放在 cpu 子目录下
+
 #include <def.h>
 
 

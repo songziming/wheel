@@ -12,7 +12,7 @@
 
 INIT_TEXT void local_apic_busywait(int us);
 
-INIT_TEXT void local_apic_init_bsp();
+INIT_TEXT void local_apic_init(int isbsp);
 INIT_TEXT void local_apic_emit_init(int cpu);
 INIT_TEXT void local_apic_emit_sipi(int cpu, int vec);
 

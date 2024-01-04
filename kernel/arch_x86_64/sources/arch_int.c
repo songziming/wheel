@@ -11,10 +11,10 @@
 void *g_handlers[256] = { NULL };
 
 // 每个CPU的当前中断嵌套深度
-PCPU_DATA int g_int_depth = 0;
+PCPU_BSS int g_int_depth;
 
 // 需要切换到的中断栈地址
-PCPU_DATA size_t g_int_stack;
+PCPU_BSS size_t g_int_stack;
 
 
 
@@ -61,6 +61,7 @@ void int_init() {
     ASSERT(NULL != g_range_pcpu_pf);
     ASSERT(NULL != g_range_pcpu_mc);
     ASSERT(NULL != g_range_pcpu_int);
+    ASSERT(0 == cpu_index());
 
     // 每个 CPU 可以设置最多 7 个 IST，编号 1~7
     // TSS 里面记录的是栈顶，也就是结束地址
@@ -69,6 +70,8 @@ void int_init() {
         tss_set_ist(i, 2, g_range_pcpu_df[i].end);
         tss_set_ist(i, 3, g_range_pcpu_pf[i].end);
         tss_set_ist(i, 4, g_range_pcpu_mc[i].end);
+
+        *(int *)pcpu_ptr(i, &g_int_depth) = 0;
 
         // 中断栈不使用 IST，因为 IST 不能重入，而中断可以
         *(size_t *)pcpu_ptr(i, &g_int_stack) = g_range_pcpu_int[i].end;

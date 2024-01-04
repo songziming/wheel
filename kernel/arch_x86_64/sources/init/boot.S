@@ -2,7 +2,9 @@
 
 
 .global sys_boot
-.global ap_boot
+.global sys_boot_ap
+.global mb_eax
+
 .extern sys_init
 
 
@@ -156,7 +158,8 @@ sys_boot:
     addl    $8, %edi
     loop    .pde
 
-load_pml4:
+// AP 从这里启动
+sys_boot_ap:
     // 加载临时页表
     movl    $pml4, %eax
     movl    %eax, %cr3
@@ -185,13 +188,6 @@ load_pml4:
     hlt
     jmp     1b
 
-
-
-// AP 从这里启动
-ap_boot:
-    movl    %eax, (mb_eax)
-    movl    %ebx, (mb_ebx)
-    jmp     load_pml4
 
 
 //------------------------------------------------------------------------------

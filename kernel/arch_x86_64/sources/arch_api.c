@@ -87,6 +87,7 @@ void arch_tcb_init(arch_tcb_t *tcb, void *entry, size_t stacktop) {
     ASSERT(NULL != entry);
     ASSERT(0 != stacktop);
 
+    stacktop -= 8;      // 留出几个字节，防止栈底越界
     stacktop &= ~7UL;   // 栈顶需要按 8 字节对齐
 
     tcb->rsp0 = stacktop;

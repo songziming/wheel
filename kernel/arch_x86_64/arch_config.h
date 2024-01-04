@@ -18,7 +18,7 @@
 #define PAGE_SIZE           0x1000
 #define PAGE_SHIFT          12
 
-#define INT_STACK_SIZE      0x1000      // 中断栈
+#define INT_STACK_SIZE      0x1000      // 中断栈大小，也是异常栈 IST 大小
 #define TASK_STACK_RANK     1           // 任务栈的大小
 
 #endif // ARCH_X86_64_CONFIG_H

@@ -167,8 +167,8 @@ INIT_TEXT void kernel_proc_init() {
     uint64_t maplen = 1UL << 32; // g_pmmap[g_pmmap_len - 1].end;
     mmu_map(table, DIRECT_MAP_ADDR, DIRECT_MAP_ADDR + maplen, 0, MMU_WRITE);
 
-    // 切换到新页表
-    write_cr3(table);
+    // // 切换到新页表
+    // write_cr3(table);
 }
 
 

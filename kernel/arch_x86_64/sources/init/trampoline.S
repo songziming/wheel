@@ -2,7 +2,8 @@
 
 #include <arch_config.h>
 
-.extern ap_boot
+.extern mb_eax
+.extern sys_boot_ap
 
 .section ".real", "ax"
 .code16
@@ -38,16 +39,13 @@ real_entry:
 // 32 位保护模式 GDT
 .balign 16
 gdt32:
-    .long   0           // dummy descriptor
-    .long   0
-
+    .quad   0           // dummy descriptor
     .word   0xffff      // code 0: limit [0 :15]
     .word   0           //         base  [0 :15]
     .byte   0           //         base  [16:23]
     .byte   0x9a        //         Present, DPL=0, non-conforming
     .byte   0xcf        //         32-bit, and limit [16:19]
     .byte   0           //         base  [24:31]
-
     .word   0xffff      // data 0: limit [0 :15]
     .word   0           //         base  [0 :15]
     .byte   0           //         base  [16:23]
@@ -73,8 +71,8 @@ start32:
     movw    %ax, %ss
 
     // TODO 直接跳转到加载临时页表的部分
-    movl    AP_BOOT_MAGIC, %eax
-    jmp     ap_boot
+    movl    $AP_BOOT_MAGIC, (mb_eax)
+    jmp     sys_boot_ap
 
 2:
     hlt

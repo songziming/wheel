@@ -70,4 +70,7 @@ INIT_TEXT void early_rw_unlock() {
 INIT_TEXT void early_alloc_disable() {
     g_ro_buff.end = g_ro_buff.ptr;
     g_rw_buff.end = g_rw_buff.ptr;
+
+    klog("early-ro used 0x%zx, end=%p\n", (size_t)(g_ro_buff.end - g_ro_area), g_ro_buff.end);
+    klog("early-rw used 0x%zx, end=%p\n", (size_t)(g_rw_buff.end - g_rw_area), g_rw_buff.end);
 }

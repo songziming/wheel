@@ -52,6 +52,8 @@ rc_t task_create(task_t *task, const char *name, void *entry, process_t *proc) {
         return RC_NO_FREE_PAGE;
     }
 
+    klog("task '%s' stack %zx --> %zx\n", name, va, pa);
+
     // 建立内核栈的映射
     vmspace_insert(kernel_vm, &task->stack_va, va, va + stack_size, name);
     mmu_map(kernel_pg, va, va + stack_size, pa, MMU_WRITE);
