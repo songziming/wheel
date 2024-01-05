@@ -12,8 +12,21 @@
 
 INIT_TEXT void local_apic_busywait(int us);
 
-INIT_TEXT void local_apic_init(int isbsp);
-INIT_TEXT void local_apic_emit_init(int cpu);
-INIT_TEXT void local_apic_emit_sipi(int cpu, int vec);
+typedef enum local_apic_type {
+    LOCAL_APIC_BSP,
+    LOCAL_APIC_AP,
+} local_apic_type_t;
+
+INIT_TEXT void local_apic_init(local_apic_type_t type);
+
+typedef enum local_apic_timer_mode {
+    LOCAL_APIC_TIMER_ONESHOT,
+    LOCAL_APIC_TIMER_PERIODIC,
+} local_apic_timer_mode_t;
+
+void local_apic_timer_set(int freq, local_apic_timer_mode_t mode);
+
+INIT_TEXT void local_apic_send_init(int cpu);
+INIT_TEXT void local_apic_send_sipi(int cpu, int vec);
 
 #endif // CPU_LOCAL_APIC_H

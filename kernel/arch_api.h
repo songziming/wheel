@@ -77,7 +77,7 @@ void   mmu_unmap(size_t tbl, size_t va, size_t end);
 // 多任务支持
 //------------------------------------------------------------------------------
 
-void arch_tcb_init(arch_tcb_t *tcb, void *entry, size_t stacktop);
+void arch_tcb_init(arch_tcb_t *tcb, size_t entry, size_t stacktop, size_t args[4]);
 void arch_task_yield();
 
 #endif // ARCH_API_H

@@ -1,15 +1,10 @@
 // 内核地址空间管理
 
 #include <arch_mem.h>
-#include <arch_cpu.h>
 #include <arch_smp.h>
 #include <cpu/rw.h>
 
 #include <wheel.h>
-#include <vmspace.h>
-#include <process.h>
-#include <page.h>
-#include <str.h>
 
 
 

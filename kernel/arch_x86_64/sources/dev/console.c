@@ -1,9 +1,9 @@
 // 字符模式终端
 
 #include <dev/console.h>
-#include <wheel.h>
 #include <cpu/rw.h>
-#include <str.h>
+#include <wheel.h>
+
 
 
 

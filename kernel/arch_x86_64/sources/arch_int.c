@@ -1,10 +1,10 @@
 // 中断和异常处理
 
 #include <arch_int.h>
-#include <wheel.h>
 #include <arch_api_p.h>
-#include <arch_cpu.h>
 #include <arch_mem.h>
+#include <cpu/gdt_idt_tss.h>
+#include <wheel.h>
 
 
 // 每个异常/中断的处理函数指针

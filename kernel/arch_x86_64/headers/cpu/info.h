@@ -1,10 +1,7 @@
-#ifndef ARCH_CPU_H
-#define ARCH_CPU_H
-
-// TODO 此头文件适合放在 cpu 子目录下
+#ifndef CPU_INFO_H
+#define CPU_INFO_H
 
 #include <def.h>
-
 
 #define CPU_FEATURE_PCID        0x0001
 #define CPU_FEATURE_X2APIC      0x0002
@@ -17,7 +14,6 @@
 #define CPU_FEATURE_INVPCID     0x0100
 #define CPU_FEATURE_SMEP        0x0200  // 特权模式禁止执行用户页面的指令（防代码注入）
 #define CPU_FEATURE_SMAP        0x0400  // 特权模式禁止访问用户页面的数据（防数据注入）
-
 
 typedef struct cache_info {
     size_t line_size;
@@ -36,19 +32,9 @@ extern CONST uint32_t g_cpu_features;
 
 INIT_TEXT void cpu_info_detect();
 INIT_TEXT void cpu_features_init();
+
 #ifdef DEBUG
 INIT_TEXT void cpu_info_show();
 #endif
 
-INIT_TEXT void gdt_init();
-INIT_TEXT void gdt_load();
-
-INIT_TEXT void idt_init();
-INIT_TEXT void idt_load();
-INIT_TEXT void idt_set_ist(int vec, int idx);
-
-INIT_TEXT void tss_init_load();
-INIT_TEXT void tss_set_rsp(int cpu, int idx, uint64_t addr);
-INIT_TEXT void tss_set_ist(int cpu, int idx, uint64_t addr);
-
-#endif // ARCH_CPU_H
+#endif // CPU_INFO_H

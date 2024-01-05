@@ -1,12 +1,12 @@
 #include <arch_mem.h>
 #include <cpu/rw.h>
-#include <arch_cpu.h>
+#include <cpu/info.h>
 
 #include <wheel.h>
-#include <str.h>
 
-#include <vmspace.h>
-#include <page.h>
+
+
+
 
 
 // 多核环境下，每个处理器的私有数据区

@@ -1,6 +1,6 @@
-#include <arch_cpu.h>
+#include <cpu/gdt_idt_tss.h>
 #include <wheel.h>
-#include <str.h>
+
 
 
 typedef struct idt_ent {

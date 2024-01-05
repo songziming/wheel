@@ -1,12 +1,12 @@
 #include <cpu/local_apic.h>
-
-#include <wheel.h>
-#include <arch_smp.h>
 #include <cpu/rw.h>
-#include <arch_cpu.h>
+#include <cpu/info.h>
+
+#include <arch_smp.h>
 #include <arch_int.h>
 
-#include <str.h>
+#include <wheel.h>
+
 
 
 
@@ -27,7 +27,7 @@
 // REG_DFR 不能在 x2APIC 模式下使用
 // REG_SELF_IPI 只能在 x2APIC 模式下使用
 
-typedef enum loapic_reg {
+typedef enum reg {
     REG_ID          = 0x02, // local APIC id
     REG_VER         = 0x03, // local APIC version
     REG_TPR         = 0x08, // task priority
@@ -55,7 +55,7 @@ typedef enum loapic_reg {
     REG_TIMER_CCR   = 0x39, // timer current count
     REG_TIMER_DIV   = 0x3e, // timer divide config
     REG_SELF_IPI    = 0x3f,
-} loapic_reg_t;
+} reg_t;
 
 // IA32_APIC_BASE msr
 #define IA32_APIC_BASE      0x1b        // MSR index
@@ -98,13 +98,13 @@ typedef enum loapic_reg {
 // xAPIC、x2APIC 的寄存器读写函数
 //------------------------------------------------------------------------------
 
-static uint32_t x_read(loapic_reg_t reg) {
+static uint32_t x_read(reg_t reg) {
     ASSERT(REG_SELF_IPI != reg);
     size_t map = DIRECT_MAP_ADDR + g_loapic_addr + ((size_t)reg << 4);
     return *(volatile uint32_t *)map;
 }
 
-static void x_write(loapic_reg_t reg, uint32_t val) {
+static void x_write(reg_t reg, uint32_t val) {
     ASSERT(REG_SELF_IPI != reg);
     size_t map = DIRECT_MAP_ADDR + g_loapic_addr + ((size_t)reg << 4);
     *(volatile uint32_t *)map = val;
@@ -124,12 +124,12 @@ static void x_write_icr(uint32_t dst, uint32_t lo) {
     x_write(REG_ICR_LO, lo);
 }
 
-static uint32_t x2_read(loapic_reg_t reg) {
+static uint32_t x2_read(reg_t reg) {
     ASSERT(REG_DFR != reg);
     return (uint32_t)(read_msr(0x800 + reg) & 0xffffffff);
 }
 
-static void x2_write(loapic_reg_t reg, uint32_t val) {
+static void x2_write(reg_t reg, uint32_t val) {
     ASSERT(REG_DFR != reg);
     write_msr(0x800 + reg, val);
 }
@@ -144,10 +144,108 @@ static void x2_write_icr(uint32_t id, uint32_t lo) {
 }
 
 // 虚函数接口
-static uint32_t (*g_read)     (loapic_reg_t reg)               = x_read;
-static void     (*g_write)    (loapic_reg_t reg, uint32_t val) = x_write;
-// static uint64_t (*g_read_icr) ()                               = x_read_icr;
-static void     (*g_write_icr)(uint32_t id, uint32_t lo)       = x_write_icr;
+static uint32_t (*g_read)     (reg_t reg)                = x_read;
+static void     (*g_write)    (reg_t reg, uint32_t val)  = x_write;
+static void     (*g_write_icr)(uint32_t id, uint32_t lo) = x_write_icr;
+
+
+//------------------------------------------------------------------------------
+// 中断处理函数
+//------------------------------------------------------------------------------
+
+// 这类中断一般不发生，无需发送 EOI
+static void handle_spurious(int vec, arch_regs_t *f) {
+    (void)vec;
+    (void)f;
+    klog("this cannot happen!\n");
+}
+
+static void handle_timer(int vec, arch_regs_t *f) {
+    (void)vec;
+    (void)f;
+    g_write(REG_EOI, 0);
+}
+
+#if 0
+// corrected machine check error
+static void handle_cmci(int vec, arch_regs_t *f) {
+    (void)vec;
+    (void)f;
+}
+
+// 核心温度超过危险值时触发该中断，温度再高就会关闭核心
+static void handle_thermal_monitor(int vec, arch_regs_t *f) {
+    (void)vec;
+    (void)f;
+}
+
+static void handle_performance_counter(int vec, arch_regs_t *f) {
+    (void)vec;
+    (void)f;
+}
+#endif
+
+// APIC 发生错误
+static void handle_error(int vec, arch_regs_t *f) {
+    (void)vec;
+    (void)f;
+    klog("fatal: Local APIC internal error!\n");
+}
+
+
+
+//------------------------------------------------------------------------------
+// 初始化
+//------------------------------------------------------------------------------
+
+INIT_TEXT void local_apic_init(local_apic_type_t type) {
+    uint64_t msr_base = g_loapic_addr & LOAPIC_MSR_BASE;
+
+    // 如果支持 x2APIC，则启用
+    if (CPU_FEATURE_X2APIC & g_cpu_features) {
+        if (LOCAL_APIC_BSP == type) {
+            g_read = x2_read;
+            g_write = x2_write;
+            g_write_icr = x2_write_icr;
+        }
+        msr_base |= LOAPIC_MSR_EXTD;
+    } else {
+        // TODO 将映射的内存，标记为不可缓存，通过页表属性位或 mtrr 实现
+    }
+
+    // 开启 loapic（尚未真的启用，还要设置 spurious reg）
+    if (LOCAL_APIC_BSP == type) {
+        msr_base |= LOAPIC_MSR_BSP;
+    }
+    msr_base |= LOAPIC_MSR_EN;
+    write_msr(IA32_APIC_BASE, msr_base);
+
+    // 注册中断处理函数
+    set_int_handler(VEC_LOAPIC_TIMER, handle_timer);
+    set_int_handler(VEC_LOAPIC_ERROR, handle_error);
+    set_int_handler(VEC_LOAPIC_SPURIOUS, handle_spurious);
+
+    // 设置 DFR、LDR、TPR
+    if (0 == (CPU_FEATURE_X2APIC & g_cpu_features)) {
+        g_write(REG_DFR, 0xffffffff);
+    }
+    g_write(REG_TPR, 16);   // 屏蔽中断号 0~31
+
+    // 设置 LINT0、LINT1，参考 Intel MultiProcessor Spec 第 5.1 节
+    // LINT0 连接到 8259A，但连接到 8259A 的设备也连接到 IO APIC，可以不设置
+    // LINT1 连接到 NMI，我们只需要 BSP 能够处理 NMI
+
+    if (LOCAL_APIC_BSP == type) {
+        g_write(REG_LVT_LINT1, LOAPIC_LEVEL | LOAPIC_DM_NMI);
+    }
+    g_write(REG_LVT_ERROR, VEC_LOAPIC_ERROR);
+
+    // 设置 spurious interrupt，开启这个 Local APIC
+    g_write(REG_SVR, LOAPIC_SVR_ENABLE | VEC_LOAPIC_SPURIOUS);
+
+    // 将已有中断丢弃
+    g_write(REG_EOI, 0);
+}
 
 
 //------------------------------------------------------------------------------
@@ -227,7 +325,37 @@ static INIT_TEXT uint32_t calibrate_using_pit_03() {
 //------------------------------------------------------------------------------
 
 // 一秒对应多少周期
-uint32_t g_timer_freq = 0;
+static CONST uint32_t g_timer_freq = 0;
+
+
+// 设置时钟中断频率，是否周期性中断
+// freq==0 表示禁用时钟中断
+// tickless OS 会多次调用这个函数
+void local_apic_timer_set(int freq, local_apic_timer_mode_t mode) {
+    ASSERT(freq >= 0);
+
+    if (0 == freq) {
+        g_write(REG_LVT_TIMER, LOAPIC_INT_MASK);
+        return;
+    }
+
+    if (0 == g_timer_freq) {
+        g_timer_freq = calibrate_using_pit_03();
+        klog("local apic timer freq %u\n", g_timer_freq);
+    }
+
+    uint32_t lvt = LOAPIC_DM_FIXED | VEC_LOAPIC_TIMER;
+    if (LOCAL_APIC_TIMER_PERIODIC == mode) {
+        lvt |= LOAPIC_PERIODIC;
+    } else {
+        lvt |= LOAPIC_ONESHOT;
+    }
+    g_write(REG_LVT_TIMER, lvt);
+
+    // 写入 ICR 会重启 timer
+    g_write(REG_TIMER_DIV, 0x0b); // divide by 1
+    g_write(REG_TIMER_ICR, g_timer_freq / freq);
+}
 
 // 忙等待
 INIT_TEXT void local_apic_busywait(int us) {
@@ -262,138 +390,13 @@ INIT_TEXT void local_apic_busywait(int us) {
 }
 
 
-//------------------------------------------------------------------------------
-// 中断处理函数
-//------------------------------------------------------------------------------
-
-// 这类中断一般不发生，无需发送 EOI
-static void handle_spurious(int vec, arch_regs_t *f) {
-    (void)vec;
-    (void)f;
-    klog("this cannot happen!\n");
-}
-
-static void handle_timer(int vec, arch_regs_t *f) {
-    (void)vec;
-    (void)f;
-    g_write(REG_EOI, 0);
-}
-
-#if 0
-// corrected machine check error
-static void handle_cmci(int vec, arch_regs_t *f) {
-    (void)vec;
-    (void)f;
-}
-
-// 核心温度超过危险值时触发该中断，温度再高就会关闭核心
-static void handle_thermal_monitor(int vec, arch_regs_t *f) {
-    (void)vec;
-    (void)f;
-}
-
-static void handle_performance_counter(int vec, arch_regs_t *f) {
-    (void)vec;
-    (void)f;
-}
-#endif
-
-// APIC 发生错误
-static void handle_error(int vec, arch_regs_t *f) {
-    (void)vec;
-    (void)f;
-    klog("fatal: Local APIC internal error!\n");
-}
-
-
-
 
 //------------------------------------------------------------------------------
-// 初始化
+// 发送 IPI
 //------------------------------------------------------------------------------
-
-INIT_TEXT void local_apic_init(int isbsp) {
-    // uint64_t msr_base = read_msr(IA32_APIC_BASE);
-
-    // if (0 == (LOAPIC_MSR_BSP & msr_base)) {
-    //     klog("warning: this is not loapic for BSP\n");
-    // }
-
-    // // 如果 MSR 记录的值和 MADT 规定的映射地址不一致，则重新映射
-    // if (g_loapic_addr != (LOAPIC_MSR_BASE & msr_base)) {
-    //     msr_base &= ~LOAPIC_MSR_BASE;
-    //     msr_base |= g_loapic_addr & LOAPIC_MSR_BASE;
-    // }
-
-    uint64_t msr_base = g_loapic_addr & LOAPIC_MSR_BASE;
-
-    // 如果支持 x2APIC，则启用
-    if (CPU_FEATURE_X2APIC & g_cpu_features) {
-        if (isbsp) {
-            g_read = x2_read;
-            g_write = x2_write;
-            g_write_icr = x2_write_icr;
-        }
-        msr_base |= LOAPIC_MSR_EXTD;
-    } else {
-        // TODO 将映射的内存，标记为不可缓存，通过页表属性位或 mtrr 实现
-    }
-
-    // 开启 loapic（尚未真的启用，还要设置 spurious reg）
-    if (isbsp) {
-        msr_base |= LOAPIC_MSR_BSP;
-    }
-    msr_base |= LOAPIC_MSR_EN;
-    write_msr(IA32_APIC_BASE, msr_base);
-
-    // 注册中断处理函数
-    set_int_handler(VEC_LOAPIC_TIMER, handle_timer);
-    set_int_handler(VEC_LOAPIC_ERROR, handle_error);
-    set_int_handler(VEC_LOAPIC_SPURIOUS, handle_spurious);
-
-    // 设置 DFR、LDR、TPR
-    if (0 == (CPU_FEATURE_X2APIC & g_cpu_features)) {
-        g_write(REG_DFR, 0xffffffff);
-    }
-    g_write(REG_TPR, 16);   // 屏蔽中断号 0~31
-    g_write(REG_TIMER_ICR, 0);
-    g_write(REG_TIMER_DIV, 0);
-
-    // 设置 LINT0、LINT1，参考 Intel MultiProcessor Spec 第 5.1 节
-    // LINT0 连接到 8259A，但连接到 8259A 的设备也连接到 IO APIC，可以不设置
-    // LINT1 连接到 NMI，我们只需要 BSP 能够处理 NMI
-    g_write(REG_LVT_LINT0, LOAPIC_INT_MASK); // LINT0 屏蔽
-    g_write(REG_LVT_LINT1, LOAPIC_LEVEL | LOAPIC_DM_NMI);
-
-    // 填写 LVT，设置中断处理方式
-    g_write(REG_LVT_TIMER, LOAPIC_PERIODIC | LOAPIC_DM_FIXED | VEC_LOAPIC_TIMER);
-    g_write(REG_LVT_ERROR, VEC_LOAPIC_ERROR);
-
-    // // 屏蔽其他的中断
-    // g_write(REG_LVT_CMCI,    LOAPIC_INT_MASK);
-    // g_write(REG_LVT_THERMAL, LOAPIC_INT_MASK);
-    // g_write(REG_LVT_PMC,     LOAPIC_INT_MASK);
-    // g_write(REG_LVT_ERROR,   LOAPIC_INT_MASK);
-
-    // 设置 spurious interrupt，开启这个 Local APIC
-    g_write(REG_SVR, LOAPIC_SVR_ENABLE | VEC_LOAPIC_SPURIOUS);
-
-    // 将已有中断丢弃
-    // 更保险的方法是检查 IRR，里面有多少个 1 就发送多少次 EOI
-    g_write(REG_EOI, 0);
-
-    if (0 == g_timer_freq) {
-        g_timer_freq = calibrate_using_pit_03();
-        klog("local apic timer freq %u\n", g_timer_freq);
-    }
-
-    // 启动 Timer，周期性发送中断
-    g_write(REG_TIMER_DIV, 0x0b); // divide by 1
-    g_write(REG_TIMER_ICR, g_timer_freq);
-}
 
 // 向目标处理器发送 INIT-IPI
-INIT_TEXT void local_apic_emit_init(int cpu) {
+INIT_TEXT void local_apic_send_init(int cpu) {
     ASSERT(cpu >= 0);
     ASSERT(cpu < cpu_count());
 
@@ -402,11 +405,11 @@ INIT_TEXT void local_apic_emit_init(int cpu) {
 }
 
 // 向目标处理器发送 startup-IPI
-INIT_TEXT void local_apic_emit_sipi(int cpu, int vec) {
+INIT_TEXT void local_apic_send_sipi(int cpu, int vec) {
     ASSERT(cpu >= 0);
     ASSERT(cpu < cpu_count());
-    ASSERT(vec >= 0);
-    ASSERT(vec < 256);
+    ASSERT((vec >= 0) && (vec < 256));
+    ASSERT((vec < 0xa0) || (vec > 0xbf)); // 向量号 a0~bf 非法
 
     uint32_t lo = (vec & 0xff) | LOAPIC_DM_STARTUP | LOAPIC_EDGE | LOAPIC_ASSERT;
     g_write_icr(g_loapics[cpu].apic_id, lo);

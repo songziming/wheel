@@ -1,6 +1,6 @@
 #include <dev/framebuf.h>
 #include <wheel.h>
-#include <str.h>
+
 
 
 static CONST uint32_t g_rows = 0;
@@ -19,16 +19,17 @@ extern font_data_t g_font_terminux_32x16;
 extern font_data_t g_font_terminux_16x8;
 extern font_data_t g_font_ubuntumono_16x8;
 
-static font_data_t *g_font; // 当前使用的字体
-static int g_em_rows;       // 当前字体下的行数
-static int g_em_cols;       // 当前字体下的列数
-static int g_caret_row;     // 光标所在行号
-static int g_caret_col;     // 光标所在列号
+static font_data_t *g_font = NULL;  // 当前使用的字体
+static int g_em_rows;               // 当前字体下的行数
+static int g_em_cols;               // 当前字体下的列数
+static int g_caret_row;             // 光标所在行号
+static int g_caret_col;             // 光标所在列号
 
 
 INIT_TEXT void framebuf_init(const fb_info_t *fb) {
     ASSERT(NULL == g_addr);
     ASSERT(NULL == g_back);
+    ASSERT(NULL == g_font);
 
     g_rows = fb->rows;
     g_cols = fb->cols;
@@ -52,6 +53,7 @@ INIT_TEXT void framebuf_init(const fb_info_t *fb) {
 }
 
 static void framebuf_putc_at(char ch, uint32_t fg, int r, int c) {
+    ASSERT(NULL != g_font);
     ASSERT(r >= 0);
     ASSERT(r < g_em_rows);
     ASSERT(c >= 0);

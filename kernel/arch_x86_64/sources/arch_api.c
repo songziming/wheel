@@ -1,7 +1,7 @@
 #include <arch_api_p.h>
 #include <wheel.h>
 #include <arch_mem.h>
-#include <str.h>
+
 
 
 //------------------------------------------------------------------------------
@@ -82,12 +82,11 @@ int unwind(size_t *addrs, int max) {
 // 多任务支持
 //------------------------------------------------------------------------------
 
-void arch_tcb_init(arch_tcb_t *tcb, void *entry, size_t stacktop) {
+void arch_tcb_init(arch_tcb_t *tcb, size_t entry, size_t stacktop, size_t args[4]) {
     ASSERT(NULL != tcb);
-    ASSERT(NULL != entry);
+    ASSERT(0 != entry);
     ASSERT(0 != stacktop);
 
-    stacktop -= 8;      // 留出几个字节，防止栈底越界
     stacktop &= ~7UL;   // 栈顶需要按 8 字节对齐
 
     tcb->rsp0 = stacktop;
@@ -99,8 +98,8 @@ void arch_tcb_init(arch_tcb_t *tcb, void *entry, size_t stacktop) {
     tcb->regs->rflags = 0x0200UL;           // 开启中断
     tcb->regs->rip    = (uint64_t)entry;
     tcb->regs->rsp    = (uint64_t)stacktop;
-    // tcb->regs->rdi    = (uint64_t)args[0];
-    // tcb->regs->rsi    = (uint64_t)args[1];
-    // tcb->regs->rdx    = (uint64_t)args[2];
-    // tcb->regs->rcx    = (uint64_t)args[3];
+    tcb->regs->rdi    = (uint64_t)args[0];
+    tcb->regs->rsi    = (uint64_t)args[1];
+    tcb->regs->rdx    = (uint64_t)args[2];
+    tcb->regs->rcx    = (uint64_t)args[3];
 }

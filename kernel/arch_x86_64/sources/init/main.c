@@ -1,24 +1,24 @@
-#include <wheel.h>
-#include <page.h>
-#include <task.h>
-#include <str.h>
+#include <init/multiboot1.h>
+#include <init/multiboot2.h>
 
 #include <arch_mem.h>
 #include <arch_smp.h>
-#include <arch_cpu.h>
 #include <arch_int.h>
+
+#include <cpu/rw.h>
+#include <cpu/info.h>
+#include <cpu/gdt_idt_tss.h>
+#include <cpu/local_apic.h>
 
 #include <dev/acpi.h>
 #include <dev/acpi_madt.h>
 #include <dev/serial.h>
 #include <dev/console.h>
 #include <dev/framebuf.h>
+#include <dev/i8259.h>
 
-#include <cpu/rw.h>
-#include <cpu/local_apic.h>
+#include <wheel.h>
 
-#include <init/multiboot1.h>
-#include <init/multiboot2.h>
 
 
 
@@ -48,49 +48,11 @@ static void serial_console_puts(const char *s, size_t n) {
 
 
 
-// 8259 PIC port
-#define PIC1            0x20        // IO base address for PIC master
-#define PIC2            0xA0        // IO base address for PIC slave
-#define PIC1_CMD        PIC1
-#define PIC1_DAT        (PIC1 + 1)
-#define PIC2_CMD        PIC2
-#define PIC2_DAT        (PIC2 + 1)
-
-// 8259 PIC control words
-#define ICW1_ICW4       0x01        // ICW4 (not) needed
-#define ICW1_SINGLE     0x02        // Single (cascade) mode
-#define ICW1_INTERVAL4  0x04        // Call address interval 4 (8)
-#define ICW1_LEVEL      0x08        // Level triggered (edge) mode
-#define ICW1_INIT       0x10        // Initialization - required!
-#define ICW4_8086       0x01        // 8086/88 (MCS-80/85) mode
-#define ICW4_AUTO       0x02        // Auto (normal) EOI
-#define ICW4_BUF_SLAVE  0x08        // Buffered mode/slave
-#define ICW4_BUF_MASTER 0x0C        // Buffered mode/master
-#define ICW4_SFNM       0x10        // Special fully nested (not)
-
-static void disable_i8259() {
-    out8(PIC1_CMD, ICW1_INIT + ICW1_ICW4);
-    out8(PIC2_CMD, ICW1_INIT + ICW1_ICW4);
-    out8(PIC1_DAT, 0x20);       // ICW2: map master PIC vector base
-    out8(PIC2_DAT, 0x28);       // ICW2: map slave PIC vector base
-    out8(PIC1_DAT, 4);          // ICW3: slave PIC at IRQ2 (0000 0100)
-    out8(PIC2_DAT, 2);          // ICW3: slave PIC's identity (0000 0010)
-    out8(PIC1_DAT, ICW4_8086);
-    out8(PIC2_DAT, ICW4_8086);
-    out8(PIC1_DAT, 0xff);       // mask all pins on master chip
-    out8(PIC2_DAT, 0xff);       // mask all pins on slave chip
-}
-
-
-
 //------------------------------------------------------------------------------
 // BSP 初始化流程，使用初始栈，从 GRUB 跳转而来
 //------------------------------------------------------------------------------
 
 INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
-    // if (g_cpu_started > 0) {
-    //     sys_init_ap(g_cpu_started);
-    // }
     if (AP_BOOT_MAGIC == eax) {
         sys_init_ap();
     }
@@ -169,22 +131,22 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     // 启用中断异常机制
     int_init();
 
-    // 关闭 8259 PIC
-    disable_i8259();
-
-    // 设置中断控制器，包含时钟
-    local_apic_init(1);
+    disable_i8259(); // 禁用 PIC
+    local_apic_init(LOCAL_APIC_BSP); // 设置中断控制器
+    local_apic_timer_set(1, LOCAL_APIC_TIMER_PERIODIC);
 
     // 创建并加载内核页表，启用内存保护
     kernel_proc_init();
     write_cr3(get_kernel_pgtable());
+
+    sched_init();
 
     // 首次中断保存上下文
     task_t dummy;
     *(task_t **)this_ptr(&g_tid_prev) = &dummy;
 
     // 启动第一个任务
-    task_create(&root_tcb, "root", root_proc, NULL);
+    task_create(&root_tcb, "root", 0, root_proc);
     *(task_t **)this_ptr(&g_tid_next) = &root_tcb;
     arch_task_yield();
 
@@ -298,11 +260,11 @@ static void root_proc() {
     for (int i = 1; i < cpu_count(); ++i) {
         klog("starting cpu %d...", i);
 
-        local_apic_emit_init(i);        // 发送 INIT
+        local_apic_send_init(i);        // 发送 INIT
         local_apic_busywait(10000);     // 等待 10ms
-        local_apic_emit_sipi(i, vec);   // 发送 startup-IPI
+        local_apic_send_sipi(i, vec);   // 发送 startup-IPI
         local_apic_busywait(200);       // 等待 200us
-        local_apic_emit_sipi(i, vec);   // 再次发送 startup-IPI
+        local_apic_send_sipi(i, vec);   // 再次发送 startup-IPI
         local_apic_busywait(200);       // 等待 200us
 
         // 每个 AP 使用相同的栈，必须等前一个 AP 启动完成再启动下一个
@@ -323,8 +285,6 @@ static void root_proc() {
 //------------------------------------------------------------------------------
 
 static INIT_TEXT void sys_init_ap() {
-    // klog("running in processor #%d!\n", cpu);
-
     cpu_features_init();
     gdt_load();
     idt_load();
@@ -333,7 +293,7 @@ static INIT_TEXT void sys_init_ap() {
     ASSERT(g_cpu_started == cpu_index());
     tss_init_load();
 
-    local_apic_init(0);
+    local_apic_init(LOCAL_APIC_AP);
 
     write_cr3(get_kernel_pgtable());
 

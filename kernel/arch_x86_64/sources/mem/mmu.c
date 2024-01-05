@@ -1,10 +1,8 @@
 // 页表内容管理
 
 #include <arch_mem.h>
-#include <arch_cpu.h>
+#include <cpu/info.h>
 #include <wheel.h>
-#include <page.h>
-#include <str.h>
 
 
 

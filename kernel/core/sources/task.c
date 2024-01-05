@@ -2,101 +2,94 @@
 
 #include <task.h>
 #include <wheel.h>
-#include <page.h>
-#include <vmspace.h>
-#include <str.h>
 
 
 
-PCPU_BSS task_t *g_tid_prev;  // 当前正在运行的任务
-PCPU_BSS task_t *g_tid_next;  // 下次中断将要切换的任务
-
-// 就绪队列
-static PCPU_BSS dlnode_t ready_head;
-
-// 空闲任务
-static PCPU_BSS task_t idle_task;
 
 
 
-// void task_create_ex(task_t *task, const char *name, void *entry, process_t *proc,
-//         int stack_rank, size_t args[4]) {
-//     //
-// }
-
-// 任务创建失败则返回非零
-rc_t task_create(task_t *task, const char *name, void *entry, process_t *proc) {
+// 如果传入 stack_top==NULL，表示动态分配内核栈的物理内存和虚拟范围
+int task_create_ex(task_t *task, const char *name,
+        uint8_t priority, int affinity, process_t *proc,
+        void *stack_top, uint8_t stack_rank,
+        void *entry, size_t a1, size_t a2, size_t a3, size_t a4) {
     ASSERT(NULL != task);
+    ASSERT(priority < PRIORITY_NUM);
+    ASSERT(affinity < cpu_count());
     ASSERT(NULL != entry);
 
     if (NULL == proc) {
         proc = get_kernel_process();
     }
 
-    vmspace_t *kernel_vm = get_kernel_vmspace();
-    size_t kernel_pg = get_kernel_pgtable();
+    // 未传入栈指针，需动态分配，动态映射
+    if (NULL == stack_top) {
+        vmspace_t *kernel_vm = get_kernel_vmspace();
+        size_t kernel_pg = get_kernel_pgtable();
 
-    // 为内核栈寻找一段虚拟地址范围
-    // TODO 内核栈大小固定，可以按编号计算分配
-    size_t stack_size = PAGE_SIZE << TASK_STACK_RANK;
-    size_t va = vmspace_search(kernel_vm, STACK_AREA_ADDR, STACK_AREA_END, stack_size);
-    if (INVALID_ADDR == va) {
-        klog("cannot reserve range for task %s\n", name);
-        return RC_NO_FREE_RANGE;
+        size_t stack_size = PAGE_SIZE << stack_rank;
+        size_t va = vmspace_search(kernel_vm, STACK_AREA_ADDR, STACK_AREA_END, stack_size);
+        if (INVALID_ADDR == va) {
+            klog("cannot reserve range for task %s\n", name);
+            return 1;
+        }
+
+        // 为内核栈申请物理内存
+        size_t pa = pages_alloc(stack_rank, PT_KERNEL_STACK);
+        if (INVALID_ADDR == pa) {
+            klog("cannot alloc page for task %s\n", name);
+            return 1;
+        }
+
+        // 建立内核栈的映射
+        vmspace_insert(kernel_vm, &task->stack_va, va, va + stack_size, name);
+        mmu_map(kernel_pg, va, va + stack_size, pa, MMU_WRITE);
+        kmemset((char *)va, 0, stack_size);
+
+        task->stack_pa = pa;
+        stack_top = (void *)(va + stack_size);
+    } else {
+        task->stack_pa = INVALID_ADDR;
     }
-
-    // 为内核栈申请物理内存
-    size_t pa = pages_alloc(TASK_STACK_RANK, PT_KERNEL_STACK);
-    if (INVALID_ADDR == pa) {
-        klog("cannot alloc page for task %s\n", name);
-        return RC_NO_FREE_PAGE;
-    }
-
-    klog("task '%s' stack %zx --> %zx\n", name, va, pa);
-
-    // 建立内核栈的映射
-    vmspace_insert(kernel_vm, &task->stack_va, va, va + stack_size, name);
-    mmu_map(kernel_pg, va, va + stack_size, pa, MMU_WRITE);
-    kmemset((char *)va, 0, stack_size);
 
     // 将任务记录在进程中
+    task->process = proc;
     dl_insert_before(&task->proc_node, &proc->proc_head);
 
-    arch_tcb_init(&task->arch, entry, va + stack_size);
-    task->stack_pa = pa;
+    // 初始化任务控制块
+    size_t args[4] = { a1, a2, a3, a4 };
+    arch_tcb_init(&task->arch, (size_t)entry, (size_t)stack_top, args);
+
     task->name = name;
-    task->process = proc;
-    return RC_OK;
+    task->state = TASK_STOPPED; // 初始状态为暂停
+    task->priority = priority;
+    task->affinity = affinity;
+
+    return 0;
 }
 
 
+// 创建简单的内核任务
+int task_create(task_t *task, const char *name, uint8_t priority, void *entry) {
+    return task_create_ex(task, name, priority, -1, NULL,
+            NULL, TASK_STACK_RANK, entry, 0, 0, 0, 0);
+}
 
-
-// 将任务放入就绪队列
-void task_resume(task_t *task) {
+// 删除任务资源
+void task_destroy(task_t *task) {
     ASSERT(NULL != task);
 
-    dlnode_t *head = this_ptr(&ready_head);
-    ASSERT(!dl_contains(head, &task->ready_node));
-}
+    // 需要确保任务已停止运行，才能释放其内核栈
+    // 否则发生中断，访问内核栈会导致 #PF
 
+    if (INVALID_ADDR != task->stack_pa) {
+        vmspace_t *kernel_vm = get_kernel_vmspace();
+        size_t kernel_pg = get_kernel_pgtable();
 
-static NORETURN void idle_proc() {
-    while (1) {
-        cpu_pause();
-        cpu_halt();
+        mmu_unmap(kernel_pg, task->stack_va.addr, task->stack_va.end);
+        vmspace_remove(kernel_vm, &task->stack_va);
     }
 }
 
-// 准备调度子系统
-// 初始化就绪队列，创建 idle 任务
-INIT_TEXT void sched_init() {
-    for (int i = 0; i < cpu_count(); ++i) {
-        dlnode_t *head = pcpu_ptr(i, &ready_head);
-        dl_init_circular(head);
 
-        task_t *idle = pcpu_ptr(i, &idle_task);
-        task_create(idle, "idle", idle_proc, NULL);
-        task_resume(idle);
-    }
-}
+

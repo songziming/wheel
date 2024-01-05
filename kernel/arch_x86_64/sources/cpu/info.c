@@ -1,9 +1,8 @@
 // 使用 cpuid 检测支持的特性，设置 MSR 开启相关功能
 
-#include <arch_cpu.h>
+#include <cpu/info.h>
 #include <cpu/rw.h>
 #include <wheel.h>
-#include <str.h>
 
 
 
@@ -20,15 +19,15 @@ static CONST uint8_t  g_cpu_type;
 static CONST uint8_t  g_cpu_ex_model;
 static CONST uint8_t  g_cpu_ex_family;
 
+static CONST uint32_t g_tsc_ratio[2]; // TSC/core_crystal 的倍率，分子/分母
+static CONST uint32_t g_core_freq; // 核心频率
+
 CONST uint32_t g_cpu_features;
 
 CONST cache_info_t g_l1d_info;
 CONST cache_info_t g_l1i_info;
 CONST cache_info_t g_l2_info;
 CONST cache_info_t g_l3_info;
-
-CONST uint32_t g_tsc_ratio[2]; // TSC/core_crystal 的倍率，分子/分母
-CONST uint32_t g_core_freq; // 核心频率
 
 
 //------------------------------------------------------------------------------

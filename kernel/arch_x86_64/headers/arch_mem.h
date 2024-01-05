@@ -1,8 +1,9 @@
 #ifndef ARCH_MEM_H
 #define ARCH_MEM_H
 
+// TODO 分解为多个子文件，放在 mem 目录下
+
 #include <def.h>
-#include <arch_api.h>
 #include <vmspace.h>
 
 

@@ -3,8 +3,8 @@
 #include <arch_mem.h>
 
 #include <wheel.h>
-#include <dllist.h>
-#include <str.h>
+
+
 
 
 typedef struct acpi_rsdp {

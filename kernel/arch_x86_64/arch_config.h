@@ -20,5 +20,6 @@
 
 #define INT_STACK_SIZE      0x1000      // 中断栈大小，也是异常栈 IST 大小
 #define TASK_STACK_RANK     1           // 任务栈的大小
+#define IDLE_STACK_SIZE     256         // 空闲任务内核栈大小
 
 #endif // ARCH_X86_64_CONFIG_H
