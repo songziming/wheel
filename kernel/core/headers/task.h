@@ -3,6 +3,7 @@
 
 #include <def.h>
 #include <arch_types.h>
+#include <spin.h>
 #include <process.h>
 
 
@@ -18,10 +19,13 @@ typedef enum task_state {
 typedef struct task {
     arch_tcb_t   arch;
 
+    spin_t       spin;
+
     const char  *name;
     uint16_t     state;
     uint8_t      priority;  // 数字越小，优先级越高
     int          affinity;  // 负值表示不限制在哪个 CPU 上运行
+    int          last_cpu;  // 最近一次运行在哪个 CPU 之上，位于哪个就绪队列之中
 
     size_t       stack_pa;  // 内核栈的物理地址，INVALID_ADDR 表示静态分配内核栈
     vmrange_t    stack_va;  // 内核栈的虚拟地址范围

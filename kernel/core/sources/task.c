@@ -60,6 +60,7 @@ int task_create_ex(task_t *task, const char *name,
     size_t args[4] = { a1, a2, a3, a4 };
     arch_tcb_init(&task->arch, (size_t)entry, (size_t)stack_top, args);
 
+    task->spin = SPIN_INIT;
     task->name = name;
     task->state = TASK_STOPPED; // 初始状态为暂停
     task->priority = priority;
@@ -92,4 +93,13 @@ void task_destroy(task_t *task) {
 }
 
 
+
+
+void task_resume(task_t *task) {
+    ASSERT(NULL != task);
+
+    int key = irq_spin_take(&task->spin);
+    sched_cont(task, TASK_STOPPED);
+    irq_spin_give(&task->spin, key);
+}
 

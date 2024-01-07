@@ -274,6 +274,8 @@ static void root_proc() {
         klog("done\n");
     }
 
+    // TODO 回收 init section 的物理内存，并删除映射
+
     cpu_halt();
     while (1) {}
 }
@@ -297,12 +299,13 @@ static INIT_TEXT void sys_init_ap() {
 
     write_cr3(get_kernel_pgtable());
 
-    task_t dummy;
-    *(task_t **)this_ptr(&g_tid_prev) = &dummy;
-
     // TODO 让 sched 决定执行哪个任务（应该是 idle-task）
 
     ++g_cpu_started;
+
+    task_t dummy;
+    *(task_t **)this_ptr(&g_tid_prev) = &dummy;
+    arch_task_yield();
 
     cpu_halt();
     while (1) {}
