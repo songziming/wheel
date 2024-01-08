@@ -25,6 +25,8 @@ static int g_em_cols;               // 当前字体下的列数
 static int g_caret_row;             // 光标所在行号
 static int g_caret_col;             // 光标所在列号
 
+static spin_t framebuf_spin = SPIN_INIT;
+
 
 INIT_TEXT void framebuf_init(const fb_info_t *fb) {
     ASSERT(NULL == g_addr);
@@ -116,7 +118,9 @@ void framebuf_putc(char c) {
 }
 
 void framebuf_puts(const char *s, size_t n) {
+    raw_spin_take(&framebuf_spin);
     for (size_t i = 0; i < n; ++i) {
         framebuf_putc(s[i]);
     }
+    raw_spin_give(&framebuf_spin);
 }

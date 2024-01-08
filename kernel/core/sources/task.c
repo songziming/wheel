@@ -83,6 +83,8 @@ void task_destroy(task_t *task) {
     // 需要确保任务已停止运行，才能释放其内核栈
     // 否则发生中断，访问内核栈会导致 #PF
 
+    int key = irq_spin_take(&task->spin);
+
     if (INVALID_ADDR != task->stack_pa) {
         vmspace_t *kernel_vm = get_kernel_vmspace();
         size_t kernel_pg = get_kernel_pgtable();
@@ -90,10 +92,19 @@ void task_destroy(task_t *task) {
         mmu_unmap(kernel_pg, task->stack_va.addr, task->stack_va.end);
         vmspace_remove(kernel_vm, &task->stack_va);
     }
+
+    irq_spin_give(&task->spin, key);
 }
 
 
 
+void task_stop(task_t *task) {
+    ASSERT(NULL != task);
+
+    int key = irq_spin_take(&task->spin);
+    sched_stop(task, TASK_STOPPED);
+    irq_spin_give(&task->spin, key);
+}
 
 void task_resume(task_t *task) {
     ASSERT(NULL != task);
@@ -103,3 +114,18 @@ void task_resume(task_t *task) {
     irq_spin_give(&task->spin, key);
 }
 
+// 退出当前任务
+void task_exit() {
+    task_t *self = THISCPU_GET(g_tid_prev);
+
+    int key = irq_spin_take(&self->spin);
+    sched_stop(self, TASK_DELETED);
+    // TODO 还要将任务从就绪队列或等待队列中移除
+    irq_spin_give(&self->spin, key);
+
+    // 立即切换，顺便在 work_q 中彻底删除任务
+    klog("yielding from %p(%s) to %p(%s)\n",
+            THISCPU_GET(g_tid_prev), THISCPU_GET(g_tid_prev)->name,
+            THISCPU_GET(g_tid_next), THISCPU_GET(g_tid_next)->name);
+    arch_task_yield();
+}

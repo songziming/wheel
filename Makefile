@@ -38,7 +38,7 @@ KERNEL := kernel
 
 
 KDIRS := $(KERNEL)/arch_$(ARCH)
-KDIRS += $(filter-out $(wildcard $(KERNEL)/arch_*),$(wildcard $(KERNEL)/*))
+KDIRS += $(filter-out $(wildcard $(KERNEL)/arch_*/.),$(wildcard $(KERNEL)/*/.))
 KINCS := $(patsubst %,%/headers,$(KDIRS)) $(KERNEL) $(KERNEL)/arch_$(ARCH)
 KOBJS := $(patsubst %,$(OUT_DIR)/objs/%.ko,$(call all_files,$(KDIRS),sources))
 

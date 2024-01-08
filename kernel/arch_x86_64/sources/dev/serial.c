@@ -2,9 +2,13 @@
 
 #include <dev/serial.h>
 #include <cpu/rw.h>
+#include <spin.h>
+
 
 #define COM1_PORT 0x3f8
 #define BOCHS_PORT 0xe9
+
+static spin_t serial_spin = SPIN_INIT;
 
 INIT_TEXT void serial_init() {
     out8(COM1_PORT + 1, 0x00);      // disable all interrupts
@@ -25,7 +29,9 @@ void serial_putc(char c) {
 }
 
 void serial_puts(const char *s, size_t n) {
+    raw_spin_take(&serial_spin);
     for (size_t i = 0; i < n; ++i) {
         serial_putc(s[i]);
     }
+    raw_spin_give(&serial_spin);
 }

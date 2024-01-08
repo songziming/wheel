@@ -78,6 +78,7 @@ static INIT_TEXT const char *pmtype_str(pmtype_t type) {
     case PM_RESERVED: return "reserved";
     case PM_AVAILABLE: return "available";
     case PM_RECLAIMABLE: return "reclaimable";
+    default: return "error";
     }
 }
 

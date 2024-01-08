@@ -50,6 +50,16 @@ static void ready_q_remove(ready_q_t *q, task_t *task) {
     ASSERT(NULL != task);
     ASSERT(dl_contains(&q->heads[task->priority], &task->q_node));
 
+    // dlnode_t *head = &q->heads[task->priority];
+    // klog("ready queue [%d] %p content:\n", task->priority, head);
+    // dlnode_t *node = head->next;
+    // for (; node != head; node = node->next) {
+    //     task_t *t = containerof(node, task_t, q_node);
+    //     klog("  - task: %s, affinity=%d, prev=%p, next=%p\n",
+    //             t->name, t->affinity, node->prev, node->next);
+    // }
+    // klog("this task %s node %p\n", task->name, &task->q_node);
+
     dl_remove(&task->q_node);
     if (dl_is_lastone(&q->heads[task->priority])) {
         q->priorities_mask &= ~(1U << task->priority);
@@ -160,14 +170,22 @@ static NORETURN void idle_proc() {
 // 初始化就绪队列，创建 idle 任务
 // idle task 无需动态分配栈，预留很小的空间即可
 INIT_TEXT void sched_init() {
+    ASSERT(IDLE_STACK_SIZE > sizeof(arch_regs_t));
+
     for (int i = 0; i < cpu_count(); ++i) {
         ready_q_init(pcpu_ptr(i, &g_ready_q));
 
+        task_t **p_prev = pcpu_ptr(i, &g_tid_prev);
+        task_t **p_next = pcpu_ptr(i, &g_tid_next);
+        klog("cpu #%d, p-prev=%p, p-next=%p\n", i, p_prev, p_next);
+
         task_t *idle = pcpu_ptr(i, &idle_task);
-        uint8_t *top = pcpu_ptr(i, &idle_stack[IDLE_STACK_SIZE]);
+        uint8_t *top = pcpu_ptr(i, idle_stack) + IDLE_STACK_SIZE;
+        klog("cpu #%d idle=%p, stack=%p\n", i, idle, top);
 
         task_create_ex(idle, "idle", PRIORITY_NUM - 1, i, NULL,
                 top, 0, idle_proc, 0, 0, 0, 0);
+
         raw_spin_take(&idle->spin);
         sched_cont(idle, TASK_STOPPED);
         // 不释放 idle_task 的自旋锁，禁止后续对 idle-task 操作

@@ -141,13 +141,16 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
 
     sched_init();
 
-    // 首次中断保存上下文
-    task_t dummy;
-    *(task_t **)this_ptr(&g_tid_prev) = &dummy;
 
     // 启动第一个任务
     task_create(&root_tcb, "root", 0, root_proc);
-    *(task_t **)this_ptr(&g_tid_next) = &root_tcb;
+    task_resume(&root_tcb);
+    // *(task_t **)this_ptr(&g_tid_next) = &root_tcb;
+
+    // 首次中断保存上下文
+    task_t dummy;
+    *(task_t **)this_ptr(&g_tid_prev) = &dummy;
+    klog("yielding to %p %s\n", THISCPU_GET(g_tid_next), THISCPU_GET(g_tid_next)->name);
     arch_task_yield();
 
 end:
@@ -276,6 +279,14 @@ static void root_proc() {
 
     // TODO 回收 init section 的物理内存，并删除映射
 
+    task_t *self = THISCPU_GET(g_tid_prev);
+    // THISCPU_SET(g_tid_next, self);
+
+    klog("current task is %s, affinity=%d, last_cpu=%d\n", self->name, self->affinity, self->last_cpu);
+
+    // 结束根任务
+    task_exit();
+
     cpu_halt();
     while (1) {}
 }
@@ -305,6 +316,7 @@ static INIT_TEXT void sys_init_ap() {
 
     task_t dummy;
     *(task_t **)this_ptr(&g_tid_prev) = &dummy;
+    klog("yielding to %p %s\n", THISCPU_GET(g_tid_next), THISCPU_GET(g_tid_next)->name);
     arch_task_yield();
 
     cpu_halt();
