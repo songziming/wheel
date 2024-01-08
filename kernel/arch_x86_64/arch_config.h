@@ -19,7 +19,10 @@
 #define PAGE_SHIFT          12
 
 #define INT_STACK_SIZE      0x1000      // 中断栈大小，也是异常栈 IST 大小
-#define TASK_STACK_RANK     1           // 任务栈的大小
-#define IDLE_STACK_SIZE     0x400       // 空闲任务内核栈大小
+
+// 任务栈也用于中断，栈大小需要能容下 arch_regs_t
+
+#define TASK_STACK_RANK     1       // 任务内核栈的默认大小
+#define IDLE_STACK_RANK     0       // 空闲任务内核栈大小
 
 #endif // ARCH_X86_64_CONFIG_H

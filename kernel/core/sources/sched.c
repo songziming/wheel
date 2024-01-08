@@ -155,7 +155,7 @@ uint16_t sched_cont(task_t *task, uint16_t bits) {
 // 空闲任务
 static PCPU_BSS task_t idle_task;
 
-static PCPU_BSS uint8_t idle_stack[IDLE_STACK_SIZE];
+// static PCPU_BSS uint8_t idle_stack[IDLE_STACK_SIZE];
 
 // 空闲任务，优先级最低，用于填充 CPU 时间
 static NORETURN void idle_proc() {
@@ -166,25 +166,25 @@ static NORETURN void idle_proc() {
     }
 }
 
-// 准备调度子系统
 // 初始化就绪队列，创建 idle 任务
-// idle task 无需动态分配栈，预留很小的空间即可
 INIT_TEXT void sched_init() {
-    ASSERT(IDLE_STACK_SIZE > sizeof(arch_regs_t));
+    // ASSERT(IDLE_STACK_SIZE > sizeof(arch_regs_t));
 
     for (int i = 0; i < cpu_count(); ++i) {
         ready_q_init(pcpu_ptr(i, &g_ready_q));
 
-        task_t **p_prev = pcpu_ptr(i, &g_tid_prev);
-        task_t **p_next = pcpu_ptr(i, &g_tid_next);
-        klog("cpu #%d, p-prev=%p, p-next=%p\n", i, p_prev, p_next);
+        // task_t **p_prev = pcpu_ptr(i, &g_tid_prev);
+        // task_t **p_next = pcpu_ptr(i, &g_tid_next);
+        // klog("cpu #%d, p-prev=%p, p-next=%p\n", i, p_prev, p_next);
 
         task_t *idle = pcpu_ptr(i, &idle_task);
-        uint8_t *top = pcpu_ptr(i, idle_stack) + IDLE_STACK_SIZE;
-        klog("cpu #%d idle=%p, stack=%p\n", i, idle, top);
+        // uint8_t *top = pcpu_ptr(i, idle_stack) + IDLE_STACK_SIZE;
+        // klog("cpu #%d idle=%p, stack=%p\n", i, idle, top);
 
+        // task_create_ex(idle, "idle", PRIORITY_NUM - 1, i, NULL,
+        //         top, 0, idle_proc, 0, 0, 0, 0);
         task_create_ex(idle, "idle", PRIORITY_NUM - 1, i, NULL,
-                top, 0, idle_proc, 0, 0, 0, 0);
+                NULL, IDLE_STACK_RANK, idle_proc, 0, 0, 0, 0);
 
         raw_spin_take(&idle->spin);
         sched_cont(idle, TASK_STOPPED);

@@ -124,8 +124,8 @@ void task_exit() {
     irq_spin_give(&self->spin, key);
 
     // 立即切换，顺便在 work_q 中彻底删除任务
-    klog("yielding from %p(%s) to %p(%s)\n",
-            THISCPU_GET(g_tid_prev), THISCPU_GET(g_tid_prev)->name,
-            THISCPU_GET(g_tid_next), THISCPU_GET(g_tid_next)->name);
+    klog("yielding from %s(%p) to %s(%p)\n",
+            THISCPU_GET(g_tid_prev)->name, THISCPU_GET(g_tid_prev),
+            THISCPU_GET(g_tid_next)->name, THISCPU_GET(g_tid_next));
     arch_task_yield();
 }

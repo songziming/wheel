@@ -145,12 +145,12 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     // 启动第一个任务
     task_create(&root_tcb, "root", 0, root_proc);
     task_resume(&root_tcb);
-    // *(task_t **)this_ptr(&g_tid_next) = &root_tcb;
 
     // 首次中断保存上下文
     task_t dummy;
-    *(task_t **)this_ptr(&g_tid_prev) = &dummy;
-    klog("yielding to %p %s\n", THISCPU_GET(g_tid_next), THISCPU_GET(g_tid_next)->name);
+    // *(task_t **)this_ptr(&g_tid_prev) = &dummy;
+    THISCPU_SET(g_tid_prev, &dummy);
+    // klog("yielding to %p %s\n", THISCPU_GET(g_tid_next), THISCPU_GET(g_tid_next)->name);
     arch_task_yield();
 
 end:
@@ -261,7 +261,7 @@ static void root_proc() {
 
     g_cpu_started = 1;
     for (int i = 1; i < cpu_count(); ++i) {
-        klog("starting cpu %d...", i);
+        klog("starting cpu %d...\n", i);
 
         local_apic_send_init(i);        // 发送 INIT
         local_apic_busywait(10000);     // 等待 10ms
@@ -274,7 +274,7 @@ static void root_proc() {
         while (g_cpu_started == i) {
             cpu_pause();
         }
-        klog("done\n");
+        // klog("done\n");
     }
 
     // TODO 回收 init section 的物理内存，并删除映射
@@ -315,8 +315,9 @@ static INIT_TEXT void sys_init_ap() {
     ++g_cpu_started;
 
     task_t dummy;
-    *(task_t **)this_ptr(&g_tid_prev) = &dummy;
-    klog("yielding to %p %s\n", THISCPU_GET(g_tid_next), THISCPU_GET(g_tid_next)->name);
+    // *(task_t **)this_ptr(&g_tid_prev) = &dummy;
+    THISCPU_SET(g_tid_prev, &dummy);
+    // klog("yielding to %p %s\n", THISCPU_GET(g_tid_next), THISCPU_GET(g_tid_next)->name);
     arch_task_yield();
 
     cpu_halt();
