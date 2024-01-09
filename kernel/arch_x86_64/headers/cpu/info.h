@@ -32,9 +32,7 @@ extern CONST uint32_t g_cpu_features;
 
 INIT_TEXT void cpu_info_detect();
 INIT_TEXT void cpu_features_init();
-
-#ifdef DEBUG
 INIT_TEXT void cpu_info_show();
-#endif
+
 
 #endif // CPU_INFO_H

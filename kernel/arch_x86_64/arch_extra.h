@@ -1,5 +1,5 @@
-#ifndef ARCH_X86_64_TYPES_H
-#define ARCH_X86_64_TYPES_H
+#ifndef ARCH_X86_64_EXTRA_H
+#define ARCH_X86_64_EXTRA_H
 
 // arch 公开数据类型定义
 
@@ -76,4 +76,4 @@ typedef struct arch_tcb {
     default:  ({ __asm__("movq %0,%%gs:(" #var ")" :: "r"(val)); })  \
 )
 
-#endif // ARCH_X86_64_TYPES_H
+#endif // ARCH_X86_64_EXTRA_H

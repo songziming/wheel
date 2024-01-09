@@ -91,7 +91,7 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     // SRAT 可以获取 NUMA 信息
     acpi_tbl_t *srat = acpi_get_table("SRAT");
     if (NULL != srat) {
-        klog("SRAT at %p\n", srat);
+        klog("SRAT at %p, contains NUMA info\n", srat);
     }
 
     // 重要数据已备份，放开 early_rw 长度限制
@@ -112,8 +112,8 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
 #ifdef DEBUG
     acpi_show_tables();
     pmmap_show();
-    cpu_info_show();
 #endif
+    cpu_info_show();
 
     // 切换正式 gdt，加载 idt
     gdt_init();
@@ -131,6 +131,8 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     // 启用中断异常机制
     int_init();
 
+    // TODO 注册 page fault 处理函数
+
     disable_i8259(); // 禁用 PIC
     local_apic_init(LOCAL_APIC_BSP); // 设置中断控制器
     local_apic_timer_set(1, LOCAL_APIC_TIMER_PERIODIC);
@@ -141,17 +143,20 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
 
     sched_init();
 
+    // 首次中断保存上下文
+    task_t dummy;
+    // task_t **prev = this_ptr(&g_tid_prev);
+    // klog("old tid_prev %p\n", *prev);
+    THISCPU_SET(g_tid_prev, &dummy);
+    // klog("new tid_prev %p\n", *prev);
+
 
     // 启动第一个任务
     task_create(&root_tcb, "root", 0, root_proc);
     task_resume(&root_tcb);
 
-    // 首次中断保存上下文
-    task_t dummy;
-    // *(task_t **)this_ptr(&g_tid_prev) = &dummy;
-    THISCPU_SET(g_tid_prev, &dummy);
-    // klog("yielding to %p %s\n", THISCPU_GET(g_tid_next), THISCPU_GET(g_tid_next)->name);
-    arch_task_yield();
+    task_yield();
+    klog("starting first task\n");
 
 end:
     // emu_exit(0);
@@ -271,18 +276,20 @@ static void root_proc() {
         local_apic_busywait(200);       // 等待 200us
 
         // 每个 AP 使用相同的栈，必须等前一个 AP 启动完成再启动下一个
-        while (g_cpu_started == i) {
+        // 当 AP 开始运行 idle task，说明该 AP 已完成初始化，不再使用 init stack
+        // 必须使用双指针，因为更新的是 g_tid_prev 的指向，而非指向的内容
+        volatile task_t **prev = pcpu_ptr(i, &g_tid_prev);
+        while ((NULL == *prev) || (NULL == (*prev)->name)) {
             cpu_pause();
         }
-        // klog("done\n");
     }
 
+    // task_t *self = THISCPU_GET(g_tid_prev);
+    // klog("current task is %s, affinity=%d, last_cpu=%d\n", self->name, self->affinity, self->last_cpu);
+
+    // TODO 启动核心系统任务，长期驻留运行（tty、键盘、PCI 设备驱动、虚拟文件系统、shell）
+
     // TODO 回收 init section 的物理内存，并删除映射
-
-    task_t *self = THISCPU_GET(g_tid_prev);
-    // THISCPU_SET(g_tid_next, self);
-
-    klog("current task is %s, affinity=%d, last_cpu=%d\n", self->name, self->affinity, self->last_cpu);
 
     // 结束根任务
     task_exit();
@@ -298,6 +305,7 @@ static void root_proc() {
 //------------------------------------------------------------------------------
 
 static INIT_TEXT void sys_init_ap() {
+    // klog("AP initializing %d ...\n", g_cpu_started);
     cpu_features_init();
     gdt_load();
     idt_load();
@@ -307,18 +315,19 @@ static INIT_TEXT void sys_init_ap() {
     tss_init_load();
 
     local_apic_init(LOCAL_APIC_AP);
+    local_apic_timer_set(1, LOCAL_APIC_TIMER_PERIODIC);
 
     write_cr3(get_kernel_pgtable());
 
-    // TODO 让 sched 决定执行哪个任务（应该是 idle-task）
+    task_t dummy;
+    dummy.name = NULL;
+    THISCPU_SET(g_tid_prev, &dummy);
+
+    // task_t **prev = this_ptr(&g_tid_prev);
+    // klog("p-prev=%p, prev=%p\n", prev, *prev);
 
     ++g_cpu_started;
-
-    task_t dummy;
-    // *(task_t **)this_ptr(&g_tid_prev) = &dummy;
-    THISCPU_SET(g_tid_prev, &dummy);
-    // klog("yielding to %p %s\n", THISCPU_GET(g_tid_next), THISCPU_GET(g_tid_next)->name);
-    arch_task_yield();
+    task_yield();
 
     cpu_halt();
     while (1) {}

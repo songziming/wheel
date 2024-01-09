@@ -24,7 +24,8 @@ PCPU_BSS size_t g_int_stack;
 
 // 通用异常处理
 void handle_exception(int vec, arch_regs_t *f) {
-    klog("exception %d from rip=%lx, frame=%p\n", vec, f->rip, f);
+    klog("[CPU%d] exception %d from frame=%p, rip=%lx, rsp=%lx\n",
+            cpu_index(), vec, f, f->rip, f->rsp);
 
     size_t rela;
     const char *name = sym_resolve(f->rip, &rela);

@@ -4,7 +4,7 @@
 #include "def.h"
 #include "arch_api.h"
 #include <arch_config.h>
-#include <arch_types.h>
+#include <arch_extra.h>
 
 // core mem
 #include <page.h>

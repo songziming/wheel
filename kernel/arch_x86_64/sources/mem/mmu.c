@@ -725,8 +725,9 @@ void mmu_map(size_t tbl, size_t va, size_t end, size_t pa, mmu_attr_t attrs) {
     prot |= (attrs & MMU_WRITE) ? MMU_RW : 0;
     prot |= (attrs & MMU_EXEC) && SUPPORT_NX ? 0 : MMU_NX;
 
-    uint64_t mapped = pml4_map(tbl, va, end, pa, prot);
-    ASSERT(va + mapped == end);
+    uint64_t len = pml4_map(tbl, va, end, pa, prot);
+    ASSERT(va + len == end);
+    (void)len;
 }
 
 void mmu_unmap(size_t tbl, size_t va, size_t end) {

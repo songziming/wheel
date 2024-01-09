@@ -2,7 +2,7 @@
 #define TASK_H
 
 #include <def.h>
-#include <arch_types.h>
+#include <arch_extra.h>
 #include <spin.h>
 #include <process.h>
 
@@ -48,6 +48,7 @@ void task_stop(task_t *task);
 void task_resume(task_t *task);
 
 void task_exit();
+void task_yield();
 
 
 #endif // TASK_H

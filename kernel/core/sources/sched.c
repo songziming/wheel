@@ -50,16 +50,6 @@ static void ready_q_remove(ready_q_t *q, task_t *task) {
     ASSERT(NULL != task);
     ASSERT(dl_contains(&q->heads[task->priority], &task->q_node));
 
-    // dlnode_t *head = &q->heads[task->priority];
-    // klog("ready queue [%d] %p content:\n", task->priority, head);
-    // dlnode_t *node = head->next;
-    // for (; node != head; node = node->next) {
-    //     task_t *t = containerof(node, task_t, q_node);
-    //     klog("  - task: %s, affinity=%d, prev=%p, next=%p\n",
-    //             t->name, t->affinity, node->prev, node->next);
-    // }
-    // klog("this task %s node %p\n", task->name, &task->q_node);
-
     dl_remove(&task->q_node);
     if (dl_is_lastone(&q->heads[task->priority])) {
         q->priorities_mask &= ~(1U << task->priority);
@@ -144,6 +134,14 @@ uint16_t sched_cont(task_t *task, uint16_t bits) {
     //      若不发送 IPI，只能等到下一次中断再切换
     // TODO 也可以无条件发送 IPI，如果未抢占，只是多一次无意义的中断，也可以接受
 
+    // if (cpu_index() == task->last_cpu) {
+    //     // 抢占当前 CPU，可以直接切换
+    //     klog("task %s(%p) preempting current cpu!\n", task->name, task);
+    //     task_yield();
+    // } else {
+    //     // TODO 发送 IPI
+    // }
+
     return old_state;
 }
 
@@ -168,26 +166,26 @@ static NORETURN void idle_proc() {
 
 // 初始化就绪队列，创建 idle 任务
 INIT_TEXT void sched_init() {
-    // ASSERT(IDLE_STACK_SIZE > sizeof(arch_regs_t));
-
     for (int i = 0; i < cpu_count(); ++i) {
         ready_q_init(pcpu_ptr(i, &g_ready_q));
 
-        // task_t **p_prev = pcpu_ptr(i, &g_tid_prev);
-        // task_t **p_next = pcpu_ptr(i, &g_tid_next);
-        // klog("cpu #%d, p-prev=%p, p-next=%p\n", i, p_prev, p_next);
-
         task_t *idle = pcpu_ptr(i, &idle_task);
-        // uint8_t *top = pcpu_ptr(i, idle_stack) + IDLE_STACK_SIZE;
-        // klog("cpu #%d idle=%p, stack=%p\n", i, idle, top);
-
-        // task_create_ex(idle, "idle", PRIORITY_NUM - 1, i, NULL,
-        //         top, 0, idle_proc, 0, 0, 0, 0);
         task_create_ex(idle, "idle", PRIORITY_NUM - 1, i, NULL,
                 NULL, IDLE_STACK_RANK, idle_proc, 0, 0, 0, 0);
 
+        klog("idle-%d, stack_va=0x%zx, stack_pa=0x%zx\n", i, idle->stack_va.addr, idle->stack_pa);
+
+        ready_q_t *q = pcpu_ptr(i, &g_ready_q);
+
+        // 将idle任务放入就绪队列，但是暂时不切换
+        raw_spin_take(&q->spin);
+        ready_q_insert(q, idle);
+        *(task_t **)pcpu_ptr(i, &g_tid_prev) = NULL;
+        *(task_t **)pcpu_ptr(i, &g_tid_next) = idle;
+        raw_spin_give(&q->spin);
+
         raw_spin_take(&idle->spin);
-        sched_cont(idle, TASK_STOPPED);
+        // sched_cont(idle, TASK_STOPPED);
         // 不释放 idle_task 的自旋锁，禁止后续对 idle-task 操作
     }
 }

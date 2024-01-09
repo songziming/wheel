@@ -12,6 +12,7 @@
 #define WEAK        __attribute__((weak))
 #define PURE        __attribute__((pure))
 #define NORETURN    __attribute__((noreturn))
+#define PRINTF(s,a) __attribute__((format(printf,s,a)))
 #define ALIGNED(x)  __attribute__((aligned(x)))
 #define SECTION(x)  __attribute__((section(x)))
 #define CONST       SECTION(".rodata")
@@ -20,7 +21,6 @@
 #define INIT_BSS    SECTION(".init.bss")
 #define PCPU_DATA   SECTION(".pcpu.data")
 #define PCPU_BSS    SECTION(".pcpu.bss")
-#define PRINTF(s,a) __attribute__((format(printf,s,a)))
 
 #ifndef offsetof
 #define offsetof(t,m) ((size_t)&((t *)0)->m)

@@ -360,7 +360,6 @@ static INIT_TEXT void intel_get_cache_info() {
         }
     }
 
-#ifdef DEBUG
     // 通过 CPUID leaf 18 获取 TLB 参数
     // 循环遍历所有 subleaf（通过 ecx 传入）
     uint32_t max_subleaf = 0xffffffff;
@@ -373,7 +372,6 @@ static INIT_TEXT void intel_get_cache_info() {
             break;
         }
     }
-#endif // DEBUG
 }
 
 
@@ -498,7 +496,7 @@ INIT_TEXT void cpu_features_init() {
     write_msr(MSR_SFMASK, 0UL);                     // SFMASK
 }
 
-#ifdef DEBUG
+// #ifdef DEBUG
 
 INIT_TEXT void cpu_info_show() {
     klog("cpu info:\n");
@@ -542,4 +540,4 @@ INIT_TEXT void cpu_info_show() {
     klog("\n");
 }
 
-#endif
+// #endif

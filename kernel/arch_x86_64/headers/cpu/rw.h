@@ -9,26 +9,26 @@
 
 static inline uint8_t in8(uint16_t port) {
     uint8_t data;
-    __asm__("inb %1, %0" : "=a"(data) : "Nd"(port));
+    __asm__ volatile("inb %1, %0" : "=a"(data) : "Nd"(port));
     return data;
 }
 
 static inline void out8(uint16_t port, uint8_t data) {
-    __asm__("outb %0, %1" :: "a"(data), "Nd"(port));
+    __asm__ volatile("outb %0, %1" :: "a"(data), "Nd"(port));
 }
 
 static inline uint16_t in16(uint16_t port) {
     uint16_t data;
-    __asm__("inw %1, %0" : "=a"(data) : "Nd"(port));
+    __asm__ volatile("inw %1, %0" : "=a"(data) : "Nd"(port));
     return data;
 }
 
 static inline void out16(uint16_t port, uint16_t data) {
-    __asm__("outw %0, %1" :: "a"(data), "Nd"(port));
+    __asm__ volatile("outw %0, %1" :: "a"(data), "Nd"(port));
 }
 
 static inline void io_wait() {
-    __asm__("outb %%al, $0x80" :: "a"(0));
+    __asm__ volatile("outb %%al, $0x80" :: "a"(0));
 }
 
 

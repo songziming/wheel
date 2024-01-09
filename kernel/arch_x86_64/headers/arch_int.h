@@ -2,7 +2,7 @@
 #define ARCH_INT_H
 
 #include <def.h>
-#include <arch_types.h>
+#include <arch_extra.h>
 
 typedef void (*int_handler_t)(int vec, arch_regs_t *f);
 

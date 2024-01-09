@@ -118,14 +118,26 @@ void task_resume(task_t *task) {
 void task_exit() {
     task_t *self = THISCPU_GET(g_tid_prev);
 
+    // 将任务标记为已删除，从就绪队列中移除（但可能留在阻塞队列中）
     int key = irq_spin_take(&self->spin);
     sched_stop(self, TASK_DELETED);
-    // TODO 还要将任务从就绪队列或等待队列中移除
     irq_spin_give(&self->spin, key);
 
-    // 立即切换，顺便在 work_q 中彻底删除任务
+    // // 立即切换，顺便在 work_q 中彻底删除任务
+    // klog("yielding from %s(%p) to %s(%p)\n",
+    //         THISCPU_GET(g_tid_prev)->name, THISCPU_GET(g_tid_prev),
+    //         THISCPU_GET(g_tid_next)->name, THISCPU_GET(g_tid_next));
+    arch_task_yield();
+}
+
+
+// 让出剩余的时间片
+void task_yield() {
+    task_t *prev = THISCPU_GET(g_tid_prev);
+    task_t *next = THISCPU_GET(g_tid_next);
+
     klog("yielding from %s(%p) to %s(%p)\n",
-            THISCPU_GET(g_tid_prev)->name, THISCPU_GET(g_tid_prev),
-            THISCPU_GET(g_tid_next)->name, THISCPU_GET(g_tid_next));
+            prev->name, prev,
+            next->name, next);
     arch_task_yield();
 }

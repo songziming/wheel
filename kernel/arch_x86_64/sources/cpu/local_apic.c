@@ -313,7 +313,7 @@ static INIT_TEXT uint32_t calibrate_using_pit_03() {
 
     // TSC 频率可以保存下来，也许有用
     int64_t g_tsc_freq = (end_tsc - start_tsc) * 20;
-    klog("tsc freq = %ld\n", g_tsc_freq);
+    klog("calibrated tsc freq %ld\n", g_tsc_freq);
 
     // 返回 APIC Timer 频率
     return (start_count - end_count) * 20;  // 1s = 20 * 50ms
@@ -341,7 +341,7 @@ void local_apic_timer_set(int freq, local_apic_timer_mode_t mode) {
 
     if (0 == g_timer_freq) {
         g_timer_freq = calibrate_using_pit_03();
-        klog("local apic timer freq %u\n", g_timer_freq);
+        klog("calibrated apic timer freq %u\n", g_timer_freq);
     }
 
     uint32_t lvt = LOAPIC_DM_FIXED | VEC_LOAPIC_TIMER;
