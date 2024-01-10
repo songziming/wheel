@@ -52,6 +52,7 @@ static void serial_console_puts(const char *s, size_t n) {
 // BSP 初始化流程，使用初始栈，从 GRUB 跳转而来
 //------------------------------------------------------------------------------
 
+// TODO 改名为 arch_init
 INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     if (AP_BOOT_MAGIC == eax) {
         sys_init_ap();
@@ -131,7 +132,8 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     // 启用中断异常机制
     int_init();
 
-    // TODO 注册 page fault 处理函数
+    // 注册 page fault 处理函数
+    set_int_handler(14, handle_pagefault);
 
     disable_i8259(); // 禁用 PIC
     local_apic_init(LOCAL_APIC_BSP); // 设置中断控制器
@@ -249,6 +251,10 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
 char _real_addr;
 char _real_end;
 
+
+// main.c
+INIT_TEXT void common_init();
+
 // 第一个开始运行的任务
 static void root_proc() {
     klog("running in root task\n");
@@ -283,6 +289,8 @@ static void root_proc() {
 
     // TODO 启动核心系统任务，长期驻留运行（tty、键盘、PCI 设备驱动、虚拟文件系统、shell）
     // TODO 回收 init section 的物理内存，并删除映射
+
+    common_init();
 
     // 结束根任务
     task_exit();

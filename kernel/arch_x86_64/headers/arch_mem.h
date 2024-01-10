@@ -4,6 +4,7 @@
 // TODO 分解为多个子文件，放在 mem 目录下
 
 #include <def.h>
+#include <arch_extra.h>
 #include <vmspace.h>
 
 
@@ -49,5 +50,10 @@ void mmu_walk(uint64_t tbl);
 INIT_TEXT void mem_init();
 INIT_TEXT void kernel_proc_init();
 void reclaim_init();
+
+
+// 处理异常
+void handle_pagefault(int vec, arch_regs_t *f);
+
 
 #endif // ARCH_MEM_H

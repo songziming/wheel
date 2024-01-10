@@ -328,59 +328,6 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
     return va;
 }
 
-#if 0
-// 判断 PD 能否合并为一个 1G 页
-int pd_continuous(uint64_t pd) {
-    ASSERT(0 == OFFSET_4K(pd));
-
-    page_info_t *info = PAGE_INFO(pd);
-    if (512 != info->ent_num) {
-        return 0;
-    }
-
-    uint64_t *tbl = VIRT(pd);
-    uint64_t pa = tbl[0] & MMU_PS;
-    uint64_t attrs = tbl[0] & MMU_ATTRS;
-
-    if (0 == (tbl[0] & MMU_PS)) {
-        if (!pt_contiuous(pa)) {
-            return 0;
-        }
-        uint64_t *pt = VIRT(pa);
-        pa = pt[0] & MMU_ADDR;
-        attrs = pt[0] & MMU_ATTRS;
-    }
-
-    if (OFFSET_1G(pa)) {
-        return 0;
-    }
-
-    pa += SIZE_2M;
-    for (int i = 1; i < 512; ++i, pa += SIZE_2M) {
-        uint64_t this_addr = tbl[i] & MMU_ADDR;
-        uint64_t this_attrs = tbl[i] & MMU_ATTRS;
-
-        if (0 == (tbl[i] & MMU_PS)) {
-            if (!pt_contiuous(this_addr)) {
-                return 0;
-            }
-            uint64_t *pt = VIRT(this_addr);
-            this_addr = pt[0] & MMU_ADDR;
-            this_attrs = pt[0] & MMU_ATTRS;
-        }
-
-        if (pa != this_addr) {
-            return 0;
-        }
-        if (attrs != this_attrs) {
-            return 0;
-        }
-    }
-
-    return 1;
-}
-#endif
-
 
 
 //------------------------------------------------------------------------------
@@ -609,10 +556,6 @@ static uint64_t pml4_unmap(uint64_t pml4, uint64_t va, uint64_t end) {
 //------------------------------------------------------------------------------
 // 公开 API
 //------------------------------------------------------------------------------
-
-// // 预留内核页表的前两级，不必动态申请
-// static uint8_t g_kernel_pml4[PAGE_SIZE] ALIGNED(PAGE_SIZE);
-// static uint8_t g_kernel_pdp[PAGE_SIZE * 256] ALIGNED(PAGE_SIZE);
 
 // 记录内核页表
 CONST static uint64_t g_kernel_table = INVALID_ADDR;
