@@ -384,13 +384,13 @@ INIT_TEXT void cpu_info_detect() {
 
     // 获取生产商和型号字符串
     __asm__("cpuid" : "=b"(b), "=c"(c), "=d"(d) : "a"(0));
-    kmemcpy(g_cpu_vendor, (uint32_t[]){ b,d,c }, 12);
+    memcpy(g_cpu_vendor, (uint32_t[]){ b,d,c }, 12);
     __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000002));
-    kmemcpy(g_cpu_brand, (uint32_t[]){ a,b,c,d }, 16);
+    memcpy(g_cpu_brand, (uint32_t[]){ a,b,c,d }, 16);
     __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000003));
-    kmemcpy(&g_cpu_brand[16], (uint32_t[]){ a,b,c,d }, 16);
+    memcpy(&g_cpu_brand[16], (uint32_t[]){ a,b,c,d }, 16);
     __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000004));
-    kmemcpy(&g_cpu_brand[32], (uint32_t[]){ a,b,c,d }, 16);
+    memcpy(&g_cpu_brand[32], (uint32_t[]){ a,b,c,d }, 16);
 
     g_cpu_vendor[12] = '\0';
     g_cpu_brand[48] = '\0';
@@ -398,7 +398,7 @@ INIT_TEXT void cpu_info_detect() {
     // trim brand
     for (int i = 0; i < 48; ++i) {
         if (' ' != g_cpu_brand[i]) {
-            kmemcpy(g_cpu_brand, g_cpu_brand + i, 48 - i);
+            memcpy(g_cpu_brand, g_cpu_brand + i, 48 - i);
             g_cpu_brand[48 - i] = '\0';
             break;
         }
@@ -429,7 +429,8 @@ INIT_TEXT void cpu_info_detect() {
 
     // thermal and power
     __asm__("cpuid" : "=a"(a) : "a"(6) : "ebx", "ecx", "edx");
-    g_cpu_features |= (a & (1U << 2)) ? CPU_FEATURE_ARAT : 0;
+    g_cpu_features |= (a & (1U <<  2)) ? CPU_FEATURE_ARAT     : 0;
+    g_cpu_features |= (a & (1U << 19)) ? CPU_FEATURE_FEEDBACK : 0;
 
     // core crystal clock
     __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c) : "a"(0x15) : "edx");
@@ -438,9 +439,9 @@ INIT_TEXT void cpu_info_detect() {
     g_tsc_ratio[1] = a;
 
     // 获取各级缓存信息
-    if (0 == kmemcmp(g_cpu_vendor, VENDOR_INTEL, 12)) {
+    if (0 == memcmp(g_cpu_vendor, VENDOR_INTEL, 12)) {
         intel_get_cache_info();
-    } else if (0 == kmemcmp(g_cpu_vendor, VENDOR_AMD, 12)) {
+    } else if (0 == memcmp(g_cpu_vendor, VENDOR_AMD, 12)) {
         amd_get_cache_info();
     } else {
         klog("unknown vendor name '%.12s'\n", g_cpu_vendor);
@@ -485,7 +486,7 @@ INIT_TEXT void cpu_features_init() {
     if (CPU_FEATURE_NX & g_cpu_features) {
         efer |= 1UL << 11;  // NXE
     }
-    if (0 == kmemcmp(g_cpu_vendor, VENDOR_INTEL, 12)) {
+    if (0 == memcmp(g_cpu_vendor, VENDOR_INTEL, 12)) {
         efer |= (1UL <<  0); // SCE，启用快速系统调用指令 syscall/sysret
     }
     write_msr(MSR_EFER, efer);
@@ -527,7 +528,8 @@ INIT_TEXT void cpu_info_show() {
         { "incpcid",  CPU_FEATURE_INVPCID   },
         { "smep",     CPU_FEATURE_SMEP      },
         { "smap",     CPU_FEATURE_SMAP      },
-        { "fsgsbase", CPU_FEATURE_FSGSBASE  }
+        { "fsgsbase", CPU_FEATURE_FSGSBASE  },
+        { "feedback", CPU_FEATURE_FEEDBACK  },
     };
     size_t nfeats = sizeof(FEATS) / sizeof(FEATS[0]);
 

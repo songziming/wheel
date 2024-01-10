@@ -6,22 +6,24 @@ extern "C" {
 }
 
 // 利用 map 存储物理页的额外信息
-static std::map<size_t, page_info_t> infomap;
+static std::map<size_t, page_info_t*> infomap;
 
-void mock_info_set(size_t key) {
-    page_info_t info;
-    info.ent_num = 999;
+void mock_info_set(size_t key, page_info_t *info) {
+    // page_info_t info;
+    // info.ent_num = 999;
     infomap[key] = info;
 }
 
 page_info_t *mock_info_get(size_t key) {
-    return &infomap.at(key);
+    return infomap.at(key);
 }
 
 void mock_info_clear(size_t key) {
     infomap.erase(key);
 }
 
+
+#if 0
 
 typedef struct map_range {
     size_t va;
@@ -39,3 +41,5 @@ void add_map_range(uint64_t va, uint64_t pa, uint64_t size, uint64_t attr, int n
     mrange.pa  = pa;
     ranges.push_back(mrange);
 }
+
+#endif

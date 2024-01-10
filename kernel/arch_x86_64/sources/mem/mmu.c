@@ -85,14 +85,13 @@ static uint64_t alloc_table() {
     if (INVALID_ADDR == pa) {
         klog("fatal: cannot allocate page for page table!\n");
         cpu_halt();
-        // TODO panic
     }
 
     page_info_t *info = PAGE_INFO(pa);
     info->ent_num = 0;
 
     uint64_t *va = VIRT(pa);
-    kmemset(va, 0, PAGE_SIZE);
+    memset(va, 0, PAGE_SIZE);
     return pa;
 }
 
@@ -647,7 +646,7 @@ size_t mmu_create_table() {
     size_t tbl = alloc_table();
     uint64_t *pml4 = VIRT(tbl);
     uint64_t *kernel_pml4 = VIRT(g_kernel_table);
-    kmemcpy(&pml4[256], &kernel_pml4[256], 256 * sizeof(uint64_t));
+    memcpy(&pml4[256], &kernel_pml4[256], 256 * sizeof(uint64_t));
     return tbl;
 }
 

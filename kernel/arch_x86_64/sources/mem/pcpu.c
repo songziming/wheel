@@ -143,7 +143,7 @@ INIT_TEXT size_t pcpu_allocate(size_t kernel_end, vmspace_t *vm) {
     kernel_end = (kernel_end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     for (int i = 0; i < ncpu; ++i) {
         kernel_end = add_pcpu_range(vm, &g_range_pcpu_vars[i], kernel_end + PAGE_SIZE, vars_size, "pcpu vars");
-        kmemcpy((void *)g_range_pcpu_vars[i].addr, &_pcpu_addr, copy_size);
+        memcpy((void *)g_range_pcpu_vars[i].addr, &_pcpu_addr, copy_size);
 
         kernel_end = add_pcpu_range(vm, &g_range_pcpu_nmi[i], kernel_end + PAGE_SIZE, INT_STACK_SIZE, "pcpu NMI stack");
         kernel_end = add_pcpu_range(vm, &g_range_pcpu_df[i],  kernel_end + PAGE_SIZE, INT_STACK_SIZE, "pcpu #DF stack");

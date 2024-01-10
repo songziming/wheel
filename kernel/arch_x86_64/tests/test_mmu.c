@@ -3,14 +3,17 @@
 #include <stdlib.h>
 
 #include <arch_config.h>
+#include <page.h>
 #include "test_mmu_helper.h"
 
 
 // 必须保证分配的地址是页对齐的
-// 除了分配一个页面，还要附带一个描述符
+// 除了分配一个页面，还要分配一个描述符
 static size_t mock_pages_alloc() {
     size_t addr = (size_t)aligned_alloc(PAGE_SIZE, PAGE_SIZE);
-    mock_info_set(addr);
+    page_info_t *info = (page_info_t *)malloc(sizeof(page_info_t));
+    info->ent_num = 999;
+    mock_info_set(addr, info);
     // printf("mock alloc page %lx\n", addr);
     return addr;
 }
@@ -18,6 +21,7 @@ static size_t mock_pages_alloc() {
 static void mock_pages_free(size_t addr) {
     // printf("mock free page %lx\n", addr);
     free((void *)addr);
+    free(mock_info_get(addr));
     mock_info_clear(addr);
 }
 

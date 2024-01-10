@@ -91,7 +91,7 @@ void arch_tcb_init(arch_tcb_t *tcb, size_t entry, size_t stacktop, size_t args[4
 
     tcb->rsp0 = stacktop;
     tcb->regs = (arch_regs_t *)(stacktop - sizeof(arch_regs_t));
-    kmemset(tcb->regs, 0, sizeof(arch_regs_t));
+    memset(tcb->regs, 0, sizeof(arch_regs_t));
 
     tcb->regs->cs     = 0x08UL;             // 内核数据段
     tcb->regs->ss     = 0x10UL;             // 内核代码段

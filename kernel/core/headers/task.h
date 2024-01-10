@@ -48,7 +48,7 @@ void task_stop(task_t *task);
 void task_resume(task_t *task);
 
 void task_exit();
-void task_yield();
+// void arch_task_yield();
 
 
 #endif // TASK_H

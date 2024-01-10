@@ -70,7 +70,7 @@ start32:
     movw    %ax, %gs
     movw    %ax, %ss
 
-    // TODO 直接跳转到加载临时页表的部分
+    // 直接跳转到加载临时页表的部分
     movl    $AP_BOOT_MAGIC, (mb_eax)
     jmp     sys_boot_ap
 

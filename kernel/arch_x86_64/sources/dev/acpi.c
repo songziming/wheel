@@ -57,13 +57,13 @@ acpi_tbl_t *acpi_get_table(const char sig[4]) {
         if (NULL == g_tables[i]) {
             continue;
         }
-        if (0 == kstrcmp(sig, g_tables[i]->signature, 4)) {
+        if (0 == strncmp(sig, g_tables[i]->signature, 4)) {
             return g_tables[i];
         }
     }
     // for (dlnode_t *i = g_tables.next; &g_tables != i; i = i->next) {
     //     table_node_t *node = containerof(i, table_node_t, dl);
-    //     if (0 == kstrcmp(sig, node->tbl->signature, 4)) {
+    //     if (0 == strncmp(sig, node->tbl->signature, 4)) {
     //         return node->tbl;
     //     }
     // }
@@ -114,7 +114,7 @@ static INIT_TEXT acpi_tbl_t *check_table(uint64_t addr) {
 
     klog("backup ACPI table %.4s\n", tbl->signature);
     acpi_tbl_t *bak = early_alloc_ro(tbl->length);
-    kmemcpy(bak, tbl, tbl->length);
+    memcpy(bak, tbl, tbl->length);
     return bak;
 }
 
@@ -139,7 +139,7 @@ static INIT_TEXT void parse_rsdp_v1(acpi_rsdp_t *rsdp) {
     g_table_num = (rsdt->header.length - sizeof(acpi_tbl_t)) / sizeof(uint32_t);
     size_t arr_size = (g_table_num + 2) * sizeof(acpi_tbl_t *); // 留出 FACS/DSDT 的位置
     g_tables = early_alloc_ro(arr_size);
-    kmemset(g_tables, 0, arr_size);
+    memset(g_tables, 0, arr_size);
 
     for (int i = 0; i < g_table_num; ++i) {
         g_tables[i] = check_table(rsdt->entries[i]);
@@ -162,7 +162,7 @@ static INIT_TEXT void parse_rsdp_v2(acpi_rsdp_t *rsdp) {
     g_table_num = (xsdt->header.length - sizeof(acpi_tbl_t)) / sizeof(uint64_t);
     size_t arr_size = (g_table_num + 2) * sizeof(acpi_tbl_t *); // 留出 FACS/DSDT 的位置
     g_tables = early_alloc_ro(arr_size);
-    kmemset(g_tables, 0, arr_size);
+    memset(g_tables, 0, arr_size);
 
     for (int i = 0; i < g_table_num; ++i) {
         g_tables[i] = check_table(xsdt->entries[i]);

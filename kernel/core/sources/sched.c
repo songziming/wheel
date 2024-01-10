@@ -77,6 +77,10 @@ PCPU_BSS task_t *g_tid_next;  // 下次中断将要切换的任务
 
 // 调用下面的函数，需要 caller 已经持有 task->spin
 
+// sched 函数只负责更新就绪队列，不会切换任务，也不会发送 IPI
+
+
+
 
 // 因为某些原因停止任务执行，从就绪队列中移除
 uint16_t sched_stop(task_t *task, uint16_t bits) {
@@ -130,19 +134,21 @@ uint16_t sched_cont(task_t *task, uint16_t bits) {
     *(task_t **)pcpu_ptr(task->last_cpu, &g_tid_next) = ready_q_head(q);
     irq_spin_give(&q->spin, key);
 
-    // TODO 判断能否抢占，如果能，则发送 IPI，触发中断切换任务
-    //      若不发送 IPI，只能等到下一次中断再切换
-    // TODO 也可以无条件发送 IPI，如果未抢占，只是多一次无意义的中断，也可以接受
-
-    // if (cpu_index() == task->last_cpu) {
-    //     // 抢占当前 CPU，可以直接切换
-    //     klog("task %s(%p) preempting current cpu!\n", task->name, task);
-    //     task_yield();
-    // } else {
-    //     // TODO 发送 IPI
-    // }
-
     return old_state;
+}
+
+
+// 轮转，切换到同优先级的另一个任务
+// 当前任务耗尽时间片时调用，中断内执行
+void sched_rotate() {
+    ready_q_t *q = this_ptr(&g_ready_q);
+
+    // 虽然处于中断，但中断也会重入
+    int key = irq_spin_take(&q->spin);
+    task_t *prev = THISCPU_GET(g_tid_prev);
+    task_t *next = containerof(prev->q_node.next, task_t, q_node);
+    THISCPU_SET(g_tid_next, next);
+    irq_spin_give(&q->spin, key);
 }
 
 
@@ -151,7 +157,7 @@ uint16_t sched_cont(task_t *task, uint16_t bits) {
 //------------------------------------------------------------------------------
 
 // 空闲任务
-static PCPU_BSS task_t idle_task;
+static PCPU_BSS task_t idle_tcb;
 
 // static PCPU_BSS uint8_t idle_stack[IDLE_STACK_SIZE];
 
@@ -169,7 +175,7 @@ INIT_TEXT void sched_init() {
     for (int i = 0; i < cpu_count(); ++i) {
         ready_q_init(pcpu_ptr(i, &g_ready_q));
 
-        task_t *idle = pcpu_ptr(i, &idle_task);
+        task_t *idle = pcpu_ptr(i, &idle_tcb);
         task_create_ex(idle, "idle", PRIORITY_NUM - 1, i, NULL,
                 NULL, IDLE_STACK_RANK, idle_proc, 0, 0, 0, 0);
 

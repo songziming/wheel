@@ -44,7 +44,7 @@ int task_create_ex(task_t *task, const char *name,
         // 建立内核栈的映射
         vmspace_insert(kernel_vm, &task->stack_va, va, va + stack_size, name);
         mmu_map(kernel_pg, va, va + stack_size, pa, MMU_WRITE);
-        kmemset((char *)va, 0, stack_size);
+        memset((char *)va, 0, stack_size);
 
         task->stack_pa = pa;
         stack_top = (void *)(va + stack_size);
@@ -109,6 +109,7 @@ void task_stop(task_t *task) {
 void task_resume(task_t *task) {
     ASSERT(NULL != task);
 
+    // 不能在 sched_cont 内部切换任务，否则自旋锁无法释放
     int key = irq_spin_take(&task->spin);
     sched_cont(task, TASK_STOPPED);
     irq_spin_give(&task->spin, key);
@@ -131,13 +132,13 @@ void task_exit() {
 }
 
 
-// 让出剩余的时间片
-void task_yield() {
-    task_t *prev = THISCPU_GET(g_tid_prev);
-    task_t *next = THISCPU_GET(g_tid_next);
+// // 让出剩余的时间片
+// void arch_task_yield() {
+//     task_t *prev = THISCPU_GET(g_tid_prev);
+//     task_t *next = THISCPU_GET(g_tid_next);
 
-    klog("yielding from %s(%p) to %s(%p)\n",
-            prev->name, prev,
-            next->name, next);
-    arch_task_yield();
-}
+//     klog("yielding from %s(%p) to %s(%p)\n",
+//             prev->name, prev,
+//             next->name, next);
+//     arch_task_yield();
+// }

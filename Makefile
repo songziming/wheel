@@ -58,7 +58,7 @@ endif
 KLAYOUT := $(KERNEL)/arch_$(ARCH)/layout.ld
 KLFLAGS := -nostdlib --gc-sections -Map=$(OUT_MAP) -T $(KLAYOUT)  --no-warnings
 
-TCFLAGS := -g -DUNIT_TEST $(KINCS:%=-I%) -Itools/kernel_test
+TCFLAGS := -g -DUNIT_TEST -Itools/kernel_test
 TCFLAGS += -fsanitize=address -fprofile-instr-generate -fcoverage-mapping
 COV_RAW := $(OUT_DIR)/test.profraw
 COV_DAT := $(OUT_DIR)/test.profdata
@@ -117,9 +117,9 @@ $(OUT_IMG): $(OUT_ELF) tools/grub.cfg
 
 
 
-# 编译单元测试
+# 编译单元测试（C++ 源文件不能引用内核头文件，避免头文件冲突）
 $(OUT_DIR)/objs/%.c.to: %.c
-	$(TCC) -c -DC_FILE -std=c11 $(TCFLAGS) $(DEP_GEN) -o $@ $<
+	$(TCC) -c -DC_FILE -std=c11 $(KINCS:%=-I%) $(TCFLAGS) $(DEP_GEN) -o $@ $<
 $(OUT_DIR)/objs/%.cc.to: %.cc
 	$(TXX) -c -DC_FILE -std=c++14 -fpermissive $(TCFLAGS) $(DEP_GEN) -o $@ $<
 $(OUT_TEST): $(TOBJS)

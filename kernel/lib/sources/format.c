@@ -60,7 +60,7 @@ static void fmt_string(fmt_context_t *ctx, const char *str, uint32_t flags, int 
         str = "(null)";
     }
 
-    int len = kstrlen(str, -1);
+    int len = strnlen(str, -1);
     if ((0 <= precision) && (precision < len)) {
         len = precision;
     }

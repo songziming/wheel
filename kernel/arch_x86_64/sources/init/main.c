@@ -141,22 +141,19 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     kernel_proc_init();
     write_cr3(get_kernel_pgtable());
 
+    // 准备就绪队列
     sched_init();
 
     // 首次中断保存上下文
     task_t dummy;
-    // task_t **prev = this_ptr(&g_tid_prev);
-    // klog("old tid_prev %p\n", *prev);
     THISCPU_SET(g_tid_prev, &dummy);
-    // klog("new tid_prev %p\n", *prev);
 
-
-    // 启动第一个任务
+    // 创建第一个任务
     task_create(&root_tcb, "root", 0, root_proc);
     task_resume(&root_tcb);
 
-    task_yield();
     klog("starting first task\n");
+    arch_task_yield();
 
 end:
     // emu_exit(0);
@@ -259,7 +256,7 @@ static void root_proc() {
     // 将实模式启动代码复制到 1M 以下
     char *from = &_real_addr;
     char *to = (char *)KERNEL_REAL_ADDR + DIRECT_MAP_ADDR;
-    kmemcpy(to, from, &_real_end - from);
+    memcpy(to, from, &_real_end - from);
 
     // 启动代码地址页号就是 startup-IPI 的向量号
     int vec = KERNEL_REAL_ADDR >> 12;
@@ -284,11 +281,7 @@ static void root_proc() {
         }
     }
 
-    // task_t *self = THISCPU_GET(g_tid_prev);
-    // klog("current task is %s, affinity=%d, last_cpu=%d\n", self->name, self->affinity, self->last_cpu);
-
     // TODO 启动核心系统任务，长期驻留运行（tty、键盘、PCI 设备驱动、虚拟文件系统、shell）
-
     // TODO 回收 init section 的物理内存，并删除映射
 
     // 结束根任务
@@ -319,15 +312,18 @@ static INIT_TEXT void sys_init_ap() {
 
     write_cr3(get_kernel_pgtable());
 
-    task_t dummy;
-    dummy.name = NULL;
+    // task_t dummy;
+    // dummy.name = NULL;
+    task_t dummy = {
+        .name = NULL,
+    };
     THISCPU_SET(g_tid_prev, &dummy);
 
     // task_t **prev = this_ptr(&g_tid_prev);
     // klog("p-prev=%p, prev=%p\n", prev, *prev);
 
     ++g_cpu_started;
-    task_yield();
+    arch_task_yield();
 
     cpu_halt();
     while (1) {}
