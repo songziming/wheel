@@ -118,9 +118,9 @@ void framebuf_putc(char c) {
 }
 
 void framebuf_puts(const char *s, size_t n) {
-    raw_spin_take(&framebuf_spin);
+    int key = irq_spin_take(&framebuf_spin);
     for (size_t i = 0; i < n; ++i) {
         framebuf_putc(s[i]);
     }
-    raw_spin_give(&framebuf_spin);
+    irq_spin_give(&framebuf_spin, key);
 }

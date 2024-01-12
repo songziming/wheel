@@ -8,10 +8,12 @@
 // 就绪队列
 //------------------------------------------------------------------------------
 
+// 我们的双链表中包含头节点，
+
 typedef struct ready_q {
-    spin_t   spin;
-    uint32_t priorities_mask; // 表示该队列包含那些优先级
-    dlnode_t heads[PRIORITY_NUM];
+    spin_t    spin;
+    uint32_t  priorities_mask; // 表示该队列包含那些优先级
+    dlnode_t *heads[PRIORITY_NUM];
 } ready_q_t;
 
 static INIT_TEXT void ready_q_init(ready_q_t *q) {
@@ -19,9 +21,7 @@ static INIT_TEXT void ready_q_init(ready_q_t *q) {
 
     q->spin = SPIN_INIT;
     q->priorities_mask = 0;
-    for (int i = 0; i < PRIORITY_NUM; ++i) {
-        dl_init_circular(&q->heads[i]);
-    }
+    memset(q->heads, 0, PRIORITY_NUM * sizeof(dlnode_t *));
 }
 
 // 调用下面的函数，需要 caller 已经获取就绪队列的自旋锁
@@ -32,7 +32,8 @@ static task_t *ready_q_head(ready_q_t *q) {
     ASSERT(q->spin.ticket_counter > q->spin.service_counter);
 
     int top = __builtin_ctz(q->priorities_mask);
-    return containerof(q->heads[top].next, task_t, q_node);
+    ASSERT(NULL != q->heads[top]);
+    return containerof(q->heads[top], task_t, q_node);
 }
 
 static void ready_q_insert(ready_q_t *q, task_t *task) {
@@ -40,19 +41,37 @@ static void ready_q_insert(ready_q_t *q, task_t *task) {
     ASSERT(q->spin.ticket_counter > q->spin.service_counter);
     ASSERT(NULL != task);
 
-    q->priorities_mask |= 1U << task->priority;
-    dl_insert_before(&task->q_node, &q->heads[task->priority]);
+    int pri = task->priority;
+
+    if ((1U << pri) & q->priorities_mask) {
+        ASSERT(NULL != q->heads[pri]);
+        dl_insert_before(&task->q_node, q->heads[pri]);
+    } else {
+        ASSERT(NULL == q->heads[pri]);
+        dl_init_circular(&task->q_node);
+        q->heads[pri] = &task->q_node;
+        q->priorities_mask |= 1U << pri;
+    }
 }
 
 static void ready_q_remove(ready_q_t *q, task_t *task) {
     ASSERT(NULL != q);
     ASSERT(q->spin.ticket_counter > q->spin.service_counter);
     ASSERT(NULL != task);
-    ASSERT(dl_contains(&q->heads[task->priority], &task->q_node));
 
-    dl_remove(&task->q_node);
-    if (dl_is_lastone(&q->heads[task->priority])) {
-        q->priorities_mask &= ~(1U << task->priority);
+    int pri = task->priority;
+    ASSERT(NULL != q->heads[pri]);
+    ASSERT(q->priorities_mask & (1U << pri));
+
+    dlnode_t *next = dl_remove(&task->q_node);
+
+    if (NULL == next) {
+        q->heads[pri] = NULL;
+        q->priorities_mask &= ~(1U << pri);
+        return;
+    }
+    if (q->heads[pri] == &task->q_node) {
+        q->heads[pri] = next;
     }
 }
 
@@ -100,7 +119,8 @@ uint16_t sched_stop(task_t *task, uint16_t bits) {
     ready_q_t *q = pcpu_ptr(task->last_cpu, &g_ready_q);
     int key = irq_spin_take(&q->spin);
     ready_q_remove(q, task);
-    *(task_t **)pcpu_ptr(task->last_cpu, &g_tid_next) = ready_q_head(q);
+    task_t *head = ready_q_head(q);
+    *(task_t **)pcpu_ptr(task->last_cpu, &g_tid_next) = head;
     irq_spin_give(&q->spin, key);
 
     return old_state;
@@ -131,7 +151,8 @@ uint16_t sched_cont(task_t *task, uint16_t bits) {
 
     int key = irq_spin_take(&q->spin);
     ready_q_insert(q, task);
-    *(task_t **)pcpu_ptr(task->last_cpu, &g_tid_next) = ready_q_head(q);
+    task_t *head = ready_q_head(q);
+    *(task_t **)pcpu_ptr(task->last_cpu, &g_tid_next) = head;
     irq_spin_give(&q->spin, key);
 
     return old_state;
@@ -144,11 +165,25 @@ void sched_rotate() {
     ready_q_t *q = this_ptr(&g_ready_q);
 
     // 虽然处于中断，但中断也会重入
+
     int key = irq_spin_take(&q->spin);
     task_t *prev = THISCPU_GET(g_tid_prev);
     task_t *next = containerof(prev->q_node.next, task_t, q_node);
     THISCPU_SET(g_tid_next, next);
     irq_spin_give(&q->spin, key);
+}
+
+
+// 每次时钟中断里执行（但是可能重入）
+void sched_tick() {
+    task_t *prev = THISCPU_GET(g_tid_prev);
+    --prev->tick;
+    if (0 != prev->tick) {
+        return;
+    }
+
+    prev->tick = prev->tick_reload;
+    sched_rotate();
 }
 
 
@@ -163,7 +198,7 @@ static PCPU_BSS task_t idle_tcb;
 
 // 空闲任务，优先级最低，用于填充 CPU 时间
 static NORETURN void idle_proc() {
-    klog("cpu %d begin idling\n", cpu_index());
+    // klog("cpu %d begin idling\n", cpu_index());
     while (1) {
         cpu_pause();
         cpu_halt();

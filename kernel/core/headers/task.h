@@ -5,6 +5,7 @@
 #include <arch_extra.h>
 #include <spin.h>
 #include <process.h>
+#include <tick.h>
 
 
 // 任务状态，多个状态可以并存
@@ -18,14 +19,8 @@ typedef enum task_state {
 
 typedef struct task {
     arch_tcb_t   arch;
-
     spin_t       spin;
-
     const char  *name;
-    uint16_t     state;
-    uint8_t      priority;  // 数字越小，优先级越高
-    int          affinity;  // 负值表示不限制在哪个 CPU 上运行
-    int          last_cpu;  // 最近一次运行在哪个 CPU 之上，位于哪个就绪队列之中
 
     size_t       stack_pa;  // 内核栈的物理地址，INVALID_ADDR 表示静态分配内核栈
     vmrange_t    stack_va;  // 内核栈的虚拟地址范围
@@ -33,7 +28,15 @@ typedef struct task {
     process_t   *process;   // 任务所属进程
     dlnode_t     proc_node; // 任务在进程中的节点
 
+    uint16_t     state;
+    uint8_t      priority;  // 数字越小，优先级越高
+    int          affinity;  // 负值表示不限制在哪个 CPU 上运行
+    int          last_cpu;  // 最近一次运行在哪个 CPU 之上，位于哪个就绪队列之中
+    int          tick_reload;
+    int          tick;
     dlnode_t     q_node;    // 任务在就绪队列或阻塞队列中的节点
+
+    work_t       work;      // 有些任务需要在中断里执行，例如删除自己、等待若干 tick
 } task_t;
 
 
@@ -48,7 +51,7 @@ void task_stop(task_t *task);
 void task_resume(task_t *task);
 
 void task_exit();
-// void arch_task_yield();
+// void arch_task_switch();
 
 
 #endif // TASK_H

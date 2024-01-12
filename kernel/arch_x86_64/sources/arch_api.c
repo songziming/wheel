@@ -58,7 +58,7 @@ NORETURN void emu_exit(int ret) {
 int arch_unwind(size_t *addrs, int max, uint64_t rbp) {
     int i = 0;
 
-    for (; i < max; ++i) {
+    for (; (i < max) && (0 != rbp); ++i) {
         uint64_t *frame = (uint64_t *)rbp;
         addrs[i] = (size_t)frame[1];
         if (0 == addrs[i]) {
@@ -88,6 +88,9 @@ void arch_tcb_init(arch_tcb_t *tcb, size_t entry, size_t stacktop, size_t args[4
     ASSERT(0 != stacktop);
 
     stacktop &= ~7UL;   // 栈顶需要按 8 字节对齐
+    stacktop -= 8;  // 留出返回地址的空间
+
+    *(uint64_t *)stacktop = 0UL;
 
     tcb->rsp0 = stacktop;
     tcb->regs = (arch_regs_t *)(stacktop - sizeof(arch_regs_t));

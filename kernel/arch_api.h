@@ -78,6 +78,6 @@ void   mmu_unmap(size_t tbl, size_t va, size_t end);
 //------------------------------------------------------------------------------
 
 void arch_tcb_init(arch_tcb_t *tcb, size_t entry, size_t stacktop, size_t args[4]);
-void arch_task_yield();
+void arch_task_switch();
 
 #endif // ARCH_API_H

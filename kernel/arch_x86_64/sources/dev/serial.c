@@ -29,9 +29,9 @@ void serial_putc(char c) {
 }
 
 void serial_puts(const char *s, size_t n) {
-    raw_spin_take(&serial_spin);
+    int key = irq_spin_take(&serial_spin);
     for (size_t i = 0; i < n; ++i) {
         serial_putc(s[i]);
     }
-    raw_spin_give(&serial_spin);
+    irq_spin_give(&serial_spin, key);
 }

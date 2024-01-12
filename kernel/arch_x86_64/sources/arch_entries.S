@@ -2,7 +2,7 @@
 
 .global isr_entries
 .global syscall_entry
-.global arch_task_yield
+.global arch_task_switch
 
 // arch_int.c
 .extern g_handlers
@@ -235,7 +235,7 @@ int_to_kernel:
 //------------------------------------------------------------------------------
 
 // 模拟发生一次中断，切换到 g_tid_next
-arch_task_yield:
+arch_task_switch:
     pushfq
     cli
     popq    %rax

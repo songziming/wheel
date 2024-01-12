@@ -14,6 +14,7 @@
 #include <debug.h>
 #include <task.h>
 #include <sched.h>
+#include <tick.h>
 
 // lib
 #include <str.h>

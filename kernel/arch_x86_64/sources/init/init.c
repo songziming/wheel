@@ -137,7 +137,7 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
 
     disable_i8259(); // 禁用 PIC
     local_apic_init(LOCAL_APIC_BSP); // 设置中断控制器
-    local_apic_timer_set(1, LOCAL_APIC_TIMER_PERIODIC);
+    local_apic_timer_set(10, LOCAL_APIC_TIMER_PERIODIC);
 
     // 创建并加载内核页表，启用内存保护
     kernel_proc_init();
@@ -146,6 +146,9 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     // 准备就绪队列
     sched_init();
 
+    // 准备延迟工作队列（此时中断关闭，不会触发tick）
+    work_init();
+
     // 首次中断保存上下文
     task_t dummy;
     THISCPU_SET(g_tid_prev, &dummy);
@@ -153,9 +156,7 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     // 创建第一个任务
     task_create(&root_tcb, "root", 0, root_proc);
     task_resume(&root_tcb);
-
-    klog("starting first task\n");
-    arch_task_yield();
+    arch_task_switch();
 
 end:
     // emu_exit(0);
@@ -306,7 +307,6 @@ static void root_proc() {
 //------------------------------------------------------------------------------
 
 static INIT_TEXT void sys_init_ap() {
-    // klog("AP initializing %d ...\n", g_cpu_started);
     cpu_features_init();
     gdt_load();
     idt_load();
@@ -316,7 +316,7 @@ static INIT_TEXT void sys_init_ap() {
     tss_init_load();
 
     local_apic_init(LOCAL_APIC_AP);
-    local_apic_timer_set(1, LOCAL_APIC_TIMER_PERIODIC);
+    local_apic_timer_set(10, LOCAL_APIC_TIMER_PERIODIC);
 
     write_cr3(get_kernel_pgtable());
 
@@ -331,7 +331,7 @@ static INIT_TEXT void sys_init_ap() {
     // klog("p-prev=%p, prev=%p\n", prev, *prev);
 
     ++g_cpu_started;
-    arch_task_yield();
+    arch_task_switch();
 
     cpu_halt();
     while (1) {}

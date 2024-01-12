@@ -66,6 +66,11 @@ int task_create_ex(task_t *task, const char *name,
     task->priority = priority;
     task->affinity = affinity;
 
+    task->tick_reload = 10;
+    task->tick = 10;
+    task->q_node = DLNODE_INIT;
+    task->work = WORK_INIT;
+
     return 0;
 }
 
@@ -82,6 +87,8 @@ void task_destroy(task_t *task) {
 
     // 需要确保任务已停止运行，才能释放其内核栈
     // 否则发生中断，访问内核栈会导致 #PF
+
+    klog("delete resource of task %s(%p)\n", task->name, task);
 
     int key = irq_spin_take(&task->spin);
 
@@ -104,6 +111,8 @@ void task_stop(task_t *task) {
     int key = irq_spin_take(&task->spin);
     sched_stop(task, TASK_STOPPED);
     irq_spin_give(&task->spin, key);
+
+    // TODO 如果停止的是当前任务，需要立即切换
 }
 
 void task_resume(task_t *task) {
@@ -113,32 +122,46 @@ void task_resume(task_t *task) {
     int key = irq_spin_take(&task->spin);
     sched_cont(task, TASK_STOPPED);
     irq_spin_give(&task->spin, key);
+
+    // TODO 判断有没有抢占，从而决定是否切换任务
+}
+
+
+
+static void task_delete_self(void *arg) {
+    task_t *self = (task_t *)arg;
+    klog("deleting task %s\n", self->name);
+    ASSERT(TASK_READY != self->state);
+    task_destroy(self);
 }
 
 // 退出当前任务
 void task_exit() {
     task_t *self = THISCPU_GET(g_tid_prev);
 
-    // 将任务标记为已删除，从就绪队列中移除（但可能留在阻塞队列中）
+    // 将任务标记为已删除（当前任务一定处于就绪态）
     int key = irq_spin_take(&self->spin);
     sched_stop(self, TASK_DELETED);
     irq_spin_give(&self->spin, key);
+
+    // 当前任务正在运行，不能此时删除 TCB
+    work_delay(&self->work, 0, task_delete_self, self);
 
     // // 立即切换，顺便在 work_q 中彻底删除任务
     // klog("yielding from %s(%p) to %s(%p)\n",
     //         THISCPU_GET(g_tid_prev)->name, THISCPU_GET(g_tid_prev),
     //         THISCPU_GET(g_tid_next)->name, THISCPU_GET(g_tid_next));
-    arch_task_yield();
+    arch_task_switch();
 }
 
 
 // // 让出剩余的时间片
-// void arch_task_yield() {
+// void arch_task_switch() {
 //     task_t *prev = THISCPU_GET(g_tid_prev);
 //     task_t *next = THISCPU_GET(g_tid_next);
 
 //     klog("yielding from %s(%p) to %s(%p)\n",
 //             prev->name, prev,
 //             next->name, next);
-//     arch_task_yield();
+//     arch_task_switch();
 // }

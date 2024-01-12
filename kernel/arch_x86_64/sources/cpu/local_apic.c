@@ -160,10 +160,15 @@ static void handle_spurious(int vec, arch_regs_t *f) {
     klog("this cannot happen!\n");
 }
 
+// core/tick.c
+// void tick_advance();
+
 static void handle_timer(int vec, arch_regs_t *f) {
     (void)vec;
     (void)f;
     g_write(REG_EOI, 0);
+    // sched_tick();
+    tick_advance();
 }
 
 #if 0

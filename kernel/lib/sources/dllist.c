@@ -21,6 +21,12 @@ int dl_is_lastone(dlnode_t *node) {
     return (node->prev == node) && (node->next == node);
 }
 
+// 判断节点是否位于链表中（自环也是合法的链表）
+int dl_is_wired(dlnode_t *node) {
+    ASSERT(NULL != node);
+    return (NULL != node->prev) && (NULL != node->next);
+}
+
 // 判断节点是否位于链表中
 int dl_contains(dlnode_t *head, dlnode_t *node) {
     ASSERT(NULL != head);
@@ -34,7 +40,7 @@ int dl_contains(dlnode_t *head, dlnode_t *node) {
     return 0;
 }
 
-dlnode_t *dl_insert_before(dlnode_t *node, dlnode_t *ref) {
+void dl_insert_before(dlnode_t *node, dlnode_t *ref) {
     ASSERT(NULL != node);
     ASSERT(NULL != ref);
     ASSERT(node != ref);
@@ -48,11 +54,9 @@ dlnode_t *dl_insert_before(dlnode_t *node, dlnode_t *ref) {
     next->prev = node;
     node->prev = prev;
     node->next = next;
-
-    return node;
 }
 
-dlnode_t *dl_insert_after(dlnode_t *node, dlnode_t *ref) {
+void dl_insert_after(dlnode_t *node, dlnode_t *ref) {
     ASSERT(NULL != node);
     ASSERT(NULL != ref);
     ASSERT(node != ref);
@@ -66,11 +70,10 @@ dlnode_t *dl_insert_after(dlnode_t *node, dlnode_t *ref) {
     next->prev = node;
     node->prev = prev;
     node->next = next;
-
-    return node;
 }
 
-// 将 node 从双链表中取出
+// 将 node 从双链表中取出，返回链表中的下一个元素
+// 如果 node 就是最后一个元素，则返回空指针
 dlnode_t *dl_remove(dlnode_t *node) {
     ASSERT(NULL != node);
 
@@ -84,11 +87,8 @@ dlnode_t *dl_remove(dlnode_t *node) {
     if ((prev != node) && (next != node)) {
         prev->next = next;
         next->prev = prev;
+        return next;
     }
 
-    // 全零表示不在任何双链表中
-    node->prev = NULL;
-    node->next = NULL;
-
-    return node;
+    return NULL;
 }
