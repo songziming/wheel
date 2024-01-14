@@ -208,15 +208,12 @@ static NORETURN void idle_proc() {
 // 初始化就绪队列，创建 idle 任务
 INIT_TEXT void sched_init() {
     for (int i = 0; i < cpu_count(); ++i) {
-        ready_q_init(pcpu_ptr(i, &g_ready_q));
+        ready_q_t *q = pcpu_ptr(i, &g_ready_q);
+        ready_q_init(q);
 
         task_t *idle = pcpu_ptr(i, &idle_tcb);
         task_create_ex(idle, "idle", PRIORITY_NUM - 1, i, NULL,
                 NULL, IDLE_STACK_RANK, idle_proc, 0, 0, 0, 0);
-
-        klog("idle-%d, stack_va=0x%zx, stack_pa=0x%zx\n", i, idle->stack_va.addr, idle->stack_pa);
-
-        ready_q_t *q = pcpu_ptr(i, &g_ready_q);
 
         // 将idle任务放入就绪队列，但是暂时不切换
         raw_spin_take(&q->spin);

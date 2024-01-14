@@ -7,6 +7,11 @@
 
 
 
+// // 实际的任务函数
+// static void task_func() {
+//     task_exit();
+// }
+
 
 // 如果传入 stack_top==NULL，表示动态分配内核栈的物理内存和虚拟范围
 int task_create_ex(task_t *task, const char *name,
@@ -128,13 +133,6 @@ void task_resume(task_t *task) {
 
 
 
-static void task_delete_self(void *arg) {
-    task_t *self = (task_t *)arg;
-    klog("deleting task %s\n", self->name);
-    ASSERT(TASK_READY != self->state);
-    task_destroy(self);
-}
-
 // 退出当前任务
 void task_exit() {
     task_t *self = THISCPU_GET(g_tid_prev);
@@ -145,23 +143,9 @@ void task_exit() {
     irq_spin_give(&self->spin, key);
 
     // 当前任务正在运行，不能此时删除 TCB
-    work_delay(&self->work, 0, task_delete_self, self);
+    // 下一次中断，任务已停止执行，才能删除任务
+    work_defer(&self->work, (work_func_t)task_destroy, self);
 
-    // // 立即切换，顺便在 work_q 中彻底删除任务
-    // klog("yielding from %s(%p) to %s(%p)\n",
-    //         THISCPU_GET(g_tid_prev)->name, THISCPU_GET(g_tid_prev),
-    //         THISCPU_GET(g_tid_next)->name, THISCPU_GET(g_tid_next));
+    // 立即切换到新任务
     arch_task_switch();
 }
-
-
-// // 让出剩余的时间片
-// void arch_task_switch() {
-//     task_t *prev = THISCPU_GET(g_tid_prev);
-//     task_t *next = THISCPU_GET(g_tid_next);
-
-//     klog("yielding from %s(%p) to %s(%p)\n",
-//             prev->name, prev,
-//             next->name, next);
-//     arch_task_switch();
-// }

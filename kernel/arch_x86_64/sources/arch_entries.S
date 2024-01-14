@@ -13,6 +13,9 @@
 .extern g_tid_prev
 .extern g_tid_next
 
+// tick.c
+.extern work_q_flush
+
 
 // 必须开启这个模式
 .altmacro
@@ -202,15 +205,26 @@ int_from_kernel:
     movq    %gs:(g_int_stack), %rsp
 
 int_nested_enter:
+    // 建立一套全新的调用栈
+    pushq   $0
+    pushq   $0
+    movq    %rsp, %rbp
+
     // 调用 C 函数
     movq    $g_handlers, %rax
     movq    (%rax, %rdi, 8), %rax
     call    *%rax
+    addq    $16, %rsp
 
     // 判断是否退出最后一层中断，如果是，需要执行任务切换
     decl    %gs:(g_int_depth)
     cmpl    $0, %gs:(g_int_depth)
     jne     int_nested_return
+
+    // 执行延迟函数
+    subq    $16, %rsp
+    call    work_q_flush
+    addq    $16, %rsp
 
     // 切换到新任务的栈顶
     movq    %gs:(g_tid_next), %rdi

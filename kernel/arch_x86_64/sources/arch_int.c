@@ -99,3 +99,7 @@ void set_int_handler(int vec, int_handler_t handler) {
     ASSERT(vec < 256);
     g_handlers[vec] = handler;
 }
+
+inline int cpu_int_depth() {
+    return THISCPU_GET(g_int_depth);
+}

@@ -147,7 +147,7 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     sched_init();
 
     // 准备延迟工作队列（此时中断关闭，不会触发tick）
-    work_init();
+    tick_init();
 
     // 首次中断保存上下文
     task_t dummy;

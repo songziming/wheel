@@ -45,8 +45,8 @@ INIT_TEXT void common_init() {
     task_resume(&a_tcb);
     task_resume(&b_tcb);
 
-    work_delay(&wa, 20, my_work, "WORK_20");
-    work_delay(&wb, 40, my_work, "WORK_40");
+    tick_delay(&wa, 20, my_work, "WORK_20");
+    tick_delay(&wb, 40, my_work, "WORK_40");
 
     task_t *self = THISCPU_GET(g_tid_prev);
     task_stop(self);

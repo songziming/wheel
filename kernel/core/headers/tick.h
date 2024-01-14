@@ -14,11 +14,13 @@ typedef struct work {
 
 #define WORK_INIT ((work_t){ DLNODE_INIT,0,NULL,NULL })
 
-INIT_TEXT void work_init();
 
-void work_delay(work_t *work, int tick, work_func_t func, void *arg);
-void work_cancel(work_t *work);
+void tick_delay(work_t *work, int tick, work_func_t func, void *arg);
 
+void work_defer(work_t *work, work_func_t func, void *arg);
+void work_q_flush();
+
+INIT_TEXT void tick_init();
 size_t tick_get();
 void tick_advance();
 
