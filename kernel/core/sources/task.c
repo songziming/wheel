@@ -133,6 +133,30 @@ void task_resume(task_t *task) {
 
 
 
+
+static void task_wakeup(void *arg) {
+    task_t *task = (task_t *)arg;
+
+    int key = irq_spin_take(&task->spin);
+    sched_cont(task, TASK_STOPPED);
+    irq_spin_give(&task->spin, key);
+
+    // 不需要切换任务，我们已经处于中断
+}
+
+void task_delay(int ticks) {
+    task_t *self = THISCPU_GET(g_tid_prev);
+
+    int key = irq_spin_take(&self->spin);
+    sched_cont(self, TASK_STOPPED);
+    irq_spin_give(&self->spin, key);
+
+    tick_delay(&self->work, ticks, task_wakeup, self);
+    arch_task_switch();
+}
+
+
+
 // 退出当前任务
 void task_exit() {
     task_t *self = THISCPU_GET(g_tid_prev);

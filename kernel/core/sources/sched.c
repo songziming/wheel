@@ -223,7 +223,6 @@ INIT_TEXT void sched_init() {
         raw_spin_give(&q->spin);
 
         raw_spin_take(&idle->spin);
-        // sched_cont(idle, TASK_STOPPED);
         // 不释放 idle_task 的自旋锁，禁止后续对 idle-task 操作
     }
 }
