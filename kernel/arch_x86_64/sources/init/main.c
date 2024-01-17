@@ -30,7 +30,7 @@ static task_t root_tcb;
 
 static INIT_TEXT void mb1_init(uint32_t ebx);
 static INIT_TEXT void mb2_init(uint32_t ebx);
-static INIT_TEXT void sys_init_ap();
+static INIT_TEXT NORETURN void sys_init_ap();
 static void root_proc();
 
 
@@ -52,8 +52,7 @@ static void serial_console_puts(const char *s, size_t n) {
 // BSP 初始化流程，使用初始栈，从 GRUB 跳转而来
 //------------------------------------------------------------------------------
 
-// TODO 改名为 arch_init
-INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
+INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     if (AP_BOOT_MAGIC == eax) {
         sys_init_ap();
     }
@@ -159,9 +158,7 @@ INIT_TEXT void sys_init(uint32_t eax, uint32_t ebx) {
     arch_task_switch();
 
 end:
-    // emu_exit(0);
-    cpu_halt();
-    while (1) {}
+    emu_exit(0);
 }
 
 static INIT_TEXT void mb1_init(uint32_t ebx) {
@@ -253,9 +250,6 @@ char _real_addr;
 char _real_end;
 
 
-// main.c
-INIT_TEXT void common_init();
-
 // 第一个开始运行的任务
 static void root_proc() {
     klog("running in root task\n");
@@ -289,9 +283,10 @@ static void root_proc() {
     }
 
     // TODO 启动核心系统任务，长期驻留运行（tty、键盘、PCI 设备驱动、虚拟文件系统、shell）
-    // TODO 回收 init section 的物理内存，并删除映射
 
     common_init();
+
+    // TODO 回收 init section 的物理内存，并删除映射
 
     // 结束根任务
     task_exit();
@@ -306,7 +301,7 @@ static void root_proc() {
 // AP 初始化流程，使用初始栈，由根任务启动
 //------------------------------------------------------------------------------
 
-static INIT_TEXT void sys_init_ap() {
+static INIT_TEXT NORETURN void sys_init_ap() {
     cpu_features_init();
     gdt_load();
     idt_load();
@@ -320,19 +315,15 @@ static INIT_TEXT void sys_init_ap() {
 
     write_cr3(get_kernel_pgtable());
 
-    // task_t dummy;
-    // dummy.name = NULL;
     task_t dummy = {
         .name = NULL,
     };
     THISCPU_SET(g_tid_prev, &dummy);
 
-    // task_t **prev = this_ptr(&g_tid_prev);
-    // klog("p-prev=%p, prev=%p\n", prev, *prev);
-
     ++g_cpu_started;
     arch_task_switch();
 
-    cpu_halt();
-    while (1) {}
+    emu_exit(0);
+    // cpu_halt();
+    // while (1) {}
 }

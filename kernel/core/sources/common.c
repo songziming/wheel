@@ -11,11 +11,6 @@ static void task_a_proc() {
         klog("A");
         local_apic_busywait(400000);
     }
-
-    // 目前还不支持函数返回自动退出
-    // 必须主动调用 task_exit
-    // TODO arch 提供一个 task_wrapper
-    task_exit();
 }
 
 static void task_b_proc() {
@@ -34,7 +29,7 @@ static work_t wa, wb;
 
 
 // 平台无关的初始化流程，在根任务中调用
-// TODO 改名为 sys_init
+// 启动平台无关的系统服务（文件系统、调试日志）
 INIT_TEXT void common_init() {
     task_t a_tcb;
     task_t b_tcb;

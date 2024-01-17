@@ -82,15 +82,15 @@ int unwind(size_t *addrs, int max) {
 // 多任务支持
 //------------------------------------------------------------------------------
 
+// arch_entries.S
+void task_entry();
+
 void arch_tcb_init(arch_tcb_t *tcb, size_t entry, size_t stacktop, size_t args[4]) {
     ASSERT(NULL != tcb);
     ASSERT(0 != entry);
     ASSERT(0 != stacktop);
 
     stacktop &= ~7UL;   // 栈顶需要按 8 字节对齐
-    stacktop -= 8;  // 留出返回地址的空间
-
-    *(uint64_t *)stacktop = 0UL;
 
     tcb->rsp0 = stacktop;
     tcb->regs = (arch_regs_t *)(stacktop - sizeof(arch_regs_t));
@@ -99,8 +99,9 @@ void arch_tcb_init(arch_tcb_t *tcb, size_t entry, size_t stacktop, size_t args[4
     tcb->regs->cs     = 0x08UL;             // 内核数据段
     tcb->regs->ss     = 0x10UL;             // 内核代码段
     tcb->regs->rflags = 0x0200UL;           // 开启中断
-    tcb->regs->rip    = (uint64_t)entry;
+    tcb->regs->rip    = (uint64_t)task_entry;
     tcb->regs->rsp    = (uint64_t)stacktop;
+    tcb->regs->rax    = (uint64_t)entry;
     tcb->regs->rdi    = (uint64_t)args[0];
     tcb->regs->rsi    = (uint64_t)args[1];
     tcb->regs->rdx    = (uint64_t)args[2];

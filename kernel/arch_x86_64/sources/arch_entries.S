@@ -1,8 +1,9 @@
 // 中断异常入口、系统调用入口
 
 .global isr_entries
-.global syscall_entry
 .global arch_task_switch
+.global syscall_entry
+.global task_entry
 
 // arch_int.c
 .extern g_handlers
@@ -15,6 +16,9 @@
 
 // tick.c
 .extern work_q_flush
+
+// task.c
+.extern task_exit
 
 
 // 必须开启这个模式
@@ -291,3 +295,20 @@ yield_resume:
 
 syscall_entry:
     ret
+
+
+
+//------------------------------------------------------------------------------
+// 新任务入口，来自内核态
+//------------------------------------------------------------------------------
+
+task_entry:
+    pushq   $0  // 返回地址
+    pushq   $0  // rbp 原本取值
+    movq    %rsp, %rbp
+
+    // 调用真正的任务函数，四个参数寄存器已经设置好
+    call    *%rax
+
+    // 任务函数返回，结束此任务
+    call    task_exit
