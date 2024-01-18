@@ -166,8 +166,7 @@ static void handle_spurious(int vec, arch_regs_t *f) {
 static void handle_timer(int vec, arch_regs_t *f) {
     (void)vec;
     (void)f;
-    g_write(REG_EOI, 0);
-    // sched_tick();
+    local_apic_send_eoi();
     tick_advance();
 }
 
@@ -234,6 +233,7 @@ INIT_TEXT void local_apic_init(local_apic_type_t type) {
     if (0 == (CPU_FEATURE_X2APIC & g_cpu_features)) {
         g_write(REG_DFR, 0xffffffff);
     }
+    g_write(REG_LDR, cpu_index());  // IO APIC 发送中断时要用，此处设为 CPU 编号
     g_write(REG_TPR, 16);   // 屏蔽中断号 0~31
 
     // 设置 LINT0、LINT1，参考 Intel MultiProcessor Spec 第 5.1 节
@@ -417,5 +417,18 @@ INIT_TEXT void local_apic_send_sipi(int cpu, int vec) {
     ASSERT((vec < 0xa0) || (vec > 0xbf)); // 向量号 a0~bf 非法
 
     uint32_t lo = (vec & 0xff) | LOAPIC_DM_STARTUP | LOAPIC_EDGE | LOAPIC_ASSERT;
+    g_write_icr(g_loapics[cpu].apic_id, lo);
+}
+
+void local_apic_send_eoi() {
+    g_write(REG_EOI, 0);
+}
+
+void local_apic_send_ipi(int cpu, int vec) {
+    ASSERT(cpu >= 0);
+    ASSERT(cpu < cpu_count());
+    ASSERT((vec >= 0) && (vec < 256));
+
+    uint32_t lo = (vec & 0xff) | LOAPIC_DM_FIXED | LOAPIC_EDGE | LOAPIC_DEASSERT;
     g_write_icr(g_loapics[cpu].apic_id, lo);
 }

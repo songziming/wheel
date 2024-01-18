@@ -9,6 +9,7 @@
 #include <cpu/info.h>
 #include <cpu/gdt_idt_tss.h>
 #include <cpu/local_apic.h>
+#include <cpu/io_apic.h>
 
 #include <dev/acpi.h>
 #include <dev/acpi_madt.h>
@@ -135,6 +136,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     set_int_handler(14, handle_pagefault);
 
     disable_i8259(); // 禁用 PIC
+    io_apic_init_all();
     local_apic_init(LOCAL_APIC_BSP); // 设置中断控制器
     local_apic_timer_set(10, LOCAL_APIC_TIMER_PERIODIC);
 

@@ -1,6 +1,8 @@
 #include <arch_api_p.h>
-#include <wheel.h>
 #include <arch_mem.h>
+#include <arch_int.h>
+#include <cpu/local_apic.h>
+#include <wheel.h>
 
 
 
@@ -106,4 +108,26 @@ void arch_tcb_init(arch_tcb_t *tcb, size_t entry, size_t stacktop, size_t args[4
     tcb->regs->rsi    = (uint64_t)args[1];
     tcb->regs->rdx    = (uint64_t)args[2];
     tcb->regs->rcx    = (uint64_t)args[3];
+}
+
+
+// 向其他 CPU 发送 IPI，通知其执行调度操作
+
+
+static void handle_resched(int vec, arch_regs_t *f) {
+    (void)vec;
+    (void)f;
+    local_apic_send_eoi();
+    // 中断返回过程自动切换任务
+}
+
+void arch_notify_resched(int cpu) {
+    ASSERT(cpu >= 0);
+    ASSERT(cpu < cpu_count());
+    ASSERT(cpu_index() != cpu);
+    local_apic_send_ipi(cpu, VEC_IPI_RESCHED);
+}
+
+INIT_TEXT void install_sched_handlers() {
+    set_int_handler(VEC_IPI_RESCHED, handle_resched);
 }
