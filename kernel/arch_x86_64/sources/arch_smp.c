@@ -244,7 +244,7 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
         }
         case MADT_TYPE_IO_APIC: {
             madt_ioapic_t *io = (madt_ioapic_t *)sub;
-            // klog("  * IO APIC apicId=%u, gsi=%u, addr=0x%x\n", io->id, io->gsi_base, io->address);
+            klog("  * IO APIC apicId=%u, gsi=%u, addr=0x%x\n", io->id, io->gsi_base, io->address);
             g_ioapics[ioapic_idx].apic_id  = io->id;
             g_ioapics[ioapic_idx].gsi_base = io->gsi_base;
             g_ioapics[ioapic_idx].address  = io->address;

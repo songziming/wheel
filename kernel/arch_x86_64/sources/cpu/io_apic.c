@@ -67,11 +67,104 @@ static void io_apic_write(size_t base, uint32_t reg, uint32_t data) {
 }
 
 
+
+
+void io_apic_send_eoi(ioapic_t *io, uint8_t vec) {
+    if (io->ver >= 0x20) {
+        *(volatile uint32_t *)(io->base + IO_REG_EOI) = vec;
+    }
+}
+
+
+
+
+
+// 关于中断编号，有以下几种：
+//  IRQ 编号，0~15，8259 定义
+//  GSI 编号，从 0 开始，与 IRQ 一对一映射
+//  RED 条目编号，具体到每一个 IO APIC
+//  中断向量号，写在 RED 条目中，IO APIC 向 Local APIC 转发这个编号的中断消息
+//      我们将 GSI 加上 0x40，就是中断号
+
+
+
+// 寻找 GSI 所对应的 IO APIC
+ioapic_t *io_apic_for_gsi(uint32_t gsi) {
+    for (int i = 0; i < g_ioapic_num; ++i) {
+        ioapic_t *io = &g_ioapics[i];
+        if ((io->gsi_base <= gsi) && (gsi < io->gsi_base + io->ent_num)) {
+            return io;
+        }
+        gsi -= io->ent_num;
+    }
+
+    klog("warning: cannot find IO APIC for gsi %d\n", gsi);
+    return NULL;
+}
+
+void io_apic_set_red(uint32_t gsi, uint32_t hi, uint32_t lo) {
+    ioapic_t *io = io_apic_for_gsi(gsi);
+    if (NULL != io) {
+        return;
+    }
+
+    gsi -= io->gsi_base;
+    io_apic_write(io->base, IOAPIC_RED_H(gsi), hi);
+    io_apic_write(io->base, IOAPIC_RED_L(gsi), lo);
+}
+
+void io_apic_mask_gsi(uint32_t gsi) {
+    ioapic_t *io = io_apic_for_gsi(gsi);
+    if (NULL != io) {
+        return;
+    }
+
+    gsi -= io->gsi_base;
+    uint32_t red_lo = io_apic_read(io->base, IOAPIC_RED_L(gsi));
+    red_lo |= IOAPIC_INT_MASK;
+    io_apic_write(io->base, IOAPIC_RED_L(gsi), red_lo);
+}
+
+void io_apic_unmask_gsi(uint32_t gsi) {
+    ioapic_t *io = io_apic_for_gsi(gsi);
+    if (NULL != io) {
+        return;
+    }
+
+    gsi -= io->gsi_base;
+    uint32_t red_lo = io_apic_read(io->base, IOAPIC_RED_L(gsi));
+    red_lo &= ~IOAPIC_INT_MASK;
+    io_apic_write(io->base, IOAPIC_RED_L(gsi), red_lo);
+}
+
+INIT_TEXT void io_apic_init(ioapic_t *io) {
+    io->base = io->address + DIRECT_MAP_ADDR;
+
+    uint32_t id = io_apic_read(io->base, IOAPIC_ID);
+    uint32_t ver = io_apic_read(io->base, IOAPIC_VER);
+
+    if (id != io->apic_id) {
+        klog("warning: IO APIC id %u different from MADT (%u)\n", id, io->apic_id);
+    }
+
+    io->ver = ver & 0xff;
+    io->ent_num = ((ver >> 16) & 0xff) + 1;
+    klog("IO APIC id=%u, madt-id=%d, ver=%u, ent_num=%d\n", id, io->apic_id, io->ver, io->ent_num);
+    if (ver & (1 << 15)) {
+        klog("no Pin Assertion Register\n");
+    }
+}
+
 INIT_TEXT void io_apic_init_all() {
     for (int i = 0; i < g_ioapic_num; ++i) {
-        size_t base = g_ioapics[i].address + DIRECT_MAP_ADDR;
-        uint32_t ver = io_apic_read(base, IOAPIC_VER);
-        klog("IO APIC %d, ver=%d, ent_num=%d\n",
-            i, ver & 0xff, (ver >> 16) & 0xff);
+        io_apic_init(&g_ioapics[i]);
+    }
+
+    // 设置每个 IO APIC 的 RED
+    // 开头 16 个对应 8259 IRQ
+    for (int i = 0; i < 16; ++i) {
+        // 固定发送给 CPU0
+        // TODO 需要查询 arch_smp，根据 int override 信息设置重定位条目
+        io_apic_set_red(i, 0, IOAPIC_DST | IOAPIC_HIGH | IOAPIC_LOGICAL | IOAPIC_FIXED | IOAPIC_LOWEST);
     }
 }

@@ -14,6 +14,10 @@ typedef struct ioapic {
     uint32_t apic_id;
     uint32_t gsi_base;
     size_t   address;   // 物理地址
+    //
+    size_t   base;  // 虚拟地址
+    uint8_t  ver;
+    int      ent_num;
 } ioapic_t;
 
 extern CONST size_t g_loapic_addr;
