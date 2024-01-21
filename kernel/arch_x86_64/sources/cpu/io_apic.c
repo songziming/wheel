@@ -113,6 +113,13 @@ void io_apic_set_red(uint32_t gsi, uint32_t hi, uint32_t lo) {
     io_apic_write(io->base, IOAPIC_RED_L(gsi), lo);
 }
 
+void io_apic_set_gsi(uint32_t gsi, int cpu, int vec) {
+    // 获取目标 CPU 的 LDR
+    uint32_t hi = (uint32_t)cpu << 24;
+    uint32_t lo = 0;
+    io_apic_set_red(gsi, hi, lo);
+}
+
 void io_apic_mask_gsi(uint32_t gsi) {
     ioapic_t *io = io_apic_for_gsi(gsi);
     if (NULL != io) {
@@ -163,8 +170,8 @@ INIT_TEXT void io_apic_init_all() {
     // 设置每个 IO APIC 的 RED
     // 开头 16 个对应 8259 IRQ
     for (int i = 0; i < 16; ++i) {
-        // 固定发送给 CPU0
+        // 外部中断固定发送给 CPU0
         // TODO 需要查询 arch_smp，根据 int override 信息设置重定位条目
-        io_apic_set_red(i, 0, IOAPIC_DST | IOAPIC_HIGH | IOAPIC_LOGICAL | IOAPIC_FIXED | IOAPIC_LOWEST);
+        io_apic_set_red(i, 0, IOAPIC_HIGH | IOAPIC_LOGICAL | IOAPIC_FIXED | IOAPIC_LOWEST);
     }
 }

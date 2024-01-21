@@ -14,7 +14,7 @@ typedef struct ioapic {
     uint32_t apic_id;
     uint32_t gsi_base;
     size_t   address;   // 物理地址
-    //
+
     size_t   base;  // 虚拟地址
     uint8_t  ver;
     int      ent_num;
@@ -27,7 +27,10 @@ extern CONST int    g_ioapic_num;
 extern CONST loapic_t *g_loapics;
 extern CONST ioapic_t *g_ioapics;
 
-INIT_TEXT int nmi_lint(int cpu);
 INIT_TEXT void parse_madt(const madt_t *madt);
+
+INIT_TEXT int get_nmi_lint(int cpu);
+INIT_TEXT int get_gsi_trigmode(int gsi); // edge=1, level=0
+INIT_TEXT int get_gsi_polarity(int gsi); // high=1, low=0
 
 #endif // ARCH_SMP_H

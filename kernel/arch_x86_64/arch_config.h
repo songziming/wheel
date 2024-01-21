@@ -28,7 +28,7 @@
 // 中断向量号
 //------------------------------------------------------------------------------
 
-#define VEC_HWINT_START     0x40    // 外部中断其实编号
+#define VEC_HWINT_START     0x40    // 外部中断起始编号
 
 #define VEC_IPI_RESCHED     0xe0
 

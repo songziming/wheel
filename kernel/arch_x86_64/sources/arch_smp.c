@@ -2,6 +2,9 @@
 #include <wheel.h>
 
 
+// 本文件主要负责解析 MADT，提取 Local APIC 和 IO APIC 的数据
+
+
 CONST size_t g_loapic_addr;
 CONST int    g_loapic_num = 0;
 CONST int    g_ioapic_num = 0;
@@ -18,35 +21,14 @@ static CONST uint8_t  *g_gsi_to_irq = NULL;
 static CONST uint16_t *g_gsi_flags  = NULL;
 
 // NMI 连接到哪个 IO APIC
-static CONST uint32_t g_nmi_gsi = UINT32_MAX; // -1 表示不经过 IO APIC，直接连接 Local APIC
+static CONST uint32_t g_nmi_gsi = 0xffffffffU; // -1 表示不经过 IO APIC，直接连接 Local APIC
 
 // NMI 直接连接到哪个处理器的哪个 LINT 引脚
-static CONST uint32_t g_nmi_cpu = UINT32_MAX; // -1 表示连接到所有处理器
+static CONST uint32_t g_nmi_cpu = 0xffffffffU; // -1 表示连接到所有处理器
 static CONST uint8_t  g_nmi_lint = 0;
 static CONST uint8_t  g_nmi_inti = 0;   // 触发模式（edge/level、low/high）
 
 
-
-inline int cpu_count() {
-    ASSERT(0 != g_loapic_num);
-    return g_loapic_num;
-}
-
-// 判断 NMI 连接到指定 CPU 的哪个 LINT 引脚，返回 -1 表示没有连接到此 CPU
-INIT_TEXT int nmi_lint(int cpu) {
-    ASSERT(cpu >= 0);
-    ASSERT(cpu < cpu_count());
-
-    if (UINT32_MAX != g_nmi_gsi) {
-        return -1;
-    }
-
-    if ((UINT32_MAX == g_nmi_cpu) || (g_loapics[cpu].processor_id == g_nmi_cpu)) {
-        return g_nmi_lint;
-    }
-
-    return -1;
-}
 
 // 解析 MPS INTI flags，描述中断触发条件
 void show_inti_flags(uint16_t flags) {
@@ -206,7 +188,7 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
     for (uint8_t i = 0; i < g_irq_max; ++i) {
         g_irq_to_gsi[i] = i;
     }
-    for (uint32_t i = 0; (i < g_gsi_max) && (i <= UINT8_MAX); ++i) {
+    for (uint32_t i = 0; (i < g_gsi_max) && (i < 256); ++i) {
         g_gsi_to_irq[i] = i;
         g_gsi_flags[i] = TRIGMODE_EDGE; // TODO 设置传统 IRQ 的默认触发条件
     }
@@ -244,7 +226,7 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
         }
         case MADT_TYPE_IO_APIC: {
             madt_ioapic_t *io = (madt_ioapic_t *)sub;
-            klog("  * IO APIC apicId=%u, gsi=%u, addr=0x%x\n", io->id, io->gsi_base, io->address);
+            // klog("  * IO APIC apicId=%u, gsi=%u, addr=0x%x\n", io->id, io->gsi_base, io->address);
             g_ioapics[ioapic_idx].apic_id  = io->id;
             g_ioapics[ioapic_idx].gsi_base = io->gsi_base;
             g_ioapics[ioapic_idx].address  = io->address;
@@ -310,4 +292,59 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
             break;
         }
     }
+}
+
+inline int cpu_count() {
+    ASSERT(0 != g_loapic_num);
+    return g_loapic_num;
+}
+
+// 判断 NMI 连接到指定 CPU 的哪个 LINT 引脚，返回 -1 表示没有连接到此 CPU
+INIT_TEXT int get_nmi_lint(int cpu) {
+    ASSERT(cpu >= 0);
+    ASSERT(cpu < cpu_count());
+
+    if (0xffffffffU != g_nmi_gsi) {
+        return -1;
+    }
+
+    if ((0xffffffffU == g_nmi_cpu) || (g_loapics[cpu].processor_id == g_nmi_cpu)) {
+        return g_nmi_lint;
+    }
+
+    return -1;
+}
+
+INIT_TEXT int get_gsi_for_irq(int irq) {
+    if (irq <= g_irq_max) {
+        return g_irq_to_gsi[irq];
+    }
+    return irq;
+}
+
+INIT_TEXT int get_gsi_trigmode(int gsi) {
+    if (gsi <= g_gsi_max) {
+        switch (TRIGMODE_MASK & g_gsi_flags[gsi]) {
+        case TRIGMODE_EDGE: return 1;
+        case TRIGMODE_LEVEL: return 0;
+        default:
+            break;
+        }
+    }
+
+    // TODO 返回默认的触发模式
+    return 0;
+}
+
+INIT_TEXT int get_gsi_polarity(int gsi) {
+    if (gsi <= g_gsi_max) {
+        switch (POLARITY_MASK & g_gsi_flags[gsi]) {
+        case POLARITY_HIGH: return 1;
+        case POLARITY_LOW: return 0;
+        default:
+            break;
+        }
+    }
+
+    return 0;
 }
