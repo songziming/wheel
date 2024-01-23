@@ -28,11 +28,14 @@
 // 中断向量号
 //------------------------------------------------------------------------------
 
-#define VEC_HWINT_START     0x40    // 外部中断起始编号
+#define VEC_IRQ_BASE        0x40    // 外部中断起始编号
 
-#define VEC_IPI_RESCHED     0xe0
+#define VEC_LINUX_SYSCALL   0x80    // Linux 系统调用兼容层
 
-#define VEC_LOAPIC_TIMER    0xfc
+#define VEC_IPI_RESCHED     0xd0
+
+#define VEC_LOAPIC_TIMER    0xe0
+
 #define VEC_LOAPIC_ERROR    0xfe
 #define VEC_LOAPIC_SPURIOUS 0xff    // spurious 向量号最后 4bit 必须是 f
 

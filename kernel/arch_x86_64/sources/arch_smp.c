@@ -322,27 +322,31 @@ INIT_TEXT int get_gsi_for_irq(int irq) {
     return irq;
 }
 
+
+// ISA 默认是 edge-triggered
+// EISA 默认是 level-triggered active-low
+// 8259A PIC 中断触发条件是 edge-triggered high pin polarity（信息来自 IBM PC/AT Technical Reference）
+
 INIT_TEXT int get_gsi_trigmode(int gsi) {
     if (gsi <= g_gsi_max) {
         switch (TRIGMODE_MASK & g_gsi_flags[gsi]) {
-        case TRIGMODE_EDGE: return 1;
-        case TRIGMODE_LEVEL: return 0;
-        default:
-            break;
+        case TRIGMODE_EDGE:  return 1;  // edge
+        case TRIGMODE_LEVEL: return 0;  // level
+        default:             return 1;  // edge
         }
     }
 
     // TODO 返回默认的触发模式
+    // IRQ 以后的中断怎么触发？
     return 0;
 }
 
 INIT_TEXT int get_gsi_polarity(int gsi) {
     if (gsi <= g_gsi_max) {
         switch (POLARITY_MASK & g_gsi_flags[gsi]) {
-        case POLARITY_HIGH: return 1;
-        case POLARITY_LOW: return 0;
-        default:
-            break;
+        case POLARITY_HIGH: return 1;   // high
+        case POLARITY_LOW:  return 0;   // low
+        default:            return 1;   // high
         }
     }
 

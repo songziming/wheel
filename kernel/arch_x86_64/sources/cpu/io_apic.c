@@ -48,12 +48,16 @@
 #define IOAPIC_HIGH     0x00000000
 #define IOAPIC_LOGICAL  0x00000800
 #define IOAPIC_PHYSICAL 0x00000000
-#define IOAPIC_FIXED    0x00000000
-#define IOAPIC_LOWEST   0x00000100
-#define IOAPIC_SMI      0x00000200
-#define IOAPIC_NMI      0x00000400
-#define IOAPIC_INIT     0x00000500
-#define IOAPIC_EXTINT   0x00000700
+
+
+// delivery mode
+#define IOAPIC_DM_FIXED    0x00000000
+#define IOAPIC_DM_LOWEST   0x00000100
+#define IOAPIC_DM_SMI      0x00000200
+#define IOAPIC_DM_NMI      0x00000400
+#define IOAPIC_DM_INIT     0x00000500
+#define IOAPIC_DM_EXTINT   0x00000700
+
 #define IOAPIC_VEC_MASK 0x000000ff
 
 static uint32_t io_apic_read(size_t base, uint32_t reg) {
@@ -168,10 +172,12 @@ INIT_TEXT void io_apic_init_all() {
     }
 
     // 设置每个 IO APIC 的 RED
-    // 开头 16 个对应 8259 IRQ
+    // 开头 16 个对应 8259 IRQ，默认是 edge-triggered，active-high
+    // 之后的中断为 level-triggered, active low
     for (int i = 0; i < 16; ++i) {
-        // 外部中断固定发送给 CPU0
-        // TODO 需要查询 arch_smp，根据 int override 信息设置重定位条目
-        io_apic_set_red(i, 0, IOAPIC_HIGH | IOAPIC_LOGICAL | IOAPIC_FIXED | IOAPIC_LOWEST);
+        uint32_t lo = IOAPIC_DM_LOWEST; // 自动选择当前优先级最低的 CPU
+        lo |= get_gsi_trigmode(i) ? IOAPIC_EDGE : IOAPIC_LEVEL;
+        lo |= get_gsi_polarity(i) ? IOAPIC_HIGH : IOAPIC_LOW;
+        io_apic_set_red(i, 0, lo);
     }
 }
