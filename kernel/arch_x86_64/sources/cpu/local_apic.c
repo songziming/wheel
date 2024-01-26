@@ -232,8 +232,11 @@ INIT_TEXT void local_apic_init(local_apic_type_t type) {
     // 设置 DFR、LDR、TPR
     if (0 == (CPU_FEATURE_X2APIC & g_cpu_features)) {
         g_write(REG_DFR, 0xffffffff);
+
+        // LDR[31:16] 表示 clusterID
+        // LDR[15:0] 表示 logicalID
+        g_write(REG_LDR, cpu_index() << 16);
     }
-    g_write(REG_LDR, cpu_index());  // IO APIC 发送中断时要用，此处设为 CPU 编号
     g_write(REG_TPR, 16);   // 屏蔽中断号 0~31
 
     // 设置 LINT0、LINT1，参考 Intel MultiProcessor Spec 第 5.1 节

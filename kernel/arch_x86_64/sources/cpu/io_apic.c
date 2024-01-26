@@ -168,16 +168,29 @@ INIT_TEXT void io_apic_init(ioapic_t *io) {
 
 INIT_TEXT void io_apic_init_all() {
     for (int i = 0; i < g_ioapic_num; ++i) {
-        io_apic_init(&g_ioapics[i]);
-    }
+        ioapic_t *io = &g_ioapics[i];
+        io_apic_init(io);
 
-    // 设置每个 IO APIC 的 RED
-    // 开头 16 个对应 8259 IRQ，默认是 edge-triggered，active-high
-    // 之后的中断为 level-triggered, active low
-    for (int i = 0; i < 16; ++i) {
-        uint32_t lo = IOAPIC_DM_LOWEST; // 自动选择当前优先级最低的 CPU
-        lo |= get_gsi_trigmode(i) ? IOAPIC_EDGE : IOAPIC_LEVEL;
-        lo |= get_gsi_polarity(i) ? IOAPIC_HIGH : IOAPIC_LOW;
-        io_apic_set_red(i, 0, lo);
+        int ent = 0;
+        if (0 == i) {
+            for (; ent < 16; ++ent) {
+                uint32_t lo = IOAPIC_DM_LOWEST; // 自动选择当前优先级最低的 CPU
+                lo |= get_gsi_trigmode(ent) ? IOAPIC_EDGE : IOAPIC_LEVEL;
+                lo |= get_gsi_polarity(ent) ? IOAPIC_HIGH : IOAPIC_LOW;
+                lo |= (ent + VEC_GSI_BASE) & IOAPIC_VEC_MASK;
+
+                io_apic_write(io->base, IOAPIC_RED_H(ent), 0);
+                io_apic_write(io->base, IOAPIC_RED_L(ent), lo);
+            }
+        }
+
+        // IRQ 之后的硬件中断，level-triggered，active low
+        for (; ent < io->ent_num; ++ent) {
+            uint32_t lo = IOAPIC_DM_LOWEST | IOAPIC_LEVEL | IOAPIC_LOW;
+            lo |= (io->gsi_base + ent + VEC_GSI_BASE) & IOAPIC_VEC_MASK;
+
+            io_apic_write(io->base, IOAPIC_RED_H(ent), 0);
+            io_apic_write(io->base, IOAPIC_RED_L(ent), lo);
+        }
     }
 }

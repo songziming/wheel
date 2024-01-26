@@ -30,6 +30,8 @@ extern CONST ioapic_t *g_ioapics;
 INIT_TEXT void parse_madt(const madt_t *madt);
 
 INIT_TEXT int get_nmi_lint(int cpu);
+
+INIT_TEXT int get_gsi_for_irq(int irq);
 INIT_TEXT int get_gsi_trigmode(int gsi); // edge=1, level=0
 INIT_TEXT int get_gsi_polarity(int gsi); // high=1, low=0
 
