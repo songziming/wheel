@@ -26,10 +26,12 @@ typedef enum local_apic_timer_mode {
 
 void local_apic_timer_set(int freq, local_apic_timer_mode_t mode);
 
+int local_apic_get_tmr(uint8_t vec);
+void local_apic_send_eoi();
+
 INIT_TEXT void local_apic_send_init(int cpu);
 INIT_TEXT void local_apic_send_sipi(int cpu, int vec);
 
-void local_apic_send_eoi();
 void local_apic_send_ipi(int cpu, int vec);
 
 #endif // CPU_LOCAL_APIC_H

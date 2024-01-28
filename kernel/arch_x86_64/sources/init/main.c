@@ -17,6 +17,7 @@
 #include <dev/console.h>
 #include <dev/framebuf.h>
 #include <dev/i8259.h>
+#include <dev/ps2keyboard.h>
 
 #include <wheel.h>
 
@@ -93,6 +94,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     acpi_tbl_t *srat = acpi_get_table("SRAT");
     if (NULL != srat) {
         klog("SRAT at %p, contains NUMA info\n", srat);
+        // 记录每个 CPU 属于哪个 NUMA domain
     }
 
     // 重要数据已备份，放开 early_rw 长度限制
@@ -285,8 +287,9 @@ static void root_proc() {
     }
 
     // TODO 启动核心系统任务，长期驻留运行（tty、键盘、PCI 设备驱动、虚拟文件系统、shell）
+    keyboard_init(); // PS/2 键盘
 
-    common_init();
+    // common_init();
 
     // TODO 回收 init section 的物理内存，并删除映射
 

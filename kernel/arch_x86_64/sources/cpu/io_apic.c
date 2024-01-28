@@ -108,7 +108,7 @@ ioapic_t *io_apic_for_gsi(uint32_t gsi) {
 
 void io_apic_set_red(uint32_t gsi, uint32_t hi, uint32_t lo) {
     ioapic_t *io = io_apic_for_gsi(gsi);
-    if (NULL != io) {
+    if (NULL == io) {
         return;
     }
 
@@ -117,16 +117,16 @@ void io_apic_set_red(uint32_t gsi, uint32_t hi, uint32_t lo) {
     io_apic_write(io->base, IOAPIC_RED_L(gsi), lo);
 }
 
-void io_apic_set_gsi(uint32_t gsi, int cpu, int vec) {
-    // 获取目标 CPU 的 LDR
-    uint32_t hi = (uint32_t)cpu << 24;
-    uint32_t lo = 0;
-    io_apic_set_red(gsi, hi, lo);
-}
+// void io_apic_set_gsi(uint32_t gsi, int cpu, int vec) {
+//     // 获取目标 CPU 的 LDR
+//     uint32_t hi = (uint32_t)cpu << 24;
+//     uint32_t lo = 0;
+//     io_apic_set_red(gsi, hi, lo);
+// }
 
 void io_apic_mask_gsi(uint32_t gsi) {
     ioapic_t *io = io_apic_for_gsi(gsi);
-    if (NULL != io) {
+    if (NULL == io) {
         return;
     }
 
@@ -138,11 +138,12 @@ void io_apic_mask_gsi(uint32_t gsi) {
 
 void io_apic_unmask_gsi(uint32_t gsi) {
     ioapic_t *io = io_apic_for_gsi(gsi);
-    if (NULL != io) {
+    if (NULL == io) {
         return;
     }
 
     gsi -= io->gsi_base;
+    klog("unmasking redirect %d on IO APIC %d\n", gsi,  io->apic_id);
     uint32_t red_lo = io_apic_read(io->base, IOAPIC_RED_L(gsi));
     red_lo &= ~IOAPIC_INT_MASK;
     io_apic_write(io->base, IOAPIC_RED_L(gsi), red_lo);
@@ -166,6 +167,8 @@ INIT_TEXT void io_apic_init(ioapic_t *io) {
     }
 }
 
+
+// 默认禁用所有硬件中断，按需开启
 INIT_TEXT void io_apic_init_all() {
     for (int i = 0; i < g_ioapic_num; ++i) {
         ioapic_t *io = &g_ioapics[i];
@@ -174,22 +177,25 @@ INIT_TEXT void io_apic_init_all() {
         int ent = 0;
         if (0 == i) {
             for (; ent < 16; ++ent) {
-                uint32_t lo = IOAPIC_DM_LOWEST; // 自动选择当前优先级最低的 CPU
+                uint32_t lo = IOAPIC_DM_LOWEST | IOAPIC_LOGICAL;
                 lo |= get_gsi_trigmode(ent) ? IOAPIC_EDGE : IOAPIC_LEVEL;
                 lo |= get_gsi_polarity(ent) ? IOAPIC_HIGH : IOAPIC_LOW;
                 lo |= (ent + VEC_GSI_BASE) & IOAPIC_VEC_MASK;
+                lo |= IOAPIC_INT_MASK;
 
-                io_apic_write(io->base, IOAPIC_RED_H(ent), 0);
+                io_apic_write(io->base, IOAPIC_RED_H(ent), 0xff000000);
+                // io_apic_write(io->base, IOAPIC_RED_H(ent), 0xfe000000); // 发送给 CPU0 之外的任意 CPU
                 io_apic_write(io->base, IOAPIC_RED_L(ent), lo);
             }
         }
 
         // IRQ 之后的硬件中断，level-triggered，active low
         for (; ent < io->ent_num; ++ent) {
-            uint32_t lo = IOAPIC_DM_LOWEST | IOAPIC_LEVEL | IOAPIC_LOW;
+            uint32_t lo = IOAPIC_DM_LOWEST | IOAPIC_LOGICAL | IOAPIC_LEVEL | IOAPIC_LOW;
             lo |= (io->gsi_base + ent + VEC_GSI_BASE) & IOAPIC_VEC_MASK;
+            lo |= IOAPIC_INT_MASK;
 
-            io_apic_write(io->base, IOAPIC_RED_H(ent), 0);
+            io_apic_write(io->base, IOAPIC_RED_H(ent), 0xff000000);
             io_apic_write(io->base, IOAPIC_RED_L(ent), lo);
         }
     }

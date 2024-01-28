@@ -12,17 +12,18 @@
 static CONST char g_cpu_vendor[12 + 1];
 static CONST char g_cpu_brand[48 + 1];
 
-static CONST uint8_t  g_cpu_stepping;
-static CONST uint8_t  g_cpu_model;
-static CONST uint8_t  g_cpu_family;
-static CONST uint8_t  g_cpu_type;
-static CONST uint8_t  g_cpu_ex_model;
-static CONST uint8_t  g_cpu_ex_family;
-
-static CONST uint32_t g_tsc_ratio[2]; // TSC/core_crystal 的倍率，分子/分母
-static CONST uint32_t g_core_freq; // 核心频率
+static CONST uint8_t g_cpu_stepping;
+static CONST uint8_t g_cpu_model;
+static CONST uint8_t g_cpu_family;
+static CONST uint8_t g_cpu_type;
+static CONST uint8_t g_cpu_ex_model;
+static CONST uint8_t g_cpu_ex_family;
 
 CONST uint32_t g_cpu_features;
+
+static CONST uint8_t g_num_ids = 1; // （超线程）逻辑处理器数量
+static CONST uint32_t g_tsc_ratio[2]; // TSC/core_crystal 的倍率，分子/分母
+static CONST uint32_t g_core_freq; // 核心频率
 
 CONST cache_info_t g_l1d_info;
 CONST cache_info_t g_l1i_info;
@@ -376,6 +377,39 @@ static INIT_TEXT void intel_get_cache_info() {
 
 
 //------------------------------------------------------------------------------
+// Intel 获取 CPU 拓扑结构
+//------------------------------------------------------------------------------
+
+static const char *DOMAIN_TYPE_NAMES[] = {
+    "",
+    "logical processor",    // 1
+    "core",                 // 2
+    "module",               // 3
+    "tile",                 // 4
+    "die",                  // 5
+    "die group",            // 6
+    "package",              // implied
+};
+
+static void intel_get_topology() {
+    uint32_t a, b, c, d;
+
+    // 按照顺序 logical processor、core、die
+    for (int domain = 0; ; ++domain) {
+        __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x18), "c"(domain));
+
+        int type = (c >> 8) & 0xff;
+        if (0 == type) {
+            break;
+        }
+
+        klog("%s, x2APIC ID shift %d\n", DOMAIN_TYPE_NAMES[type], a & 0x1f);
+        klog("%d logical processors within each %s\n", b & 0xffff, DOMAIN_TYPE_NAMES[type + 1]);
+    }
+}
+
+
+//------------------------------------------------------------------------------
 // 检测处理器型号信息
 //------------------------------------------------------------------------------
 
@@ -404,18 +438,24 @@ INIT_TEXT void cpu_info_detect() {
         }
     }
 
-    __asm__("cpuid" : "=a"(a), "=c"(c), "=d"(d) : "a"(1) : "ebx");
+    // basic information
+    g_cpu_features  = 0;
+    __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1));
     g_cpu_stepping  =  a        & 0x0f;
     g_cpu_model     = (a >>  4) & 0x0f;
     g_cpu_family    = (a >>  8) & 0x0f;
     g_cpu_type      = (a >> 12) & 0x03;
     g_cpu_ex_model  = (a >> 16) & 0x0f;
     g_cpu_ex_family = (a >> 20) & 0xff;
-    g_cpu_features  = 0;
     g_cpu_features |= (c & (1U << 17)) ? CPU_FEATURE_PCID   : 0;
     g_cpu_features |= (c & (1U << 21)) ? CPU_FEATURE_X2APIC : 0;
     g_cpu_features |= (d & (1U <<  4)) ? CPU_FEATURE_TSC    : 0;
+    g_cpu_features |= (d & (1U << 28)) ? CPU_FEATURE_HT     : 0;
+    if (g_cpu_features & CPU_FEATURE_HT) {
+        g_num_ids = (b >> 16) & 0xff;
+    }
 
+    // extended feature flags
     __asm__("cpuid" : "=b"(b) : "a"(7), "c"(0) : "edx");
     g_cpu_features |= (b &  1)         ? CPU_FEATURE_FSGSBASE : 0;
     g_cpu_features |= (b & (1U <<  7)) ? CPU_FEATURE_SMEP     : 0;
@@ -423,6 +463,7 @@ INIT_TEXT void cpu_info_detect() {
     g_cpu_features |= (b & (1U << 10)) ? CPU_FEATURE_INVPCID  : 0;
     g_cpu_features |= (b & (1U << 20)) ? CPU_FEATURE_SMAP     : 0;
 
+    // extended function
     __asm__("cpuid" : "=d"(d) : "a"(0x80000001) : "ebx", "ecx");
     g_cpu_features |= (d & (1U << 20)) ? CPU_FEATURE_NX : 0;
     g_cpu_features |= (d & (1U << 26)) ? CPU_FEATURE_1G : 0;
@@ -441,6 +482,7 @@ INIT_TEXT void cpu_info_detect() {
     // 获取各级缓存信息
     if (0 == memcmp(g_cpu_vendor, VENDOR_INTEL, 12)) {
         intel_get_cache_info();
+        intel_get_topology();
     } else if (0 == memcmp(g_cpu_vendor, VENDOR_AMD, 12)) {
         amd_get_cache_info();
     } else {
@@ -514,6 +556,7 @@ INIT_TEXT void cpu_info_show() {
     klog("  - L3 cache #color %zu\n", g_l3_info.line_size * g_l3_info.sets >> PAGE_SHIFT);
 
     klog("  - core crystal freq %u, TSC ratio %u/%u\n", g_core_freq, g_tsc_ratio[0], g_tsc_ratio[1]);
+    klog("  - %d logical processors in physical package\n", g_num_ids);
 
     static const struct {
         const char *name;
@@ -522,6 +565,7 @@ INIT_TEXT void cpu_info_show() {
         { "pcid",     CPU_FEATURE_PCID      },
         { "x2apic",   CPU_FEATURE_X2APIC    },
         { "tsc",      CPU_FEATURE_TSC       },
+        { "ht",       CPU_FEATURE_HT        },
         { "nx",       CPU_FEATURE_NX        },
         { "pdpe1gb",  CPU_FEATURE_1G        },
         { "arat",     CPU_FEATURE_ARAT      },

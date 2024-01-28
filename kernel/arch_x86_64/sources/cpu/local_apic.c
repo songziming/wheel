@@ -124,6 +124,13 @@ static void x_write_icr(uint32_t dst, uint32_t lo) {
     x_write(REG_ICR_LO, lo);
 }
 
+// x2APIC 使用 MSR，而且会被 CPU 乱序执行
+// 为了安全，写寄存器前加上 memory fence，确保内存读写有序
+// 目的是读写 Local APIC 寄存器的顺序必须和代码中的顺序一致
+
+// TODO 每个 wrmsr 之前都加 mfence 也许太严格了
+//      只有 spurious 等几个关键寄存器的读写需要有序
+
 static uint32_t x2_read(reg_t reg) {
     ASSERT(REG_DFR != reg);
     return (uint32_t)(read_msr(0x800 + reg) & 0xffffffff);
@@ -131,6 +138,7 @@ static uint32_t x2_read(reg_t reg) {
 
 static void x2_write(reg_t reg, uint32_t val) {
     ASSERT(REG_DFR != reg);
+    cpu_rwfence();
     write_msr(0x800 + reg, val);
 }
 
@@ -140,6 +148,7 @@ static void x2_write(reg_t reg, uint32_t val) {
 
 static void x2_write_icr(uint32_t id, uint32_t lo) {
     uint64_t val = (uint64_t)id << 32 | lo;
+    cpu_rwfence();
     write_msr(0x800 + REG_ICR_LO, val);
 }
 
@@ -224,20 +233,56 @@ INIT_TEXT void local_apic_init(local_apic_type_t type) {
     msr_base |= LOAPIC_MSR_EN;
     write_msr(IA32_APIC_BASE, msr_base);
 
-    // 注册中断处理函数
-    set_int_handler(VEC_LOAPIC_TIMER, handle_timer);
-    set_int_handler(VEC_LOAPIC_ERROR, handle_error);
-    set_int_handler(VEC_LOAPIC_SPURIOUS, handle_spurious);
-
-    // 设置 DFR、LDR、TPR
-    if (0 == (CPU_FEATURE_X2APIC & g_cpu_features)) {
-        g_write(REG_DFR, 0xffffffff);
-
-        // LDR[31:16] 表示 clusterID
-        // LDR[15:0] 表示 logicalID
-        g_write(REG_LDR, cpu_index() << 16);
+    // 检查版本号
+    if (LOCAL_APIC_BSP == type) {
+        uint32_t ver = g_read(REG_VER);
+        int lvt_max = (ver >> 16) & 0xff;
+        klog("Local APIC version %d, %d LVT\n", ver & 0xff, lvt_max + 1);
+        if (ver & (1 << 24)) {
+            // 可以让 Local APIC 不发送 EOI 给 IO APIC，而是由 kernel 自己发送
+            // 但我们不使用这个功能
+            klog("supports EOI-broadcast suppression\n");
+        }
     }
-    g_write(REG_TPR, 16);   // 屏蔽中断号 0~31
+
+    // 注册中断处理函数
+    if (LOCAL_APIC_BSP == type) {
+        set_int_handler(VEC_LOAPIC_TIMER, handle_timer);
+        set_int_handler(VEC_LOAPIC_ERROR, handle_error);
+        set_int_handler(VEC_LOAPIC_SPURIOUS, handle_spurious);
+    }
+
+    // 设置 DFR、LDR，根据 CPU 个数分类讨论
+    // TODO 获取处理器的拓扑结构，按拓扑结构分组
+    // TODO 解析 MADT 之后就可以提前分配好 logical ID
+    if (0 == (CPU_FEATURE_X2APIC & g_cpu_features)) {
+        if (g_loapic_num <= 8) {
+            // 正好每个 CPU 对应一个比特
+            g_write(REG_DFR, 0xffffffff); // flat model
+            g_write(REG_LDR, 1 << (24 + cpu_index()));
+            klog("setting LDR to 0x%x\n", 1 << (24 + cpu_index()));
+        } else if (g_loapic_num <= 60) {
+            // 必须分组，每个组最多 4 个 CPU
+            int id = cpu_index();
+            uint32_t logical = ((id / 4) << 4) | (1 << (id % 4));
+            g_write(REG_DFR, 0x0fffffff); // cluster model
+            g_write(REG_LDR, logical << 24);
+        } else {
+            // 还不够，只能让多个 CPU 使用相同的 Logical ID
+            klog("fatal: too much processors!\n");
+            emu_exit(1);
+        }
+    } else {
+        // x2APIC 没有 DFR，只能处于 cluster model
+        // LDR 也扩展为 32-bit，而且只读
+        // 高 16-bit 表示 cluster ID，最多允许 65535 个 cluster
+        // 每个 cluster 最多可以有 16 个不同 ID 的 CPU
+        uint32_t ldr = g_read(REG_LDR);
+        klog("x2APIC logical cluster %d, id 0x%x\n", ldr >> 16, ldr & 0xffff);
+    }
+
+    // 屏蔽中断号 0~31
+    g_write(REG_TPR, 16);
 
     // 设置 LINT0、LINT1，参考 Intel MultiProcessor Spec 第 5.1 节
     // LINT0 连接到 8259A，但连接到 8259A 的设备也连接到 IO APIC，可以不设置
@@ -398,6 +443,21 @@ INIT_TEXT void local_apic_busywait(int us) {
 }
 
 
+//------------------------------------------------------------------------------
+// 公开 API
+//------------------------------------------------------------------------------
+
+int local_apic_get_tmr(uint8_t vec) {
+    int reg = vec / 32;
+    int bit = vec % 32;
+    uint32_t val = g_read(REG_TMR + reg);
+    return (val >> bit) & 1;
+}
+
+void local_apic_send_eoi() {
+    g_write(REG_EOI, 0);
+}
+
 
 //------------------------------------------------------------------------------
 // 发送 IPI
@@ -421,10 +481,6 @@ INIT_TEXT void local_apic_send_sipi(int cpu, int vec) {
 
     uint32_t lo = (vec & 0xff) | LOAPIC_DM_STARTUP | LOAPIC_EDGE | LOAPIC_ASSERT;
     g_write_icr(g_loapics[cpu].apic_id, lo);
-}
-
-void local_apic_send_eoi() {
-    g_write(REG_EOI, 0);
 }
 
 void local_apic_send_ipi(int cpu, int vec) {
