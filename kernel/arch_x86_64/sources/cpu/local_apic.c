@@ -233,6 +233,7 @@ INIT_TEXT void local_apic_init(local_apic_type_t type) {
         }
         msr_base |= LOAPIC_MSR_EXTD;
         write_msr(IA32_APIC_BASE, msr_base);
+        write_msr(IA32_APIC_BASE, msr_base); // bochs 必须第二次写base，LDR才能生效
     } else {
         // TODO 将映射的内存，标记为不可缓存，通过页表属性位或 mtrr 实现
     }
@@ -283,7 +284,7 @@ INIT_TEXT void local_apic_init(local_apic_type_t type) {
         // 每个 cluster 最多可以有 16 个不同 ID 的 CPU
         cpu_rwfence();
         uint32_t ldr = g_read(REG_LDR);
-        klog("x2APIC ldr 0x%x\n", ldr);
+        klog("x2APIC ldr 0x%x, id %d\n", ldr, g_read(REG_ID));
     }
 
     // 屏蔽中断号 0~31
