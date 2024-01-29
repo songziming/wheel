@@ -27,6 +27,16 @@ static inline void out16(uint16_t port, uint16_t data) {
     __asm__ volatile("outw %0, %1" :: "a"(data), "Nd"(port));
 }
 
+static inline uint32_t in32(uint16_t port) {
+    uint32_t data;
+    __asm__ volatile("inl %1, %0" : "=a"(data) : "Nd"(port));
+    return data;
+}
+
+static inline void out32(uint16_t port, uint32_t data) {
+    __asm__ volatile("outl %0, %1" :: "a"(data), "Nd"(port));
+}
+
 static inline void io_wait() {
     __asm__ volatile("outb %%al, $0x80" :: "a"(0));
 }

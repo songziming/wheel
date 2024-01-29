@@ -212,9 +212,19 @@ static void handle_error(int vec, arch_regs_t *f) {
 //------------------------------------------------------------------------------
 
 INIT_TEXT void local_apic_init(local_apic_type_t type) {
-    uint64_t msr_base = g_loapic_addr & LOAPIC_MSR_BASE;
+    // 开启 loapic（尚未真的启用，还要设置 spurious reg）
+    uint64_t msr_base = read_msr(IA32_APIC_BASE); // g_loapic_addr & LOAPIC_MSR_BASE;
+    if ((msr_base & LOAPIC_MSR_BASE) != g_loapic_addr) {
+        klog("warning: LAPIC base different!\n");
+    }
+    // if (LOCAL_APIC_BSP == type) {
+    //     msr_base |= LOAPIC_MSR_BSP;
+    // }
+    msr_base |= LOAPIC_MSR_EN;
+    write_msr(IA32_APIC_BASE, msr_base);
 
     // 如果支持 x2APIC，则启用
+    // 必须分成两步，先启用 xAPIC，再切到 x2APIC 模式
     if (CPU_FEATURE_X2APIC & g_cpu_features) {
         if (LOCAL_APIC_BSP == type) {
             g_read = x2_read;
@@ -222,16 +232,10 @@ INIT_TEXT void local_apic_init(local_apic_type_t type) {
             g_write_icr = x2_write_icr;
         }
         msr_base |= LOAPIC_MSR_EXTD;
+        write_msr(IA32_APIC_BASE, msr_base);
     } else {
         // TODO 将映射的内存，标记为不可缓存，通过页表属性位或 mtrr 实现
     }
-
-    // 开启 loapic（尚未真的启用，还要设置 spurious reg）
-    if (LOCAL_APIC_BSP == type) {
-        msr_base |= LOAPIC_MSR_BSP;
-    }
-    msr_base |= LOAPIC_MSR_EN;
-    write_msr(IA32_APIC_BASE, msr_base);
 
     // 检查版本号
     if (LOCAL_APIC_BSP == type) {
@@ -277,8 +281,9 @@ INIT_TEXT void local_apic_init(local_apic_type_t type) {
         // LDR 也扩展为 32-bit，而且只读
         // 高 16-bit 表示 cluster ID，最多允许 65535 个 cluster
         // 每个 cluster 最多可以有 16 个不同 ID 的 CPU
+        cpu_rwfence();
         uint32_t ldr = g_read(REG_LDR);
-        klog("x2APIC logical cluster %d, id 0x%x\n", ldr >> 16, ldr & 0xffff);
+        klog("x2APIC ldr 0x%x\n", ldr);
     }
 
     // 屏蔽中断号 0~31
