@@ -64,6 +64,9 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     serial_init();
     set_log_func(serial_puts);
 
+    cpu_info_detect(); // 检测 CPU 特性
+    cpu_features_init(); // 开启 CPU 功能
+
     // 解析 multiboot 信息
     switch (eax) {
     case MB1_BOOTLOADER_MAGIC: mb1_init(ebx); break;
@@ -109,9 +112,6 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         console_init();
         set_log_func(serial_console_puts);
     }
-
-    cpu_info_detect(); // 检测 CPU 特性
-    cpu_features_init(); // 开启 CPU 功能
 
 #ifdef DEBUG
     acpi_show_tables();

@@ -143,7 +143,6 @@ void io_apic_unmask_gsi(uint32_t gsi) {
     }
 
     gsi -= io->gsi_base;
-    klog("unmasking redirect %d on IO APIC %d\n", gsi,  io->apic_id);
     uint32_t red_lo = io_apic_read(io->base, IOAPIC_RED_L(gsi));
     red_lo &= ~IOAPIC_INT_MASK;
     io_apic_write(io->base, IOAPIC_RED_L(gsi), red_lo);
@@ -151,8 +150,6 @@ void io_apic_unmask_gsi(uint32_t gsi) {
 
 INIT_TEXT void io_apic_init(ioapic_t *io) {
     io->base = io->address + DIRECT_MAP_ADDR;
-    klog("IO APIC id=%d, mapped at 0x%lx, virtual 0x%lx\n",
-        io->apic_id, io->address, io->base);
 
     uint32_t id = io_apic_read(io->base, IOAPIC_ID);
     uint32_t ver = io_apic_read(io->base, IOAPIC_VER);

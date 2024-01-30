@@ -1,4 +1,6 @@
 // 读写 PCI 总线上的设备
+// PCI 是一种通用总线，并非 x86 专属
+// 可以在这里提供基础读写接口，common 模块实现设备枚举逻辑
 
 #include <dev/pci.h>
 #include <wheel.h>
@@ -51,30 +53,47 @@ static void pci_write(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg, uint3
 //------------------------------------------------------------------------------
 
 
-void pci_parse_func(uint8_t bus, uint8_t dev, uint8_t func) {
-    uint32_t reg2  = pci_read(bus, dev, func, 8);
-    uint16_t ccode = (reg2 >> 16) & 0xffff;  // base and sub class code
-    uint8_t  prog  = (reg2 >>  8) & 0xff;    // programming interface
+// // 设备存在返回 1，不存在返回 0
+// int pci_parse_func(uint8_t bus, uint8_t dev, uint8_t func) {
+//     uint32_t reg0 = pci_read(bus, dev, func, 0);
+//     uint16_t vendor = reg0 & 0xffff;
+//     uint16_t device = reg0 >> 16;
+//     if (0xffff == vendor) {
+//         return 0;
+//     }
 
-    klog("found pci device 0x%04x, prog if %d.\n", ccode, prog);
+//     uint32_t reg2  = pci_read(bus, dev, func, 8);
+//     uint16_t ccode = (reg2 >> 16) & 0xffff;  // base and sub class code
+//     uint8_t  prog  = (reg2 >>  8) & 0xff;    // programming interface
 
-    // TODO 准备一个 PCI 设备编号数据表，可以注册驱动程序
-    //      探测到新的 PCI 设备就从数据表中获取驱动
-}
+//     klog("found pci device 0x%04x, prog if %d.\n", ccode, prog);
+
+//     // TODO 准备一个 PCI 设备编号数据表，可以注册驱动程序
+//     //      探测到新的 PCI 设备就从数据表中获取驱动
+// }
 
 void pci_walk_dev(uint8_t bus, uint8_t dev) {
-    if (0xffff == (pci_read(bus, dev, 0, 0) & 0xffff)) {
+    uint32_t reg0 = pci_read(bus, dev, 0, 0);
+    uint16_t vendor = reg0 & 0xffff;
+    uint16_t device = (reg0 >> 16) & 0xffff;
+    if (0xffff == vendor) {
         return; // 设备不存在
     }
-    pci_parse_func(bus, dev, 0);
+
+    klog("+ pci vendor=%04x device=%04x %d:%d:0.\n", vendor, device, bus, dev);
 
     // 该设备可能有多个 function
-    if (pci_read(bus, dev, 0, 12) & (1 << 23)) {
+    uint32_t reg2 = pci_read(bus, dev, 0, 12);
+    if (reg2 & (1 << 23)) {
         for (uint8_t func = 1; func < 8; ++func) {
-            if (0xffff == (pci_read(bus, dev, 0, 0) & 0xffff)) {
+            reg0 = pci_read(bus, dev, func, 0);
+            vendor = reg0 & 0xffff;
+            device = (reg0 >> 16) & 0xffff;
+            if (0xffff == vendor) {
                 continue;
             }
-            pci_parse_func(bus, dev, func);
+
+            klog("+ pci vendor=%04x device=%04x %d:%d:%d.\n", vendor, device, bus, dev, func);
         }
     }
 }

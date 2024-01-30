@@ -311,6 +311,9 @@ INIT_TEXT void local_apic_init() {
 #define PIT_CH2 0x42
 #define PIT_CMD 0x43
 
+// time stamp counter 频率
+static CONST uint64_t g_tsc_freq = 0;
+
 // 等待 50ms，计算一秒钟对应多少周期
 // 同时还计算了 tsc 速度（tsc 可能睿频，导致速度不准）
 static INIT_TEXT uint32_t calibrate_using_pit_03() {
@@ -366,8 +369,8 @@ static INIT_TEXT uint32_t calibrate_using_pit_03() {
     out8(0x61, in8(0x61) & ~1);
 
     // TSC 频率可以保存下来，也许有用
-    int64_t g_tsc_freq = (end_tsc - start_tsc) * 20;
-    klog("calibrated tsc freq %ld\n", g_tsc_freq);
+    g_tsc_freq = (end_tsc - start_tsc) * 20;
+    // klog("calibrated tsc freq %ld\n", g_tsc_freq);
 
     // 返回 APIC Timer 频率
     return (start_count - end_count) * 20;  // 1s = 20 * 50ms
@@ -395,7 +398,7 @@ void local_apic_timer_set(int freq, local_apic_timer_mode_t mode) {
 
     if (0 == g_timer_freq) {
         g_timer_freq = calibrate_using_pit_03();
-        klog("calibrated apic timer freq %u\n", g_timer_freq);
+        // klog("calibrated apic timer freq %u\n", g_timer_freq);
     }
 
     uint32_t lvt = LOAPIC_DM_FIXED | VEC_LOAPIC_TIMER;
