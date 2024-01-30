@@ -292,6 +292,10 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
             break;
         }
     }
+
+    // TODO 统计最大的 apic_id 取值，检查是否超过 256
+    //      如果超过 256 且硬件没有 interrupt remapper，则不能使用 x2APIC
+    //      需要在初始化 Local APIC 之前决定
 }
 
 inline int cpu_count() {

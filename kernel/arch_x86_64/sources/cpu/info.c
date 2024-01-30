@@ -9,6 +9,8 @@
 #define VENDOR_INTEL "GenuineIntel"
 #define VENDOR_AMD   "AuthenticAMD"
 
+static CONST uint32_t g_max_cpuid_eax;
+
 static CONST char g_cpu_vendor[12 + 1];
 static CONST char g_cpu_brand[48 + 1];
 
@@ -391,8 +393,12 @@ static const char *DOMAIN_TYPE_NAMES[] = {
     "package",              // implied
 };
 
-static void intel_get_topology() {
+
+static INIT_TEXT void intel_get_topology() {
     uint32_t a, b, c, d;
+
+    // 首先尝试 cpuid eax=0x1f
+    // 如果不支持，再尝试 cpuid eax=0x0b
 
     // 按照顺序 logical processor、core、die
     for (int domain = 0; ; ++domain) {
@@ -410,6 +416,30 @@ static void intel_get_topology() {
 
 
 //------------------------------------------------------------------------------
+// AMD 检测虚拟化支持（SVM，Secure Virtual Machine，也称 AMD-V）
+//------------------------------------------------------------------------------
+
+static INIT_TEXT void amd_detect_svm() {
+    uint32_t c;
+
+    __asm__("cpuid" : "=c"(c) : "a"(0x80000001) : "ebx", "edx");
+    g_cpu_features |= (c & (1U << 2)) ? CPU_FEATURE_SVM : 0;
+}
+
+
+//------------------------------------------------------------------------------
+// Intel 检测虚拟化支持（VMX，也称 VT-d）
+//------------------------------------------------------------------------------
+
+static INIT_TEXT void intel_detect_vmx() {
+    uint32_t c;
+
+    __asm__("cpuid" : "=c"(c) : "a"(1) : "ebx", "edx");
+    g_cpu_features |= (c & (1U << 5)) ? CPU_FEATURE_VMX : 0;
+}
+
+
+//------------------------------------------------------------------------------
 // 检测处理器型号信息
 //------------------------------------------------------------------------------
 
@@ -417,7 +447,8 @@ INIT_TEXT void cpu_info_detect() {
     uint32_t a, b, c, d;
 
     // 获取生产商和型号字符串
-    __asm__("cpuid" : "=b"(b), "=c"(c), "=d"(d) : "a"(0));
+    __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0));
+    g_max_cpuid_eax = a;
     memcpy(g_cpu_vendor, (uint32_t[]){ b,d,c }, 12);
     __asm__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000002));
     memcpy(g_cpu_brand, (uint32_t[]){ a,b,c,d }, 16);
@@ -447,6 +478,7 @@ INIT_TEXT void cpu_info_detect() {
     g_cpu_type      = (a >> 12) & 0x03;
     g_cpu_ex_model  = (a >> 16) & 0x0f;
     g_cpu_ex_family = (a >> 20) & 0xff;
+    g_cpu_features |= (c & (1U <<  5)) ? CPU_FEATURE_VMX    : 0;
     g_cpu_features |= (c & (1U << 17)) ? CPU_FEATURE_PCID   : 0;
     g_cpu_features |= (c & (1U << 21)) ? CPU_FEATURE_X2APIC : 0;
     g_cpu_features |= (d & (1U <<  4)) ? CPU_FEATURE_TSC    : 0;
@@ -483,8 +515,10 @@ INIT_TEXT void cpu_info_detect() {
     if (0 == memcmp(g_cpu_vendor, VENDOR_INTEL, 12)) {
         intel_get_cache_info();
         intel_get_topology();
+        intel_detect_vmx();
     } else if (0 == memcmp(g_cpu_vendor, VENDOR_AMD, 12)) {
         amd_get_cache_info();
+        amd_detect_svm();
     } else {
         klog("unknown vendor name '%.12s'\n", g_cpu_vendor);
     }
@@ -574,6 +608,8 @@ INIT_TEXT void cpu_info_show() {
         { "smap",     CPU_FEATURE_SMAP      },
         { "fsgsbase", CPU_FEATURE_FSGSBASE  },
         { "feedback", CPU_FEATURE_FEEDBACK  },
+        { "vmx",      CPU_FEATURE_VMX       },
+        { "svm",      CPU_FEATURE_SVM       },
     };
     size_t nfeats = sizeof(FEATS) / sizeof(FEATS[0]);
 

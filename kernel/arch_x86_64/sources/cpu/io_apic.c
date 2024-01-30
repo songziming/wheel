@@ -151,11 +151,13 @@ void io_apic_unmask_gsi(uint32_t gsi) {
 
 INIT_TEXT void io_apic_init(ioapic_t *io) {
     io->base = io->address + DIRECT_MAP_ADDR;
+    klog("IO APIC id=%d, mapped at 0x%lx, virtual 0x%lx\n",
+        io->apic_id, io->address, io->base);
 
     uint32_t id = io_apic_read(io->base, IOAPIC_ID);
     uint32_t ver = io_apic_read(io->base, IOAPIC_VER);
 
-    if (id != io->apic_id) {
+    if (((id >> 24) & 0x0f) != io->apic_id) {
         klog("warning: IO APIC id %u different from MADT (%u)\n", id, io->apic_id);
     }
 

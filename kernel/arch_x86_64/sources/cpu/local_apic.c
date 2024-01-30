@@ -211,47 +211,51 @@ static void handle_error(int vec, arch_regs_t *f) {
 // 初始化
 //------------------------------------------------------------------------------
 
-INIT_TEXT void local_apic_init(local_apic_type_t type) {
-    // 开启 loapic（尚未真的启用，还要设置 spurious reg）
-    uint64_t msr_base = read_msr(IA32_APIC_BASE); // g_loapic_addr & LOAPIC_MSR_BASE;
+INIT_TEXT void local_apic_init() {
+    int ix = cpu_index();
+    loapic_t *lo = &g_loapics[ix];
+
+    // 开启 local APIC，进入 xAPIC 模式
+    uint64_t msr_base = read_msr(IA32_APIC_BASE);
     if ((msr_base & LOAPIC_MSR_BASE) != g_loapic_addr) {
-        klog("warning: LAPIC base different!\n");
+        klog("warning: Local APIC base different!\n");
+        msr_base &= LOAPIC_MSR_BASE;
+        msr_base |= g_loapic_addr & LOAPIC_MSR_BASE;
     }
-    // if (LOCAL_APIC_BSP == type) {
-    //     msr_base |= LOAPIC_MSR_BSP;
-    // }
+    if (0 == ix) {
+        msr_base |= LOAPIC_MSR_BSP;
+    }
     msr_base |= LOAPIC_MSR_EN;
     write_msr(IA32_APIC_BASE, msr_base);
 
-    // 如果支持 x2APIC，则启用
-    // 必须分成两步，先启用 xAPIC，再切到 x2APIC 模式
+    // 如果支持 x2APIC，则启用（必须分成两步，先进入 xAPIC，再切到 x2APIC）
     if (CPU_FEATURE_X2APIC & g_cpu_features) {
-        if (LOCAL_APIC_BSP == type) {
+        if (0 == ix) {
             g_read = x2_read;
             g_write = x2_write;
             g_write_icr = x2_write_icr;
         }
         msr_base |= LOAPIC_MSR_EXTD;
         write_msr(IA32_APIC_BASE, msr_base);
-        write_msr(IA32_APIC_BASE, msr_base); // bochs 必须第二次写base，LDR才能生效
+        write_msr(IA32_APIC_BASE, msr_base); // bochs bug， 必须第二次写base，LDR才能生效
     } else {
         // TODO 将映射的内存，标记为不可缓存，通过页表属性位或 mtrr 实现
     }
 
-    // 检查版本号
-    if (LOCAL_APIC_BSP == type) {
-        uint32_t ver = g_read(REG_VER);
-        int lvt_max = (ver >> 16) & 0xff;
-        klog("Local APIC version %d, %d LVT\n", ver & 0xff, lvt_max + 1);
-        if (ver & (1 << 24)) {
-            // 可以让 Local APIC 不发送 EOI 给 IO APIC，而是由 kernel 自己发送
-            // 但我们不使用这个功能
-            klog("supports EOI-broadcast suppression\n");
-        }
-    }
+    // // 检查版本号
+    // if (0 == ix) {
+    //     uint32_t ver = g_read(REG_VER);
+    //     int lvt_max = (ver >> 16) & 0xff;
+    //     klog("Local APIC version %d, %d LVT\n", ver & 0xff, lvt_max + 1);
+    //     if (ver & (1 << 24)) {
+    //         // 可以让 Local APIC 不发送 EOI 给 IO APIC，而是由 kernel 自己发送
+    //         // 但我们不使用这个功能
+    //         klog("supports EOI-broadcast suppression\n");
+    //     }
+    // }
 
     // 注册中断处理函数
-    if (LOCAL_APIC_BSP == type) {
+    if (0 == ix) {
         set_int_handler(VEC_LOAPIC_TIMER, handle_timer);
         set_int_handler(VEC_LOAPIC_ERROR, handle_error);
         set_int_handler(VEC_LOAPIC_SPURIOUS, handle_spurious);
@@ -263,15 +267,17 @@ INIT_TEXT void local_apic_init(local_apic_type_t type) {
     if (0 == (CPU_FEATURE_X2APIC & g_cpu_features)) {
         if (g_loapic_num <= 8) {
             // 正好每个 CPU 对应一个比特
+            lo->cluster_id = 0;
+            lo->logical_id = 1 << cpu_index();
             g_write(REG_DFR, 0xffffffff); // flat model
-            g_write(REG_LDR, 1 << (24 + cpu_index()));
-            klog("setting LDR to 0x%x\n", 1 << (24 + cpu_index()));
+            g_write(REG_LDR, lo->logical_id << 24);
         } else if (g_loapic_num <= 60) {
             // 必须分组，每个组最多 4 个 CPU
-            int id = cpu_index();
-            uint32_t logical = ((id / 4) << 4) | (1 << (id % 4));
+            lo->cluster_id = ix / 4;
+            lo->logical_id = ix % 4;
+            uint32_t ldr = (lo->cluster_id << 4) | lo->logical_id;
             g_write(REG_DFR, 0x0fffffff); // cluster model
-            g_write(REG_LDR, logical << 24);
+            g_write(REG_LDR, ldr << 24);
         } else {
             // 还不够，只能让多个 CPU 使用相同的 Logical ID
             klog("fatal: too much processors!\n");
@@ -280,11 +286,10 @@ INIT_TEXT void local_apic_init(local_apic_type_t type) {
     } else {
         // x2APIC 没有 DFR，只能处于 cluster model
         // LDR 也扩展为 32-bit，而且只读
-        // 高 16-bit 表示 cluster ID，最多允许 65535 个 cluster
-        // 每个 cluster 最多可以有 16 个不同 ID 的 CPU
         cpu_rwfence();
         uint32_t ldr = g_read(REG_LDR);
-        klog("x2APIC ldr 0x%x, id %d\n", ldr, g_read(REG_ID));
+        lo->cluster_id = ldr >> 16;
+        lo->logical_id = ldr & 0xffff;
     }
 
     // 屏蔽中断号 0~31
@@ -294,7 +299,7 @@ INIT_TEXT void local_apic_init(local_apic_type_t type) {
     // LINT0 连接到 8259A，但连接到 8259A 的设备也连接到 IO APIC，可以不设置
     // LINT1 连接到 NMI，我们只需要 BSP 能够处理 NMI
 
-    if (LOCAL_APIC_BSP == type) {
+    if (0 == ix) {
         g_write(REG_LVT_LINT1, LOAPIC_LEVEL | LOAPIC_DM_NMI);
     }
     g_write(REG_LVT_ERROR, VEC_LOAPIC_ERROR);

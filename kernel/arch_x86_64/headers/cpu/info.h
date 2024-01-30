@@ -16,6 +16,8 @@
 #define CPU_FEATURE_SMEP        0x0400  // 特权模式禁止执行用户页面的指令（防代码注入）
 #define CPU_FEATURE_SMAP        0x0800  // 特权模式禁止访问用户页面的数据（防数据注入）
 #define CPU_FEATURE_FEEDBACK    0x1000  // 大小核架构下，支持硬件调度反馈
+#define CPU_FEATURE_VMX         0x2000  // Intel VMX 虚拟化扩展
+#define CPU_FEATURE_SVM         0x4000  // AMD SVM 虚拟化扩展
 
 typedef struct cache_info {
     size_t line_size;
