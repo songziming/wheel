@@ -235,24 +235,14 @@ INIT_TEXT void local_apic_init() {
             g_write = x2_write;
             g_write_icr = x2_write_icr;
         }
+
+        // bochs bug，启用 x2APIC 后再次写入 base，LDR 才能生效
         msr_base |= LOAPIC_MSR_EXTD;
         write_msr(IA32_APIC_BASE, msr_base);
-        write_msr(IA32_APIC_BASE, msr_base); // bochs bug， 必须第二次写base，LDR才能生效
+        write_msr(IA32_APIC_BASE, msr_base);
     } else {
         // TODO 将映射的内存，标记为不可缓存，通过页表属性位或 mtrr 实现
     }
-
-    // // 检查版本号
-    // if (0 == ix) {
-    //     uint32_t ver = g_read(REG_VER);
-    //     int lvt_max = (ver >> 16) & 0xff;
-    //     klog("Local APIC version %d, %d LVT\n", ver & 0xff, lvt_max + 1);
-    //     if (ver & (1 << 24)) {
-    //         // 可以让 Local APIC 不发送 EOI 给 IO APIC，而是由 kernel 自己发送
-    //         // 但我们不使用这个功能
-    //         klog("supports EOI-broadcast suppression\n");
-    //     }
-    // }
 
     // 注册中断处理函数
     if (0 == ix) {
@@ -262,9 +252,9 @@ INIT_TEXT void local_apic_init() {
     }
 
     // 设置 DFR、LDR，根据 CPU 个数分类讨论
-    // TODO 获取处理器的拓扑结构，按拓扑结构分组
-    // TODO 解析 MADT 之后就可以提前分配好 logical ID
     if (0 == (CPU_FEATURE_X2APIC & g_cpu_features)) {
+        // TODO 获取处理器的拓扑结构，按拓扑结构分组
+        // TODO 解析 MADT 之后就可以提前分配好 logical ID
         if (g_loapic_num <= 8) {
             // 正好每个 CPU 对应一个比特
             lo->cluster_id = 0;

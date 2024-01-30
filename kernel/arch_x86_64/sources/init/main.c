@@ -18,6 +18,7 @@
 #include <dev/framebuf.h>
 #include <dev/i8259.h>
 #include <dev/ps2keyboard.h>
+#include <dev/pci.h>
 
 #include <wheel.h>
 
@@ -252,10 +253,6 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
 // layout.ld
 char _real_addr;
 char _real_end;
-
-
-// pci.c
-void pci_walk_bus(uint8_t bus);
 
 
 // 第一个开始运行的任务

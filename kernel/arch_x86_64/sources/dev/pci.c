@@ -1,5 +1,6 @@
 // 读写 PCI 总线上的设备
 
+#include <dev/pci.h>
 #include <wheel.h>
 #include <cpu/rw.h>
 
