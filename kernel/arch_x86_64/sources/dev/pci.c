@@ -8,6 +8,10 @@
 
 
 
+CONST uint32_t (*g_pci_read)(uint8_t, uint8_t, uint8_t, uint8_t) = NULL;
+CONST uint32_t (*g_pci_write)(uint8_t, uint8_t, uint8_t, uint8_t, uint32_t) = NULL;
+
+
 //------------------------------------------------------------------------------
 // PCI 读写配置空间
 //------------------------------------------------------------------------------
@@ -101,5 +105,21 @@ void pci_walk_dev(uint8_t bus, uint8_t dev) {
 void pci_walk_bus(uint8_t bus) {
     for (uint8_t dev = 0; dev < 32; ++dev) {
         pci_walk_dev(bus, dev);
+    }
+}
+
+
+
+
+
+void pci_add_driver(pci_driver_t *drv) {
+    klog("registering driver %04x:%04x (%s)\n", drv->vendor_id, drv->device_id, drv->name);
+}
+
+INIT_TEXT void pci_init(mcfg_t *mcfg) {
+    if (NULL == mcfg) {
+        g_pci_read = pci_read;
+        g_pci_write = pci_write;
+        return;
     }
 }
