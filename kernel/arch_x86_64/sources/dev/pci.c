@@ -9,7 +9,7 @@
 
 
 CONST uint32_t (*g_pci_read)(uint8_t, uint8_t, uint8_t, uint8_t) = NULL;
-CONST uint32_t (*g_pci_write)(uint8_t, uint8_t, uint8_t, uint8_t, uint32_t) = NULL;
+CONST void (*g_pci_write)(uint8_t, uint8_t, uint8_t, uint8_t, uint32_t) = NULL;
 
 
 //------------------------------------------------------------------------------
@@ -112,8 +112,12 @@ void pci_walk_bus(uint8_t bus) {
 
 
 
+static rbtree_t pci_drivers = RBTREE_INIT;
+
 void pci_add_driver(pci_driver_t *drv) {
     klog("registering driver %04x:%04x (%s)\n", drv->vendor_id, drv->device_id, drv->name);
+
+    // rbtree_insert(&pci_drivers, &drv->rb);
 }
 
 INIT_TEXT void pci_init(mcfg_t *mcfg) {
