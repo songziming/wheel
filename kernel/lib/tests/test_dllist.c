@@ -5,10 +5,10 @@
 #include "../sources/dllist.c"
 
 
-typedef struct myitem {
+typedef struct listitem {
     dlnode_t dl;
     int      val;
-} myitem_t;
+} listitem_t;
 
 // 头节点本身也是一个节点，位于链表中
 static dlnode_t myhead;
@@ -20,48 +20,50 @@ static void setup() {
 static void teardown() {
     dlnode_t *node = myhead.next;
     while (node != &myhead) {
-        myitem_t *item = containerof(node, myitem_t, dl);
+        listitem_t *item = containerof(node, listitem_t, dl);
         node = node->next;
         free(item);
     }
 }
 
-static myitem_t *new_item(int val) {
-    myitem_t *item = malloc(sizeof(myitem_t));
-    memset(&item->dl, 0, sizeof(dlnode_t));
+static listitem_t *new_item(int val) {
+    listitem_t *item = malloc(sizeof(listitem_t));
+    item->dl = DLNODE_INIT;
     item->val = val;
     return item;
 }
 
-static myitem_t *push_head(myitem_t *item) {
+static listitem_t *push_head(listitem_t *item) {
     EXPECT_TRUE(!dl_contains(&myhead, &item->dl));
     dl_insert_after(&item->dl, &myhead);
     return item;
 }
 
-static myitem_t *push_tail(myitem_t *item) {
+static listitem_t *push_tail(listitem_t *item) {
     EXPECT_TRUE(!dl_contains(&myhead, &item->dl));
     dl_insert_before(&item->dl, &myhead);
     return item;
 }
 
-static myitem_t *pop_head() {
-    if (myhead.next == &myhead) {
+static listitem_t *pop_head() {
+    dlnode_t *node = myhead.next;
+    if (&myhead == node) {
         return NULL;
     }
-    dlnode_t *node = dl_remove(myhead.next);
-    return containerof(node, myitem_t, dl);
+    dl_remove(node);
+    return containerof(node, listitem_t, dl);
 }
 
-static myitem_t *pop_tail() {
-    if (myhead.prev == &myhead) {
+static listitem_t *pop_tail() {
+    dlnode_t *node = myhead.prev;
+    if (&myhead == node) {
         return NULL;
     }
-    dlnode_t *node = dl_remove(myhead.prev);
-    return containerof(node, myitem_t, dl);
+    dl_remove(node);
+    return containerof(node, listitem_t, dl);
 }
 
-myitem_t *insert_before(myitem_t *item, myitem_t *ref) {
+listitem_t *insert_before(listitem_t *item, listitem_t *ref) {
     EXPECT_TRUE(!dl_contains(&myhead, &item->dl));
     if (NULL == ref) {
         dl_insert_before(&item->dl, &myhead);
@@ -72,7 +74,7 @@ myitem_t *insert_before(myitem_t *item, myitem_t *ref) {
     return item;
 }
 
-myitem_t *insert_after(myitem_t *item, myitem_t *ref) {
+listitem_t *insert_after(listitem_t *item, listitem_t *ref) {
     EXPECT_TRUE(!dl_contains(&myhead, &item->dl));
     if (NULL == ref) {
         dl_insert_after(&item->dl, &myhead);
@@ -83,7 +85,7 @@ myitem_t *insert_after(myitem_t *item, myitem_t *ref) {
     return item;
 }
 
-void remove_and_free(myitem_t *item) {
+void remove_and_free(listitem_t *item) {
     EXPECT_TRUE(dl_contains(&myhead, &item->dl));
     dl_remove(&item->dl);
     free(item);
@@ -93,7 +95,7 @@ void compare_array(const int *arr, int len) {
     dlnode_t *node = myhead.next;
     const int *it = arr;
     while (node != &myhead) {
-        myitem_t *item = containerof(node, myitem_t, dl);
+        listitem_t *item = containerof(node, listitem_t, dl);
         node = node->next;
         EXPECT_TRUE(item->val == *it++);
     }
@@ -106,7 +108,7 @@ void compare_array(const int *arr, int len) {
     compare_array(cmp, len); \
 } while (0)
 
-void compare_item_and_free(myitem_t *item, int num) {
+void compare_item_and_free(listitem_t *item, int num) {
     EXPECT_TRUE(item->val == num);
     free(item);
 }
@@ -156,10 +158,10 @@ TEST_F(List, PopTail, setup, teardown) {
 
 TEST_F(List, InsertBefore, setup, teardown) {
     EXPECT_TRUE(dl_is_lastone(&myhead));
-    myitem_t *i1 = insert_before(new_item(1), NULL);
-    myitem_t *i2 = insert_before(new_item(2), i1);
-    myitem_t *i3 = insert_before(new_item(3), i2);
-    myitem_t *i4 = insert_before(new_item(4), i3);
+    listitem_t *i1 = insert_before(new_item(1), NULL);
+    listitem_t *i2 = insert_before(new_item(2), i1);
+    listitem_t *i3 = insert_before(new_item(3), i2);
+    listitem_t *i4 = insert_before(new_item(4), i3);
     insert_before(new_item(5), i1);
     insert_before(new_item(6), i1);
     insert_before(new_item(7), i1);
@@ -169,10 +171,10 @@ TEST_F(List, InsertBefore, setup, teardown) {
 
 TEST_F(List, InsertAfter, setup, teardown) {
     EXPECT_TRUE(dl_is_lastone(&myhead));
-    myitem_t *i1 = insert_after(new_item(1), NULL);
-    myitem_t *i2 = insert_after(new_item(2), i1);
-    myitem_t *i3 = insert_after(new_item(3), i2);
-    myitem_t *i4 = insert_after(new_item(4), i3);
+    listitem_t *i1 = insert_after(new_item(1), NULL);
+    listitem_t *i2 = insert_after(new_item(2), i1);
+    listitem_t *i3 = insert_after(new_item(3), i2);
+    listitem_t *i4 = insert_after(new_item(4), i3);
     insert_after(new_item(5), i1);
     insert_after(new_item(6), i1);
     insert_after(new_item(7), i1);
@@ -182,14 +184,14 @@ TEST_F(List, InsertAfter, setup, teardown) {
 
 TEST_F(List, Pop, setup, teardown) {
     EXPECT_TRUE(dl_is_lastone(&myhead));
-    myitem_t *i1 = push_tail(new_item(1));
-    myitem_t *i2 = push_tail(new_item(2));
-    myitem_t *i3 = push_tail(new_item(3));
-    myitem_t *i4 = push_tail(new_item(4));
-    myitem_t *i5 = push_tail(new_item(5));
-    myitem_t *i6 = push_tail(new_item(6));
-    myitem_t *i7 = push_tail(new_item(7));
-    myitem_t *i8 = push_tail(new_item(8));
+    listitem_t *i1 = push_tail(new_item(1));
+    listitem_t *i2 = push_tail(new_item(2));
+    listitem_t *i3 = push_tail(new_item(3));
+    listitem_t *i4 = push_tail(new_item(4));
+    listitem_t *i5 = push_tail(new_item(5));
+    listitem_t *i6 = push_tail(new_item(6));
+    listitem_t *i7 = push_tail(new_item(7));
+    listitem_t *i8 = push_tail(new_item(8));
     EXPECT_ARRAY(1,2,3,4,5,6,7,8);
 
     remove_and_free(i1);

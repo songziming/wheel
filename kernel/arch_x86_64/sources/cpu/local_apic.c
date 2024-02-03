@@ -415,7 +415,7 @@ void local_apic_timer_set(int freq, local_apic_timer_mode_t mode) {
 }
 
 // 忙等待
-INIT_TEXT void local_apic_busywait(int us) {
+void local_apic_busywait(int us) {
     ASSERT(0 != g_timer_freq);
 
     uint32_t start  = g_read(REG_TIMER_CCR);
@@ -451,12 +451,12 @@ INIT_TEXT void local_apic_busywait(int us) {
 // 公开 API
 //------------------------------------------------------------------------------
 
-int local_apic_get_tmr(uint8_t vec) {
-    int reg = vec / 32;
-    int bit = vec % 32;
-    uint32_t val = g_read(REG_TMR + reg);
-    return (val >> bit) & 1;
-}
+// int local_apic_get_tmr(uint8_t vec) {
+//     int reg = vec / 32;
+//     int bit = vec % 32;
+//     uint32_t val = g_read(REG_TMR + reg);
+//     return (val >> bit) & 1;
+// }
 
 void local_apic_send_eoi() {
     g_write(REG_EOI, 0);

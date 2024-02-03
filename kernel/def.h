@@ -28,7 +28,7 @@
 #endif
 
 #ifndef containerof
-#define containerof(p,t,m) ((t *)((size_t)p - offsetof(t,m)))
+#define containerof(p,t,m) ((t *)((size_t)(p) - offsetof(t,m)))
 #endif
 
 // 使用 32-bit 整型表示页号，最多支持 4G-1 个物理页

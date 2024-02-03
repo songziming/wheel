@@ -3,7 +3,6 @@
 
 #include <def.h>
 
-INIT_TEXT void local_apic_busywait(int us);
 
 // typedef enum local_apic_type {
 //     LOCAL_APIC_BSP,
@@ -18,8 +17,9 @@ typedef enum local_apic_timer_mode {
 } local_apic_timer_mode_t;
 
 void local_apic_timer_set(int freq, local_apic_timer_mode_t mode);
+void local_apic_busywait(int us);
 
-int local_apic_get_tmr(uint8_t vec);
+// int local_apic_get_tmr(uint8_t vec);
 void local_apic_send_eoi();
 
 INIT_TEXT void local_apic_send_init(int cpu);

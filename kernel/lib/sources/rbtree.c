@@ -162,6 +162,10 @@ static void rb_insert_fixup(rbtree_t *tree, rbnode_t *node) {
 }
 
 void rb_insert(rbtree_t *tree, rbnode_t *node, rbnode_t *parent, rbnode_t **link) {
+    ASSERT(NULL != tree);
+    ASSERT(NULL != node);
+    ASSERT(NULL != link);
+
     node->parent_color = (size_t)parent;
     node->left = NULL;
     node->right = NULL;
@@ -304,6 +308,9 @@ static void rb_remove_fixup(rbtree_t *tree, rbnode_t *child) {
 }
 
 void rb_remove(rbtree_t *tree, rbnode_t *node) {
+    ASSERT(NULL != tree);
+    ASSERT(NULL != node);
+
     rbnode_t *X = NULL; // 被移除的节点（至多有一个子节点）
     rbnode_t *C = NULL; // 被移除节点的子节点（可能为空）
 
@@ -355,6 +362,10 @@ void rb_remove(rbtree_t *tree, rbnode_t *node) {
 // victim 是被换出的节点，原本位于红黑树中，换出后属性不变
 // node 是被换入的节点，原本不在红黑树中
 void rb_replace(rbtree_t *tree, rbnode_t *victim, rbnode_t *node) {
+    ASSERT(NULL != tree);
+    ASSERT(NULL != victim);
+    ASSERT(NULL != node);
+
     rbnode_t *parent = RB_PARENT(victim);
     if (NULL == parent) {
         tree->root = node;

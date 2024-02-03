@@ -25,10 +25,16 @@ typedef struct mcfg {
 // TODO PCI 设备枚举和驱动注册也可以放在 common 部分，arch 仅提供 PCI 读写函数
 // TODO 驱动也可以分两级，vendor 一级，其下的 device 放在一个链表中
 //      vendor 名称字符串只需要保存一份
+// 一个 driver 可以对应多个 device
 typedef struct pci_driver {
     rbnode_t rb; // 红黑树节点，按 vendor/device 建立搜索树
-    uint16_t vendor_id;
-    uint16_t device_id;
+    union {
+        uint32_t key;
+        struct {
+            uint16_t vendor_id;
+            uint16_t device_id;
+        };
+    };
     const char *name;
 
     void (*probe)(uint8_t bus, uint8_t dev, uint8_t func); // 发现匹配的设备时调用
@@ -38,9 +44,9 @@ typedef struct pci_driver {
 extern CONST uint32_t (*g_pci_read)(uint8_t, uint8_t, uint8_t, uint8_t);
 extern CONST void (*g_pci_write)(uint8_t, uint8_t, uint8_t, uint8_t, uint32_t);
 
-void pci_walk_bus(uint8_t bus);
-
+INIT_TEXT void pci_init(acpi_tbl_t *mcfg);
 void pci_add_driver(pci_driver_t *driver);
-INIT_TEXT void pci_init(mcfg_t *mcfg);
+
+void pci_walk_bus(uint8_t bus);
 
 #endif // DEEV_PCI_H

@@ -1,7 +1,7 @@
 #ifndef TEST_MMU_HELPER_H
 #define TEST_MMU_HELPER_H
 
-// #include <page.h>
+#include <stddef.h>
 
 typedef union page_info page_info_t;
 
