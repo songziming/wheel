@@ -150,5 +150,6 @@ void pci_walk_bus(uint8_t bus) {
     for (uint8_t dev = 0; dev < 32; ++dev) {
         pci_walk_dev(bus, dev);
     }
+    klog("\n");
 }
 

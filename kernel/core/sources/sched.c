@@ -196,9 +196,11 @@ static PCPU_BSS task_t idle_tcb;
 
 // static PCPU_BSS uint8_t idle_stack[IDLE_STACK_SIZE];
 
+// #include <cpu/rw.h>
+
 // 空闲任务，优先级最低，用于填充 CPU 时间
 static NORETURN void idle_proc() {
-    // klog("cpu %d begin idling\n", cpu_index());
+    // klog("cpu %d begin idling, rflags=%lx\n", cpu_index(), read_rflags());
     while (1) {
         cpu_pause();
         cpu_halt();

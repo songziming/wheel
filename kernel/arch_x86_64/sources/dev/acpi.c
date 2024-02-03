@@ -76,13 +76,14 @@ void acpi_show_tables() {
     ASSERT(0 != g_table_num);
     ASSERT(NULL != g_tables);
 
-    klog("ACPI tables:\n");
+    klog("ACPI tables:");
     for (int i = 0; i < g_table_num; ++i) {
         if (NULL == g_tables[i]) {
             continue;
         }
-        klog("  - %.4s at %p\n", g_tables[i]->signature, g_tables[i]);
+        klog(" %.4s", g_tables[i]->signature);
     }
+    klog("\n");
 }
 
 
@@ -117,11 +118,6 @@ static INIT_TEXT acpi_tbl_t *check_table(uint64_t addr) {
     memcpy(bak, tbl, tbl->length);
     return bak;
 }
-
-
-//------------------------------------------------------------------------------
-//
-//------------------------------------------------------------------------------
 
 // 从 RSDT 提取子表地址
 static INIT_TEXT void parse_rsdp_v1(acpi_rsdp_t *rsdp) {

@@ -78,7 +78,7 @@ typedef struct fadt {
     uint8_t  Century;
 
     // reserved in ACPI 1.0; used since ACPI 2.0+
-    uint16_t BootArchitectureFlags;
+    uint16_t ia_boot_arch;
 
     uint8_t  Reserved2;
     uint32_t Flags;

@@ -576,8 +576,7 @@ INIT_TEXT void cpu_features_init() {
 // #ifdef DEBUG
 
 INIT_TEXT void cpu_info_show() {
-    klog("cpu info:\n");
-    klog("  - vendor '%s', brand '%s'\n", g_cpu_vendor, g_cpu_brand);
+    klog("cpu %s (%s) info:\n", g_cpu_vendor, g_cpu_brand);
     klog("  - L1I line=%zu, nsets=%zu, nways=%zu\n", g_l1i_info.line_size, g_l1i_info.sets, g_l1i_info.ways);
     klog("  - L1D line=%zu, nsets=%zu, nways=%zu\n", g_l1d_info.line_size, g_l1d_info.sets, g_l1d_info.ways);
 
@@ -589,8 +588,8 @@ INIT_TEXT void cpu_info_show() {
     klog("  - L2 cache #color %zu\n", g_l2_info.line_size * g_l2_info.sets >> PAGE_SHIFT);
     klog("  - L3 cache #color %zu\n", g_l3_info.line_size * g_l3_info.sets >> PAGE_SHIFT);
 
-    klog("  - core crystal freq %u, TSC ratio %u/%u\n", g_core_freq, g_tsc_ratio[0], g_tsc_ratio[1]);
-    klog("  - %d logical processors in physical package\n", g_num_ids);
+    // klog("  - core crystal freq %u, TSC ratio %u/%u\n", g_core_freq, g_tsc_ratio[0], g_tsc_ratio[1]);
+    // klog("  - %d logical processors in physical package\n", g_num_ids);
 
     static const struct {
         const char *name;

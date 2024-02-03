@@ -69,6 +69,7 @@ DEFINE_WRITE_CR(3) // write_cr3
 DEFINE_WRITE_CR(4) // write_cr4
 #undef DEFINE_WRITE_CR
 
+uint64_t read_rflags(); // support.S
 
 
 //------------------------------------------------------------------------------

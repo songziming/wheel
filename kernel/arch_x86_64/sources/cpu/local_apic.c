@@ -14,6 +14,17 @@
 //  - MMIO，所有寄存器都位于 16-byte 对齐的位置
 //  - MSR，速度更快，编号连续，x2APIC 引入
 // 我们同时支持两种方式，根据检测结果选择其中一套读写函数
+typedef enum reg reg_t;
+static CONST uint32_t (*g_read)     (reg_t reg)                = NULL;
+static CONST void     (*g_write)    (reg_t reg, uint32_t val)  = NULL;
+static CONST void     (*g_write_icr)(uint32_t id, uint32_t lo) = NULL;
+
+
+// x2APIC LDR 最大取值，判断 8-bit destination 够不够用
+// 进而用来判断是否需要开启 interrupt remapping
+static CONST uint16_t g_max_cluster = 0;
+static CONST uint16_t g_max_logical = 0;
+
 
 //------------------------------------------------------------------------------
 // 寄存器定义
@@ -27,7 +38,7 @@
 // REG_DFR 不能在 x2APIC 模式下使用
 // REG_SELF_IPI 只能在 x2APIC 模式下使用
 
-typedef enum reg {
+enum reg {
     REG_ID          = 0x02, // local APIC id
     REG_VER         = 0x03, // local APIC version
     REG_TPR         = 0x08, // task priority
@@ -55,7 +66,7 @@ typedef enum reg {
     REG_TIMER_CCR   = 0x39, // timer current count
     REG_TIMER_DIV   = 0x3e, // timer divide config
     REG_SELF_IPI    = 0x3f,
-} reg_t;
+};
 
 // IA32_APIC_BASE msr
 #define IA32_APIC_BASE      0x1b        // MSR index
@@ -110,12 +121,6 @@ static void x_write(reg_t reg, uint32_t val) {
     *(volatile uint32_t *)map = val;
 }
 
-// static uint64_t x_read_icr() {
-//     uint32_t lo = x_read(REG_ICR_LO);
-//     uint32_t hi = x_read(REG_ICR_HI);
-//     return ((uint64_t)hi << 32) | lo;
-// }
-
 // xAPIC 模式的目标 ID 只有 8-bit
 static void x_write_icr(uint32_t dst, uint32_t lo) {
     ASSERT(dst < 0x100);
@@ -142,20 +147,11 @@ static void x2_write(reg_t reg, uint32_t val) {
     write_msr(0x800 + reg, val);
 }
 
-// static uint64_t x2_read_icr() {
-//     return read_msr(0x800 + REG_ICR_LO);
-// }
-
 static void x2_write_icr(uint32_t id, uint32_t lo) {
     uint64_t val = (uint64_t)id << 32 | lo;
     cpu_rwfence();
     write_msr(0x800 + REG_ICR_LO, val);
 }
-
-// 虚函数接口
-static uint32_t (*g_read)     (reg_t reg)                = x_read;
-static void     (*g_write)    (reg_t reg, uint32_t val)  = x_write;
-static void     (*g_write_icr)(uint32_t id, uint32_t lo) = x_write_icr;
 
 
 //------------------------------------------------------------------------------
@@ -242,6 +238,11 @@ INIT_TEXT void local_apic_init() {
         write_msr(IA32_APIC_BASE, msr_base);
     } else {
         // TODO 将映射的内存，标记为不可缓存，通过页表属性位或 mtrr 实现
+        if (0 == ix) {
+            g_read = x_read;
+            g_write = x_write;
+            g_write_icr = x_write_icr;
+        }
     }
 
     // 注册中断处理函数
@@ -252,34 +253,38 @@ INIT_TEXT void local_apic_init() {
     }
 
     // 设置 DFR、LDR，根据 CPU 个数分类讨论
-    if (0 == (CPU_FEATURE_X2APIC & g_cpu_features)) {
-        // TODO 获取处理器的拓扑结构，按拓扑结构分组
-        // TODO 解析 MADT 之后就可以提前分配好 logical ID
-        if (g_loapic_num <= 8) {
-            // 正好每个 CPU 对应一个比特
-            lo->cluster_id = 0;
-            lo->logical_id = 1 << cpu_index();
-            g_write(REG_DFR, 0xffffffff); // flat model
-            g_write(REG_LDR, lo->logical_id << 24);
-        } else if (g_loapic_num <= 60) {
-            // 必须分组，每个组最多 4 个 CPU
-            lo->cluster_id = ix / 4;
-            lo->logical_id = ix % 4;
-            uint32_t ldr = (lo->cluster_id << 4) | lo->logical_id;
-            g_write(REG_DFR, 0x0fffffff); // cluster model
-            g_write(REG_LDR, ldr << 24);
-        } else {
-            // 还不够，只能让多个 CPU 使用相同的 Logical ID
-            klog("fatal: too much processors!\n");
-            emu_exit(1);
-        }
-    } else {
-        // x2APIC 没有 DFR，只能处于 cluster model
-        // LDR 也扩展为 32-bit，而且只读
+    if (CPU_FEATURE_X2APIC & g_cpu_features) {
         cpu_rwfence();
         uint32_t ldr = g_read(REG_LDR);
         lo->cluster_id = ldr >> 16;
         lo->logical_id = ldr & 0xffff;
+
+        ASSERT(lo->cluster_id == (lo->apic_id >> 4));
+        ASSERT(lo->logical_id == (1 << (lo->apic_id & 15)));
+
+        if (g_max_cluster < lo->cluster_id) {
+            g_max_cluster = lo->cluster_id;
+        }
+        if (g_max_logical < lo->logical_id) {
+            g_max_logical = lo->logical_id;
+        }
+    } else if (g_loapic_num <= 8) {
+        // 正好每个 CPU 对应一个比特
+        lo->cluster_id = 0;
+        lo->logical_id = 1 << cpu_index();
+        g_write(REG_DFR, 0xffffffff); // flat model
+        g_write(REG_LDR, lo->logical_id << 24);
+    } else if (g_loapic_num <= 60) {
+        // 必须分组，每个组最多 4 个 CPU
+        lo->cluster_id = ix / 4;
+        lo->logical_id = ix % 4;
+        uint32_t ldr = (lo->cluster_id << 4) | lo->logical_id;
+        g_write(REG_DFR, 0x0fffffff); // cluster model
+        g_write(REG_LDR, ldr << 24);
+    } else {
+        // 还不够，只能让多个 CPU 使用相同的 Logical ID
+        klog("fatal: too much processors!\n");
+        emu_exit(1);
     }
 
     // 屏蔽中断号 0~31
@@ -451,12 +456,12 @@ void local_apic_busywait(int us) {
 // 公开 API
 //------------------------------------------------------------------------------
 
-// int local_apic_get_tmr(uint8_t vec) {
-//     int reg = vec / 32;
-//     int bit = vec % 32;
-//     uint32_t val = g_read(REG_TMR + reg);
-//     return (val >> bit) & 1;
-// }
+int local_apic_get_tmr(uint8_t vec) {
+    int reg = vec / 32;
+    int bit = vec % 32;
+    uint32_t val = g_read(REG_TMR + reg);
+    return (val >> bit) & 1;
+}
 
 void local_apic_send_eoi() {
     g_write(REG_EOI, 0);

@@ -94,6 +94,15 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     }
     parse_madt(madt);
 
+    // 检查是否有必要启用 interrupt remapping（依赖 VT-d）
+    acpi_tbl_t *dmar = acpi_get_table("DMAR");
+    if (NULL != dmar) {
+        klog("supports DMAR!\n");
+    }
+    if (requires_int_remap()) {
+        klog("requires int remap!\n");
+    }
+
     // SRAT 可以获取 NUMA 信息
     acpi_tbl_t *srat = acpi_get_table("SRAT");
     if (NULL != srat) {
@@ -113,11 +122,11 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         set_log_func(serial_console_puts);
     }
 
-// #ifdef DEBUG
-//     acpi_show_tables();
-//     pmmap_show();
-// #endif
-//     cpu_info_show();
+#ifdef DEBUG
+    acpi_show_tables();
+    // pmmap_show();
+#endif
+    cpu_info_show();
 
     // 切换正式 gdt，加载 idt
     gdt_init();
@@ -142,12 +151,6 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     io_apic_init_all();
     local_apic_init(); // 设置中断控制器
     local_apic_timer_set(10, LOCAL_APIC_TIMER_PERIODIC);
-
-    // 检查有无 VT-d 支持，能否实现 interrupt remapping
-    acpi_tbl_t *dmar = acpi_get_table("DMAR");
-    if (NULL != dmar) {
-        klog("supports DMAR!\n");
-    }
 
     // 创建并加载内核页表，启用内存保护
     kernel_proc_init();
@@ -293,20 +296,23 @@ static void root_proc() {
         }
     }
 
-    // TODO 启动核心系统任务，长期驻留运行（tty、键盘、PCI 设备驱动、虚拟文件系统、shell）
+    // 启动核心系统任务，长期驻留运行（tty、键盘、PCI 设备驱动、虚拟文件系统、shell）
     pci_init(acpi_get_table("MCFG"));
-    keyboard_init(); // PS/2 键盘
     pci_walk_bus(0); // 检测 PCI bus 0 上的设备
-
+    keyboard_init(); // PS/2 键盘
     // common_init();
 
+    // // TODO 键盘中断无法在 idle 任务中触发（仅 VMware 可复现），sti 也无效
+    // //      也许 i8254 需要初始化？
+    // klog("rflags = %lx\n", read_rflags());
+    // __asm__("sti");
+    // klog("rflags = %lx\n", read_rflags());
+    // local_apic_send_eoi();
+    // while (1) {
+    //     cpu_pause();
+    // }
+
     // TODO 回收 init section 的物理内存，并删除映射
-
-    // // 结束根任务
-    // task_exit();
-
-    // cpu_halt();
-    // while (1) {}
 }
 
 

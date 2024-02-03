@@ -1,4 +1,5 @@
 #include <arch_smp.h>
+#include <cpu/info.h>
 #include <wheel.h>
 
 
@@ -27,6 +28,12 @@ static CONST uint32_t g_nmi_gsi = 0xffffffffU; // -1 表示不经过 IO APIC，�
 static CONST uint32_t g_nmi_cpu = 0xffffffffU; // -1 表示连接到所有处理器
 static CONST uint8_t  g_nmi_lint = 0;
 static CONST uint8_t  g_nmi_inti = 0;   // 触发模式（edge/level、low/high）
+
+// 最大的 x2APIC ID
+// 如果能用 8-bit 表示，说明仍兼容 IO APIC
+// 如果超过了 8-bit，则只能借助 VT-d Interrupt Remapper
+// 必须首先启用 extended interrupt mode，然后再开启 x2APIC 模式
+static CONST uint32_t g_max_id = 0;
 
 
 
@@ -142,6 +149,9 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
             madt_loapic_t *lo = (madt_loapic_t *)sub;
             if (1 & lo->loapic_flags) {
                 ++g_loapic_num;
+                if (g_max_id < lo->id) {
+                    g_max_id = lo->id;
+                }
             }
             break;
         }
@@ -149,6 +159,9 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
             madt_lox2apic_t *lo = (madt_lox2apic_t *)sub;
             if (1 & lo->loapic_flags) {
                 ++g_loapic_num;
+                if (g_max_id < lo->id) {
+                    g_max_id = lo->id;
+                }
             }
             break;
         }
@@ -301,6 +314,28 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
 inline int cpu_count() {
     ASSERT(0 != g_loapic_num);
     return g_loapic_num;
+}
+
+// 检查所有的 Local APIC ID，判断 IO APIC 使用的 8-bit logical destination
+// 能否表示所有的目标 CPU
+INIT_TEXT int requires_int_remap() {
+    if (0 == (CPU_FEATURE_X2APIC & g_cpu_features)) {
+        return 0; // xAPIC 没有任何问题
+    }
+
+    if (g_max_id >= 255) {
+        return 1;
+    }
+
+    for (int i = 0; i < g_loapic_num; ++i) {
+        uint16_t cluster = g_loapics[i].apic_id >> 4;
+        uint16_t logical = 1 << (g_loapics[i].apic_id & 15);
+        if ((cluster >= 15) || (logical >= 16)) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 // 判断 NMI 连接到指定 CPU 的哪个 LINT 引脚，返回 -1 表示没有连接到此 CPU

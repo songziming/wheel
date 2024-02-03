@@ -5,6 +5,8 @@
 .global load_idtr
 .global load_tr
 
+.global read_rflags
+
 .section ".init.text", "ax"
 .code64
 
@@ -28,4 +30,15 @@ load_idtr:
 
 load_tr:
     ltr     %di
+    ret
+
+
+.section ".text"
+
+.text
+.code64
+
+read_rflags:
+    pushfq
+    popq    %rax
     ret

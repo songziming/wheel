@@ -160,18 +160,22 @@ INIT_TEXT void io_apic_init(ioapic_t *io) {
 
     io->ver = ver & 0xff;
     io->ent_num = ((ver >> 16) & 0xff) + 1;
-    klog("IO APIC id=%u, madt-id=%d, ver=%u, ent_num=%d\n", id, io->apic_id, io->ver, io->ent_num);
+    // klog("IO APIC id=%u, ver=%u, ent_num=%d\n", io->apic_id, io->ver, io->ent_num);
     if (ver & (1 << 15)) {
         klog("no Pin Assertion Register\n");
     }
 }
 
 
+// 初始化所有的 IO APIC
 // 默认禁用所有硬件中断，按需开启
 INIT_TEXT void io_apic_init_all() {
     for (int i = 0; i < g_ioapic_num; ++i) {
         ioapic_t *io = &g_ioapics[i];
         io_apic_init(io);
+
+        // 填写中断路由表
+        // 全部使用 logical 模式，广播发送
 
         int ent = 0;
         if (0 == i) {
