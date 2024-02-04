@@ -127,6 +127,7 @@ uint16_t sched_stop(task_t *task, uint16_t bits) {
 }
 
 // 取消 stoped 状态，如果变为就绪，就把任务放入就绪队列
+// TODO 应该返回修改之后的状态，而不是之前的
 uint16_t sched_cont(task_t *task, uint16_t bits) {
     ASSERT(NULL != task);
     ASSERT(task->spin.ticket_counter > task->spin.service_counter);

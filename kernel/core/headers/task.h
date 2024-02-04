@@ -51,7 +51,6 @@ void task_stop(task_t *task);
 void task_resume(task_t *task);
 
 void task_exit();
-// void arch_task_switch();
 
 
 #endif // TASK_H

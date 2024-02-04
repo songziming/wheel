@@ -119,15 +119,16 @@ static void handle_resched(int vec, arch_regs_t *f) {
     (void)f;
     local_apic_send_eoi();
     // 中断返回过程自动切换任务
+    klog("resched received on cpu %d\n", cpu_index());
 }
 
-void arch_notify_resched(int cpu) {
+void arch_send_resched(int cpu) {
     ASSERT(cpu >= 0);
     ASSERT(cpu < cpu_count());
     ASSERT(cpu_index() != cpu);
     local_apic_send_ipi(cpu, VEC_IPI_RESCHED);
 }
 
-INIT_TEXT void install_sched_handlers() {
+INIT_TEXT void install_resched_handlers() {
     set_int_handler(VEC_IPI_RESCHED, handle_resched);
 }

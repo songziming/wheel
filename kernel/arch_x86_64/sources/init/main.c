@@ -4,6 +4,7 @@
 #include <arch_mem.h>
 #include <arch_smp.h>
 #include <arch_int.h>
+#include <arch_api_p.h>
 
 #include <cpu/rw.h>
 #include <cpu/info.h>
@@ -21,6 +22,7 @@
 #include <dev/pci.h>
 
 #include <wheel.h>
+#include <keyboard.h>
 
 
 
@@ -144,8 +146,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // 启用中断异常机制
     int_init();
 
-    // 注册 page fault 处理函数
-    set_int_handler(14, handle_pagefault);
+    set_int_handler(14, handle_pagefault); // 注册 page fault 处理函数
+    install_resched_handlers(); // 注册 resched 中断处理函数
 
     i8259_disable(); // 禁用 PIC
     io_apic_init_all();
@@ -263,6 +265,8 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
 char _real_addr;
 char _real_end;
 
+// tty.c
+INIT_TEXT void tty_init();
 
 // 第一个开始运行的任务
 static void root_proc() {
@@ -300,17 +304,12 @@ static void root_proc() {
     pci_init(acpi_get_table("MCFG"));
     pci_walk_bus(0); // 检测 PCI bus 0 上的设备
     i8042_init(); // PS/2 键盘
+
+    keyboard_init(); // 虚拟设备 /dev/kbd
+    tty_init();
     // common_init();
 
-    // // TODO 键盘中断无法在 idle 任务中触发（仅 VMware 可复现），sti 也无效
-    // //      也许 i8254 需要初始化？
-    // klog("rflags = %lx\n", read_rflags());
-    // __asm__("sti");
-    // klog("rflags = %lx\n", read_rflags());
-    // local_apic_send_eoi();
-    // while (1) {
-    //     cpu_pause();
-    // }
+    // arch_send_resched(1);
 
     // TODO 回收 init section 的物理内存，并删除映射
 }

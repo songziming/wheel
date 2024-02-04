@@ -65,7 +65,9 @@ typedef enum keycode {
 // 最高位表示按键释放
 #define KEY_RELEASE 0x80000000U
 
-void keyboard_send(keycode_t key);
+INIT_TEXT void keyboard_init();
 
+void keyboard_send(keycode_t key);
+keycode_t keyboard_recv();
 
 #endif // KEYBOARD_H

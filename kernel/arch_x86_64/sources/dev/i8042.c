@@ -255,12 +255,12 @@ INIT_TEXT void i8042_init() {
 
     int gsi = get_gsi_for_irq(1);
 
-#if 1
-    klog("GSI for keyboard is %d\n", gsi);
-    const char *trigger = get_gsi_trigmode(gsi) ? "edge" : "level";
-    const char *active = get_gsi_polarity(gsi) ? "high" : "low";
-    klog("config is %s-trigger, active-%s\n", trigger, active);
-#endif
+// #if 1
+//     klog("GSI for keyboard is %d\n", gsi);
+//     const char *trigger = get_gsi_trigmode(gsi) ? "edge" : "level";
+//     const char *active = get_gsi_polarity(gsi) ? "high" : "low";
+//     klog("config is %s-trigger, active-%s\n", trigger, active);
+// #endif
 
     set_int_handler(gsi + VEC_GSI_BASE, handle_keyboard);
     io_apic_unmask_gsi(gsi);

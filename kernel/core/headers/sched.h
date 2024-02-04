@@ -8,7 +8,6 @@
 // 中断响应 bottom-half、log 输出等核心系统任务具有最高优先级
 // 需要长时间运行，不需要快速响应的，如 housekeeping，具有较低优先级
 
-
 extern PCPU_BSS task_t *g_tid_prev;
 extern PCPU_BSS task_t *g_tid_next;
 

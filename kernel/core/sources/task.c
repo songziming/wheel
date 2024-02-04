@@ -93,7 +93,7 @@ void task_destroy(task_t *task) {
     // 需要确保任务已停止运行，才能释放其内核栈
     // 否则发生中断，访问内核栈会导致 #PF
 
-    klog("delete resource of task %s(%p)\n", task->name, task);
+    // klog("delete resource of task %s(%p)\n", task->name, task);
 
     int key = irq_spin_take(&task->spin);
 
