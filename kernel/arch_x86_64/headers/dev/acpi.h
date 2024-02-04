@@ -15,6 +15,8 @@ typedef struct acpi_tbl {
     uint32_t    creator_revision;
 } PACKED acpi_tbl_t;
 
+extern CONST int g_acpi_revision;
+
 acpi_tbl_t *acpi_get_table(const char sig[4]);
 void acpi_show_tables();
 

@@ -33,6 +33,9 @@ typedef struct acpi_xsdt {
 
 
 
+// ACPI 版本，1.0 或 2.0
+CONST int g_acpi_revision = 0;
+
 // 所有的 ACPI 表
 // TODO ACPI 表并不是保存在一个数组里，而是递归引用的
 //      可以换成双链表，动态添加元素
@@ -202,7 +205,8 @@ INIT_TEXT void acpi_parse_rsdp(size_t addr) {
     ASSERT(INVALID_ADDR != addr);
 
     acpi_rsdp_t *rsdp = (acpi_rsdp_t *)(DIRECT_MAP_ADDR + addr);
-    if (0 == rsdp->revision) {
+    g_acpi_revision = rsdp->revision;
+    if (0 == g_acpi_revision) {
         parse_rsdp_v1(rsdp);
     } else {
         parse_rsdp_v2(rsdp);

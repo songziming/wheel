@@ -3,6 +3,6 @@
 
 #include <def.h>
 
-INIT_TEXT void disable_i8259();
+INIT_TEXT void i8259_disable();
 
 #endif // DEV_I8259_H

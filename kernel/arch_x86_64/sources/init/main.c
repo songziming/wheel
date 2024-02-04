@@ -17,7 +17,7 @@
 #include <dev/console.h>
 #include <dev/framebuf.h>
 #include <dev/i8259.h>
-#include <dev/ps2keyboard.h>
+#include <dev/i8042.h>
 #include <dev/pci.h>
 
 #include <wheel.h>
@@ -147,7 +147,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // 注册 page fault 处理函数
     set_int_handler(14, handle_pagefault);
 
-    disable_i8259(); // 禁用 PIC
+    i8259_disable(); // 禁用 PIC
     io_apic_init_all();
     local_apic_init(); // 设置中断控制器
     local_apic_timer_set(10, LOCAL_APIC_TIMER_PERIODIC);
@@ -299,7 +299,7 @@ static void root_proc() {
     // 启动核心系统任务，长期驻留运行（tty、键盘、PCI 设备驱动、虚拟文件系统、shell）
     pci_init(acpi_get_table("MCFG"));
     pci_walk_bus(0); // 检测 PCI bus 0 上的设备
-    keyboard_init(); // PS/2 键盘
+    i8042_init(); // PS/2 键盘
     // common_init();
 
     // // TODO 键盘中断无法在 idle 任务中触发（仅 VMware 可复现），sti 也无效

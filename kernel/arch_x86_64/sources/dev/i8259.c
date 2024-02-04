@@ -21,7 +21,7 @@
 #define ICW4_BUF_MASTER 0x0C        // Buffered mode/master
 #define ICW4_SFNM       0x10        // Special fully nested (not)
 
-INIT_TEXT void disable_i8259() {
+INIT_TEXT void i8259_disable() {
     out8(PIC1_CMD, ICW1_INIT + ICW1_ICW4);
     out8(PIC2_CMD, ICW1_INIT + ICW1_ICW4);
     out8(PIC1_DAT, 0x20);       // ICW2: map master PIC vector base
