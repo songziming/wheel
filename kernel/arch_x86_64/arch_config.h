@@ -44,18 +44,19 @@
 // 预留的缓冲区大小
 //------------------------------------------------------------------------------
 
-#define EARLY_RO_SIZE       0x3000      // 只读预留内存大小
-#define EARLY_RW_SIZE       0x2000      // 读写预留内存大小
+#define EARLY_RO_SIZE       0x3000      // 只读预留内存
+#define EARLY_RW_SIZE       0x2000      // 读写预留内存
 
-#define KEYBOARD_BUFF_LEN   64
+#define KEYBOARD_BUFF_LEN   64          // 按键码缓冲区
+#define KERNEL_HEAP_SIZE    0x4000      // 内核堆
 
 
 //------------------------------------------------------------------------------
 // 栈尺寸
 //------------------------------------------------------------------------------
 
-#define INIT_STACK_SIZE     0x1000      // 初始化阶段使用的栈的大小
-#define INT_STACK_SIZE      0x1000      // 中断栈大小，也是异常栈 IST 大小
+#define INIT_STACK_SIZE     0x1000      // 初始化阶段使用的栈
+#define INT_STACK_SIZE      0x1000      // 中断栈大小，也是异常栈 IST
 
 // 任务栈也用于中断，栈大小需要能容下 arch_regs_t
 

@@ -6,7 +6,7 @@
 #include <arch_config.h>
 #include <arch_extra.h>
 
-// core mem
+// mem
 #include <page.h>
 #include <vmspace.h>
 
@@ -20,5 +20,6 @@
 // lib
 #include <str.h>
 #include <dllist.h>
+#include <rbtree.h>
 
 #endif // WHEEL_H

@@ -3,6 +3,7 @@
 #include <arch_mem.h>
 
 #include <wheel.h>
+#include <shell.h>
 
 
 
@@ -41,6 +42,8 @@ CONST int g_acpi_revision = 0;
 //      可以换成双链表，动态添加元素
 static CONST int g_table_num = 0;
 static CONST acpi_tbl_t **g_tables = NULL;
+
+static shell_cmd_t g_cmd_acpi;
 
 
 // typedef struct table_node {
@@ -212,6 +215,11 @@ INIT_TEXT void acpi_parse_rsdp(size_t addr) {
         parse_rsdp_v2(rsdp);
     }
 
+    // 注册 shell 命令
+    g_cmd_acpi.name = "acpi";
+    g_cmd_acpi.func = (void *)acpi_show_tables;
+    shell_add_cmd(&g_cmd_acpi);
+
     // FADT 需要特殊处理
     fadt_t *fadt = (fadt_t *)acpi_get_table("FACP");
     if (NULL == fadt) {
@@ -230,4 +238,3 @@ INIT_TEXT void acpi_parse_rsdp(size_t addr) {
     }
     g_tables[g_table_num++] = check_table(dsdt);
 }
-

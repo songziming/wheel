@@ -5,10 +5,10 @@
 #include <wheel.h>
 
 
-#define ALIGN 16
+#define ALIGNMENT 16
 
-static SECTION(".rotail") uint8_t g_ro_area[EARLY_RO_SIZE] ALIGNED(ALIGN);
-static SECTION(".rwtail") uint8_t g_rw_area[EARLY_RW_SIZE] ALIGNED(ALIGN);
+static SECTION(".rotail") uint8_t g_ro_area[EARLY_RO_SIZE] ALIGNED(ALIGNMENT);
+static SECTION(".rwtail") uint8_t g_rw_area[EARLY_RW_SIZE] ALIGNED(ALIGNMENT);
 
 typedef struct buff {
     uint8_t *ptr;
@@ -29,8 +29,8 @@ static INIT_TEXT void *buff_grow(buff_t *buff, size_t size) {
     if (buff->ptr + size > buff->end) {
         return NULL;
     }
-    size +=   ALIGN - 1;
-    size &= ~(ALIGN - 1);
+    size +=   ALIGNMENT - 1;
+    size &= ~(ALIGNMENT - 1);
     uint8_t *p = buff->ptr;
     buff->ptr += size;
     return p;

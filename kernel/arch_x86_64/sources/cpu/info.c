@@ -3,6 +3,7 @@
 #include <cpu/info.h>
 #include <cpu/rw.h>
 #include <wheel.h>
+#include <shell.h>
 
 
 
@@ -31,6 +32,8 @@ CONST cache_info_t g_l1d_info;
 CONST cache_info_t g_l1i_info;
 CONST cache_info_t g_l2_info;
 CONST cache_info_t g_l3_info;
+
+static shell_cmd_t g_cmd_info;
 
 
 //------------------------------------------------------------------------------
@@ -443,6 +446,52 @@ static INIT_TEXT void intel_detect_vmx() {
 // 检测处理器型号信息
 //------------------------------------------------------------------------------
 
+static void cpu_info_show() {
+    klog("cpu %s (%s) info:\n", g_cpu_vendor, g_cpu_brand);
+    klog("  - L1I line=%zu, nsets=%zu, nways=%zu\n", g_l1i_info.line_size, g_l1i_info.sets, g_l1i_info.ways);
+    klog("  - L1D line=%zu, nsets=%zu, nways=%zu\n", g_l1d_info.line_size, g_l1d_info.sets, g_l1d_info.ways);
+
+    ASSERT(g_l1d_info.line_size * g_l1d_info.sets * g_l1d_info.ways == g_l1d_info.total_size);
+    ASSERT(g_l2_info.line_size * g_l2_info.sets * g_l2_info.ways == g_l2_info.total_size);
+    ASSERT(g_l3_info.line_size * g_l3_info.sets * g_l3_info.ways == g_l3_info.total_size);
+
+    klog("  - L1 cache #color %zu\n", g_l1d_info.line_size * g_l1d_info.sets >> PAGE_SHIFT);
+    klog("  - L2 cache #color %zu\n", g_l2_info.line_size * g_l2_info.sets >> PAGE_SHIFT);
+    klog("  - L3 cache #color %zu\n", g_l3_info.line_size * g_l3_info.sets >> PAGE_SHIFT);
+
+    // klog("  - core crystal freq %u, TSC ratio %u/%u\n", g_core_freq, g_tsc_ratio[0], g_tsc_ratio[1]);
+    // klog("  - %d logical processors in physical package\n", g_num_ids);
+
+    static const struct {
+        const char *name;
+        uint32_t mask;
+    } FEATS[] = {
+        { "pcid",     CPU_FEATURE_PCID      },
+        { "x2apic",   CPU_FEATURE_X2APIC    },
+        { "tsc",      CPU_FEATURE_TSC       },
+        { "ht",       CPU_FEATURE_HT        },
+        { "nx",       CPU_FEATURE_NX        },
+        { "pdpe1gb",  CPU_FEATURE_1G        },
+        { "arat",     CPU_FEATURE_ARAT      },
+        { "incpcid",  CPU_FEATURE_INVPCID   },
+        { "smep",     CPU_FEATURE_SMEP      },
+        { "smap",     CPU_FEATURE_SMAP      },
+        { "fsgsbase", CPU_FEATURE_FSGSBASE  },
+        { "feedback", CPU_FEATURE_FEEDBACK  },
+        { "vmx",      CPU_FEATURE_VMX       },
+        { "svm",      CPU_FEATURE_SVM       },
+    };
+    size_t nfeats = sizeof(FEATS) / sizeof(FEATS[0]);
+
+    klog("  - features:");
+    for (size_t i = 0; i < nfeats; ++i) {
+        if (g_cpu_features & FEATS[i].mask) {
+            klog(" %s", FEATS[i].name);
+        }
+    }
+    klog("\n");
+}
+
 INIT_TEXT void cpu_info_detect() {
     uint32_t a, b, c, d;
 
@@ -522,6 +571,11 @@ INIT_TEXT void cpu_info_detect() {
     } else {
         klog("unknown vendor name '%.12s'\n", g_cpu_vendor);
     }
+
+    // 注册 shell 命令
+    g_cmd_info.name = "cpuid";
+    g_cmd_info.func = (void *)cpu_info_show;
+    shell_add_cmd(&g_cmd_info);
 }
 
 
@@ -573,52 +627,3 @@ INIT_TEXT void cpu_features_init() {
     write_msr(MSR_SFMASK, 0UL);                     // SFMASK
 }
 
-// #ifdef DEBUG
-
-INIT_TEXT void cpu_info_show() {
-    klog("cpu %s (%s) info:\n", g_cpu_vendor, g_cpu_brand);
-    klog("  - L1I line=%zu, nsets=%zu, nways=%zu\n", g_l1i_info.line_size, g_l1i_info.sets, g_l1i_info.ways);
-    klog("  - L1D line=%zu, nsets=%zu, nways=%zu\n", g_l1d_info.line_size, g_l1d_info.sets, g_l1d_info.ways);
-
-    ASSERT(g_l1d_info.line_size * g_l1d_info.sets * g_l1d_info.ways == g_l1d_info.total_size);
-    ASSERT(g_l2_info.line_size * g_l2_info.sets * g_l2_info.ways == g_l2_info.total_size);
-    ASSERT(g_l3_info.line_size * g_l3_info.sets * g_l3_info.ways == g_l3_info.total_size);
-
-    klog("  - L1 cache #color %zu\n", g_l1d_info.line_size * g_l1d_info.sets >> PAGE_SHIFT);
-    klog("  - L2 cache #color %zu\n", g_l2_info.line_size * g_l2_info.sets >> PAGE_SHIFT);
-    klog("  - L3 cache #color %zu\n", g_l3_info.line_size * g_l3_info.sets >> PAGE_SHIFT);
-
-    // klog("  - core crystal freq %u, TSC ratio %u/%u\n", g_core_freq, g_tsc_ratio[0], g_tsc_ratio[1]);
-    // klog("  - %d logical processors in physical package\n", g_num_ids);
-
-    static const struct {
-        const char *name;
-        uint32_t mask;
-    } FEATS[] = {
-        { "pcid",     CPU_FEATURE_PCID      },
-        { "x2apic",   CPU_FEATURE_X2APIC    },
-        { "tsc",      CPU_FEATURE_TSC       },
-        { "ht",       CPU_FEATURE_HT        },
-        { "nx",       CPU_FEATURE_NX        },
-        { "pdpe1gb",  CPU_FEATURE_1G        },
-        { "arat",     CPU_FEATURE_ARAT      },
-        { "incpcid",  CPU_FEATURE_INVPCID   },
-        { "smep",     CPU_FEATURE_SMEP      },
-        { "smap",     CPU_FEATURE_SMAP      },
-        { "fsgsbase", CPU_FEATURE_FSGSBASE  },
-        { "feedback", CPU_FEATURE_FEEDBACK  },
-        { "vmx",      CPU_FEATURE_VMX       },
-        { "svm",      CPU_FEATURE_SVM       },
-    };
-    size_t nfeats = sizeof(FEATS) / sizeof(FEATS[0]);
-
-    klog("  - features:");
-    for (size_t i = 0; i < nfeats; ++i) {
-        if (g_cpu_features & FEATS[i].mask) {
-            klog(" %s", FEATS[i].name);
-        }
-    }
-    klog("\n");
-}
-
-// #endif

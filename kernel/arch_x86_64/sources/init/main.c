@@ -23,6 +23,7 @@
 
 #include <wheel.h>
 #include <keyboard.h>
+#include <shell.h>
 
 
 
@@ -124,12 +125,6 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         set_log_func(serial_console_puts);
     }
 
-#ifdef DEBUG
-    acpi_show_tables();
-    // pmmap_show();
-#endif
-    cpu_info_show();
-
     // 切换正式 gdt，加载 idt
     gdt_init();
     gdt_load();
@@ -155,6 +150,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     local_apic_timer_set(10, LOCAL_APIC_TIMER_PERIODIC);
 
     // 创建并加载内核页表，启用内存保护
+    kernel_pgtable_init();
     kernel_proc_init();
     write_cr3(get_kernel_pgtable());
 
@@ -266,7 +262,7 @@ char _real_addr;
 char _real_end;
 
 // tty.c
-INIT_TEXT void tty_init();
+INIT_TEXT void shell_init();
 
 // 第一个开始运行的任务
 static void root_proc() {
@@ -306,7 +302,7 @@ static void root_proc() {
     i8042_init(); // PS/2 键盘
 
     keyboard_init(); // 虚拟设备 /dev/kbd
-    tty_init();
+    shell_init();
     // common_init();
 
     // arch_send_resched(1);

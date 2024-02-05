@@ -2,6 +2,8 @@
 
 #include <page.h>
 #include <wheel.h>
+#include <spin.h>
+#include <shell.h>
 
 
 // TODO 除了管理物理页，还要记录页面颜色直方图
@@ -35,11 +37,13 @@ static CONST page_t *g_pages = NULL;
 #define RANK_NUM 16
 static pglist_t g_blocks[RANK_NUM];
 
+static spin_t g_pages_lock = SPIN_INIT;
+static shell_cmd_t g_cmd_pages;
 
 
 
 //------------------------------------------------------------------------------
-// 连续的物理页组成块
+// 连续的物理页构成块，多个页块组成链表
 //------------------------------------------------------------------------------
 
 // 返回页所在的块
@@ -311,6 +315,25 @@ static pfn_t block_alloc(uint8_t rank, pfn_t period, pfn_t phase, page_type_t ty
 // 公开的函数
 //------------------------------------------------------------------------------
 
+static int pages_show(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
+
+    int key = irq_spin_take(&g_pages_lock);
+
+    klog("free pages:\n");
+    for (pfn_t blk = 0; blk < g_page_num;) {
+        pfn_t size = page_block_size(blk);
+        if (PT_FREE == g_pages[blk].type) {
+            klog("  - block 0x%x, size 0x%x\n", blk, size);
+        }
+        blk += size;
+    }
+
+    irq_spin_give(&g_pages_lock, key);
+    return 0;
+}
+
 // 传入物理内存的上限
 INIT_TEXT void page_init(size_t end) {
     ASSERT(0 == g_page_num);
@@ -336,6 +359,11 @@ INIT_TEXT void page_init(size_t end) {
         g_blocks[i].head = INVALID_PFN;
         g_blocks[i].tail = INVALID_PFN;
     }
+
+    // 注册打印物理页的命令
+    g_cmd_pages.name = "pages";
+    g_cmd_pages.func = pages_show;
+    shell_add_cmd(&g_cmd_pages);
 }
 
 // 将一段内存标记为有效内存
@@ -386,7 +414,10 @@ size_t pages_alloc(int rank, page_type_t type) {
     ASSERT(rank < RANK_NUM);
     ASSERT(PT_INVALID != type);
 
+    int key = irq_spin_take(&g_pages_lock);
     pfn_t pg = block_alloc(rank, 1, 0, type);
+    irq_spin_give(&g_pages_lock, key);
+
     if (INVALID_PFN == pg) {
         return INVALID_ADDR;
     }
@@ -402,5 +433,7 @@ void pages_free(size_t pa) {
     ASSERT(g_pages[pa].head);
     ASSERT(PT_FREE != g_pages[pa].type);
 
+    int key = irq_spin_take(&g_pages_lock);
     block_free((pfn_t)pa);
+    irq_spin_give(&g_pages_lock, key);
 }

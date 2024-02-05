@@ -29,7 +29,8 @@ static work_t wa, wb;
 
 
 // 平台无关的初始化流程，在根任务中调用
-// 启动平台无关的系统服务（文件系统、调试日志）
+// 运行在 BSP，此时 AP 均已启动，正在运行 idle task
+// 启动平台无关的系统服务（文件系统、调试日志、keyboard 中间件、内核 shell）
 INIT_TEXT void common_init() {
     task_t a_tcb;
     task_t b_tcb;

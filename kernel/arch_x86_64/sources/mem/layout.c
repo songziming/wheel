@@ -5,6 +5,7 @@
 #include <cpu/rw.h>
 
 #include <wheel.h>
+#include <shell.h>
 
 
 
@@ -23,6 +24,8 @@ static INIT_BSS vmrange_t g_range_init;
 static CONST    vmrange_t g_range_text;
 static CONST    vmrange_t g_range_rodata;   // 结束位置由 g_ro_buff 决定
 static CONST    vmrange_t g_range_data;     // 结束位置由 g_rw_buff 决定
+
+static shell_cmd_t g_cmd_vm;
 
 
 
@@ -62,6 +65,14 @@ static void map_kernel_range(size_t table, const vmrange_t *rng, mmu_attr_t attr
     size_t from = rng->addr & ~(PAGE_SIZE - 1);
     size_t to = (rng->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     mmu_map(table, from, to, from - KERNEL_TEXT_ADDR, attrs);
+}
+
+
+static int show_vm(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
+    vmspace_show(get_kernel_vmspace());
+    return 0;
 }
 
 
@@ -133,6 +144,11 @@ INIT_TEXT void mem_init() {
         vmrange_t *curr = containerof(i, vmrange_t, dl);
         add_kernel_gap(prev, curr);
     }
+
+    // 注册 vmspace 命令
+    g_cmd_vm.name = "vm";
+    g_cmd_vm.func = show_vm;
+    shell_add_cmd(&g_cmd_vm);
 }
 
 

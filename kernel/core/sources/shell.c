@@ -1,9 +1,13 @@
 // 虚拟终端设备，不断读取 /dev/keyboard，转换为字符串
+// 内核态 shell，以 tty-task 的身份运行内核函数
+
+// TODO 定义一套接口，允许其他模块注册 ksh command
+//      将 ksh command 组织为红黑树，按 command 字典序排列
 
 // TODO tty 也应该是一个文件？类似 /dev/keyboard，只是内容为可显示文本？
 
+#include <shell.h>
 #include <keyboard.h>
-
 #include <wheel.h>
 
 
@@ -199,15 +203,138 @@ static char keycode_to_ascii(keycode_t key) {
 }
 
 
+//------------------------------------------------------------------------------
+// 内核
+//------------------------------------------------------------------------------
+
+
+static rbtree_t g_cmds = RBTREE_INIT;   // 记录所有命令
+static task_t g_shell_tcb;
 
 
 
+// 去掉字符串开头的空白，如果全是空白，则返回空指针
+static char *trim(char *s) {
+    for (; *s; ++s) {
+        if ((' ' != *s) && ('\t' != *s)) {
+            return s;
+        }
+    }
+
+    return NULL;
+}
+
+// 从字符串里分割出第一个单词，返回剩余部分的字符串
+static char *split(char *s) {
+    // if (NULL == s) {
+    //     return NULL;
+    // }
+
+    // // 跳过开头连续的空白
+    // for (; *s; ++s) {
+    //     if ((' ' != *s) && ('\t' != *s)) {
+    //         break;
+    //     }
+    // }
+
+    // 找到下一个空白
+    for (; *s; ++s) {
+        if ((' ' == *s) || ('\t' == *s)) {
+            *s = '\0';
+            ++s;
+            break;
+        }
+    }
+
+    // 返回剩余部分的第一个非空白字符
+    return trim(s);
+}
+
+// 注册一个命令
+INIT_TEXT void shell_add_cmd(shell_cmd_t *cmd) {
+    ASSERT(NULL != cmd);
+
+    rbnode_t **link = &g_cmds.root;
+    rbnode_t *parent = NULL;
+
+    while (NULL != *link) {
+        shell_cmd_t *ref = containerof(*link, shell_cmd_t, rb);
+        int diff = strncmp(cmd->name, ref->name, 1024);
+
+        parent = *link;
+        if (0 == diff) {
+            klog("warning: command %s already exist!\n", cmd->name);
+            return;
+        } else if (diff < 0) {
+            link = &parent->left;
+        } else {
+            link = &parent->right;
+        }
+    }
+
+    rb_insert(&g_cmds, &cmd->rb, parent, link);
+}
+
+// 中序遍历
+static void run_help(rbnode_t *rb) {
+    if (NULL == rb) {
+        return;
+    }
+
+    run_help(rb->left);
+    shell_cmd_t *cmd = containerof(rb, shell_cmd_t, rb);
+    klog(" %s", cmd->name);
+    run_help(rb->right);
+}
+
+// 解析并执行命令
+static void execute(char *line) {
+    int argc;
+    char *argv[32];
+    line = trim(line);
+    for (argc = 0; (argc < 32) && line; ++argc) {
+        argv[argc] = line;
+        line = split(line);
+    }
+
+    if ((0 == argc) || (NULL == argv[0])) {
+        return;
+    }
+
+    // 搜索已注册的命令
+    rbnode_t *rb = g_cmds.root;
+    while (rb) {
+        shell_cmd_t *cmd = containerof(rb, shell_cmd_t, rb);
+        int diff = strncmp(argv[0], cmd->name, 1024);
+        if (0 == diff) {
+            cmd->func(argc, argv);
+            return;
+        }
+        if (diff < 0) {
+            rb = rb->left;
+        } else {
+            rb = rb->right;
+        }
+    }
+
+    // 检查内部命令
+    if (!strncmp(argv[0], "help", 10)) {
+        klog("commands:");
+        run_help(g_cmds.root);
+        klog("\n");
+        return;
+    }
+
+    klog("error: no command `%s`\n", argv[0]);
+}
 
 
 // tty 拥有字符输出终端，可以控制显示什么内容
 // tty 启动之后应该禁用 klog，只能将字符串发给 /dev/log，logTask 负责不断读取并打印
-static void tty_proc() {
-    klog("tty starting...\n");
+static void shell_proc() {
+    klog("\n> ");
+    char cmd[1024 + 1];
+    int len = 0;
 
     while (1) {
         keycode_t key = keyboard_recv();
@@ -216,13 +343,28 @@ static void tty_proc() {
             continue;
         }
 
-        klog("%c", ch);
+        klog("%c", ch); // 回显
+
+        if ('\n' == ch) {
+            cmd[len] = '\0';
+            execute(cmd); // 执行命令
+            len = 0;
+            klog("> "); // 打印下一个 prompt
+            continue;
+        }
+
+        if (len < 1024) {
+            cmd[len++] = ch;
+        }
     }
 }
 
-static task_t g_tty_tcb;
-
-INIT_TEXT void tty_init() {
-    task_create(&g_tty_tcb, "tty", 1, tty_proc);
-    task_resume(&g_tty_tcb);
+// TODO 定义 terminal 设备的接口，成员函数包括打印、清屏、设置光标、设置颜色等
+//      由 arch 提供该接口（console、framebuf 均可提供），shell 使用
+//      便于实现 inline-editing、history 等功能
+// TODO 打印调试输出（klog）也应该换成 terminal 接口的方案
+// TODO 可以用不同的颜色区分不同类别的打印
+INIT_TEXT void shell_init() {
+    task_create(&g_shell_tcb, "kshell", 1, shell_proc);
+    task_resume(&g_shell_tcb);
 }

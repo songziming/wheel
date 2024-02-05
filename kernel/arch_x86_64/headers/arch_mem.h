@@ -44,6 +44,7 @@ INIT_TEXT void gsbase_init(int idx);
 
 // MMU
 void mmu_walk(uint64_t tbl);
+INIT_TEXT void kernel_pgtable_init();
 
 
 // 内存布局初始化

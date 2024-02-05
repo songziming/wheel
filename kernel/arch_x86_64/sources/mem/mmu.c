@@ -2,7 +2,9 @@
 
 #include <arch_mem.h>
 #include <cpu/info.h>
+#include <cpu/rw.h>
 #include <wheel.h>
+#include <shell.h>
 
 
 
@@ -548,142 +550,8 @@ static uint64_t pml4_unmap(uint64_t pml4, uint64_t va, uint64_t end) {
 }
 
 
-
-
-
-
-
 //------------------------------------------------------------------------------
-// 公开 API
-//------------------------------------------------------------------------------
-
-// 记录内核页表
-CONST static uint64_t g_kernel_table = INVALID_ADDR;
-
-
-static INIT_TEXT void create_kernel_table() {
-    g_kernel_table = alloc_table();
-    PAGE_INFO(g_kernel_table)->ent_num = 256;
-
-    // 填充 canonical hole 之后对 PDP 的映射
-    // 这部分映射被所有进程的页表共享
-    uint64_t *pml4 = (uint64_t *)VIRT(g_kernel_table);
-    for (int i = 256; i < 512; ++i) {
-        uint64_t pdp = alloc_table();
-        pml4[i] = (pdp & MMU_ADDR) | MMU_G | MMU_P | MMU_US | MMU_RW;
-    }
-}
-
-// 获取内核页表
-size_t get_kernel_pgtable() {
-    if (INVALID_ADDR == g_kernel_table) {
-        create_kernel_table();
-    }
-
-    return g_kernel_table;
-}
-
-// 创建一套新的页表，供进程使用，内核部分继承
-size_t mmu_create_table() {
-    ASSERT(INVALID_ADDR != g_kernel_table);
-    size_t tbl = alloc_table();
-    uint64_t *pml4 = VIRT(tbl);
-    uint64_t *kernel_pml4 = VIRT(g_kernel_table);
-    memcpy(&pml4[256], &kernel_pml4[256], 256 * sizeof(uint64_t));
-    return tbl;
-}
-
-// 删除一套页表，只能删除进程页表
-void mmu_table_delete(size_t tbl) {
-    ASSERT(tbl != g_kernel_table);
-    pml4_free(tbl);
-}
-
-// 查询虚拟地址映射的物理地址，同时返回页面属性
-// 多级页表中，各级表项都有属性位，不能只看最末一级
-// 这部分行为要看 Intel 文档，AMD 文档说的不清楚
-size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs) {
-    uint64_t *pml4 = VIRT(tbl);
-    uint64_t pml4e = pml4[(va >> 39) & 0x1ff];
-    if (0 == (pml4e & MMU_P)) {
-        return INVALID_ADDR;
-    }
-
-    *attrs = 0;
-    *attrs |= (pml4e & MMU_US) ? MMU_USER  : 0;
-    *attrs |= (pml4e & MMU_RW) ? MMU_WRITE : 0;
-    *attrs |= (pml4e & MMU_NX) ? 0 : MMU_EXEC;
-
-    uint64_t *pdp = VIRT(pml4e & MMU_ADDR);
-    uint64_t pdpe = pdp[(va >> 30) & 0x1ff];
-    if (0 == (pdpe & MMU_P)) {
-        return INVALID_ADDR;
-    }
-
-    *attrs &= (pdpe & MMU_US) ? MMU_USER  : 0;
-    *attrs &= (pdpe & MMU_RW) ? MMU_WRITE : 0;
-    *attrs &= (pdpe & MMU_NX) ? 0 : MMU_EXEC;
-
-    if (SUPPORT_1G && (pdpe & MMU_PS)) {
-        ASSERT(0 == OFFSET_1G(pdpe & MMU_ADDR));
-        return (pdpe & MMU_ADDR) | OFFSET_1G(va);
-    }
-
-    uint64_t *pd = VIRT(pdpe & MMU_ADDR);
-    uint64_t pde = pd[(va >> 21) & 0x1ff];
-    if (0 == (pde & MMU_P)) {
-        return INVALID_ADDR;
-    }
-
-    *attrs &= (pde & MMU_US) ? MMU_USER  : 0;
-    *attrs &= (pde & MMU_RW) ? MMU_WRITE : 0;
-    *attrs &= (pde & MMU_NX) ? 0 : MMU_EXEC;
-
-    if (pde & MMU_PS) {
-        ASSERT(0 == OFFSET_2M(pde & MMU_ADDR));
-        return (pde & MMU_ADDR) | OFFSET_2M(va);
-    }
-
-    uint64_t *pt = VIRT(pde & MMU_ADDR);
-    uint64_t pte = pt[(va >> 12) & 0x1ff];
-    if (0 == (pte & MMU_P)) {
-        return INVALID_ADDR;
-    }
-
-    *attrs &= (pte & MMU_US) ? MMU_USER  : 0;
-    *attrs &= (pte & MMU_RW) ? MMU_WRITE : 0;
-    *attrs &= (pte & MMU_NX) ? 0 : MMU_EXEC;
-    return (pte & MMU_ADDR) | OFFSET_4K(va);
-}
-
-void mmu_map(size_t tbl, size_t va, size_t end, size_t pa, mmu_attr_t attrs) {
-    ASSERT(0 == OFFSET_4K(tbl));
-    ASSERT(0 == OFFSET_4K(va));
-    ASSERT(0 == OFFSET_4K(end));
-    ASSERT(0 == OFFSET_4K(pa));
-
-    uint64_t prot = 0;
-    prot |= (attrs & MMU_USER) ? MMU_US : 0;
-    prot |= (attrs & MMU_WRITE) ? MMU_RW : 0;
-    prot |= (attrs & MMU_EXEC) && SUPPORT_NX ? 0 : MMU_NX;
-
-    uint64_t len = pml4_map(tbl, va, end, pa, prot);
-    ASSERT(va + len == end);
-    (void)len;
-}
-
-void mmu_unmap(size_t tbl, size_t va, size_t end) {
-    ASSERT(0 == OFFSET_4K(tbl));
-    ASSERT(0 == OFFSET_4K(va));
-    ASSERT(0 == OFFSET_4K(end));
-
-    va = pml4_unmap(tbl, va, end);
-    ASSERT(va == end);
-}
-
-
-//------------------------------------------------------------------------------
-// 打印映射
+// 打印页表内容
 //------------------------------------------------------------------------------
 
 #ifndef SHOW_MAP
@@ -713,7 +581,7 @@ void mmu_walk(uint64_t tbl) {
     uint64_t prev_attr = 0;
     int      nitems    = 0; // 涉及多少条目
 
-    klog("page table %lx content:\n", tbl);
+    klog("page table 0x%lx content:\n", tbl);
 
     uint64_t *pml4 = VIRT(tbl);
     uint64_t va4 = 0;
@@ -824,4 +692,146 @@ void mmu_walk(uint64_t tbl) {
     }
 
     mmu_show_map(prev_va, prev_pa, prev_size, prev_attr, nitems);
+}
+
+
+
+//------------------------------------------------------------------------------
+// 公开 API
+//------------------------------------------------------------------------------
+
+static CONST uint64_t g_kernel_cr3 = INVALID_ADDR;
+static shell_cmd_t g_cmd_mmu;
+
+static int mmu_proc(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
+    mmu_walk(read_cr3());
+    return 0;
+}
+
+
+// 准备内核页表
+INIT_TEXT void kernel_pgtable_init() {
+    ASSERT(INVALID_ADDR == g_kernel_cr3);
+
+    g_kernel_cr3 = alloc_table();
+    PAGE_INFO(g_kernel_cr3)->ent_num = 256;
+
+    // 填充 canonical hole 之后对 PDP 的映射
+    // 这部分映射被所有进程的页表共享
+    uint64_t *pml4 = (uint64_t *)VIRT(g_kernel_cr3);
+    for (int i = 256; i < 512; ++i) {
+        uint64_t pdp = alloc_table();
+        pml4[i] = (pdp & MMU_ADDR) | MMU_G | MMU_P | MMU_US | MMU_RW;
+    }
+
+    // 注册命令
+    g_cmd_mmu.name = "mmu";
+    g_cmd_mmu.func = mmu_proc;
+    shell_add_cmd(&g_cmd_mmu);
+}
+
+// 获取内核页表
+size_t get_kernel_pgtable() {
+    ASSERT(INVALID_ADDR != g_kernel_cr3);
+    return g_kernel_cr3;
+}
+
+// 创建一套新的页表，供进程使用，内核部分继承
+size_t mmu_create_table() {
+    ASSERT(INVALID_ADDR != g_kernel_cr3);
+    size_t tbl = alloc_table();
+    uint64_t *pml4 = VIRT(tbl);
+    uint64_t *kernel_pml4 = VIRT(g_kernel_cr3);
+    memcpy(&pml4[256], &kernel_pml4[256], 256 * sizeof(uint64_t));
+    return tbl;
+}
+
+// 删除一套页表，只能删除进程页表
+void mmu_table_delete(size_t tbl) {
+    ASSERT(tbl != g_kernel_cr3);
+    pml4_free(tbl);
+}
+
+// 查询虚拟地址映射的物理地址，同时返回页面属性
+// 多级页表中，各级表项都有属性位，不能只看最末一级
+// 这部分行为要看 Intel 文档，AMD 文档说的不清楚
+size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs) {
+    uint64_t *pml4 = VIRT(tbl);
+    uint64_t pml4e = pml4[(va >> 39) & 0x1ff];
+    if (0 == (pml4e & MMU_P)) {
+        return INVALID_ADDR;
+    }
+
+    *attrs = 0;
+    *attrs |= (pml4e & MMU_US) ? MMU_USER  : 0;
+    *attrs |= (pml4e & MMU_RW) ? MMU_WRITE : 0;
+    *attrs |= (pml4e & MMU_NX) ? 0 : MMU_EXEC;
+
+    uint64_t *pdp = VIRT(pml4e & MMU_ADDR);
+    uint64_t pdpe = pdp[(va >> 30) & 0x1ff];
+    if (0 == (pdpe & MMU_P)) {
+        return INVALID_ADDR;
+    }
+
+    *attrs &= (pdpe & MMU_US) ? MMU_USER  : 0;
+    *attrs &= (pdpe & MMU_RW) ? MMU_WRITE : 0;
+    *attrs &= (pdpe & MMU_NX) ? 0 : MMU_EXEC;
+
+    if (SUPPORT_1G && (pdpe & MMU_PS)) {
+        ASSERT(0 == OFFSET_1G(pdpe & MMU_ADDR));
+        return (pdpe & MMU_ADDR) | OFFSET_1G(va);
+    }
+
+    uint64_t *pd = VIRT(pdpe & MMU_ADDR);
+    uint64_t pde = pd[(va >> 21) & 0x1ff];
+    if (0 == (pde & MMU_P)) {
+        return INVALID_ADDR;
+    }
+
+    *attrs &= (pde & MMU_US) ? MMU_USER  : 0;
+    *attrs &= (pde & MMU_RW) ? MMU_WRITE : 0;
+    *attrs &= (pde & MMU_NX) ? 0 : MMU_EXEC;
+
+    if (pde & MMU_PS) {
+        ASSERT(0 == OFFSET_2M(pde & MMU_ADDR));
+        return (pde & MMU_ADDR) | OFFSET_2M(va);
+    }
+
+    uint64_t *pt = VIRT(pde & MMU_ADDR);
+    uint64_t pte = pt[(va >> 12) & 0x1ff];
+    if (0 == (pte & MMU_P)) {
+        return INVALID_ADDR;
+    }
+
+    *attrs &= (pte & MMU_US) ? MMU_USER  : 0;
+    *attrs &= (pte & MMU_RW) ? MMU_WRITE : 0;
+    *attrs &= (pte & MMU_NX) ? 0 : MMU_EXEC;
+    return (pte & MMU_ADDR) | OFFSET_4K(va);
+}
+
+void mmu_map(size_t tbl, size_t va, size_t end, size_t pa, mmu_attr_t attrs) {
+    ASSERT(0 == OFFSET_4K(tbl));
+    ASSERT(0 == OFFSET_4K(va));
+    ASSERT(0 == OFFSET_4K(end));
+    ASSERT(0 == OFFSET_4K(pa));
+
+    uint64_t prot = 0;
+    prot |= (attrs & MMU_USER) ? MMU_US : 0;
+    prot |= (attrs & MMU_WRITE) ? MMU_RW : 0;
+    prot |= (attrs & MMU_EXEC) && SUPPORT_NX ? 0 : MMU_NX;
+
+    uint64_t len = pml4_map(tbl, va, end, pa, prot);
+    ASSERT(va + len == end);
+    (void)len;
+}
+
+void mmu_unmap(size_t tbl, size_t va, size_t end) {
+    ASSERT(0 == OFFSET_4K(tbl));
+    ASSERT(0 == OFFSET_4K(va));
+    ASSERT(0 == OFFSET_4K(end));
+
+    va = pml4_unmap(tbl, va, end);
+    ASSERT(va == end);
 }

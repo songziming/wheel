@@ -17,7 +17,7 @@ typedef enum page_type {
 // 每个物理页都有这个结构体，记录相关信息
 typedef union page_info {
     struct {
-        uint16_t    ent_num;    // 有效页表条目数量
+        uint16_t ent_num;    // 有效页表条目数量
     };
 } page_info_t;
 

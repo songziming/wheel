@@ -1,5 +1,6 @@
 #include <arch_mem.h>
 #include <wheel.h>
+#include <shell.h>
 
 #include <init/multiboot1.h>
 #include <init/multiboot2.h>
@@ -9,6 +10,37 @@
 CONST pmrange_t *g_pmmap = NULL;
 CONST int g_pmmap_len = 0;
 
+static shell_cmd_t g_cmd_pmmap;
+
+
+
+static INIT_TEXT const char *pmtype_str(pmtype_t type) {
+    switch (type) {
+    case PM_RESERVED: return "reserved";
+    case PM_AVAILABLE: return "available";
+    case PM_RECLAIMABLE: return "reclaimable";
+    default: return "error";
+    }
+}
+
+void pmmap_show() {
+    ASSERT(NULL != g_pmmap);
+    ASSERT(g_pmmap_len > 0);
+
+    klog("ram ranges:\n");
+    for (int i = 0; i < g_pmmap_len; ++i) {
+        size_t addr = g_pmmap[i].addr;
+        size_t end  = g_pmmap[i].end;
+        const char *type = pmtype_str(g_pmmap[i].type);
+        klog("  - ram range: addr=0x%016zx, end=0x%016zx, type=%s\n", addr, end, type);
+    }
+}
+
+INIT_TEXT void pmmap_register_cmd() {
+    g_cmd_pmmap.name = "pmmap";
+    g_cmd_pmmap.func = (void *)pmmap_show;
+    shell_add_cmd(&g_cmd_pmmap);
+}
 
 INIT_TEXT void pmmap_init_mb1(uint32_t mmap, uint32_t len) {
     ASSERT(NULL == g_pmmap);
@@ -34,6 +66,8 @@ INIT_TEXT void pmmap_init_mb1(uint32_t mmap, uint32_t len) {
         g_pmmap[i].addr = ent->addr;
         g_pmmap[i].end  = ent->addr + ent->len;
     }
+
+    pmmap_register_cmd();
 }
 
 INIT_TEXT void pmmap_init_mb2(void *tag) {
@@ -56,6 +90,8 @@ INIT_TEXT void pmmap_init_mb2(void *tag) {
         g_pmmap[i].addr = ent->addr;
         g_pmmap[i].end  = ent->addr + ent->len;
     }
+
+    pmmap_register_cmd();
 }
 
 pmrange_t *pmmap_locate(size_t ptr) {
@@ -71,26 +107,4 @@ pmrange_t *pmmap_locate(size_t ptr) {
     }
 
     return NULL;
-}
-
-static INIT_TEXT const char *pmtype_str(pmtype_t type) {
-    switch (type) {
-    case PM_RESERVED: return "reserved";
-    case PM_AVAILABLE: return "available";
-    case PM_RECLAIMABLE: return "reclaimable";
-    default: return "error";
-    }
-}
-
-void pmmap_show() {
-    ASSERT(NULL != g_pmmap);
-    ASSERT(g_pmmap_len > 0);
-
-    klog("ram ranges:\n");
-    for (int i = 0; i < g_pmmap_len; ++i) {
-        size_t addr = g_pmmap[i].addr;
-        size_t end  = g_pmmap[i].end;
-        const char *type = pmtype_str(g_pmmap[i].type);
-        klog("  - ram range: addr=0x%016zx, end=0x%016zx, type=%s\n", addr, end, type);
-    }
 }
