@@ -1,5 +1,6 @@
 #include <dev/framebuf.h>
 #include <wheel.h>
+#include <spin.h>
 
 
 
@@ -26,7 +27,7 @@ static int g_em_cols;               // 当前字体下的列数
 static int g_caret_row;             // 光标所在行号
 static int g_caret_col;             // 光标所在列号
 
-static spin_t framebuf_spin = SPIN_INIT;
+static spin_t g_framebuf_spin = SPIN_INIT;
 
 
 static void framebuf_putc_at(char ch, uint32_t fg, int r, int c) {
@@ -144,10 +145,12 @@ void framebuf_putc(char ch) {
 }
 
 void framebuf_puts(const char *s, size_t n) {
-    int key = irq_spin_take(&framebuf_spin);
+    int key = irq_spin_take(&g_framebuf_spin);
     for (size_t i = 0; i < n; ++i) {
         framebuf_putc(s[i]);
     }
     framebuf_draw_caret(g_px_color, g_caret_row, g_caret_col);
-    irq_spin_give(&framebuf_spin, key);
+    irq_spin_give(&g_framebuf_spin, key);
 }
+
+// TODO 提供 ioctl 函数，支持修改分辨率、设置光标位置、颜色等

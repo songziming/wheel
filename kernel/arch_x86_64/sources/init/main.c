@@ -296,16 +296,15 @@ static void root_proc() {
         }
     }
 
-    // 启动核心系统任务，长期驻留运行（tty、键盘、PCI 设备驱动、虚拟文件系统、shell）
     pci_init(acpi_get_table("MCFG"));
     pci_walk_bus(0); // 检测 PCI bus 0 上的设备
-    i8042_init(); // PS/2 键盘
+    i8042_init(); // PS/2 键盘控制器
 
+    // 启动核心系统任务，长期驻留运行
     keyboard_init(); // 虚拟设备 /dev/kbd
     shell_init();
+    // TODO 文件系统
     // common_init();
-
-    // arch_send_resched(1);
 
     // TODO 回收 init section 的物理内存，并删除映射
 }

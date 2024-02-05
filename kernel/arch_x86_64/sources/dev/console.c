@@ -3,6 +3,7 @@
 #include <dev/console.h>
 #include <cpu/rw.h>
 #include <wheel.h>
+#include <spin.h>
 
 
 
@@ -25,6 +26,9 @@ static uint8_t  g_text_color;
 static unsigned g_caret_row;    // 光标所在行（g_vbuf）
 static unsigned g_caret_col;    // 光标所在列
 static unsigned g_start_row;    // g_vram 首行在 g_vbuf 中的行号
+
+static spin_t g_console_spin = SPIN_INIT;
+
 
 INIT_TEXT void console_init() {
     ASSERT(NULL == g_vram);
@@ -110,8 +114,10 @@ void console_putc(char c) {
 }
 
 void console_puts(const char *s, size_t n) {
+    int key = irq_spin_take(&g_console_spin);
     for (size_t i = 0; i < n; ++i) {
         draw_char(s[i]);
     }
     set_caret((g_caret_row - g_start_row) * COLS + g_caret_col);
+    irq_spin_give(&g_console_spin, key);
 }
