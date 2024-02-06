@@ -3,14 +3,18 @@
 // 可以在这里提供基础读写接口，common 模块实现设备枚举逻辑
 
 #include <dev/pci.h>
-#include <wheel.h>
 #include <cpu/rw.h>
+#include <wheel.h>
+#include <shell.h>
 
 
 
 CONST uint32_t (*g_pci_read)(uint8_t, uint8_t, uint8_t, uint8_t) = NULL;
 CONST void (*g_pci_write)(uint8_t, uint8_t, uint8_t, uint8_t, uint32_t) = NULL;
 
+
+static rbtree_t g_drivers = RBTREE_INIT;
+static shell_cmd_t g_cmd_pci;
 
 //------------------------------------------------------------------------------
 // PCI 读写配置空间
@@ -56,18 +60,6 @@ static void pci_write(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg, uint3
 //------------------------------------------------------------------------------
 // PCI 设备驱动数据库
 //------------------------------------------------------------------------------
-
-static rbtree_t g_drivers = RBTREE_INIT;
-
-INIT_TEXT void pci_init(acpi_tbl_t *mcfg) {
-    if (NULL == mcfg) {
-        g_pci_read = pci_read;
-        g_pci_write = pci_write;
-        return;
-    }
-
-    klog("supports PCI-E!\n");
-}
 
 void pci_add_driver(pci_driver_t *drv) {
     ASSERT(NULL != drv);
@@ -116,14 +108,111 @@ pci_driver_t *pci_get_driver(uint32_t key) {
 
 void pci_add_device(uint8_t bus, uint8_t dev, uint8_t func, uint32_t reg0) {
     pci_driver_t *driver = pci_get_driver(reg0);
-    if (NULL == driver) {
-        uint16_t vendor = reg0 & 0xffff;
-        uint16_t device = (reg0 >> 16) & 0xffff;
-        klog("<%04x:%04x>", vendor, device);
-        return;
+
+    const char *name = driver ? driver->name : "?";
+    uint16_t vendor = reg0 & 0xffff;
+    uint16_t device = (reg0 >> 16) & 0xffff;
+    // if (NULL == driver) {
+    //     uint16_t vendor = reg0 & 0xffff;
+    //     uint16_t device = (reg0 >> 16) & 0xffff;
+    //     klog("<%04x:%04x>", vendor, device);
+    //     return;
+    // }
+
+    uint32_t reg2 = pci_read(bus, dev, func, 8);
+    uint8_t classcode = (reg2 >> 24) & 0xff;
+    uint8_t subclass = (reg2 >> 16) & 0xff;
+    uint8_t progif = (reg2 >> 8) & 0xff;
+
+    uint32_t reg3 = pci_read(bus, dev, func, 12);
+    uint8_t header = (reg3 >> 16) & 0x7f;
+
+    // const char *type = "?";
+    const char *subtype = "?";
+    switch (classcode) {
+    case 0:
+        // type = "unclassified";
+        break;
+    case 1:
+        // type = "mass storage controller";
+        switch (subclass) {
+        case 0: subtype = "SCSI bus controller"; break;
+        case 1: subtype = "IDE controller"; break;
+        case 2: subtype = "floppy disk controller"; break;
+        case 3: subtype = "IPI controller"; break;
+        case 4: subtype = "RAID controller"; break;
+        case 5: subtype = "ATA controller"; break;
+        case 6: subtype = "Serial ATA controller"; break;
+        case 7: subtype = "Serial Attached SCSI controller"; break;
+        case 8: subtype = "non-volatile memory controller"; break;
+        default: subtype = "other"; break;
+        }
+        break;
+    case 2:
+        // type = "network controller";
+        switch (subclass) {
+        case 0: subtype = "ethernet controller"; break;
+        case 1: subtype = "token ring controller"; break;
+        case 2: subtype = "FDDI controller"; break;
+        case 3: subtype = "ATM controller"; break;
+        }
+        break;
+    case 3:
+        // type = "display controller";
+        switch (subclass) {
+        case 0: subtype = "VGA compatible controller"; break;
+        case 1: subtype = "XGA compatible controller"; break;
+        case 2: subtype = "3D controller"; break;
+        }
+        break;
+    case 6:
+        // type = "bridge";
+        switch (subclass) {
+        case 0: subtype = "host bridge"; break;
+        case 1: subtype = "ISA bridge"; break;
+        case 2: subtype = "EISA bridge"; break;
+        case 3: subtype = "MCA bridge"; break;
+        case 4: subtype = "PCI-to-PCI bridge"; break;
+        case 5: subtype = "PCMCIA bridge"; break;
+        case 6: subtype = "NuBus bridge"; break;
+        case 7: subtype = "CardBus bridge"; break;
+        case 8: subtype = "RACEway bridge"; break;
+        case 9: subtype = "PCI-to-PCI bridge"; break;
+        case 10: subtype = "InfiniBand-to-PCI host bridge"; break;
+        }
+        break;
+    case 0xc:
+        // type = "serial";
+        switch (subclass) {
+        case 0: subtype = "firewire controller"; break;
+        case 1: subtype = "ACCESS bus controller"; break;
+        case 2: subtype = "SSA"; break;
+        case 3: subtype = "USB controller"; break;
+        case 4: subtype = "fibre channel"; break;
+        case 5: subtype = "SMBus controller"; break;
+        case 6: subtype = "InfiniBand controller"; break;
+        case 7: subtype = "IPMI interface"; break;
+        case 8: subtype = "SERCOS interface"; break;
+        case 9: subtype = "CANbus controller"; break;
+        }
+        break;
+    default:
+        break;
     }
 
-    klog("pci dev %d:%d:%d %s\n", bus, dev, func, driver->name);
+    klog("pci %x:%x:%x vendor/device=%04x/%04x, %s, class/subclass/prog=%x/%x/%x, %s",
+        bus, dev, func, vendor, device, name, classcode, subclass, progif, subtype);
+
+    // 如果是 PCI-to-PCI bus，需要读取下一个 bus 的编号
+    if (1 == header) {
+        uint32_t reg6 = pci_read(bus, dev, func, 0x18);
+        uint8_t primary = reg6 & 0xff;
+        uint8_t secondary = (reg6 >> 8) & 0xff;
+        ASSERT(bus == primary);
+        klog(", secondary bus %d\n", secondary);
+    } else {
+        klog("\n");
+    }
 }
 
 void pci_walk_dev(uint8_t bus, uint8_t dev) {
@@ -134,8 +223,8 @@ void pci_walk_dev(uint8_t bus, uint8_t dev) {
     pci_add_device(bus, dev, 0, reg0);
 
     // 该设备可能有多个 function
-    uint32_t reg2 = pci_read(bus, dev, 0, 12);
-    if (reg2 & (1 << 23)) {
+    uint32_t reg3 = pci_read(bus, dev, 0, 12);
+    if (reg3 & (1 << 23)) {
         for (uint8_t func = 1; func < 8; ++func) {
             reg0 = pci_read(bus, dev, func, 0);
             if (0xffff == (reg0 & 0xffff)) {
@@ -146,10 +235,37 @@ void pci_walk_dev(uint8_t bus, uint8_t dev) {
     }
 }
 
+
 void pci_walk_bus(uint8_t bus) {
     for (uint8_t dev = 0; dev < 32; ++dev) {
         pci_walk_dev(bus, dev);
     }
-    klog("\n");
+    // klog("\n");
+}
+
+
+static int show_pci(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
+
+    // 可以只搜索 bus0，遇到
+    for (int bus = 0; bus < 256; ++bus) {
+        pci_walk_bus((uint8_t)bus);
+    }
+    return 0;
+}
+
+
+INIT_TEXT void pci_init(acpi_tbl_t *mcfg) {
+    if (NULL == mcfg) {
+        g_pci_read = pci_read;
+        g_pci_write = pci_write;
+    } else {
+        klog("supports PCI-E!\n");
+    }
+
+    g_cmd_pci.name = "pci";
+    g_cmd_pci.func = show_pci;
+    shell_add_cmd(&g_cmd_pci);
 }
 

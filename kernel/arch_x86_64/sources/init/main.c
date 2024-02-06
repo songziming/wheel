@@ -298,7 +298,7 @@ static void root_proc() {
     }
 
     pci_init(acpi_get_table("MCFG"));
-    pci_walk_bus(0); // 检测 PCI bus 0 上的设备
+    // pci_walk_bus(0); // 检测 PCI bus 0 上的设备
     i8042_init(); // PS/2 键盘控制器
 
     // 启动核心系统任务，长期驻留运行

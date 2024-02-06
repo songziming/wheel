@@ -44,7 +44,7 @@
 // 预留的缓冲区大小
 //------------------------------------------------------------------------------
 
-#define EARLY_RO_SIZE       0x3000      // 只读预留内存
+#define EARLY_RO_SIZE       0x4000      // 只读预留内存
 #define EARLY_RW_SIZE       0x2000      // 读写预留内存
 
 #define KEYBOARD_BUFF_LEN   64          // 按键码缓冲区
