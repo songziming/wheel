@@ -32,8 +32,8 @@ typedef struct task {
     uint8_t      priority;  // 数字越小，优先级越高
     int          affinity;  // 负值表示不限制在哪个 CPU 上运行
     int          last_cpu;  // 最近一次运行在哪个 CPU 之上，位于哪个就绪队列之中
-    int          tick_reload;
-    int          tick;
+    uint32_t     tick_reload;
+    uint32_t     tick;
     dlnode_t     q_node;    // 任务在就绪队列或阻塞队列中的节点
 
     work_t       work;      // 有些任务需要在中断里执行，例如删除自己、等待若干 tick

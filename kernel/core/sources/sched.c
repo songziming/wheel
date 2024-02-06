@@ -2,25 +2,28 @@
 #include <wheel.h>
 
 #include <spin.h>
+#include <shell.h>
+
+// dllist 双链表没有专门的头节点，因此用指针
+
+typedef struct ready_q {
+    spin_t    spin;
+    uint32_t  total_tick; // 队列中所有任务的时间片之和
+    uint32_t  priorities; // 位图，表示队列包含的优先级
+    dlnode_t *heads[PRIORITY_NUM];
+} ready_q_t;
 
 
 //------------------------------------------------------------------------------
 // 就绪队列
 //------------------------------------------------------------------------------
 
-// 我们的双链表中包含头节点，
-
-typedef struct ready_q {
-    spin_t    spin;
-    uint32_t  priorities_mask; // 表示该队列包含那些优先级
-    dlnode_t *heads[PRIORITY_NUM];
-} ready_q_t;
-
 static INIT_TEXT void ready_q_init(ready_q_t *q) {
     ASSERT(NULL != q);
 
     q->spin = SPIN_INIT;
-    q->priorities_mask = 0;
+    q->total_tick = 0;
+    q->priorities = 0;
     memset(q->heads, 0, PRIORITY_NUM * sizeof(dlnode_t *));
 }
 
@@ -31,7 +34,7 @@ static task_t *ready_q_head(ready_q_t *q) {
     ASSERT(NULL != q);
     ASSERT(q->spin.ticket_counter > q->spin.service_counter);
 
-    int top = __builtin_ctz(q->priorities_mask);
+    int top = __builtin_ctz(q->priorities);
     ASSERT(NULL != q->heads[top]);
     return containerof(q->heads[top], task_t, q_node);
 }
@@ -43,36 +46,41 @@ static void ready_q_insert(ready_q_t *q, task_t *task) {
 
     int pri = task->priority;
 
-    if ((1U << pri) & q->priorities_mask) {
+    if ((1U << pri) & q->priorities) {
         ASSERT(NULL != q->heads[pri]);
         dl_insert_before(&task->q_node, q->heads[pri]);
     } else {
         ASSERT(NULL == q->heads[pri]);
         dl_init_circular(&task->q_node);
         q->heads[pri] = &task->q_node;
-        q->priorities_mask |= 1U << pri;
+        q->priorities |= 1U << pri;
     }
+
+    q->total_tick += task->tick_reload;
 }
 
 static void ready_q_remove(ready_q_t *q, task_t *task) {
     ASSERT(NULL != q);
     ASSERT(q->spin.ticket_counter > q->spin.service_counter);
     ASSERT(NULL != task);
+    ASSERT(q->total_tick >= task->tick_reload);
 
     int pri = task->priority;
     ASSERT(NULL != q->heads[pri]);
-    ASSERT(q->priorities_mask & (1U << pri));
+    ASSERT(q->priorities & (1U << pri));
 
     dlnode_t *next = dl_remove(&task->q_node);
 
     if (NULL == next) {
         q->heads[pri] = NULL;
-        q->priorities_mask &= ~(1U << pri);
+        q->priorities &= ~(1U << pri);
         return;
     }
     if (q->heads[pri] == &task->q_node) {
         q->heads[pri] = next;
     }
+
+    q->total_tick -= task->tick_reload;
 }
 
 
@@ -97,6 +105,44 @@ PCPU_BSS task_t *g_tid_next;  // 下次中断将要切换的任务
 // 调用下面的函数，需要 caller 已经持有 task->spin
 
 // sched 函数只负责更新就绪队列，不会切换任务，也不会发送 IPI
+
+
+// 挑选负载最轻的，优先级最低的 CPU
+static int select_cpu(task_t *task) {
+    int lowest_cpu = 0;
+    int lowest_tick = 0; // 就绪队列总负载
+    int lowest_pri = 0; // 优先级
+
+    // 优先选择之前运行的 CPU，缓存无需预热
+    if ((NULL != task) && (task->last_cpu >= 0)) {
+        ASSERT(task->affinity < 0);
+        lowest_cpu = task->last_cpu;
+        ready_q_t *q = pcpu_ptr(lowest_cpu, &g_ready_q);
+        lowest_tick = q->total_tick;
+        lowest_pri = __builtin_ctz(q->priorities);
+    }
+
+    for (int i = 0; i < cpu_count(); ++i) {
+        if (task->last_cpu == i) {
+            continue;
+        }
+
+        ready_q_t *q = pcpu_ptr(i, &g_ready_q);
+        int tick = q->total_tick;
+        int pri = __builtin_ctz(q->priorities);
+
+        if (tick < lowest_tick) {
+            lowest_cpu = i;
+            lowest_tick = tick;
+            lowest_pri = pri;
+        } else if ((tick == lowest_tick) && (pri < lowest_pri)) {
+            lowest_cpu = i;
+            lowest_pri = pri;
+        }
+    }
+
+    return lowest_cpu;
+}
 
 
 
@@ -140,15 +186,12 @@ uint16_t sched_cont(task_t *task, uint16_t bits) {
     }
 
     // 变为就绪态，放入一个就绪队列
-    ready_q_t *q;
     if (task->affinity >= 0) {
-        q = pcpu_ptr(task->affinity, &g_ready_q);
         task->last_cpu = task->affinity;
     } else {
-        // TODO 选择优先级最低的 CPU，而不是当前 CPU
-        q = this_ptr(&g_ready_q);
-        task->last_cpu = cpu_index();
+        task->last_cpu = select_cpu(task);
     }
+    ready_q_t *q = pcpu_ptr(task->last_cpu, &g_ready_q);
 
     int key = irq_spin_take(&q->spin);
     ready_q_insert(q, task);
@@ -194,18 +237,40 @@ void sched_tick() {
 
 // 空闲任务
 static PCPU_BSS task_t idle_tcb;
-
-// static PCPU_BSS uint8_t idle_stack[IDLE_STACK_SIZE];
-
-// #include <cpu/rw.h>
+static shell_cmd_t g_cmd_sched;
 
 // 空闲任务，优先级最低，用于填充 CPU 时间
 static NORETURN void idle_proc() {
-    // klog("cpu %d begin idling, rflags=%lx\n", cpu_index(), read_rflags());
     while (1) {
         cpu_pause();
         cpu_halt();
     }
+}
+
+// 显示当前就绪任务
+static int sched_show(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
+
+    for (int i = 0; i < cpu_count(); ++i) {
+        klog("content of ready queue %d:\n", i);
+        ready_q_t *q = pcpu_ptr(i, &g_ready_q);
+        for (int p = 0; p < PRIORITY_NUM; ++p) {
+            if (0 == (q->priorities & (1U << p))) {
+                continue;
+            }
+
+            dlnode_t *dl = q->heads[p];
+            do {
+                task_t *task = containerof(dl, task_t, q_node);
+                dl = dl->next;
+                klog("  - task `%s`, priority %d, affinity %d\n",
+                    task->name, task->priority, task->affinity);
+            } while (dl != q->heads[p]);
+        }
+    }
+
+    return 0;
 }
 
 // 初始化就绪队列，创建 idle 任务
@@ -224,8 +289,9 @@ INIT_TEXT void sched_init() {
         *(task_t **)pcpu_ptr(i, &g_tid_prev) = NULL;
         *(task_t **)pcpu_ptr(i, &g_tid_next) = idle;
         raw_spin_give(&q->spin);
-
-        raw_spin_take(&idle->spin);
-        // 不释放 idle_task 的自旋锁，禁止后续对 idle-task 操作
     }
+
+    g_cmd_sched.name = "ready";
+    g_cmd_sched.func = sched_show;
+    shell_add_cmd(&g_cmd_sched);
 }

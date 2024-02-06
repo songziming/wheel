@@ -1,3 +1,7 @@
+// 图形模式的字符终端
+
+// TODO 支持 escape sequence
+
 #include <dev/framebuf.h>
 #include <wheel.h>
 #include <spin.h>

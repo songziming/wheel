@@ -166,6 +166,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 创建第一个任务
     task_create(&root_tcb, "root", 0, root_proc);
+    root_tcb.affinity = 0;
     task_resume(&root_tcb);
     arch_task_switch();
 

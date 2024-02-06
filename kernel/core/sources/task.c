@@ -70,6 +70,7 @@ int task_create_ex(task_t *task, const char *name,
     task->state = TASK_STOPPED; // 初始状态为暂停
     task->priority = priority;
     task->affinity = affinity;
+    task->last_cpu = affinity;
 
     task->tick_reload = 10;
     task->tick = 10;

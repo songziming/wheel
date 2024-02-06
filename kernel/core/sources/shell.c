@@ -283,7 +283,7 @@ static void run_help(rbnode_t *rb) {
 
     run_help(rb->left);
     shell_cmd_t *cmd = containerof(rb, shell_cmd_t, rb);
-    klog(" %s", cmd->name);
+    klog("%s, ", cmd->name);
     run_help(rb->right);
 }
 
@@ -319,9 +319,14 @@ static void execute(char *line) {
 
     // 检查内部命令
     if (!strncmp(argv[0], "help", 10)) {
-        klog("commands:");
+        klog("commands: ");
         run_help(g_cmds.root);
-        klog("\n");
+        klog("help, exit\n");
+        return;
+    }
+
+    if (!strncmp(argv[0], "exit", 10)) {
+        emu_exit(0);
         return;
     }
 
@@ -332,7 +337,7 @@ static void execute(char *line) {
 // tty 拥有字符输出终端，可以控制显示什么内容
 // tty 启动之后应该禁用 klog，只能将字符串发给 /dev/log，logTask 负责不断读取并打印
 static void shell_proc() {
-    klog("\n> ");
+    klog("\nkernel shell started\n%d> ", cpu_index());
     char cmd[1024 + 1];
     int len = 0;
 
@@ -349,7 +354,7 @@ static void shell_proc() {
             cmd[len] = '\0';
             execute(cmd); // 执行命令
             len = 0;
-            klog("> "); // 打印下一个 prompt
+            klog("%d> ", cpu_index()); // 打印下一个 prompt
             continue;
         }
 

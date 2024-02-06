@@ -220,9 +220,6 @@ static void handle_keyboard(int vec, arch_regs_t *f) {
     (void)vec;
     (void)f;
 
-    // klog("keyboard interrupt from cpu %d, vec %d\n", cpu_index(), vec);
-    // klog("local apic tmr is %d\n", local_apic_get_tmr(vec));
-
     while (in8(PS2KBD_CTRL_PORT) & 1) {
         handle_scancode(in8(PS2KBD_DATA_PORT));
     }

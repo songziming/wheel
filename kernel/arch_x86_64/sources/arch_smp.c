@@ -1,6 +1,7 @@
 #include <arch_smp.h>
 #include <cpu/info.h>
 #include <wheel.h>
+#include <shell.h>
 
 
 // 本文件主要负责解析 MADT，提取 Local APIC 和 IO APIC 的数据
@@ -35,6 +36,9 @@ static CONST uint8_t  g_nmi_inti = 0;   // 触发模式（edge/level、low/high�
 // 必须首先启用 extended interrupt mode，然后再开启 x2APIC 模式
 static CONST uint32_t g_max_id = 0;
 
+static CONST const madt_t *g_madt = NULL;
+static shell_cmd_t g_cmd_smp;
+
 
 
 // 解析 MPS INTI flags，描述中断触发条件
@@ -61,14 +65,12 @@ void show_inti_flags(uint16_t flags) {
     klog("%s-triggered, active-%s\n", trigger, polarity);
 }
 
-#if 0
+
 static void print_madt(const madt_t *madt) {
-    int len = madt->header.length;
-    uint8_t *arr = (uint8_t *)madt;
-    for (int i = 0; i < len; ++i) {
-        klog("%02x", arr[i]);
+    if (NULL == madt) {
+        klog("madt is NULL\n");
+        return;
     }
-    klog("\n");
 
     klog("madt flags=%x\n", madt->flags);
     klog("madt loapic_addr=%x\n", madt->loapic_addr);
@@ -117,7 +119,13 @@ static void print_madt(const madt_t *madt) {
         }
     }
 }
-#endif // 0
+
+static int show_smp(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
+    print_madt(g_madt);
+    return 0;
+}
 
 INIT_TEXT void parse_madt(const madt_t *madt) {
     ASSERT(NULL == g_loapics);
@@ -127,9 +135,7 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
     ASSERT(NULL == g_gsi_flags);
     ASSERT(NULL != madt);
 
-#if 0
-    print_madt(madt);
-#endif
+    g_madt = madt;
 
     g_loapic_addr = madt->loapic_addr;
     g_loapic_num = 0;
@@ -309,6 +315,10 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
     // TODO 统计最大的 apic_id 取值，检查是否超过 256
     //      如果超过 256 且硬件没有 interrupt remapper，则不能使用 x2APIC
     //      需要在初始化 Local APIC 之前决定
+
+    g_cmd_smp.name = "smp";
+    g_cmd_smp.func = show_smp;
+    shell_add_cmd(&g_cmd_smp);
 }
 
 inline int cpu_count() {

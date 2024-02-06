@@ -102,10 +102,10 @@ INIT_TEXT void mem_init() {
     // 记录内核的地址空间布局，也是后面建立页表的依据
     vmspace_t *space = get_kernel_vmspace();
     char *kernel_addr = (char *)KERNEL_TEXT_ADDR + KERNEL_LOAD_ADDR;
-    add_kernel_range(space, &g_range_init, kernel_addr, &_init_end, "init");
-    add_kernel_range(space, &g_range_text, &_text_addr, &_text_end, "text");
-    add_kernel_range(space, &g_range_rodata, &_rodata_addr, early_alloc_ro(0), "rodata");
-    add_kernel_range(space, &g_range_data, &_data_addr, early_alloc_rw(0), "data");
+    add_kernel_range(space, &g_range_init, kernel_addr, &_init_end, "kernel init");
+    add_kernel_range(space, &g_range_text, &_text_addr, &_text_end, "kernel text");
+    add_kernel_range(space, &g_range_rodata, &_rodata_addr, early_alloc_ro(0), "kernel rodata");
+    add_kernel_range(space, &g_range_data, &_data_addr, early_alloc_rw(0), "kernel data");
 
     // 为 PCPU 划分空间，并将信息记录在 vmspace 中
     // PCPU 结束位置也是内核静态 sections 结束位置
