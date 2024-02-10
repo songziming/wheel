@@ -29,6 +29,7 @@ void semaphore_init(semaphore_t *sem, int n, int max) {
     sem->value = n;
 }
 
+// 可能阻塞
 void semaphore_take(semaphore_t *sem, int n) {
     ASSERT(NULL != sem);
     ASSERT(n > 0);
@@ -57,11 +58,19 @@ void semaphore_take(semaphore_t *sem, int n) {
     raw_spin_give(&self->spin);
     irq_spin_give(&sem->spin, key);
 
+    // TODO 有一种可能，将自身任务放入了阻塞队列，即将切换任务，立马得到了信号量
+    //      如果这时切换任务，会怎样？
+
     arch_task_switch();
 
     // TODO 任务重新开始执行，判断是否成功获得信号量
     //      还是因为超时或删除信号量导致的重启
+    ASSERT(!dl_contains(&sem->pend_q, &item.dl));
 }
+
+
+
+extern task_t g_shell_tcb;
 
 
 void semaphore_give(semaphore_t *sem, int n) {
@@ -78,6 +87,14 @@ void semaphore_give(semaphore_t *sem, int n) {
     // 如果没有阻塞的任务就直接返回
     if (dl_is_lastone(&sem->pend_q)) {
         irq_spin_give(&sem->spin, key);
+// #if 1
+//         key = irq_spin_take(&g_shell_tcb.spin);
+//         klog("(%d)", g_shell_tcb.state);
+//         if (g_shell_tcb.state) {
+//             klog("(%p:%p)", g_shell_tcb.q_node.prev, g_shell_tcb.q_node.next);
+//         }
+//         irq_spin_give(&g_shell_tcb.spin, key);
+// #endif
         return;
     }
 
@@ -86,9 +103,10 @@ void semaphore_give(semaphore_t *sem, int n) {
     // 遍历阻塞队列，尝试唤醒
     for (dlnode_t *i = sem->pend_q.next; i != &sem->pend_q;) {
         pend_item_t *item = containerof(i, pend_item_t, dl);
-        i = i->next;
+        i = i->next; // 遍历的同时要删除节点，需要提前得到下一个 node
 
         if (sem->value < item->require) {
+            klog("(nowake)");
             continue;
         }
 

@@ -190,6 +190,9 @@ uint16_t sched_cont(task_t *task, uint16_t bits) {
         task->last_cpu = task->affinity;
     } else {
         task->last_cpu = select_cpu(task);
+        ASSERT(task->last_cpu >= 0);
+        ASSERT(task->last_cpu < cpu_count());
+        // task->last_cpu = cpu_index();
     }
     ready_q_t *q = pcpu_ptr(task->last_cpu, &g_ready_q);
 
@@ -198,6 +201,10 @@ uint16_t sched_cont(task_t *task, uint16_t bits) {
     task_t *head = ready_q_head(q);
     *(task_t **)pcpu_ptr(task->last_cpu, &g_tid_next) = head;
     irq_spin_give(&q->spin, key);
+
+    // if (head != task) {
+    //     klog("[nopreempt]");
+    // }
 
     return old_state;
 }
@@ -236,7 +243,7 @@ void sched_tick() {
 //------------------------------------------------------------------------------
 
 // 空闲任务
-static PCPU_BSS task_t idle_tcb;
+static PCPU_BSS task_t g_idle_tcb;
 static shell_cmd_t g_cmd_sched;
 
 // 空闲任务，优先级最低，用于填充 CPU 时间
@@ -279,7 +286,7 @@ INIT_TEXT void sched_init() {
         ready_q_t *q = pcpu_ptr(i, &g_ready_q);
         ready_q_init(q);
 
-        task_t *idle = pcpu_ptr(i, &idle_tcb);
+        task_t *idle = pcpu_ptr(i, &g_idle_tcb);
         task_create_ex(idle, "idle", PRIORITY_NUM - 1, i, NULL,
                 NULL, IDLE_STACK_RANK, idle_proc, 0, 0, 0, 0);
 

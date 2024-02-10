@@ -147,7 +147,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     i8259_disable(); // 禁用 PIC
     io_apic_init_all();
     local_apic_init(); // 设置中断控制器
-    local_apic_timer_set(10, LOCAL_APIC_TIMER_PERIODIC);
+    local_apic_timer_set(TIMER_FREQ, LOCAL_APIC_TIMER_PERIODIC);
 
     // 创建并加载内核页表，启用内存保护
     kernel_pgtable_init();
@@ -326,7 +326,7 @@ static INIT_TEXT NORETURN void sys_init_ap() {
     tss_init_load();
 
     local_apic_init();
-    local_apic_timer_set(10, LOCAL_APIC_TIMER_PERIODIC);
+    local_apic_timer_set(TIMER_FREQ, LOCAL_APIC_TIMER_PERIODIC);
 
     write_cr3(get_kernel_pgtable());
 

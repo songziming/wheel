@@ -362,6 +362,8 @@ static void shell_proc() {
             cmd[len++] = ch;
         }
     }
+
+    klog("\nkernel shell exited!\n");
 }
 
 // TODO 定义 terminal 设备的接口，成员函数包括打印、清屏、设置光标、设置颜色等
@@ -370,6 +372,7 @@ static void shell_proc() {
 // TODO 打印调试输出（klog）也应该换成 terminal 接口的方案
 // TODO 可以用不同的颜色区分不同类别的打印
 INIT_TEXT void shell_init() {
-    task_create(&g_shell_tcb, "kshell", 1, shell_proc);
+    task_create(&g_shell_tcb, "shell", 1, shell_proc);
+    // g_shell_tcb.affinity = 1;
     task_resume(&g_shell_tcb);
 }

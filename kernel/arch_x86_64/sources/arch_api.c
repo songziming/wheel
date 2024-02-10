@@ -119,7 +119,7 @@ static void handle_resched(int vec, arch_regs_t *f) {
     (void)f;
     local_apic_send_eoi();
     // 中断返回过程自动切换任务，无需任何处理
-    // klog("resched received on cpu %d\n", cpu_index());
+    // klog("<sched-%d>", cpu_index());
 }
 
 void arch_send_resched(int cpu) {
