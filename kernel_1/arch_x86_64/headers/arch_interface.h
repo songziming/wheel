@@ -79,8 +79,8 @@ uint32_t atomic32_add(uint32_t *ptr, uint32_t val);
 // liba/mmu.c
 size_t mmu_create();
 size_t mmu_translate(size_t tbl, size_t va, uint32_t *flags);
-void   mmu_map(size_t tbl, size_t va, size_t pa, size_t npages, uint32_t flags);
-void   mmu_unmap(size_t tbl, size_t va, size_t npages, flush_flag_t flush);
+void mmu_map(size_t tbl, size_t va, size_t pa, size_t npages, uint32_t flags);
+void mmu_unmap(size_t tbl, size_t va, size_t npages, flush_flag_t flush);
 
 // arch_mem.c
 INIT_TEXT void *early_const_alloc(size_t size);

@@ -109,17 +109,22 @@ PCPU_BSS task_t *g_tid_next;  // 下次中断将要切换的任务
 
 // 挑选负载最轻的，优先级最低的 CPU
 static int select_cpu(task_t *task) {
+    ASSERT(NULL != task);
+    ASSERT(task->spin.ticket_counter > task->spin.service_counter);
+
     int lowest_cpu = 0;
     int lowest_tick = 0; // 就绪队列总负载
     int lowest_pri = 0; // 优先级
 
     // 优先选择之前运行的 CPU，缓存无需预热
-    if ((NULL != task) && (task->last_cpu >= 0)) {
+    if (task->last_cpu >= 0) {
         ASSERT(task->affinity < 0);
         lowest_cpu = task->last_cpu;
         ready_q_t *q = pcpu_ptr(lowest_cpu, &g_ready_q);
+        int key = irq_spin_take(&q->spin);
         lowest_tick = q->total_tick;
         lowest_pri = __builtin_ctz(q->priorities);
+        irq_spin_give(&q->spin, key);
     }
 
     for (int i = 0; i < cpu_count(); ++i) {
@@ -128,8 +133,10 @@ static int select_cpu(task_t *task) {
         }
 
         ready_q_t *q = pcpu_ptr(i, &g_ready_q);
+        int key = irq_spin_take(&q->spin);
         int tick = q->total_tick;
         int pri = __builtin_ctz(q->priorities);
+        irq_spin_give(&q->spin, key);
 
         if (tick < lowest_tick) {
             lowest_cpu = i;
@@ -172,12 +179,15 @@ uint16_t sched_stop(task_t *task, uint16_t bits) {
     return old_state;
 }
 
+extern task_t g_shell_tcb;
+
 // 取消 stoped 状态，如果变为就绪，就把任务放入就绪队列
 // TODO 应该返回修改之后的状态，而不是之前的
 uint16_t sched_cont(task_t *task, uint16_t bits) {
     ASSERT(NULL != task);
     ASSERT(task->spin.ticket_counter > task->spin.service_counter);
     ASSERT(0 != bits);
+    // ASSERT(&g_shell_tcb == task);
 
     uint16_t old_state = task->state;
     task->state &= ~bits;
@@ -202,39 +212,45 @@ uint16_t sched_cont(task_t *task, uint16_t bits) {
     *(task_t **)pcpu_ptr(task->last_cpu, &g_tid_next) = head;
     irq_spin_give(&q->spin, key);
 
-    // if (head != task) {
-    //     klog("[nopreempt]");
-    // }
+    if ((&g_shell_tcb == task) && (head != task)) {
+        klog("[nopreempt]");
+        arch_send_stopall();
+    }
 
     return old_state;
 }
 
 
-// 轮转，切换到同优先级的另一个任务
-// 当前任务耗尽时间片时调用，中断内执行
-void sched_rotate() {
-    ready_q_t *q = this_ptr(&g_ready_q);
-
-    // 虽然处于中断，但中断也会重入
-
-    int key = irq_spin_take(&q->spin);
-    task_t *prev = THISCPU_GET(g_tid_prev);
-    task_t *next = containerof(prev->q_node.next, task_t, q_node);
-    THISCPU_SET(g_tid_next, next);
-    irq_spin_give(&q->spin, key);
-}
-
-
 // 每次时钟中断里执行（但是可能重入）
+// 首先锁住就绪队列，防止轮转过程中插入新的任务，导致当前任务不再是最高优先级
 void sched_tick() {
-    task_t *prev = THISCPU_GET(g_tid_prev);
-    --prev->tick;
-    if (0 != prev->tick) {
+    // ready_q_t *q = this_ptr(&g_ready_q);
+    // int key = irq_spin_take(&q->spin);
+
+    task_t *self = THISCPU_GET(g_tid_prev);
+    int key = irq_spin_take(&self->spin);
+    --self->tick;
+    if (0 != self->tick) {
+        irq_spin_give(&self->spin, key);
         return;
     }
 
-    prev->tick = prev->tick_reload;
-    sched_rotate();
+    self->tick = self->tick_reload;
+
+    // 刚才修改 tick 时候，仅仅锁住了任务，没有锁住就绪队列
+    // 就绪队列中可能放入了新任务，导致 self 不再是最高优先级
+    // 锁住就绪队列（和 tid_next）后，需要判断 tid_next 有无发生变化
+    // 如果有变化，说明有抢占，不能再轮转
+
+    ready_q_t *q = this_ptr(&g_ready_q);
+    raw_spin_take(&q->spin);
+    task_t *next = containerof(self->q_node.next, task_t, q_node);
+    if (THISCPU_GET(g_tid_next) == self) {
+        THISCPU_SET(g_tid_next, next);
+    }
+
+    raw_spin_give(&q->spin);
+    irq_spin_give(&self->spin, key);
 }
 
 

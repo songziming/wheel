@@ -265,3 +265,28 @@ void heap_free(mem_heap_t *heap, void *ptr) {
     chunk_free(heap, chk);
     irq_spin_give(&heap->spin, key);
 }
+
+
+
+//------------------------------------------------------------------------------
+// 内核使用的默认堆
+//------------------------------------------------------------------------------
+
+
+static mem_heap_t g_common_heap = { SPIN_INIT, RBTREE_INIT };
+static uint8_t g_heap_buff[KERNEL_HEAP_SIZE];
+
+INIT_TEXT void kernel_heap_init() {
+    ASSERT(NULL == g_common_heap.sizetree.root);
+    heap_init(&g_common_heap, g_heap_buff, sizeof(g_heap_buff));
+}
+
+void *kernel_heap_alloc(size_t size) {
+    ASSERT(NULL != g_common_heap.sizetree.root);
+    return heap_alloc(&g_common_heap, size);
+}
+
+void kernel_heap_free(void *ptr) {
+    ASSERT(NULL != g_common_heap.sizetree.root);
+    heap_free(&g_common_heap, ptr);
+}

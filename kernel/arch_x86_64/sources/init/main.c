@@ -132,6 +132,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     idt_load();
 
     // 划分内存布局，启用物理页面管理
+    // kernel_context_init();
     mem_init();
     gsbase_init(0);
 
@@ -297,8 +298,11 @@ static void root_proc() {
         }
     }
 
+#if 0
+    // 压力测试
+    test_spin_lock();
+#else
     pci_init(acpi_get_table("MCFG"));
-    // pci_walk_bus(0); // 检测 PCI bus 0 上的设备
     i8042_init(); // PS/2 键盘控制器
 
     // 启动核心系统任务，长期驻留运行
@@ -308,6 +312,7 @@ static void root_proc() {
     // common_init();
 
     // TODO 回收 init section 的物理内存，并删除映射
+#endif
 }
 
 

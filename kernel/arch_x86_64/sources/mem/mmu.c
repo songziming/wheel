@@ -1,11 +1,11 @@
 // 页表内容管理
+// 页表操作没有自旋锁保护
 
 #include <arch_mem.h>
 #include <cpu/info.h>
 #include <cpu/rw.h>
 #include <wheel.h>
 #include <shell.h>
-
 
 
 // table          PML4 --> PDP --> PD --> PT
@@ -19,6 +19,7 @@
 // 如果内核 PML4 更新，进程页表不会自动更新，访问时可能发生 page fault，此时再更新进程 PML4
 
 // 内核 PDP 为空也不能删除，因为内核 PDP 被所有进程的 PML4 引用
+
 
 
 //------------------------------------------------------------------------------
@@ -138,37 +139,6 @@ static uint64_t pt_map(uint64_t pt, uint64_t va, uint64_t end, uint64_t pa, uint
 
     return va - start;
 }
-
-#if 0
-// 判断 PT 能否合并为一个 2M 页
-int pt_contiuous(uint64_t pt) {
-    ASSERT(0 == OFFSET_4K(pt));
-
-    page_info_t *info = PAGE_INFO(pt);
-    if (512 != info->ent_num) {
-        return 0;
-    }
-
-    uint64_t *tbl = VIRT(pt);
-    uint64_t pa = tbl[0] & MMU_ADDR;
-    if (OFFSET_2M(pa)) {
-        return 0;
-    }
-
-    pa += SIZE_4K;
-    uint64_t attrs = tbl[0] & MMU_ADDR;
-    for (int i = 1; i < 512; ++i, pa += SIZE_4K) {
-        if (pa != (tbl[i] & MMU_ADDR)) {
-            return 0;
-        }
-        if (attrs != (tbl[i] & MMU_ADDR)) {
-            return 0;
-        }
-    }
-
-    return 1;
-}
-#endif
 
 static uint64_t pt_unmap(uint64_t pt, uint64_t va, uint64_t end) {
     ASSERT(0 == OFFSET_4K(pt));

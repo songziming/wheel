@@ -6,6 +6,50 @@
 INIT_TEXT void local_apic_busywait(int us);
 
 
+
+//------------------------------------------------------------------------------
+// 测试自旋锁
+//------------------------------------------------------------------------------
+
+static spin_t g_test_spin;
+static volatile int g_test_val;
+static task_t g_task_a;
+static task_t g_task_b;
+
+static void spin_test_proc() {
+    klog("running on cpu %d\n", cpu_index());
+    while (1) {
+        raw_spin_take(&g_test_spin);
+        int old = __sync_fetch_and_add(&g_test_val, 1);
+        if (0 != old) {
+            klog("spinlock error!\n");
+            while (1) {
+                cpu_halt();
+            }
+        }
+        local_apic_busywait(100);
+        g_test_val= 0;
+        raw_spin_give(&g_test_spin);
+    }
+}
+
+void test_spin_lock() {
+    g_test_spin = SPIN_INIT;
+    g_test_val = 0;
+    task_create(&g_task_a, "spin-a", 1, spin_test_proc);
+    task_create(&g_task_b, "spin-b", 1, spin_test_proc);
+    g_task_a.affinity = 1;
+    g_task_b.affinity = 2;
+    task_resume(&g_task_a);
+    task_resume(&g_task_b);
+}
+
+
+
+
+//------------------------------------------------------------------------------
+
+
 static void task_a_proc() {
     for (int i = 0; i < 15; ++i) {
         klog("A");

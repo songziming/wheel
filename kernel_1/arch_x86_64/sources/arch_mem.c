@@ -182,6 +182,10 @@ void mem_init() {
     // 根据物理内存大小准备页描述符（这一步会调用 early_alloc）
     pages_init(npages);
 
+    // TODO 应该用 kernel_context 记录内核的地址空间，带有自旋锁保护
+    //      初始化阶段，先把地址范围记录在 vmrange 内部，
+    //      划分内存之后，再把 vmrange 注册到 kernel_ctx，顺便映射页表
+
     // 记录内核地址空间布局
     uint8_t *init_addr = (uint8_t *)(KERNEL_TEXT_BASE + KERNEL_LOAD_ADDR);
     uint8_t *rodata_end = (uint8_t *)early_heap_get_ptr(&g_early_const_heap);

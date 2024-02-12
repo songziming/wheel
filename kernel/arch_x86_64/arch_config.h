@@ -35,6 +35,7 @@
 #define VEC_LINUX_SYSCALL   0x80    // Linux 系统调用兼容层
 
 #define VEC_IPI_RESCHED     0xd0
+#define VEC_IPI_STOPALL     0xd1
 
 #define VEC_LOAPIC_TIMER    0xe0
 

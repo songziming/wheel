@@ -85,6 +85,7 @@ enum reg {
 #define LOAPIC_DM_INIT      0x00000500  // delivery mode: INIT
 #define LOAPIC_DM_STARTUP   0x00000600  // delivery mode: startup
 #define LOAPIC_DM_EXTINT    0x00000700  // delivery mode: ExtINT
+#define LOAPIC_LOGICAL      0x00000800  // logical destination
 #define LOAPIC_IDLE         0x00000000  // delivery status: idle
 #define LOAPIC_PENDING      0x00001000  // delivery status: pend
 #define LOAPIC_HIGH         0x00000000  // polarity: High
@@ -123,7 +124,7 @@ static void x_write(reg_t reg, uint32_t val) {
 
 // xAPIC 模式的目标 ID 只有 8-bit
 static void x_write_icr(uint32_t dst, uint32_t lo) {
-    ASSERT(dst < 0x100);
+    // ASSERT(dst < 0x100);
     dst <<= 24;
     x_write(REG_ICR_HI, dst);
     x_write(REG_ICR_LO, lo);
@@ -493,10 +494,19 @@ INIT_TEXT void local_apic_send_sipi(int cpu, int vec) {
 }
 
 void local_apic_send_ipi(int cpu, int vec) {
-    ASSERT(cpu >= 0);
     ASSERT(cpu < cpu_count());
     ASSERT((vec >= 0) && (vec < 256));
 
     uint32_t lo = (vec & 0xff) | LOAPIC_DM_FIXED | LOAPIC_EDGE | LOAPIC_DEASSERT;
-    g_write_icr(g_loapics[cpu].apic_id, lo);
+    if (cpu < 0) {
+        g_write_icr(0xffffffffU, lo); // 广播
+    } else {
+        g_write_icr(g_loapics[cpu].apic_id, lo);
+    }
 }
+
+// void local_apic_broadcast_ipi(int vec) {
+//     ASSERT((vec >= 0) && (vec < 256));
+//     uint32_t lo = (vec & 0xff) | LOAPIC_LOGICAL;
+//     // g_write_icr(LOAPIC_BROADCAST, lo);
+// }

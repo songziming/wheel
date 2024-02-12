@@ -113,6 +113,8 @@ void arch_tcb_init(arch_tcb_t *tcb, size_t entry, size_t stacktop, size_t args[4
 
 // 向其他 CPU 发送 IPI，通知其执行调度操作
 
+extern task_t g_shell_tcb;
+
 
 static void handle_resched(int vec, arch_regs_t *f) {
     (void)vec;
@@ -120,6 +122,27 @@ static void handle_resched(int vec, arch_regs_t *f) {
     local_apic_send_eoi();
     // 中断返回过程自动切换任务，无需任何处理
     // klog("<sched-%d>", cpu_index());
+
+    if (1 == cpu_index()) {
+        task_t *next = THISCPU_GET(g_tid_next);
+        if (&g_shell_tcb != next) {
+            klog("not waking shell!\n");
+            arch_send_stopall();
+            while (1) {
+                cpu_halt();
+            }
+        }
+    }
+}
+
+static void handle_stopall(int vec, arch_regs_t *f) {
+    (void)vec;
+    (void)f;
+    // local_apic_send_eoi();
+    __asm__("cli");
+    while (1) {
+        cpu_halt();
+    }
 }
 
 void arch_send_resched(int cpu) {
@@ -129,6 +152,11 @@ void arch_send_resched(int cpu) {
     local_apic_send_ipi(cpu, VEC_IPI_RESCHED);
 }
 
+void arch_send_stopall() {
+    local_apic_send_ipi(-1, VEC_IPI_STOPALL);
+}
+
 INIT_TEXT void install_resched_handlers() {
     set_int_handler(VEC_IPI_RESCHED, handle_resched);
+    set_int_handler(VEC_IPI_STOPALL, handle_stopall);
 }

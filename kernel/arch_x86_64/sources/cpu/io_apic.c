@@ -186,7 +186,8 @@ INIT_TEXT void io_apic_init_all() {
                 lo |= (ent + VEC_GSI_BASE) & IOAPIC_VEC_MASK;
                 lo |= IOAPIC_INT_MASK;
 
-                io_apic_write(io->base, IOAPIC_RED_H(ent), 0xff000000);
+                // io_apic_write(io->base, IOAPIC_RED_H(ent), 0xff000000);
+                io_apic_write(io->base, IOAPIC_RED_H(ent), 0x01000000); // 固定发送给 CPU0
                 // io_apic_write(io->base, IOAPIC_RED_H(ent), 0xfe000000); // 发送给 CPU0 之外的任意 CPU
                 io_apic_write(io->base, IOAPIC_RED_L(ent), lo);
             }
