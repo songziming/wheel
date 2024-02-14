@@ -90,10 +90,9 @@ static void ready_q_remove(ready_q_t *q, task_t *task) {
 //------------------------------------------------------------------------------
 
 static PCPU_BSS ready_q_t g_ready_q; // 就绪队列
-// static int g_lowest_cpu;  // 哪个 CPU 的当前优先级最低
 
 // 在这里 g_tid_prev 是只读的，只有 ISR（entries.S）能更新这个变量
-// g_tid_next 也受 g_ready_q->spin 的控制，可以将其看作就绪队列的成员
+// 就绪队列自旋锁 g_ready_q->spin 同时也控制 g_tid_next（以及每个任务中的 q_node）
 PCPU_BSS task_t *g_tid_prev;  // 当前正在运行的任务
 PCPU_BSS task_t *g_tid_next;  // 下次中断将要切换的任务
 
@@ -221,12 +220,34 @@ uint16_t sched_cont(task_t *task, uint16_t bits) {
 }
 
 
+#if 1
+
 // 每次时钟中断里执行（但是可能重入）
 // 首先锁住就绪队列，防止轮转过程中插入新的任务，导致当前任务不再是最高优先级
 void sched_tick() {
-    // ready_q_t *q = this_ptr(&g_ready_q);
-    // int key = irq_spin_take(&q->spin);
+    ready_q_t *q = this_ptr(&g_ready_q);
+    int key = irq_spin_take(&q->spin);
 
+    // 读取 tid_next，而不是 tid_prev
+    // 如果不发生中断，tid_prev 就一致不更新
+    // 因为 tid_prev 可能尚未更新，导致我们轮转的不是最高优先级任务
+    task_t *curr = THISCPU_GET(g_tid_next);
+    raw_spin_take(&curr->spin);
+
+    --curr->tick;
+    if (0 == curr->tick) {
+        curr->tick = curr->tick_reload;
+        task_t *next = containerof(curr->q_node.next, task_t, q_node);
+        THISCPU_SET(g_tid_next, next);
+    }
+
+    raw_spin_give(&curr->spin);
+    irq_spin_give(&q->spin, key);
+}
+
+#else
+
+void sched_tick() {
     task_t *self = THISCPU_GET(g_tid_prev);
     int key = irq_spin_take(&self->spin);
     --self->tick;
@@ -252,6 +273,8 @@ void sched_tick() {
     raw_spin_give(&q->spin);
     irq_spin_give(&self->spin, key);
 }
+
+#endif
 
 
 //------------------------------------------------------------------------------

@@ -10,7 +10,7 @@
 #define PAGE_SIZE           0x1000
 #define PAGE_SHIFT          12
 
-#define TIMER_FREQ          2
+#define TIMER_FREQ          60
 
 
 //------------------------------------------------------------------------------
