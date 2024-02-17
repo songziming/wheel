@@ -36,7 +36,7 @@ typedef struct task {
     uint32_t     tick;
     dlnode_t     q_node;    // 任务在就绪队列或阻塞队列中的节点
 
-    work_t       work;      // 有些任务需要在中断里执行，例如删除自己、等待若干 tick
+    // work_t       work;      // 有些任务需要在中断里执行，例如删除自己、等待若干 tick
 } task_t;
 
 

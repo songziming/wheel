@@ -31,8 +31,16 @@ static PCPU_BSS dlnode_t g_work_q;
 
 
 //------------------------------------------------------------------------------
-// 定时函数调用，在若干 tick 后的中断里执行
+// 定时函数调用，在若干 tick 后的中断里执行（CPU-0）
 //------------------------------------------------------------------------------
+
+INIT_TEXT void tick_init() {
+    dl_init_circular(&g_tick_q);
+}
+
+size_t tick_get() {
+    return g_tick_count;
+}
 
 // caller 需要保证持有 work 的自旋锁
 void tick_delay(work_t *work, int tick, work_func_t func, void *arg) {
@@ -59,20 +67,18 @@ void tick_delay(work_t *work, int tick, work_func_t func, void *arg) {
     irq_spin_give(&g_tick_spin, key);
 }
 
+// 每次时钟中断执行，每个 CPU 都执行
+void tick_advance() {
+    sched_tick();
 
-// void work_cancel(work_t *work) {
-//     ASSERT(NULL != work);
+    if (0 != cpu_index()) {
+        return;
+    }
 
-//     // TODO 这个 work 可能注册在另一个 CPU 的工作队列中，而不是当前 CPU
-//     if (dl_is_wired(&work->node)) {
-//         dl_remove(&work->node);
-//     }
-// }
+    // 只有 CPU-0 需要处理计时
 
+    ++g_tick_count;
 
-
-// 执行队列中的所有工作，处于中断上下文
-static void tick_q_run() {
     int key = irq_spin_take(&g_tick_spin);
 
     while (!dl_is_lastone(&g_tick_q)) {
@@ -85,7 +91,7 @@ static void tick_q_run() {
         dl_remove(&w->node);
         w->node.prev = NULL;
 
-        // TODO 这个 work 函数内部可能注册新的 work，需要此处释放锁
+        // 这个 work 函数内部可能注册新的 work，需要此处释放锁
         irq_spin_give(&g_tick_spin, key);
         w->func(w->arg);
         key = irq_spin_take(&g_tick_spin);
@@ -100,9 +106,17 @@ static void tick_q_run() {
 }
 
 
+//------------------------------------------------------------------------------
+// 延迟调用，在下一次中断返回过程中执行
+//------------------------------------------------------------------------------
 
-// 用于删除任务自己，下一个中断立即执行
-// TODO 目前只有这一种用途？可以用全局变量替代，中断返回中调用 task_delete
+INIT_TEXT void work_init() {
+    for (int i = 0; i < cpu_count(); i++) {
+        dlnode_t *q = pcpu_ptr(i, &g_work_q);
+        dl_init_circular(q);
+    }
+}
+
 void work_defer(work_t *work, work_func_t func, void *arg) {
     ASSERT(NULL != work);
     ASSERT(NULL != func);
@@ -117,8 +131,6 @@ void work_defer(work_t *work, work_func_t func, void *arg) {
     dl_insert_before(&work->node, q);
     irq_spin_give(lock, key);
 }
-
-
 
 // 在中断返回阶段执行，执行所有的函数
 void work_q_flush() {
@@ -135,31 +147,4 @@ void work_q_flush() {
     dl_init_circular(q);
 
     irq_spin_give(lock, key);
-}
-
-
-
-INIT_TEXT void tick_init() {
-    dl_init_circular(&g_tick_q);
-
-    for (int i = 0; i < cpu_count(); i++) {
-        dlnode_t *q = pcpu_ptr(i, &g_work_q);
-        dl_init_circular(q);
-    }
-}
-
-
-size_t tick_get() {
-    return g_tick_count;
-}
-
-
-// 每次时钟中断执行，每个 CPU 都执行
-void tick_advance() {
-    sched_tick();
-
-    if (0 == cpu_index()) {
-        ++g_tick_count;
-        tick_q_run();
-    }
 }

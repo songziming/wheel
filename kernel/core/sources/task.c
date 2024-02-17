@@ -75,7 +75,7 @@ int task_create_ex(task_t *task, const char *name,
     task->tick_reload = 10;
     task->tick = 10;
     task->q_node = DLNODE_INIT;
-    task->work = WORK_INIT;
+    // task->work = WORK_INIT;
 
     return 0;
 }
@@ -94,7 +94,7 @@ void task_destroy(task_t *task) {
     // 需要确保任务已停止运行，才能释放其内核栈
     // 否则发生中断，访问内核栈会导致 #PF
 
-    klog("\ndelete resource of task %s(%p)\n", task->name, task);
+    // klog("\ndelete resource of task %s(%p)\n", task->name, task);
 
     int key = irq_spin_take(&task->spin);
 
@@ -152,7 +152,8 @@ void task_delay(int ticks) {
     sched_cont(self, TASK_STOPPED);
     irq_spin_give(&self->spin, key);
 
-    tick_delay(&self->work, ticks, task_wakeup, self);
+    work_t wait_work = WORK_INIT;
+    tick_delay(&wait_work, ticks, task_wakeup, self);
     arch_task_switch();
 }
 
@@ -169,7 +170,8 @@ void task_exit() {
 
     // 当前任务正在运行，不能此时删除 TCB
     // 下一次中断，任务已停止执行，才能删除任务
-    work_defer(&self->work, (work_func_t)task_destroy, self);
+    work_t exit_work = WORK_INIT;
+    work_defer(&exit_work, (work_func_t)task_destroy, self);
 
     // 立即切换到新任务
     arch_task_switch();
