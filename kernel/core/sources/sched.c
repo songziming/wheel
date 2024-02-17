@@ -178,7 +178,6 @@ uint16_t sched_stop(task_t *task, uint16_t bits) {
     return old_state;
 }
 
-extern task_t g_shell_tcb;
 
 // 取消 stoped 状态，如果变为就绪，就把任务放入就绪队列
 // TODO 应该返回修改之后的状态，而不是之前的
@@ -186,7 +185,6 @@ uint16_t sched_cont(task_t *task, uint16_t bits) {
     ASSERT(NULL != task);
     ASSERT(task->spin.ticket_counter > task->spin.service_counter);
     ASSERT(0 != bits);
-    // ASSERT(&g_shell_tcb == task);
 
     uint16_t old_state = task->state;
     task->state &= ~bits;
@@ -211,10 +209,10 @@ uint16_t sched_cont(task_t *task, uint16_t bits) {
     *(task_t **)pcpu_ptr(task->last_cpu, &g_tid_next) = head;
     irq_spin_give(&q->spin, key);
 
-    if ((&g_shell_tcb == task) && (head != task)) {
-        klog("[nopreempt]");
-        arch_send_stopall();
-    }
+    // if ((&g_shell_tcb == task) && (head != task)) {
+    //     klog("[nopreempt]");
+    //     arch_send_stopall();
+    // }
 
     return old_state;
 }

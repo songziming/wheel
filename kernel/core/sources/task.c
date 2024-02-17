@@ -33,7 +33,7 @@ int task_create_ex(task_t *task, const char *name,
         size_t kernel_pg = get_kernel_pgtable();
 
         size_t stack_size = PAGE_SIZE << stack_rank;
-        size_t va = vmspace_search(kernel_vm, STACK_AREA_ADDR, STACK_AREA_END, stack_size);
+        size_t va = vmspace_search(kernel_vm, DYNAMIC_MAP_ADDR, DYNAMIC_MAP_END, stack_size);
         if (INVALID_ADDR == va) {
             klog("cannot reserve range for task %s\n", name);
             return 1;

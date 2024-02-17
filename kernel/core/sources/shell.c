@@ -209,7 +209,7 @@ static char keycode_to_ascii(keycode_t key) {
 
 
 static rbtree_t g_cmds = RBTREE_INIT;   // 记录所有命令
-task_t g_shell_tcb;
+static task_t g_shell_tcb;
 
 
 

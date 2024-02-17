@@ -1,5 +1,6 @@
 #include <format.h>
 #include <str.h>
+#include <heap.h>
 
 
 // 使用循环缓冲区接收格式化之后的字符串
@@ -395,4 +396,21 @@ size_t snprintk(char *buf, size_t n, const char *fmt, ...) {
     size_t len = vsnprintk(buf, n, fmt, args);
     va_end(args);
     return len;
+}
+
+char *strmake(const char *fmt, ...) {
+    char buf[1024];
+
+    va_list args;
+    va_start(args, fmt);
+    size_t len = vsnprintk(buf, sizeof(buf) - 1, fmt, args);
+    va_end(args);
+
+    char *str = kernel_heap_alloc(len + 1);
+    if (NULL == str) {
+        return NULL;
+    }
+
+    memcpy(str, buf, len + 1);
+    return str;
 }

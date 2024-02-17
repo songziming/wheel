@@ -9,6 +9,7 @@
 typedef struct context {
     spin_t    lock;
     vmspace_t space;
+    dlnode_t  ranges;
     size_t    table;
 } context_t;
 

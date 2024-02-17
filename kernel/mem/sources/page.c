@@ -413,6 +413,7 @@ size_t pages_alloc(int rank, page_type_t type) {
     ASSERT(rank >= 0);
     ASSERT(rank < RANK_NUM);
     ASSERT(PT_INVALID != type);
+    ASSERT(PT_FREE != type);
 
     int key = irq_spin_take(&g_pages_lock);
     pfn_t pg = block_alloc(rank, 1, 0, type);

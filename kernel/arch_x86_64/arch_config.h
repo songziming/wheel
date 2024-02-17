@@ -22,8 +22,8 @@
 #define KERNEL_REAL_ADDR    0x8000  // 32K，实模式启动代码位置
 
 #define DIRECT_MAP_ADDR     0xffff800000000000UL // 物理内存映射地址（共 16TB）
-#define STACK_AREA_ADDR     0xffff900000000000UL // 任务栈映射范围（共 16TB）
-#define STACK_AREA_END      0xffffa00000000000UL
+#define DYNAMIC_MAP_ADDR    0xffff900000000000UL // 动态映射范围（共 16TB）
+#define DYNAMIC_MAP_END     0xffffa00000000000UL
 
 
 //------------------------------------------------------------------------------

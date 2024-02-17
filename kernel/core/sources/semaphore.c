@@ -70,7 +70,7 @@ void semaphore_take(semaphore_t *sem, int n) {
 
 
 
-extern task_t g_shell_tcb;
+// extern task_t g_shell_tcb;
 
 
 void semaphore_give(semaphore_t *sem, int n) {
