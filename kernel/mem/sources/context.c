@@ -23,7 +23,7 @@ void context_map(context_t *ctx, size_t va, size_t size, size_t pa, mmu_attr_t a
 
     int key = irq_spin_take(&ctx->lock);
     vmrange_t *rng = kernel_heap_alloc(sizeof(vmrange_t));
-    vmspace_insert(&ctx->space, rng, va, va + size, desc);
+    vmspace_insert(&ctx->space, rng, va, va + size, pa, attrs, desc);
     if (INVALID_ADDR != pa) {
         ASSERT(0 == (pa & (PAGE_SIZE - 1)));
         mmu_map(ctx->table, va, va + size, pa, attrs);
@@ -72,7 +72,7 @@ void *context_alloc(context_t *ctx, int rank, page_type_t type, mmu_attr_t attrs
         return NULL;
     }
 
-    vmspace_insert(&ctx->space, rng, va, va + size, desc);
+    vmspace_insert(&ctx->space, rng, va, va + size, pa, attrs, desc);
     mmu_map(ctx->table, va, va + size, pa, attrs);
 
     irq_spin_give(&ctx->lock, key);
@@ -90,7 +90,7 @@ context_t *get_kernel_context() {
 }
 
 // 将一段内核地址范围标记在地址空间中，返回这段空间
-INIT_TEXT vmrange_t *kernel_context_mark(size_t va, size_t end, const char *desc) {
+INIT_TEXT vmrange_t *kernel_context_mark(size_t va, size_t end, size_t pa, mmu_attr_t attrs, const char *desc) {
     ASSERT(va < end);
 
     vmrange_t *rng = kernel_heap_alloc(sizeof(vmrange_t));
@@ -100,7 +100,7 @@ INIT_TEXT vmrange_t *kernel_context_mark(size_t va, size_t end, const char *desc
     }
 
     int key = irq_spin_take(&g_kernel_ctx.lock);
-    vmspace_insert(&g_kernel_ctx.space, rng, va, end, desc);
+    vmspace_insert(&g_kernel_ctx.space, rng, va, end, pa, attrs, desc);
     irq_spin_give(&g_kernel_ctx.lock, key);
 
     return rng;
@@ -113,7 +113,7 @@ INIT_TEXT void kernel_context_mapall() {
     for (dlnode_t *i = g_kernel_ctx.space.head.next; i != &g_kernel_ctx.space.head; i = i->next) {
         vmrange_t *rng = containerof(i, vmrange_t, dl);
         size_t end = (rng->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-        mmu_map(g_kernel_ctx.table, rng->addr, end, rng->addr & ~KERNEL_TEXT_ADDR, MMU_WRITE);
+        mmu_map(g_kernel_ctx.table, rng->addr, end, rng->pa, rng->attrs);
     }
 
     irq_spin_give(&g_kernel_ctx.lock, key);

@@ -32,11 +32,12 @@ static shell_cmd_t g_cmd_vm;
 // 将一段内存标记为内核占用，记录在地址空间里，也记录在物理内存管理器中
 // 地址必须按页对齐，因为涉及到物理页管理
 static INIT_TEXT void add_kernel_range(vmspace_t *space, vmrange_t *rng,
-        void *addr, void *end, const char *desc) {
+        void *addr, void *end, mmu_attr_t attrs, const char *desc) {
     ASSERT(NULL != space);
     ASSERT(NULL != rng);
 
-    vmspace_insert(space, rng, (size_t)addr, (size_t)end, desc);
+    size_t pa = (size_t)addr - KERNEL_TEXT_ADDR;
+    vmspace_insert(space, rng, (size_t)addr, (size_t)end, pa, attrs, desc);
 
     size_t from = rng->addr & ~(PAGE_SIZE - 1);
     size_t to = (rng->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
@@ -102,10 +103,10 @@ INIT_TEXT void mem_init() {
     // 记录内核的地址空间布局，也是后面建立页表的依据
     vmspace_t *space = get_kernel_vmspace();
     char *kernel_addr = (char *)KERNEL_TEXT_ADDR + KERNEL_LOAD_ADDR;
-    add_kernel_range(space, &g_range_init, kernel_addr, &_init_end, "kernel init");
-    add_kernel_range(space, &g_range_text, &_text_addr, &_text_end, "kernel text");
-    add_kernel_range(space, &g_range_rodata, &_rodata_addr, early_alloc_ro(0), "kernel rodata");
-    add_kernel_range(space, &g_range_data, &_data_addr, early_alloc_rw(0), "kernel data");
+    add_kernel_range(space, &g_range_init, kernel_addr, &_init_end, MMU_WRITE|MMU_EXEC, "kernel init");
+    add_kernel_range(space, &g_range_text, &_text_addr, &_text_end, MMU_EXEC, "kernel text");
+    add_kernel_range(space, &g_range_rodata, &_rodata_addr, early_alloc_ro(0), MMU_NONE, "kernel rodata");
+    add_kernel_range(space, &g_range_data, &_data_addr, early_alloc_rw(0), MMU_WRITE, "kernel data");
 
     // 为 PCPU 划分空间，并将信息记录在 vmspace 中
     // PCPU 结束位置也是内核静态 sections 结束位置
@@ -153,6 +154,9 @@ INIT_TEXT void mem_init() {
 
 
 // 创建内核页表
+// TODO 为对等映射的所有物理内存也分配一个 vmrange
+// TODO 常规 RAM 和 MMIO 区域分别建立映射，可以根据 pmmap 建立
+// TODO 直接调用 kernel_ctx_mapall 将所有的 vmrange 映射到页表中
 INIT_TEXT void kernel_proc_init() {
     ASSERT(NULL != g_pmmap);
     ASSERT(g_pmmap_len > 0);

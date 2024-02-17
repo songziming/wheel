@@ -47,7 +47,7 @@ int task_create_ex(task_t *task, const char *name,
         }
 
         // 建立内核栈的映射
-        vmspace_insert(kernel_vm, &task->stack_va, va, va + stack_size, name);
+        vmspace_insert(kernel_vm, &task->stack_va, va, va + stack_size, pa, MMU_WRITE, name);
         mmu_map(kernel_pg, va, va + stack_size, pa, MMU_WRITE);
         memset((char *)va, 0, stack_size);
 
@@ -75,7 +75,6 @@ int task_create_ex(task_t *task, const char *name,
     task->tick_reload = 10;
     task->tick = 10;
     task->q_node = DLNODE_INIT;
-    // task->work = WORK_INIT;
 
     return 0;
 }

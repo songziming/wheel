@@ -23,27 +23,29 @@ vmspace_t *get_kernel_vmspace() {
     return &g_kernel_vm;
 }
 
-void vmspace_insert(vmspace_t *vm, vmrange_t *rng, size_t addr, size_t end, const char *desc) {
+void vmspace_insert(vmspace_t *vm, vmrange_t *rng, size_t va, size_t end,
+        size_t pa, mmu_attr_t attrs, const char *desc) {
     ASSERT(NULL != vm);
     ASSERT(NULL != rng);
-    ASSERT(addr < end);
+    ASSERT(va < end);
     ASSERT(!dl_contains(&vm->head, &rng->dl));
-
-    rng->addr = addr;
-    rng->end  = end;
-    rng->desc = desc;
 
     // 在链表中寻找一个位置
     dlnode_t *node = vm->head.next;
     for (; &vm->head != node; node = node->next) {
         vmrange_t *cur = containerof(node, vmrange_t, dl);
-        if (rng->addr < cur->addr) {
-            ASSERT(rng->end <= cur->addr);
+        if (va < cur->addr) {
+            ASSERT(end <= cur->addr);
             break;
         }
     }
 
     // 将新的节点放入链表（此时 node 可能为头节点）
+    rng->addr  = va;
+    rng->end   = end;
+    rng->pa    = pa;
+    rng->attrs = attrs;
+    rng->desc  = desc;
     dl_insert_before(&rng->dl, node);
 }
 
