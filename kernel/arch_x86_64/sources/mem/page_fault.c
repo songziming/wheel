@@ -15,4 +15,8 @@ void handle_pagefault(int vec, arch_regs_t *f) {
     print_frames(frames, depth);
 
     // TODO 找出发生错误的地址属于哪个任务
+
+    while (1) {
+        cpu_halt();
+    }
 }

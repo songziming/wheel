@@ -61,6 +61,45 @@ static int insert_item(treeitem_t *item) {
     return 0;
 }
 
+// 从树中取出一个元素
+static void remove_item(treeitem_t *item) {
+    rb_remove(&mytree, &item->rb);
+}
+
+
+// 计算子树的黑高度，并验证黑高度是否一致
+static int black_height(rbnode_t *rb) {
+    if (NULL == rb) {
+        return 1; // 叶子节点，是黑色的
+    }
+
+    // 黑高度必须相等
+    int h1 = black_height(rb->left);
+    int h2 = black_height(rb->right);
+    EXPECT_TRUE(h1 == h2);
+
+    // 红节点的两个子节点都是黑色
+    if (RB_RED == RB_COLOR(rb)) {
+        EXPECT_TRUE((NULL == rb->left) || (RB_BLACK == RB_COLOR(rb->left)));
+        EXPECT_TRUE((NULL == rb->right) || (RB_BLACK == RB_COLOR(rb->right)));
+        return h1;
+    }
+
+    return h1 + 1;
+}
+
+// 检查是否符合红黑树的五条性质
+static void validate() {
+    if (NULL == mytree.root) {
+        return;
+    }
+
+    // 根节点必须是黑色
+    EXPECT_TRUE(RB_BLACK == RB_COLOR(mytree.root));
+
+    black_height(mytree.root);
+}
+
 
 //------------------------------------------------------------------------------
 // 测试用例
@@ -71,6 +110,7 @@ TEST_F(Tree, InsertNew, setup, teardown) {
     EXPECT_TRUE(0 == insert_item(new_item(2)));
     EXPECT_TRUE(0 == insert_item(new_item(3)));
     EXPECT_TRUE(0 == insert_item(new_item(4)));
+    validate();
 }
 
 TEST_F(Tree, InsertExisting, setup, teardown) {
@@ -79,4 +119,12 @@ TEST_F(Tree, InsertExisting, setup, teardown) {
     EXPECT_TRUE(1 == insert_item(new_item(1)));
     EXPECT_TRUE(0 == insert_item(new_item(3)));
     EXPECT_TRUE(1 == insert_item(new_item(2)));
+    validate();
+}
+
+TEST_F(Tree, RemoveLast, setup, teardown) {
+    treeitem_t *item = new_item(100);
+    insert_item(item);
+    remove_item(item);
+    free(item);
 }

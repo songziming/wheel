@@ -9,7 +9,7 @@
 // mem
 #include <page.h>
 #include <heap.h>
-#include <vmspace.h>
+// #include <vmspace.h>
 #include <context.h>
 
 // core

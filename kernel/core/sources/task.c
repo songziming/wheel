@@ -15,7 +15,7 @@
 
 // 如果传入 stack_top==NULL，表示动态分配内核栈的物理内存和虚拟范围
 int task_create_ex(task_t *task, const char *name,
-        uint8_t priority, int affinity, process_t *proc,
+        uint8_t priority, int affinity, context_t *proc,
         void *stack_top, uint8_t stack_rank,
         void *entry, size_t a1, size_t a2, size_t a3, size_t a4) {
     ASSERT(NULL != task);
@@ -24,46 +24,12 @@ int task_create_ex(task_t *task, const char *name,
     ASSERT(NULL != entry);
 
     if (NULL == proc) {
-        proc = get_kernel_process();
-    }
-
-    // 未传入栈指针，需动态分配，动态映射
-    if (NULL == stack_top) {
-        vmspace_t *kernel_vm = get_kernel_vmspace();
-        size_t kernel_pg = get_kernel_pgtable();
-
-        size_t stack_size = PAGE_SIZE << stack_rank;
-        size_t va = vmspace_search(kernel_vm, DYNAMIC_MAP_ADDR, DYNAMIC_MAP_END, stack_size);
-        if (INVALID_ADDR == va) {
-            klog("cannot reserve range for task %s\n", name);
-            return 1;
-        }
-
-        // 为内核栈申请物理内存
-        size_t pa = pages_alloc(stack_rank, PT_KERNEL_STACK);
-        if (INVALID_ADDR == pa) {
-            klog("cannot alloc page for task %s\n", name);
-            return 1;
-        }
-
-        // 建立内核栈的映射
-        vmspace_insert(kernel_vm, &task->stack_va, va, va + stack_size, pa, MMU_WRITE, name);
-        mmu_map(kernel_pg, va, va + stack_size, pa, MMU_WRITE);
-        memset((char *)va, 0, stack_size);
-
-        task->stack_pa = pa;
-        stack_top = (void *)(va + stack_size);
-    } else {
-        task->stack_pa = INVALID_ADDR;
+        proc = get_kernel_context();
     }
 
     // 将任务记录在进程中
     task->process = proc;
-    dl_insert_before(&task->proc_node, &proc->proc_head);
-
-    // 初始化任务控制块
-    size_t args[4] = { a1, a2, a3, a4 };
-    arch_tcb_init(&task->arch, (size_t)entry, (size_t)stack_top, args);
+    // dl_insert_before(&task->proc_node, &proc->proc_head);
 
     task->spin = SPIN_INIT;
     task->name = name;
@@ -75,6 +41,52 @@ int task_create_ex(task_t *task, const char *name,
     task->tick_reload = 10;
     task->tick = 10;
     task->q_node = DLNODE_INIT;
+
+    // 未传入栈指针，需动态分配，动态映射
+    if (NULL == stack_top) {
+        char *va = context_alloc(proc, stack_rank, PT_KERNEL_STACK, MMU_WRITE, name);
+        if (NULL == va) {
+            klog("warning: alloc stack for %s failed\n", name);
+            return 1;
+        }
+
+        size_t stack_size = PAGE_SIZE << stack_rank;
+        memset(va, 0, stack_size);
+
+        task->stack = va;
+        stack_top = va + stack_size;
+
+        // task->flags |= TF_DYNAMIC_STACK;
+        // vmspace_t *kernel_vm = get_kernel_vmspace();
+        // size_t kernel_pg = get_kernel_pgtable();
+
+        // size_t stack_size = PAGE_SIZE << stack_rank;
+        // size_t va = vmspace_search(kernel_vm, DYNAMIC_MAP_ADDR, DYNAMIC_MAP_END, stack_size);
+        // if (INVALID_ADDR == va) {
+        //     klog("cannot reserve range for task %s\n", name);
+        //     return 1;
+        // }
+
+        // // 为内核栈申请物理内存
+        // size_t pa = pages_alloc(stack_rank, PT_KERNEL_STACK);
+        // if (INVALID_ADDR == pa) {
+        //     klog("cannot alloc page for task %s\n", name);
+        //     return 1;
+        // }
+
+        // // 建立内核栈的映射
+        // vmspace_insert(kernel_vm, &task->stack_va, va, va + stack_size, pa, MMU_WRITE, name);
+        // mmu_map(kernel_pg, va, va + stack_size, pa, MMU_WRITE);
+
+        // task->stack_pa = pa;
+        // stack_top = (void *)(va + stack_size);
+    } else {
+        task->stack = NULL;
+    }
+
+    // 初始化任务控制块
+    size_t args[4] = { a1, a2, a3, a4 };
+    arch_tcb_init(&task->arch, (size_t)entry, (size_t)stack_top, args);
 
     return 0;
 }
@@ -97,13 +109,17 @@ void task_destroy(task_t *task) {
 
     int key = irq_spin_take(&task->spin);
 
-    if (INVALID_ADDR != task->stack_pa) {
-        vmspace_t *kernel_vm = get_kernel_vmspace();
-        size_t kernel_pg = get_kernel_pgtable();
-
-        mmu_unmap(kernel_pg, task->stack_va.addr, task->stack_va.end);
-        vmspace_remove(kernel_vm, &task->stack_va);
+    if (NULL != task->stack) {
+        context_free(task->process, task->stack);
     }
+
+    // if (INVALID_ADDR != task->stack_pa) {
+    //     vmspace_t *kernel_vm = get_kernel_vmspace();
+    //     size_t kernel_pg = get_kernel_pgtable();
+
+    //     mmu_unmap(kernel_pg, task->stack_va.addr, task->stack_va.end);
+    //     vmspace_remove(kernel_vm, &task->stack_va);
+    // }
 
     irq_spin_give(&task->spin, key);
 }

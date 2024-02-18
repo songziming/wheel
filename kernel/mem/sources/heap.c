@@ -9,6 +9,7 @@
 #define ROUND_UP(x) (((x) + ALIGNMENT - 1) & ~(ALIGNMENT - 1))
 #define ROUND_DOWN(x) ((x) & ~(ALIGNMENT - 1))
 
+// TODO 可以用 bitfield 表示是否已分配
 typedef struct chunk_hdr {
     uint32_t prevsize;   // 包括 header
     uint32_t selfsize;   // 包括 header，最低位表示已分配
@@ -158,16 +159,17 @@ static chunk_t *chunk_alloc(mem_heap_t *heap, size_t size) {
     take_chunk_from_heap(heap, chk);
 
     // 如果剩余空间足够大，就分割为前后两个 chunk，后一部分放回 heap
-    size_t remain = chk->hdr.selfsize - size;
+    uint32_t selfsize = chk->hdr.selfsize & ~CHUNK_INUSE;
+    size_t remain = selfsize - size;
     if (remain >= sizeof(chunk_t))  {
         chunk_t *rest = build_chunk_free((size_t)chk + size, size, remain);
         put_chunk_into_heap(heap, rest);
 
-        chunk_t *next = (chunk_t *)((size_t)chk + chk->hdr.selfsize);
-        ASSERT(chk->hdr.selfsize == next->hdr.prevsize);
+        chunk_t *next = (chunk_t *)((size_t)chk + selfsize);
+        ASSERT(selfsize == next->hdr.prevsize);
         next->hdr.prevsize = remain;
 
-        chk->hdr.selfsize = size;
+        chk->hdr.selfsize = size | CHUNK_INUSE;
     }
 
     return chk;

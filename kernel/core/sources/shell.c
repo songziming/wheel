@@ -373,6 +373,6 @@ static void shell_proc() {
 // TODO 可以用不同的颜色区分不同类别的打印
 INIT_TEXT void shell_init() {
     task_create(&g_shell_tcb, "shell", 1, shell_proc);
-    g_shell_tcb.affinity = 1;
+    // g_shell_tcb.affinity = 1;
     task_resume(&g_shell_tcb);
 }

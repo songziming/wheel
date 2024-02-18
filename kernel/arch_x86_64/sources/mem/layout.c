@@ -20,6 +20,7 @@ extern CONST int g_pmmap_len;
 extern CONST pmrange_t *g_pmmap;
 
 // 初始化代码数据，还有 PCPU 模板、实模式代码
+static CONST    vmrange_t g_range_idmap;
 static INIT_BSS vmrange_t g_range_init;
 static CONST    vmrange_t g_range_text;
 static CONST    vmrange_t g_range_rodata;   // 结束位置由 g_ro_buff 决定
@@ -31,13 +32,14 @@ static shell_cmd_t g_cmd_vm;
 
 // 将一段内存标记为内核占用，记录在地址空间里，也记录在物理内存管理器中
 // 地址必须按页对齐，因为涉及到物理页管理
-static INIT_TEXT void add_kernel_range(vmspace_t *space, vmrange_t *rng,
+static INIT_TEXT void add_kernel_range(vmrange_t *rng,
         void *addr, void *end, mmu_attr_t attrs, const char *desc) {
-    ASSERT(NULL != space);
+    // ASSERT(NULL != space);
     ASSERT(NULL != rng);
 
     size_t pa = (size_t)addr - KERNEL_TEXT_ADDR;
-    vmspace_insert(space, rng, (size_t)addr, (size_t)end, pa, attrs, desc);
+    // vmspace_insert(space, rng, (size_t)addr, (size_t)end, pa, attrs, desc);
+    kernel_context_mark(rng, (size_t)addr, (size_t)end, pa, attrs, desc);
 
     size_t from = rng->addr & ~(PAGE_SIZE - 1);
     size_t to = (rng->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
@@ -59,20 +61,28 @@ static INIT_TEXT void add_kernel_gap(vmrange_t *prev, vmrange_t *curr) {
 }
 
 
-static void map_kernel_range(size_t table, const vmrange_t *rng, mmu_attr_t attrs) {
-    ASSERT(INVALID_ADDR != table);
-    ASSERT(NULL != rng);
+// static void map_kernel_range(size_t table, const vmrange_t *rng, mmu_attr_t attrs) {
+//     ASSERT(INVALID_ADDR != table);
+//     ASSERT(NULL != rng);
 
-    size_t from = rng->addr & ~(PAGE_SIZE - 1);
-    size_t to = (rng->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-    mmu_map(table, from, to, from - KERNEL_TEXT_ADDR, attrs);
-}
+//     size_t from = rng->addr & ~(PAGE_SIZE - 1);
+//     size_t to = (rng->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+//     mmu_map(table, from, to, from - KERNEL_TEXT_ADDR, attrs);
+// }
 
 
 static int show_vm(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
-    vmspace_show(get_kernel_vmspace());
+
+    context_t *kctx = get_kernel_context();
+
+    klog("virtual mem space:\n");
+    for (dlnode_t *i = kctx->head.next; &kctx->head != i; i = i->next) {
+        vmrange_t *rng = containerof(i, vmrange_t, dl);
+        klog("  - 0x%zx..0x%zx %s\n", rng->addr, rng->end, rng->desc);
+    }
+
     return 0;
 }
 
@@ -101,17 +111,17 @@ INIT_TEXT void mem_init() {
     early_alloc_disable();  // 禁用临时内存分配
 
     // 记录内核的地址空间布局，也是后面建立页表的依据
-    vmspace_t *space = get_kernel_vmspace();
+    // vmspace_t *space = get_kernel_vmspace();
     char *kernel_addr = (char *)KERNEL_TEXT_ADDR + KERNEL_LOAD_ADDR;
-    add_kernel_range(space, &g_range_init, kernel_addr, &_init_end, MMU_WRITE|MMU_EXEC, "kernel init");
-    add_kernel_range(space, &g_range_text, &_text_addr, &_text_end, MMU_EXEC, "kernel text");
-    add_kernel_range(space, &g_range_rodata, &_rodata_addr, early_alloc_ro(0), MMU_NONE, "kernel rodata");
-    add_kernel_range(space, &g_range_data, &_data_addr, early_alloc_rw(0), MMU_WRITE, "kernel data");
+    add_kernel_range(&g_range_init, kernel_addr, &_init_end, MMU_WRITE|MMU_EXEC, "kernel init");
+    add_kernel_range(&g_range_text, &_text_addr, &_text_end, MMU_EXEC, "kernel text");
+    add_kernel_range(&g_range_rodata, &_rodata_addr, early_alloc_ro(0), MMU_NONE, "kernel rodata");
+    add_kernel_range(&g_range_data, &_data_addr, early_alloc_rw(0), MMU_WRITE, "kernel data");
 
     // 为 PCPU 划分空间，并将信息记录在 vmspace 中
     // PCPU 结束位置也是内核静态 sections 结束位置
     size_t kend_va = (size_t)early_alloc_rw(0);
-    size_t kend_pa = pcpu_allocate(kend_va, space) - KERNEL_TEXT_ADDR;
+    size_t kend_pa = pcpu_allocate(kend_va) - KERNEL_TEXT_ADDR;
 
     // 遍历物理内存范围，将可用内存添加给页分配器
     // RECLAIMABLE 也属于可用范围，跳过 1M 以下的 lowmem 与内核占用的部分
@@ -140,7 +150,8 @@ INIT_TEXT void mem_init() {
     }
 
     // 相邻的 range 之间还有空隙，虚拟地址保留作为 guard page，但是物理页可以使用
-    for (dlnode_t *i = space->head.next->next; i != &space->head; i = i->next) {
+    context_t *kctx = get_kernel_context();
+    for (dlnode_t *i = kctx->head.next->next; i != &kctx->head; i = i->next) {
         vmrange_t *prev = containerof(i->prev, vmrange_t, dl);
         vmrange_t *curr = containerof(i, vmrange_t, dl);
         add_kernel_gap(prev, curr);
@@ -161,6 +172,15 @@ INIT_TEXT void kernel_proc_init() {
     ASSERT(NULL != g_pmmap);
     ASSERT(g_pmmap_len > 0);
 
+    // 将所有物理内存（含 MMIO）映射到 canonical hole 之后
+    size_t map_addr = DIRECT_MAP_ADDR;
+    size_t map_end = map_addr + (1UL << 32); // g_pmmap[g_pmmap_len - 1].end;
+    kernel_context_mark(&g_range_idmap, map_addr, map_end, 0, MMU_WRITE, "id-map");
+    // mmu_map(table, DIRECT_MAP_ADDR, DIRECT_MAP_ADDR + maplen, 0, MMU_WRITE);
+
+    kernel_context_map_all();
+
+#if 0
     // 创建页表
     uint64_t table = get_kernel_pgtable();
     vmspace_t *space = get_kernel_vmspace();
@@ -181,9 +201,11 @@ INIT_TEXT void kernel_proc_init() {
     // TODO 遍历所有物理内存范围 pmmap，逐个映射
     uint64_t maplen = 1UL << 32; // g_pmmap[g_pmmap_len - 1].end;
     mmu_map(table, DIRECT_MAP_ADDR, DIRECT_MAP_ADDR + maplen, 0, MMU_WRITE);
+#endif
 }
 
 
+#if 0
 // 回收 init 部分的内存空间（本函数不能使用 init 函数）
 // 需要在 root-task 中执行，此时已切换到任务栈，不再使用初始栈
 void reclaim_init() {
@@ -201,3 +223,4 @@ void reclaim_init() {
     vmspace_remove(get_kernel_vmspace(), &g_range_init);
     mmu_unmap(get_kernel_pgtable(), init_start, init_end);
 }
+#endif

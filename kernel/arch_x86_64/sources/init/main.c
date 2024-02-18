@@ -132,7 +132,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     idt_load();
 
     // 划分内存布局，启用物理页面管理
-    // kernel_context_init();
+    kernel_heap_init();
+    kernel_context_init();
     mem_init();
     gsbase_init(0);
 
@@ -153,9 +154,6 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // 创建并加载内核页表，启用内存保护
     kernel_pgtable_init();
     kernel_proc_init();
-    // vmspace_show(get_kernel_vmspace());
-    // mmu_walk(get_kernel_pgtable());
-    // cpu_halt();
     write_cr3(get_kernel_pgtable());
 
     // 准备就绪队列

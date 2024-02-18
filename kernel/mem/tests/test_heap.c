@@ -31,6 +31,6 @@ static void check_heap_integrity() {
     }
 }
 
-TEST_F(Heap, Integrity, setup, teardown) {
+TEST_F(Heap, Setup, setup, teardown) {
     check_heap_integrity();
 }

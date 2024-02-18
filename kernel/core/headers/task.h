@@ -4,8 +4,9 @@
 #include <def.h>
 #include <arch_extra.h>
 #include <spin.h>
-#include <process.h>
+// #include <process.h>
 #include <tick.h>
+#include <context.h>
 
 
 // 任务状态，多个状态可以并存
@@ -17,17 +18,25 @@ typedef enum task_state {
 } task_state_t;
 
 
+// typedef enum task_flag {
+//     TF_DYNAMIC_STACK = 1,   // 任务栈是动态分配的
+//     TF_DYNAMIC_NAME  = 2,   // 任务名称字符串是动态分配的
+// } test_flag_t;
+
+
 typedef struct task {
     arch_tcb_t   arch;
     spin_t       spin;
     const char  *name;
 
-    size_t       stack_pa;  // 内核栈的物理地址，INVALID_ADDR 表示静态分配内核栈
-    vmrange_t    stack_va;  // 内核栈的虚拟地址范围
+    void        *stack; // NULL 表示任务栈是静态分配的
+    // size_t       stack_pa;  // 内核栈的物理地址，INVALID_ADDR 表示静态分配内核栈
+    // vmrange_t    stack_rng;  // 内核栈的虚拟地址范围
 
-    process_t   *process;   // 任务所属进程
+    context_t   *process;   // 任务所属进程
     dlnode_t     proc_node; // 任务在进程中的节点
 
+    // uint32_t     flags;
     uint16_t     state;
     uint8_t      priority;  // 数字越小，优先级越高
     int          affinity;  // 负值表示不限制在哪个 CPU 上运行
@@ -41,7 +50,7 @@ typedef struct task {
 
 
 int task_create_ex(task_t *task, const char *name,
-        uint8_t priority, int affinity, process_t *proc,
+        uint8_t priority, int affinity, context_t *proc,
         void *stack_top, uint8_t stack_rank,
         void *entry, size_t a1, size_t a2, size_t a3, size_t a4);
 

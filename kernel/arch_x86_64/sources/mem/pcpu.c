@@ -92,8 +92,11 @@ INIT_TEXT void pcpu_prepare() {
 
 // 记录一段 PCPU 区域，标记物理页，返回对齐的结束地址
 // 类似 arch_mem.c 里面的 add_kernel_range
-static INIT_TEXT size_t add_pcpu_range(vmspace_t *vm, vmrange_t *rng, size_t addr, size_t size, const char *desc) {
-    vmspace_insert(vm, rng, addr, addr + size, addr - KERNEL_TEXT_ADDR, MMU_WRITE, desc);
+static INIT_TEXT size_t add_pcpu_range(vmrange_t *rng, size_t addr, size_t size, const char *desc) {
+    ASSERT(NULL != rng);
+
+    // vmspace_insert(vm, rng, addr, addr + size, addr - KERNEL_TEXT_ADDR, MMU_WRITE, desc);
+    kernel_context_mark(rng, addr, addr + size, addr - KERNEL_TEXT_ADDR, MMU_WRITE, desc);
 
     size_t from = addr & ~(PAGE_SIZE - 1);
     size_t to = (rng->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
@@ -105,7 +108,7 @@ static INIT_TEXT size_t add_pcpu_range(vmspace_t *vm, vmrange_t *rng, size_t add
 
 // 传入内核结束位置（bss 结尾，不含 guard page）
 // 划分 pcpu 占据的范围，返回 pcpu 结束位置
-INIT_TEXT size_t pcpu_allocate(size_t kernel_end, vmspace_t *vm) {
+INIT_TEXT size_t pcpu_allocate(size_t kernel_end) {
     ASSERT(0 == g_pcpu_offset);
     ASSERT(0 == g_pcpu_size);
 
@@ -142,14 +145,14 @@ INIT_TEXT size_t pcpu_allocate(size_t kernel_end, vmspace_t *vm) {
     // 划分每个 PCPU 的布局，并记录在 vmrange 中
     kernel_end = (kernel_end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     for (int i = 0; i < ncpu; ++i) {
-        kernel_end = add_pcpu_range(vm, &g_range_pcpu_vars[i], kernel_end + PAGE_SIZE, vars_size, "pcpu vars");
+        kernel_end = add_pcpu_range(&g_range_pcpu_vars[i], kernel_end + PAGE_SIZE, vars_size, "pcpu vars");
         memcpy((void *)g_range_pcpu_vars[i].addr, &_pcpu_addr, copy_size);
 
-        kernel_end = add_pcpu_range(vm, &g_range_pcpu_nmi[i], kernel_end + PAGE_SIZE, INT_STACK_SIZE, "pcpu NMI stack");
-        kernel_end = add_pcpu_range(vm, &g_range_pcpu_df[i],  kernel_end + PAGE_SIZE, INT_STACK_SIZE, "pcpu #DF stack");
-        kernel_end = add_pcpu_range(vm, &g_range_pcpu_pf[i],  kernel_end + PAGE_SIZE, INT_STACK_SIZE, "pcpu #PF stack");
-        kernel_end = add_pcpu_range(vm, &g_range_pcpu_mc[i],  kernel_end + PAGE_SIZE, INT_STACK_SIZE, "pcpu #MC stack");
-        kernel_end = add_pcpu_range(vm, &g_range_pcpu_int[i], kernel_end + PAGE_SIZE, INT_STACK_SIZE, "pcpu int stack");
+        kernel_end = add_pcpu_range(&g_range_pcpu_nmi[i], kernel_end + PAGE_SIZE, INT_STACK_SIZE, "pcpu NMI stack");
+        kernel_end = add_pcpu_range(&g_range_pcpu_df[i],  kernel_end + PAGE_SIZE, INT_STACK_SIZE, "pcpu #DF stack");
+        kernel_end = add_pcpu_range(&g_range_pcpu_pf[i],  kernel_end + PAGE_SIZE, INT_STACK_SIZE, "pcpu #PF stack");
+        kernel_end = add_pcpu_range(&g_range_pcpu_mc[i],  kernel_end + PAGE_SIZE, INT_STACK_SIZE, "pcpu #MC stack");
+        kernel_end = add_pcpu_range(&g_range_pcpu_int[i], kernel_end + PAGE_SIZE, INT_STACK_SIZE, "pcpu int stack");
 
         if (0 == i) {
             g_pcpu_size = kernel_end - g_range_pcpu_vars[i].addr + PAGE_SIZE;

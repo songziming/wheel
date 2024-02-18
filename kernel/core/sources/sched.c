@@ -317,6 +317,8 @@ static int sched_show(int argc, char *argv[]) {
     return 0;
 }
 
+static PCPU_BSS uint8_t idle_stack[PAGE_SIZE];
+
 // 初始化就绪队列，创建 idle 任务
 INIT_TEXT void sched_init() {
     for (int i = 0; i < cpu_count(); ++i) {
@@ -324,8 +326,9 @@ INIT_TEXT void sched_init() {
         ready_q_init(q);
 
         task_t *idle = pcpu_ptr(i, &g_idle_tcb);
+        uint8_t *top = pcpu_ptr(i, &idle_stack[PAGE_SIZE]);
         task_create_ex(idle, "idle", PRIORITY_NUM - 1, i, NULL,
-                NULL, IDLE_STACK_RANK, idle_proc, 0, 0, 0, 0);
+                top, IDLE_STACK_RANK, idle_proc, 0, 0, 0, 0);
 
         // 将idle任务放入就绪队列，但是暂时不切换
         raw_spin_take(&q->spin);

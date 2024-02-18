@@ -5,7 +5,7 @@
 
 #include <def.h>
 #include <arch_extra.h>
-#include <vmspace.h>
+#include <context.h>
 
 
 // 临时内存分配
@@ -38,7 +38,7 @@ extern CONST vmrange_t *g_range_pcpu_pf;
 extern CONST vmrange_t *g_range_pcpu_mc;
 extern CONST vmrange_t *g_range_pcpu_int;
 INIT_TEXT void pcpu_prepare();
-INIT_TEXT size_t pcpu_allocate(size_t kernel_end, vmspace_t *vm);
+INIT_TEXT size_t pcpu_allocate(size_t kernel_end);
 INIT_TEXT void gsbase_init(int idx);
 
 
