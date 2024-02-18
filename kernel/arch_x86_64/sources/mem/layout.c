@@ -20,11 +20,12 @@ extern CONST int g_pmmap_len;
 extern CONST pmrange_t *g_pmmap;
 
 // 初始化代码数据，还有 PCPU 模板、实模式代码
-static CONST    vmrange_t g_range_idmap;
+// 这些 range 不能是 const，因为处于链表中，需要动态增删
+static          vmrange_t g_range_idmap;
 static INIT_BSS vmrange_t g_range_init;
-static CONST    vmrange_t g_range_text;
-static CONST    vmrange_t g_range_rodata;   // 结束位置由 g_ro_buff 决定
-static CONST    vmrange_t g_range_data;     // 结束位置由 g_rw_buff 决定
+static          vmrange_t g_range_text;
+static          vmrange_t g_range_rodata;   // 结束位置由 g_ro_buff 决定
+static          vmrange_t g_range_data;     // 结束位置由 g_rw_buff 决定
 
 static shell_cmd_t g_cmd_vm;
 

@@ -1,6 +1,7 @@
 #include <arch_int.h>
 #include <arch_api_p.h>
 #include <wheel.h>
+#include <cpu/rw.h>
 
 
 // 处理分页异常，有自己的 IST
@@ -13,6 +14,15 @@ void handle_pagefault(int vec, arch_regs_t *f) {
     size_t frames[32];
     int depth = arch_unwind(frames, 32, f->rbp);
     print_frames(frames, depth);
+
+    uint64_t va = read_cr2();
+
+    const char *rw = (f->errcode & 2) ? "write" : "read";
+    klog("error when %s %lx\n", rw, va);
+
+    // if (0 == (f->errcode & 1)) {
+    //     klog("page not exist\n");
+    // }
 
     // TODO 找出发生错误的地址属于哪个任务
 

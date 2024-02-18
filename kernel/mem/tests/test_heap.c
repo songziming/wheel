@@ -33,4 +33,22 @@ static void check_heap_integrity() {
 
 TEST_F(Heap, Setup, setup, teardown) {
     check_heap_integrity();
+
+    char *p1 = heap_alloc(&g_test_heap, 0x10);  *p1 = 1;
+    char *p2 = heap_alloc(&g_test_heap, 0x20);  *p2 = 2;
+    char *p3 = heap_alloc(&g_test_heap, 0x30);  *p3 = 3;
+    char *p4 = heap_alloc(&g_test_heap, 0x40);  *p4 = 4;
+    char *p5 = heap_alloc(&g_test_heap, 0x50);  *p5 = 5;
+    check_heap_integrity();
+
+    heap_free(&g_test_heap, p2);
+    check_heap_integrity();
+    heap_free(&g_test_heap, p4);
+    check_heap_integrity();
+    heap_free(&g_test_heap, p3);
+    check_heap_integrity();
+
+    char *p6 = heap_alloc(&g_test_heap, 0x60);  *p6 = 6;
+    char *p7 = heap_alloc(&g_test_heap, 0x70);  *p7 = 7;
+    check_heap_integrity();
 }

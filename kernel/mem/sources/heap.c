@@ -78,6 +78,7 @@ static void put_chunk_into_heap(mem_heap_t *heap, chunk_t *chk) {
         parent = *link;
         chunk_t *ref = containerof(parent, chunk_t, sizenode);
         size_t size = ref->hdr.selfsize;
+        ASSERT(0 == (size & CHUNK_INUSE));
 
         if (chk->hdr.selfsize == size) {
             // 已存在相同大小的 freelist，只需添加到链表结尾
@@ -189,21 +190,24 @@ static void chunk_free(mem_heap_t *heap, chunk_t *chk) {
     size_t size = chk->hdr.selfsize & ~CHUNK_INUSE;
     ASSERT(0 == (size & (ALIGNMENT - 1)));
 
-    chunk_t *prev = (chunk_t *)((size_t)chk - chk->hdr.selfsize);
+    chunk_t *prev = (chunk_t *)((size_t)chk - chk->hdr.prevsize);
     chunk_t *next = (chunk_t *)((size_t)chk + size);
 
     if (0 == (prev->hdr.selfsize & CHUNK_INUSE)) {
         take_chunk_from_heap(heap, prev);
-        next->hdr.prevsize += size;
+        next->hdr.prevsize += chk->hdr.prevsize;
         prev->hdr.selfsize += size;
+        ASSERT(prev->hdr.selfsize == next->hdr.prevsize + 1);
         chk = prev;
+        size = chk->hdr.selfsize & ~CHUNK_INUSE;
     }
 
     if (0 == (next->hdr.selfsize & CHUNK_INUSE)) {
         take_chunk_from_heap(heap, next);
-        chunk_t *after = (chunk_t *)((size_t)next + next->hdr.selfsize);
-        after->hdr.prevsize += chk->hdr.selfsize;
-        chk->hdr.selfsize += next->hdr.selfsize;
+        uint32_t nextsize = next->hdr.selfsize & ~CHUNK_INUSE;
+        chunk_t *after = (chunk_t *)((size_t)next + nextsize);
+        after->hdr.prevsize += next->hdr.prevsize;
+        chk->hdr.selfsize += nextsize;
     }
 
     put_chunk_into_heap(heap, chk);
@@ -245,6 +249,9 @@ void *heap_alloc(mem_heap_t *heap, size_t size) {
     ASSERT(NULL != heap);
 
     size += sizeof(chunk_hdr_t);
+    if (size < sizeof(chunk_t)) {
+        size = sizeof(chunk_t);
+    }
     size = ROUND_UP(size);
 
     int key = irq_spin_take(&heap->spin);
