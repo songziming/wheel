@@ -89,7 +89,6 @@ void tick_advance() {
 
         // 首先从队列中删除，再运行定时函数，函数内部可能要删除 work 所在结构体
         dl_remove(&w->node);
-        w->node.prev = NULL;
 
         // 这个 work 函数内部可能注册新的 work，需要此处释放锁
         irq_spin_give(&g_tick_spin, key);
@@ -140,8 +139,10 @@ void work_q_flush() {
     int key = irq_spin_take(lock);
 
     // 执行所有的函数，并将队列清空
-    for (dlnode_t *i = q->next; i != q; i = i->next) {
+    // func 内部可能删除 work_t，因此需要先访问后继，再执行函数
+    for (dlnode_t *i = q->next; i != q;) {
         work_t *w = containerof(i, work_t, node);
+        i = i->next;
         w->func(w->arg);
     }
     dl_init_circular(q);

@@ -231,9 +231,10 @@ void heap_init(mem_heap_t *heap, void *buff, size_t size) {
     size_t end = ROUND_DOWN((size_t)buff + size);
     ASSERT(start + sizeof(chunk_t) * 3 <= end);
 
-    size_t guard_size = ROUND_UP(sizeof(chunk_hdr_t));
+
 
     // 划分为三个 chunk，头尾始终处于 inuse 状态
+    size_t guard_size = ROUND_UP(sizeof(chunk_hdr_t));
     build_chunk_used(start, 0, guard_size);
     start += guard_size;
     end -= guard_size;
@@ -242,6 +243,8 @@ void heap_init(mem_heap_t *heap, void *buff, size_t size) {
 
     heap->spin = SPIN_INIT;
     heap->sizetree = RBTREE_INIT;
+    heap->buff = (char *)start;
+    heap->end  = (char *)end;
     put_chunk_into_heap(heap, body_chk);
 }
 
@@ -270,7 +273,11 @@ void heap_free(mem_heap_t *heap, void *ptr) {
 
     chunk_t *chk = (chunk_t *)((size_t)ptr - sizeof(chunk_hdr_t));
 
-    // TODO 需要检查这个 chk 是否位于 heap 内部
+    // 检查这个 chk 是否位于 heap 内部
+    if (((char *)chk < heap->buff) || ((char *)chk >= heap->end)) {
+        klog("warning: chunk outside heap!\n");
+        return;
+    }
 
     int key = irq_spin_take(&heap->spin);
     chunk_free(heap, chk);
@@ -284,7 +291,7 @@ void heap_free(mem_heap_t *heap, void *ptr) {
 //------------------------------------------------------------------------------
 
 
-static mem_heap_t g_common_heap = { SPIN_INIT, RBTREE_INIT };
+static mem_heap_t g_common_heap = { SPIN_INIT, RBTREE_INIT, NULL, NULL };
 static uint8_t g_heap_buff[KERNEL_HEAP_SIZE];
 
 INIT_TEXT void kernel_heap_init() {

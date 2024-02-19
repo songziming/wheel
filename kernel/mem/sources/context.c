@@ -178,6 +178,17 @@ void context_free(context_t *ctx, void *ptr) {
     irq_spin_give(&ctx->spin, key);
 }
 
+vmrange_t *context_query(context_t *ctx, size_t va) {
+    ASSERT(NULL != ctx);
+    ASSERT(INVALID_ADDR != va);
+
+    int key = irq_spin_take(&ctx->spin);
+    vmrange_t *rng = vm_locate(ctx, va);
+    irq_spin_give(&ctx->spin, key);
+
+    return rng;
+}
+
 
 
 //------------------------------------------------------------------------------

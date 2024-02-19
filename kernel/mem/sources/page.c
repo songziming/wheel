@@ -38,7 +38,7 @@ static CONST page_t *g_pages = NULL;
 static pglist_t g_blocks[RANK_NUM];
 
 static spin_t g_pages_lock = SPIN_INIT;
-static shell_cmd_t g_cmd_pages;
+static shell_cmd_t g_cmd_page;
 
 
 
@@ -49,7 +49,7 @@ static shell_cmd_t g_cmd_pages;
 // 返回页所在的块
 pfn_t page_block_head(pfn_t pfn) {
     ASSERT(pfn < g_page_num);
-    while (g_pages[pfn].head && pfn) {
+    while (!g_pages[pfn].head && pfn) {
         pfn &= pfn - 1;
     }
     return pfn;
@@ -315,9 +315,51 @@ static pfn_t block_alloc(uint8_t rank, pfn_t period, pfn_t phase, page_type_t ty
 // 公开的函数
 //------------------------------------------------------------------------------
 
-static int pages_show(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
+static uint64_t strtoul(const char *s) {
+    ASSERT(NULL != s);
+
+    int base = 10;
+    if ('0' == *s) {
+        ++s;
+        base = 8;
+        if (('x' == *s) || ('X' == *s)) {
+            ++s;
+            base = 16;
+        }
+    }
+
+    uint64_t num = 0;
+    for (; *s; ++s) {
+        num *= base;
+        if (('0' <= *s) && (*s <= '9')) {
+            num += *s - '0';
+        } else if (('a' <= *s) && (*s <= 'f')) {
+            num += *s - 'a' + 10;
+        } else if (('A' <= *s) && (*s <= 'F')) {
+            num += *s - 'A' + 10;
+        } else {
+            break;
+        }
+    }
+
+    return num;
+}
+
+static int page_show(int argc, char *argv[]) {
+    if (2 == argc) {
+        uint64_t addr = strtoul(argv[1]);
+        size_t pn = addr >> PAGE_SHIFT;
+
+        if (pn >= g_page_num) {
+            klog("invalid phys_addr: 0x%lx\n", addr);
+            return 1;
+        }
+
+        pfn_t blk = page_block_head(pn);
+        klog("addr %lx, block %x, size %x, type %d\n",
+            addr, blk, 1 << g_pages[blk].rank, g_pages[blk].type);
+        return 0;
+    }
 
     int key = irq_spin_take(&g_pages_lock);
 
@@ -333,6 +375,7 @@ static int pages_show(int argc, char *argv[]) {
     irq_spin_give(&g_pages_lock, key);
     return 0;
 }
+
 
 // 传入物理内存的上限
 INIT_TEXT void page_init(size_t end) {
@@ -361,9 +404,9 @@ INIT_TEXT void page_init(size_t end) {
     }
 
     // 注册打印物理页的命令
-    g_cmd_pages.name = "pages";
-    g_cmd_pages.func = pages_show;
-    shell_add_cmd(&g_cmd_pages);
+    g_cmd_page.name = "page";
+    g_cmd_page.func = page_show;
+    shell_add_cmd(&g_cmd_page);
 }
 
 // 将一段内存标记为有效内存
@@ -383,7 +426,7 @@ INIT_TEXT void page_add(size_t start, size_t end, page_type_t type) {
         return;
     }
     for (size_t i = start; i < end; ++i) {
-        ASSERT(g_pages[i].type == PT_INVALID);
+        ASSERT(g_pages[i].type != type);
         g_pages[i].head = 0;
     }
 
@@ -408,7 +451,7 @@ INIT_TEXT void page_add(size_t start, size_t end, page_type_t type) {
     }
 }
 
-// 申请一个物理页
+// 申请一个物理页块
 size_t pages_alloc(int rank, page_type_t type) {
     ASSERT(rank >= 0);
     ASSERT(rank < RANK_NUM);
@@ -425,7 +468,7 @@ size_t pages_alloc(int rank, page_type_t type) {
     return (size_t)pg << PAGE_SHIFT;
 }
 
-// 回收一个物理页
+// 回收一个物理页块
 void pages_free(size_t pa) {
     ASSERT(0 == (pa & (PAGE_SIZE - 1)));
 
@@ -438,3 +481,27 @@ void pages_free(size_t pa) {
     block_free((pfn_t)pa);
     irq_spin_give(&g_pages_lock, key);
 }
+
+#if 0
+// 将一段内核使用的物理内存回收（用于回收 init）
+void reclaim_kernel_pages(size_t pa, size_t end) {
+    ASSERT(0 == (pa  & (PAGE_SIZE - 1)));
+    ASSERT(0 == (end & (PAGE_SIZE - 1)));
+
+    pa  >>= PAGE_SHIFT;
+    end >>= PAGE_SHIFT;
+    ASSERT(pa < end);
+    ASSERT(end <= g_page_num);
+
+    int key = irq_spin_take(&g_pages_lock);
+
+    for (; pa < end; ++pa) {
+        ASSERT(0 == g_pages[pa].rank);
+        ASSERT(g_pages[pa].head);
+        ASSERT(PT_KERNEL == g_pages[pa].type);
+        block_free((pfn_t)pa);
+    }
+
+    irq_spin_give(&g_pages_lock, key);
+}
+#endif

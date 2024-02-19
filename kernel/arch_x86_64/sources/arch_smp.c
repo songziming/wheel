@@ -209,7 +209,7 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
     }
     for (uint32_t i = 0; (i < g_gsi_max) && (i < 256); ++i) {
         g_gsi_to_irq[i] = i;
-        g_gsi_flags[i] = TRIGMODE_EDGE; // TODO 设置传统 IRQ 的默认触发条件
+        g_gsi_flags[i] = TRIGMODE_EDGE; // 传统 IRQ 的默认触发条件
     }
 
     // 再次遍历 MADT，创建设备

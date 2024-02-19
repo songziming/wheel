@@ -58,7 +58,7 @@ static INIT_TEXT void add_kernel_gap(vmrange_t *prev, vmrange_t *curr) {
 
     size_t from = (prev->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     size_t to = curr->addr & ~(PAGE_SIZE - 1);
-    page_add(from - KERNEL_TEXT_ADDR, to - KERNEL_TEXT_ADDR, PT_KERNEL);
+    page_add(from - KERNEL_TEXT_ADDR, to - KERNEL_TEXT_ADDR, PT_FREE);
 }
 
 
@@ -108,7 +108,6 @@ INIT_TEXT void mem_init() {
     }
 
     page_init(ramtop);      // 分配页描述符数组
-    // pcpu_prepare();         // 准备 PCPU 相关数据结构
     early_alloc_disable();  // 禁用临时内存分配
 
     // 记录内核的地址空间布局，也是后面建立页表的依据
@@ -120,8 +119,6 @@ INIT_TEXT void mem_init() {
 
     // 为 PCPU 划分空间，并将信息记录在 vmspace 中
     // PCPU 结束位置也是内核静态 sections 结束位置
-    // size_t kend_va = (size_t)early_alloc_rw(0);
-    // size_t kend_pa = pcpu_allocate(kend_va) - KERNEL_TEXT_ADDR;
     pcpu_allocate((size_t)early_alloc_rw(0));
 
     // 最后一个 range，获取内核结束位置
@@ -179,5 +176,13 @@ INIT_TEXT void mem_init() {
 // 回收 init 部分的内存空间（本函数不能使用 init 函数）
 // 需要在 root-task 中执行，此时已切换到任务栈，不再使用初始栈
 void reclaim_init() {
+    size_t pa  = g_range_init.pa;
+    size_t end = g_range_init.end - g_range_init.addr + g_range_init.pa;
+    end = (end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+
+    // 本函数是 init，但只是把物理页标记回收，映射关系还在
+    page_add(pa, end, PT_FREE);
+
+    // 也可以将 vmrange 保留在地址空间里，方便 #PF handler 检查
     kernel_context_unmap(&g_range_init);
 }

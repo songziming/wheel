@@ -308,13 +308,13 @@ static void root_proc() {
     pci_init(acpi_get_table("MCFG"));
     i8042_init(); // PS/2 键盘控制器
 
-    // 启动核心系统任务，长期驻留运行
     keyboard_init(); // 虚拟设备 /dev/kbd
     shell_init();
     // TODO 文件系统
     // common_init();
 
-    // TODO 回收 init section 的物理内存，并删除映射
+    // 初始化已将完成，回收 init section
+    reclaim_init();
 #endif
 }
 

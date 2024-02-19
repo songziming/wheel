@@ -166,7 +166,12 @@ exp_from_kernel:
 
     // 函数参数
     movq    %rax, %rdi      // 向量号
-    movq    %rsp, %rsi      // 当前栈帧
+    movq    %rsp, %rsi      // 寄存器
+
+    // 建立一套全新的调用栈
+    pushq   0x80(%rsi)      // 返回地址
+    pushq   %rbp            // old rbp，指向被中断的栈帧
+    movq    %rsp, %rbp
 
     // 调用 C 函数处理异常
     movq    $g_handlers, %rax
@@ -197,7 +202,7 @@ int_from_kernel:
 
     // 准备函数参数
     movq    %rax, %rdi      // 向量号
-    movq    %rsp, %rsi      // 当前栈帧
+    movq    %rsp, %rsi      // 寄存器
 
     incl    %gs:(g_int_depth)
     cmpl    $1, %gs:(g_int_depth)
@@ -210,8 +215,8 @@ int_from_kernel:
 
 int_nested_enter:
     // 建立一套全新的调用栈
-    pushq   $0
-    pushq   $0
+    pushq   0x80(%rsi)      // 返回地址
+    pushq   %rbp            // old rbp，指向被中断的栈帧
     movq    %rsp, %rbp
 
     // 调用 C 函数

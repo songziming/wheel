@@ -124,7 +124,6 @@ static void x_write(reg_t reg, uint32_t val) {
 
 // xAPIC 模式的目标 ID 只有 8-bit
 static void x_write_icr(uint32_t dst, uint32_t lo) {
-    // ASSERT(dst < 0x100);
     dst <<= 24;
     x_write(REG_ICR_HI, dst);
     x_write(REG_ICR_LO, lo);

@@ -20,6 +20,8 @@
 
 // 内核 PDP 为空也不能删除，因为内核 PDP 被所有进程的 PML4 引用
 
+// unmap 操作的一般都是当前页表，必须执行 invlpg
+
 
 
 //------------------------------------------------------------------------------
@@ -154,6 +156,7 @@ static uint64_t pt_unmap(uint64_t pt, uint64_t va, uint64_t end) {
             --info->ent_num;
         }
         tbl[i] = 0;
+        __asm__("invlpg (%0)" :: "r"(va) : "memory");
         va += SIZE_4K;
     }
 
@@ -261,6 +264,7 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
             }
             --info->ent_num;
             tbl[i] = 0;
+            __asm__("invlpg (%0)" :: "r"(va) : "memory");
             va += SIZE_2M;
             continue;
         }
@@ -286,6 +290,7 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
             }
 
             tbl[i] = (pt & MMU_ADDR) | MMU_P | MMU_US | MMU_RW;
+            __asm__("invlpg (%0)" :: "r"(old_va) : "memory");
         } else {
             va = pt_unmap(pt, va, end);
         }
@@ -399,6 +404,7 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
             }
             tbl[i] = 0;
             --info->ent_num;
+            __asm__("invlpg (%0)" :: "r"(va) : "memory");
             va += SIZE_1G;
             continue;
         }
@@ -424,6 +430,7 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
             }
 
             tbl[i] = (pd & MMU_ADDR) | MMU_P | MMU_US | MMU_RW;
+            __asm__("invlpg (%0)" :: "r"(old_va) : "memory");
         } else {
             va = pd_unmap(pd, va, end);
         }
@@ -509,7 +516,7 @@ static uint64_t pml4_unmap(uint64_t pml4, uint64_t va, uint64_t end) {
         // 需要判断这个 PDP 是不是内核地址范围
         // 如果是内核空间的 PDP，即使有效元素为零也不能删除
         // 因为内核 PDP 被所有进程的 PML4 引用
-        if ((i >= 256) && (0 == PAGE_INFO(pdp)->ent_num)) {
+        if ((i < 256) && (0 == PAGE_INFO(pdp)->ent_num)) {
             pdp_free(pdp);
             tbl[i] = 0;
             --info->ent_num;

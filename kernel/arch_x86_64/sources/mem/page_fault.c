@@ -6,13 +6,16 @@
 
 // 处理分页异常，有自己的 IST
 
+// 异常的 regs 是不完整的
+
 void handle_pagefault(int vec, arch_regs_t *f) {
     ASSERT(14 == vec);
 
-    klog("#PF rip=%lx rsp=%lx rbp=%lx\n", f->rip, f->rsp, f->rbp);
+    klog("#PF cpu-%d rip=%lx rsp=%lx\n", cpu_index(), f->rip, f->rsp);
 
     size_t frames[32];
-    int depth = arch_unwind(frames, 32, f->rbp);
+    // int depth = arch_unwind(frames, 32, f->rbp);
+    int depth = unwind(frames, 32);
     print_frames(frames, depth);
 
     uint64_t va = read_cr2();
@@ -24,7 +27,16 @@ void handle_pagefault(int vec, arch_regs_t *f) {
     //     klog("page not exist\n");
     // }
 
-    // TODO 找出发生错误的地址属于哪个任务
+    // TODO 找出发生错误的地址属于哪个任务，位于哪个地址空间
+    //      进而找出所在 vmrange
+    task_t *prev = THISCPU_GET(g_tid_prev);
+    if (NULL != prev) {
+        vmrange_t *rng = context_query(prev->process, va);
+        if (NULL != rng) {
+            klog("within task %s, range %s %lx~%lx\n",
+                prev->name, rng->desc, rng->addr, rng->end);
+        }
+    }
 
     while (1) {
         cpu_halt();

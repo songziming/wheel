@@ -14,7 +14,7 @@ static shell_cmd_t g_cmd_pmmap;
 
 
 
-static INIT_TEXT const char *pmtype_str(pmtype_t type) {
+static const char *pmtype_str(pmtype_t type) {
     switch (type) {
     case PM_RESERVED: return "reserved";
     case PM_AVAILABLE: return "available";

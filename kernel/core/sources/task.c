@@ -67,6 +67,7 @@ int task_create(task_t *task, const char *name, uint8_t priority, void *entry) {
             NULL, TASK_STACK_RANK, entry, 0, 0, 0, 0);
 }
 
+
 // 删除任务资源
 void task_destroy(task_t *task) {
     ASSERT(NULL != task);

@@ -8,6 +8,8 @@
 typedef struct mem_heap {
     spin_t spin;
     rbtree_t sizetree;
+    char *buff;
+    char *end;
 } mem_heap_t;
 
 

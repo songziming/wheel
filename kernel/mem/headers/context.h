@@ -34,6 +34,7 @@ typedef struct context {
 void context_init(context_t *ctx);
 void *context_alloc(context_t *ctx, int rank, page_type_t type, mmu_attr_t attrs, const char *desc);
 void context_free(context_t *ctx, void *ptr);
+vmrange_t *context_query(context_t *ctx, size_t va);
 
 
 
