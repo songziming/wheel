@@ -84,10 +84,9 @@ void acpi_show_tables() {
 
     klog("ACPI tables:");
     for (int i = 0; i < g_table_num; ++i) {
-        if (NULL == g_tables[i]) {
-            continue;
+        if (NULL != g_tables[i]) {
+            klog(" %.4s", g_tables[i]->signature);
         }
-        klog(" %.4s", g_tables[i]->signature);
     }
     klog("\n");
 }
@@ -114,13 +113,16 @@ static INIT_TEXT acpi_tbl_t *check_table(uint64_t addr) {
         return NULL;
     }
 
-    pmrange_t *rng = pmmap_locate((size_t)tbl);
-    if (!rng || (PM_RESERVED == rng->type)) {
+    // klog("acpi table %.4s at %p, range %p\n", tbl->signature, tbl, rng);
+
+    pmrange_t *rng = pmmap_locate(addr);
+    ASSERT(NULL != rng);
+    if (PM_RESERVED == rng->type) {
         return tbl;
     }
 
-    klog("backup ACPI table %.4s\n", tbl->signature);
     acpi_tbl_t *bak = early_alloc_ro(tbl->length);
+    // klog("backup ACPI table %.4s to %p\n", tbl->signature, bak);
     memcpy(bak, tbl, tbl->length);
     return bak;
 }

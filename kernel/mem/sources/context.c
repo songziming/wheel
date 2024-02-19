@@ -173,6 +173,7 @@ void context_free(context_t *ctx, void *ptr) {
     mmu_unmap(ctx->table, rng->addr, rng->end);
     pages_free(rng->pa);
     vm_remove(&g_kernel_ctx, rng);
+    kernel_heap_free(rng->desc);
     kernel_heap_free(rng);
 
     irq_spin_give(&ctx->spin, key);

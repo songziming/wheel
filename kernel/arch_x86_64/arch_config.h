@@ -47,8 +47,8 @@
 // 预留的缓冲区大小
 //------------------------------------------------------------------------------
 
-#define EARLY_RO_SIZE       0x4000      // 只读预留内存
-#define EARLY_RW_SIZE       0x2000      // 读写预留内存
+#define EARLY_RO_SIZE       0x200000    // 只读预留内存（需要留足备份 ACPI 表的空间）
+#define EARLY_RW_SIZE       0x800000    // 读写预留内存（需要留足 framebuffer 的空间）
 
 #define KEYBOARD_BUFF_LEN   64          // 按键码缓冲区
 #define KERNEL_HEAP_SIZE    0x4000      // 内核堆

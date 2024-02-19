@@ -79,6 +79,15 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         goto end;
     }
 
+    // 检查是否支持图形界面，使用不同输出方式
+    if ((0 != g_fb.rows) && (0 != g_fb.cols)) {
+        framebuf_init(&g_fb);
+        set_log_func(serial_framebuf_puts);
+    } else {
+        console_init();
+        set_log_func(serial_console_puts);
+    }
+
     // 寻找 RSDP，并找出所有 ACPI 表
     if (INVALID_ADDR == g_rsdp) {
         g_rsdp = acpi_find_rsdp();
@@ -100,7 +109,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // 检查是否有必要启用 interrupt remapping（依赖 VT-d）
     acpi_tbl_t *dmar = acpi_get_table("DMAR");
     if (NULL != dmar) {
-        klog("supports DMAR!\n");
+        klog("DMAR at %p, supports VT-d interrupt remapping\n", dmar);
     }
     if (requires_int_remap()) {
         klog("requires int remap!\n");
@@ -116,14 +125,14 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // 重要数据已备份，放开 early_rw 长度限制
     early_rw_unlock();
 
-    // 检查是否支持图形界面，使用不同输出方式
-    if ((0 != g_fb.rows) && (0 != g_fb.cols)) {
-        framebuf_init(&g_fb);
-        set_log_func(serial_framebuf_puts);
-    } else {
-        console_init();
-        set_log_func(serial_console_puts);
-    }
+    // // 检查是否支持图形界面，使用不同输出方式
+    // if ((0 != g_fb.rows) && (0 != g_fb.cols)) {
+    //     framebuf_init(&g_fb);
+    //     set_log_func(serial_framebuf_puts);
+    // } else {
+    //     console_init();
+    //     set_log_func(serial_console_puts);
+    // }
 
     // 切换正式 gdt，加载 idt
     gdt_init();

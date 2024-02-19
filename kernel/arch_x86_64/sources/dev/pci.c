@@ -16,45 +16,6 @@ CONST void (*g_pci_write)(uint8_t, uint8_t, uint8_t, uint8_t, uint32_t) = NULL;
 static rbtree_t g_drivers = RBTREE_INIT;
 static shell_cmd_t g_cmd_pci;
 
-//------------------------------------------------------------------------------
-// PCI 读写配置空间
-//------------------------------------------------------------------------------
-
-#define CONFIG_ADDR 0xcf8
-#define CONFIG_DATA 0xcfc
-
-static uint32_t pci_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg) {
-    ASSERT(dev < 32);
-    ASSERT(func < 8);
-    ASSERT(0 == (reg & 3));
-
-    uint32_t addr = ((uint32_t)bus  << 16)
-                  | ((uint32_t)dev  << 11)
-                  | ((uint32_t)func <<  8)
-                  |  (uint32_t)reg
-                  | 0x80000000U;
-    out32(CONFIG_ADDR, addr);
-    return in32(CONFIG_DATA);
-}
-
-static void pci_write(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg, uint32_t data) {
-    ASSERT(dev < 32);
-    ASSERT(func < 8);
-    ASSERT(0 == (reg & 3));
-
-    uint32_t addr = ((uint32_t)bus  << 16)
-                  | ((uint32_t)dev  << 11)
-                  | ((uint32_t)func <<  8)
-                  |  (uint32_t)reg
-                  | 0x80000000U;
-    out32(CONFIG_ADDR, addr);
-    out32(CONFIG_DATA, data);
-}
-
-// TODO PCIe 使用 MMIO 读写配置空间，而不是端口
-//      如果 ACPI 提供了 MCFG 表，说明支持 PCIe
-// TODO 实现一套 pcie 读写函数，像 xAPIC 和 x2APIC 通过函数指针动态选择
-
 
 
 //------------------------------------------------------------------------------
@@ -113,12 +74,12 @@ void pci_add_device(uint8_t bus, uint8_t dev, uint8_t func, uint32_t reg0) {
     uint16_t vendor = reg0 & 0xffff;
     uint16_t device = (reg0 >> 16) & 0xffff;
 
-    uint32_t reg2 = pci_read(bus, dev, func, 8);
+    uint32_t reg2 = g_pci_read(bus, dev, func, 8);
     uint8_t classcode = (reg2 >> 24) & 0xff;
     uint8_t subclass = (reg2 >> 16) & 0xff;
     uint8_t progif = (reg2 >> 8) & 0xff;
 
-    // uint32_t reg3 = pci_read(bus, dev, func, 12);
+    // uint32_t reg3 = g_pci_read(bus, dev, func, 12);
     // uint8_t header = (reg3 >> 16) & 0x7f;
 
     // const char *type = "?";
@@ -208,7 +169,7 @@ void pci_enumerate() {
         uint8_t bus = buses[--num];
         for (uint8_t dev = 0; dev < 32; ++dev) {
             for (uint8_t func = 0; func < 8; ++func) {
-                uint32_t reg0 = pci_read(bus, dev, func, 0);
+                uint32_t reg0 = g_pci_read(bus, dev, func, 0);
                 if (0xffff == (reg0 & 0xffff)) {
                     if (0 == func) {
                         func = 8;
@@ -217,15 +178,15 @@ void pci_enumerate() {
                 }
 
                 // 如果是 PCI-to-PCI bridge，则需要遍历
-                uint32_t reg3 = pci_read(bus, dev, func, 12);
+                uint32_t reg3 = g_pci_read(bus, dev, func, 12);
                 uint8_t type = (reg3 >> 16) & 0x7f;
                 if (1 == type) {
-                    uint32_t reg6 = pci_read(bus, dev, func, 0x18);
+                    uint32_t reg6 = g_pci_read(bus, dev, func, 0x18);
                     buses[num++] = (reg6 >> 8) & 0xff;
                     continue;
                 }
 
-                // uint32_t reg2 = pci_read(bus, dev, 0, 8);
+                // uint32_t reg2 = g_pci_read(bus, dev, 0, 8);
                 // uint8_t classcode = (reg2 >> 24) & 0xff;
                 // uint8_t subclass = (reg2 >> 16) & 0xff;
 
@@ -244,12 +205,18 @@ static int show_pci(int argc, char *argv[]) {
 }
 
 
+static uint32_t pci_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg);
+static void pci_write(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg, uint32_t data);
+
+
 INIT_TEXT void pci_init(acpi_tbl_t *mcfg) {
     if (NULL == mcfg) {
         g_pci_read = pci_read;
         g_pci_write = pci_write;
     } else {
-        klog("supports PCI-E!\n");
+        klog("MCFG at %p, supports PCI-E\n", mcfg);
+        g_pci_read = pci_read;
+        g_pci_write = pci_write;
     }
 
     g_cmd_pci.name = "pci";
@@ -257,3 +224,43 @@ INIT_TEXT void pci_init(acpi_tbl_t *mcfg) {
     shell_add_cmd(&g_cmd_pci);
 }
 
+
+
+//------------------------------------------------------------------------------
+// PCI 读写配置空间
+//------------------------------------------------------------------------------
+
+#define CONFIG_ADDR 0xcf8
+#define CONFIG_DATA 0xcfc
+
+static uint32_t pci_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg) {
+    ASSERT(dev < 32);
+    ASSERT(func < 8);
+    ASSERT(0 == (reg & 3));
+
+    uint32_t addr = ((uint32_t)bus  << 16)
+                  | ((uint32_t)dev  << 11)
+                  | ((uint32_t)func <<  8)
+                  |  (uint32_t)reg
+                  | 0x80000000U;
+    out32(CONFIG_ADDR, addr);
+    return in32(CONFIG_DATA);
+}
+
+static void pci_write(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg, uint32_t data) {
+    ASSERT(dev < 32);
+    ASSERT(func < 8);
+    ASSERT(0 == (reg & 3));
+
+    uint32_t addr = ((uint32_t)bus  << 16)
+                  | ((uint32_t)dev  << 11)
+                  | ((uint32_t)func <<  8)
+                  |  (uint32_t)reg
+                  | 0x80000000U;
+    out32(CONFIG_ADDR, addr);
+    out32(CONFIG_DATA, data);
+}
+
+// TODO PCIe 使用 MMIO 读写配置空间，而不是端口
+//      如果 ACPI 提供了 MCFG 表，说明支持 PCIe
+// TODO 实现一套 pcie 读写函数，像 xAPIC 和 x2APIC 通过函数指针动态选择

@@ -275,7 +275,6 @@ void heap_free(mem_heap_t *heap, void *ptr) {
 
     // 检查这个 chk 是否位于 heap 内部
     if (((char *)chk < heap->buff) || ((char *)chk >= heap->end)) {
-        klog("warning: chunk outside heap!\n");
         return;
     }
 
