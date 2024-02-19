@@ -28,11 +28,6 @@ inline void cpu_int_unlock(int key) {
     }
 }
 
-// bochs magic breakpoint
-void emu_break() {
-    __asm__("xchgw %bx, %bx");
-}
-
 // 退出 QEMU/Bochs 模拟器并返回值
 NORETURN void emu_exit(int ret) {
 #ifdef DEBUG
@@ -43,6 +38,11 @@ NORETURN void emu_exit(int ret) {
     while (1) {
         cpu_halt();
     }
+}
+
+// bochs magic breakpoint
+void emu_break() {
+    __asm__("xchgw %bx, %bx");
 }
 
 

@@ -7,13 +7,6 @@
 
 static context_t g_kernel_ctx;
 
-void context_init(context_t *ctx) {
-    ctx->spin = SPIN_INIT;
-    dl_init_circular(&ctx->head);
-    // vmspace_init(&ctx->space);
-    ctx->table = mmu_create_table();
-}
-
 
 //------------------------------------------------------------------------------
 // 虚拟地址空间管理，不涉及锁，不涉及页表
@@ -116,43 +109,15 @@ static vmrange_t *vm_locate(context_t *ctx, size_t va) {
 }
 
 
-
-
-
 //------------------------------------------------------------------------------
 // 分配虚拟地址空间并映射物理内存
 //------------------------------------------------------------------------------
 
-
-// void context_map(context_t *ctx, size_t va, size_t size, size_t pa, mmu_attr_t attrs, const char *desc) {
-//     ASSERT(NULL != ctx);
-//     ASSERT(INVALID_ADDR != va);
-//     ASSERT(0 == (va   & (PAGE_SIZE - 1)));
-//     ASSERT(0 == (size & (PAGE_SIZE - 1)));
-
-//     int key = irq_spin_take(&ctx->spin);
-//     vmrange_t *rng = kernel_heap_alloc(sizeof(vmrange_t));
-//     vmspace_insert(&ctx->space, rng, va, va + size, pa, attrs, desc);
-//     if (INVALID_ADDR != pa) {
-//         ASSERT(0 == (pa & (PAGE_SIZE - 1)));
-//         mmu_map(ctx->table, va, va + size, pa, attrs);
-//     }
-//     irq_spin_give(&ctx->spin, key);
-// }
-
-// void context_unmap(context_t *ctx, size_t va, size_t size) {
-//     ASSERT(NULL != ctx);
-//     ASSERT(INVALID_ADDR != va);
-//     ASSERT(0 == (va   & (PAGE_SIZE - 1)));
-//     ASSERT(0 == (size & (PAGE_SIZE - 1)));
-
-//     int key = irq_spin_take(&ctx->spin);
-//     vmrange_t *rng = vmspace_locate(&ctx->space, va);
-//     vmspace_remove(&ctx->space, rng);
-//     kernel_heap_free(rng);
-//     mmu_unmap(ctx->table, va, va + size);
-//     irq_spin_give(&ctx->spin, key);
-// }
+void context_init(context_t *ctx) {
+    ctx->spin = SPIN_INIT;
+    dl_init_circular(&ctx->head);
+    ctx->table = mmu_create_table();
+}
 
 // 申请一段虚拟内存，分配物理内存，建立映射
 void *context_alloc(context_t *ctx, int rank, page_type_t type, mmu_attr_t attrs, const char *desc) {
@@ -162,7 +127,6 @@ void *context_alloc(context_t *ctx, int rank, page_type_t type, mmu_attr_t attrs
 
     int key = irq_spin_take(&ctx->spin);
 
-    // size_t va = vmspace_search(&ctx->space, DYNAMIC_MAP_ADDR, DYNAMIC_MAP_END, size);
     size_t va = vm_search(&g_kernel_ctx, DYNAMIC_MAP_ADDR, DYNAMIC_MAP_END, size);
     if (INVALID_ADDR == va) {
         irq_spin_give(&ctx->spin, key);
@@ -182,7 +146,6 @@ void *context_alloc(context_t *ctx, int rank, page_type_t type, mmu_attr_t attrs
         return NULL;
     }
 
-    // vmspace_insert(&ctx->space, rng, va, va + size, pa, attrs, desc);
     rng->addr = va;
     rng->end = va + size;
     rng->pa = pa;
@@ -221,12 +184,16 @@ void context_free(context_t *ctx, void *ptr) {
 // 内核地址空间，也是所有进程共用的部分
 //------------------------------------------------------------------------------
 
+
+// TODO 有些 range 是全局变量，静态分配，这些 range 不能删除
+//      还有一些是动态分配的，例如任务栈、内存池，这些 range 可以被删除
+
+
 // 只初始化虚拟地址空间，暂不关心页表
 INIT_TEXT void kernel_context_init() {
     g_kernel_ctx.spin = SPIN_INIT;
-    // vmspace_init(&g_kernel_ctx.space);
     dl_init_circular(&g_kernel_ctx.head);
-    // g_kernel_ctx.table = get_kernel_pgtable();
+    g_kernel_ctx.table = INVALID_ADDR;
 }
 
 context_t *get_kernel_context() {
@@ -252,7 +219,6 @@ INIT_TEXT vmrange_t *kernel_context_mark(vmrange_t *rng, size_t va, size_t end,
     rng->pa    = pa;
     rng->attrs = attrs;
     rng->desc  = desc;
-    // vmspace_insert(&g_kernel_ctx.space, rng, va, end, pa, attrs, desc);
     vm_insert(&g_kernel_ctx, rng);
     irq_spin_give(&g_kernel_ctx.spin, key);
 
@@ -281,9 +247,13 @@ void kernel_context_unmap(vmrange_t *rng) {
 
     int key = irq_spin_take(&g_kernel_ctx.spin);
 
+    // 先移除 vmrange，最后清除页表中的映射
+    // 因为 vmrange 可能就属于 init data
+
+    vm_remove(&g_kernel_ctx, rng);
+
     size_t end = (rng->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     mmu_unmap(g_kernel_ctx.table, rng->addr, end);
-    vm_remove(&g_kernel_ctx, rng);
 
     irq_spin_give(&g_kernel_ctx.spin, key);
 }

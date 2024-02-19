@@ -270,6 +270,8 @@ void heap_free(mem_heap_t *heap, void *ptr) {
 
     chunk_t *chk = (chunk_t *)((size_t)ptr - sizeof(chunk_hdr_t));
 
+    // TODO 需要检查这个 chk 是否位于 heap 内部
+
     int key = irq_spin_take(&heap->spin);
     chunk_free(heap, chk);
     irq_spin_give(&heap->spin, key);

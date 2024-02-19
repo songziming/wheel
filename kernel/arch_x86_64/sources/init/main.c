@@ -153,7 +153,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 创建并加载内核页表，启用内存保护
     kernel_pgtable_init();
-    kernel_proc_init();
+    // kernel_proc_init();
+    kernel_context_map_all();
     write_cr3(get_kernel_pgtable());
 
     // 准备就绪队列

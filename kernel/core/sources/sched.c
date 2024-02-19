@@ -325,8 +325,8 @@ INIT_TEXT void sched_init() {
         ready_q_init(q);
 
         task_t *idle = pcpu_ptr(i, &g_idle_tcb);
-        task_create_ex(idle, "idle", PRIORITY_NUM - 1, i, NULL,
-                NULL, IDLE_STACK_RANK, idle_proc, 0, 0, 0, 0);
+        task_create_ex(idle, strmake("idle-%d", i), PRIORITY_NUM - 1, i,
+                NULL, NULL, IDLE_STACK_RANK, idle_proc, 0, 0, 0, 0);
 
         // 将idle任务放入就绪队列，但是暂时不切换
         raw_spin_take(&q->spin);

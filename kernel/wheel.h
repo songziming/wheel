@@ -21,6 +21,7 @@
 
 // lib
 #include <str.h>
+#include <format.h>
 #include <dllist.h>
 #include <rbtree.h>
 

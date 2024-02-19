@@ -56,26 +56,32 @@ void handle_interrupt(int vec, arch_regs_t *f) {
 //      但是现在，为每个处理器都分配了相同大小的栈
 
 void int_init() {
-    ASSERT(NULL != g_range_pcpu_vars);
-    ASSERT(NULL != g_range_pcpu_nmi);
-    ASSERT(NULL != g_range_pcpu_df);
-    ASSERT(NULL != g_range_pcpu_pf);
-    ASSERT(NULL != g_range_pcpu_mc);
-    ASSERT(NULL != g_range_pcpu_int);
+    // ASSERT(NULL != g_range_pcpu_vars);
+    // ASSERT(NULL != g_range_pcpu_nmi);
+    // ASSERT(NULL != g_range_pcpu_df);
+    // ASSERT(NULL != g_range_pcpu_pf);
+    // ASSERT(NULL != g_range_pcpu_mc);
+    // ASSERT(NULL != g_range_pcpu_int);
     ASSERT(0 == cpu_index());
 
     // 每个 CPU 可以设置最多 7 个 IST，编号 1~7
     // TSS 里面记录的是栈顶，也就是结束地址
     for (int i = 0; i < cpu_count(); ++i) {
-        tss_set_ist(i, 1, g_range_pcpu_nmi[i].end);
-        tss_set_ist(i, 2, g_range_pcpu_df[i].end);
-        tss_set_ist(i, 3, g_range_pcpu_pf[i].end);
-        tss_set_ist(i, 4, g_range_pcpu_mc[i].end);
+        vmrange_t *nmi = pcpu_ptr(i, &g_range_pcpu_nmi);
+        vmrange_t *df  = pcpu_ptr(i, &g_range_pcpu_df);
+        vmrange_t *pf  = pcpu_ptr(i, &g_range_pcpu_pf);
+        vmrange_t *mc  = pcpu_ptr(i, &g_range_pcpu_mc);
+
+        tss_set_ist(i, 1, nmi->end);
+        tss_set_ist(i, 2, df->end);
+        tss_set_ist(i, 3, pf->end);
+        tss_set_ist(i, 4, mc->end);
 
         *(int *)pcpu_ptr(i, &g_int_depth) = 0;
 
         // 中断栈不使用 IST，因为 IST 不能重入，而中断可以
-        *(size_t *)pcpu_ptr(i, &g_int_stack) = g_range_pcpu_int[i].end;
+        vmrange_t *intstack = pcpu_ptr(i, &g_range_pcpu_int);
+        *(size_t *)pcpu_ptr(i, &g_int_stack) = intstack->end;
     }
 
     // IDT 是所有 CPU 共享的

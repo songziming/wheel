@@ -5,15 +5,8 @@
 
 
 
-
-
-// // 实际的任务函数
-// static void task_func() {
-//     task_exit();
-// }
-
-
 // 如果传入 stack_top==NULL，表示动态分配内核栈的物理内存和虚拟范围
+// 任务创建失败则返回非零
 int task_create_ex(task_t *task, const char *name,
         uint8_t priority, int affinity, context_t *proc,
         void *stack_top, uint8_t stack_rank,
@@ -44,42 +37,18 @@ int task_create_ex(task_t *task, const char *name,
 
     // 未传入栈指针，需动态分配，动态映射
     if (NULL == stack_top) {
-        char *va = context_alloc(proc, stack_rank, PT_KERNEL_STACK, MMU_WRITE, name);
-        if (NULL == va) {
+        ASSERT(stack_rank >= 0);
+
+        task->stack = context_alloc(proc, stack_rank, PT_KERNEL_STACK,
+                MMU_WRITE, strmake("stack of %s", name));
+        if (NULL == task->stack) {
             klog("warning: alloc stack for %s failed\n", name);
             return 1;
         }
 
         size_t stack_size = PAGE_SIZE << stack_rank;
-        memset(va, 0, stack_size);
-
-        task->stack = va;
-        stack_top = va + stack_size;
-
-        // task->flags |= TF_DYNAMIC_STACK;
-        // vmspace_t *kernel_vm = get_kernel_vmspace();
-        // size_t kernel_pg = get_kernel_pgtable();
-
-        // size_t stack_size = PAGE_SIZE << stack_rank;
-        // size_t va = vmspace_search(kernel_vm, DYNAMIC_MAP_ADDR, DYNAMIC_MAP_END, stack_size);
-        // if (INVALID_ADDR == va) {
-        //     klog("cannot reserve range for task %s\n", name);
-        //     return 1;
-        // }
-
-        // // 为内核栈申请物理内存
-        // size_t pa = pages_alloc(stack_rank, PT_KERNEL_STACK);
-        // if (INVALID_ADDR == pa) {
-        //     klog("cannot alloc page for task %s\n", name);
-        //     return 1;
-        // }
-
-        // // 建立内核栈的映射
-        // vmspace_insert(kernel_vm, &task->stack_va, va, va + stack_size, pa, MMU_WRITE, name);
-        // mmu_map(kernel_pg, va, va + stack_size, pa, MMU_WRITE);
-
-        // task->stack_pa = pa;
-        // stack_top = (void *)(va + stack_size);
+        memset(task->stack, 0, stack_size);
+        stack_top = task->stack + stack_size;
     } else {
         task->stack = NULL;
     }
@@ -105,21 +74,11 @@ void task_destroy(task_t *task) {
     // 需要确保任务已停止运行，才能释放其内核栈
     // 否则发生中断，访问内核栈会导致 #PF
 
-    // klog("\ndelete resource of task %s(%p)\n", task->name, task);
-
     int key = irq_spin_take(&task->spin);
 
     if (NULL != task->stack) {
         context_free(task->process, task->stack);
     }
-
-    // if (INVALID_ADDR != task->stack_pa) {
-    //     vmspace_t *kernel_vm = get_kernel_vmspace();
-    //     size_t kernel_pg = get_kernel_pgtable();
-
-    //     mmu_unmap(kernel_pg, task->stack_va.addr, task->stack_va.end);
-    //     vmspace_remove(kernel_vm, &task->stack_va);
-    // }
 
     irq_spin_give(&task->spin, key);
 }

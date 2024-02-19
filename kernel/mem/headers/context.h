@@ -3,12 +3,10 @@
 
 #include <def.h>
 #include <spin.h>
-// #include <vmspace.h>
 #include <arch_api.h>
 #include <page.h>
 #include <dllist.h>
 
-#if 1
 
 typedef struct vmrange {
     dlnode_t    dl;
@@ -19,11 +17,8 @@ typedef struct vmrange {
     const char *desc;
 } vmrange_t;
 
-#endif
-
 typedef struct context {
     spin_t    spin;
-    // vmspace_t space;
     dlnode_t  head; // vmrange 链表头节点
     size_t    table;
 } context_t;

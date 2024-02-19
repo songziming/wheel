@@ -108,11 +108,10 @@ INIT_TEXT void mem_init() {
     }
 
     page_init(ramtop);      // 分配页描述符数组
-    pcpu_prepare();         // 准备 PCPU 相关数据结构
+    // pcpu_prepare();         // 准备 PCPU 相关数据结构
     early_alloc_disable();  // 禁用临时内存分配
 
     // 记录内核的地址空间布局，也是后面建立页表的依据
-    // vmspace_t *space = get_kernel_vmspace();
     char *kernel_addr = (char *)KERNEL_TEXT_ADDR + KERNEL_LOAD_ADDR;
     add_kernel_range(&g_range_init, kernel_addr, &_init_end, MMU_WRITE|MMU_EXEC, "kernel init");
     add_kernel_range(&g_range_text, &_text_addr, &_text_end, MMU_EXEC, "kernel text");
@@ -121,8 +120,14 @@ INIT_TEXT void mem_init() {
 
     // 为 PCPU 划分空间，并将信息记录在 vmspace 中
     // PCPU 结束位置也是内核静态 sections 结束位置
-    size_t kend_va = (size_t)early_alloc_rw(0);
-    size_t kend_pa = pcpu_allocate(kend_va) - KERNEL_TEXT_ADDR;
+    // size_t kend_va = (size_t)early_alloc_rw(0);
+    // size_t kend_pa = pcpu_allocate(kend_va) - KERNEL_TEXT_ADDR;
+    pcpu_allocate((size_t)early_alloc_rw(0));
+
+    // 最后一个 range，获取内核结束位置
+    context_t *kctx = get_kernel_context();
+    vmrange_t *last = containerof(kctx->head.prev, vmrange_t, dl);
+    size_t kend_pa = last->end - last->addr + last->pa;
 
     // 遍历物理内存范围，将可用内存添加给页分配器
     // RECLAIMABLE 也属于可用范围，跳过 1M 以下的 lowmem 与内核占用的部分
@@ -141,7 +146,7 @@ INIT_TEXT void mem_init() {
             continue;
         }
 
-        // 内核占据的内存范围必然完整包含于一个 range
+        // 内核占据的内存范围必然完整包含于一段 pmmap
         if ((start <= KERNEL_LOAD_ADDR) && (end >= kend_pa)) {
             page_add(start, KERNEL_LOAD_ADDR, PT_FREE);
             page_add(kend_pa, end, PT_FREE);
@@ -151,12 +156,18 @@ INIT_TEXT void mem_init() {
     }
 
     // 相邻的 range 之间还有空隙，虚拟地址保留作为 guard page，但是物理页可以使用
-    context_t *kctx = get_kernel_context();
     for (dlnode_t *i = kctx->head.next->next; i != &kctx->head; i = i->next) {
         vmrange_t *prev = containerof(i->prev, vmrange_t, dl);
         vmrange_t *curr = containerof(i, vmrange_t, dl);
         add_kernel_gap(prev, curr);
     }
+
+    // 将所有物理内存（含 MMIO）映射到 canonical hole 之后
+    // 最后再添加这个 mapping，防止 guard page 混乱
+    // TODO 常规内存和 MMIO 分开映射？使用 pmmap 获取物理内存上限？
+    size_t map_addr = DIRECT_MAP_ADDR;
+    size_t map_end = map_addr + (1UL << 32); // g_pmmap[g_pmmap_len - 1].end;
+    kernel_context_mark(&g_range_idmap, map_addr, map_end, 0, MMU_WRITE, "id-map");
 
     // 注册 vmspace 命令
     g_cmd_vm.name = "vm";
@@ -165,63 +176,8 @@ INIT_TEXT void mem_init() {
 }
 
 
-// 创建内核页表
-// TODO 为对等映射的所有物理内存也分配一个 vmrange
-// TODO 常规 RAM 和 MMIO 区域分别建立映射，可以根据 pmmap 建立
-// TODO 直接调用 kernel_ctx_mapall 将所有的 vmrange 映射到页表中
-INIT_TEXT void kernel_proc_init() {
-    ASSERT(NULL != g_pmmap);
-    ASSERT(g_pmmap_len > 0);
-
-    // 将所有物理内存（含 MMIO）映射到 canonical hole 之后
-    size_t map_addr = DIRECT_MAP_ADDR;
-    size_t map_end = map_addr + (1UL << 32); // g_pmmap[g_pmmap_len - 1].end;
-    kernel_context_mark(&g_range_idmap, map_addr, map_end, 0, MMU_WRITE, "id-map");
-    // mmu_map(table, DIRECT_MAP_ADDR, DIRECT_MAP_ADDR + maplen, 0, MMU_WRITE);
-
-    kernel_context_map_all();
-
-#if 0
-    // 创建页表
-    uint64_t table = get_kernel_pgtable();
-    vmspace_t *space = get_kernel_vmspace();
-
-    // 映射内核代码数据段
-    map_kernel_range(table, &g_range_init, MMU_WRITE|MMU_EXEC);
-    map_kernel_range(table, &g_range_text, MMU_EXEC);
-    map_kernel_range(table, &g_range_rodata, MMU_NONE);
-    map_kernel_range(table, &g_range_data, MMU_WRITE);
-
-    // 遍历剩下的 pcpu 和异常栈
-    ASSERT(dl_contains(&space->head, &g_range_data.dl));
-    for (dlnode_t *i = g_range_data.dl.next; i != &space->head; i = i->next) {
-        map_kernel_range(table, containerof(i, vmrange_t, dl), MMU_WRITE);
-    }
-
-    // 将所有物理内存（至少 4GB，包含 MMIO 部分）映射到内核地址空间
-    // TODO 遍历所有物理内存范围 pmmap，逐个映射
-    uint64_t maplen = 1UL << 32; // g_pmmap[g_pmmap_len - 1].end;
-    mmu_map(table, DIRECT_MAP_ADDR, DIRECT_MAP_ADDR + maplen, 0, MMU_WRITE);
-#endif
-}
-
-
-#if 0
 // 回收 init 部分的内存空间（本函数不能使用 init 函数）
 // 需要在 root-task 中执行，此时已切换到任务栈，不再使用初始栈
 void reclaim_init() {
-    // 注意 page_add 也是初始代码段函数，但此时可以调用
-    // TODO 我们已经把 init 标记为了 PT_KERNEL，重新执行 page_add 会出错
-    //      应该使用 page_range_free
-    size_t from = g_range_init.addr & ~(PAGE_SIZE - 1);
-    size_t to = (g_range_init.end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-    page_add(from - KERNEL_TEXT_ADDR, to - KERNEL_TEXT_ADDR, PT_KERNEL);
-
-    // 移除 init 部分的映射
-    // 需要首先读出 init 变量，避免再次访问
-    size_t init_start = g_range_init.addr;
-    size_t init_end = g_range_init.end;
-    vmspace_remove(get_kernel_vmspace(), &g_range_init);
-    mmu_unmap(get_kernel_pgtable(), init_start, init_end);
+    kernel_context_unmap(&g_range_init);
 }
-#endif

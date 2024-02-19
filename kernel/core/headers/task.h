@@ -18,25 +18,14 @@ typedef enum task_state {
 } task_state_t;
 
 
-// typedef enum task_flag {
-//     TF_DYNAMIC_STACK = 1,   // 任务栈是动态分配的
-//     TF_DYNAMIC_NAME  = 2,   // 任务名称字符串是动态分配的
-// } test_flag_t;
-
-
 typedef struct task {
     arch_tcb_t   arch;
     spin_t       spin;
     const char  *name;
 
-    void        *stack; // NULL 表示任务栈是静态分配的
-    // size_t       stack_pa;  // 内核栈的物理地址，INVALID_ADDR 表示静态分配内核栈
-    // vmrange_t    stack_rng;  // 内核栈的虚拟地址范围
+    context_t   *process;   // 所属进程（地址空间）
+    void        *stack;     // NULL 表示任务栈是静态分配的
 
-    context_t   *process;   // 任务所属进程
-    dlnode_t     proc_node; // 任务在进程中的节点
-
-    // uint32_t     flags;
     uint16_t     state;
     uint8_t      priority;  // 数字越小，优先级越高
     int          affinity;  // 负值表示不限制在哪个 CPU 上运行
@@ -44,8 +33,6 @@ typedef struct task {
     uint32_t     tick_reload;
     uint32_t     tick;
     dlnode_t     q_node;    // 任务在就绪队列或阻塞队列中的节点
-
-    // work_t       work;      // 有些任务需要在中断里执行，例如删除自己、等待若干 tick
 } task_t;
 
 

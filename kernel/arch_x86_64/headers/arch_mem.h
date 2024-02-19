@@ -31,14 +31,13 @@ void pmmap_show();
 
 
 // Per-CPU
-extern CONST vmrange_t *g_range_pcpu_vars;
-extern CONST vmrange_t *g_range_pcpu_nmi;
-extern CONST vmrange_t *g_range_pcpu_df;
-extern CONST vmrange_t *g_range_pcpu_pf;
-extern CONST vmrange_t *g_range_pcpu_mc;
-extern CONST vmrange_t *g_range_pcpu_int;
-INIT_TEXT void pcpu_prepare();
-INIT_TEXT size_t pcpu_allocate(size_t kernel_end);
+extern PCPU_BSS vmrange_t g_range_pcpu_vars;
+extern PCPU_BSS vmrange_t g_range_pcpu_nmi;
+extern PCPU_BSS vmrange_t g_range_pcpu_df;
+extern PCPU_BSS vmrange_t g_range_pcpu_pf;
+extern PCPU_BSS vmrange_t g_range_pcpu_mc;
+extern PCPU_BSS vmrange_t g_range_pcpu_int;
+INIT_TEXT void pcpu_allocate(size_t kend);
 INIT_TEXT void gsbase_init(int idx);
 
 
@@ -49,7 +48,6 @@ INIT_TEXT void kernel_pgtable_init();
 
 // 内存布局初始化
 INIT_TEXT void mem_init();
-INIT_TEXT void kernel_proc_init();
 void reclaim_init();
 
 
