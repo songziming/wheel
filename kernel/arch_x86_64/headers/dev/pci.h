@@ -41,6 +41,25 @@ typedef struct pci_driver {
 } pci_driver_t;
 
 
+
+// PCI 设备
+// 枚举到的设备，读出其配置空间，传给 driver 函数
+typedef struct pci_device {
+    union {
+        struct {
+            uint32_t reg0;
+            uint32_t reg1;
+            uint32_t reg2;
+            uint32_t reg3;
+        };
+        struct {
+            uint16_t vendor;
+            uint16_t device;
+        };
+    };
+} pci_device_t;
+
+
 extern CONST uint32_t (*g_pci_read)(uint8_t, uint8_t, uint8_t, uint8_t);
 extern CONST void (*g_pci_write)(uint8_t, uint8_t, uint8_t, uint8_t, uint32_t);
 
