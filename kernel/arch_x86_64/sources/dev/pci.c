@@ -67,7 +67,7 @@ pci_driver_t *pci_get_driver(uint32_t key) {
 // 遍历总线上的所有设备
 //------------------------------------------------------------------------------
 
-void pci_add_device(uint8_t bus, uint8_t dev, uint8_t func, uint32_t reg0) {
+static void pci_show_device(uint8_t bus, uint8_t dev, uint8_t func, uint32_t reg0) {
     pci_driver_t *driver = pci_get_driver(reg0);
 
     const char *name = driver ? driver->name : "?";
@@ -78,9 +78,6 @@ void pci_add_device(uint8_t bus, uint8_t dev, uint8_t func, uint32_t reg0) {
     uint8_t classcode = (reg2 >> 24) & 0xff;
     uint8_t subclass = (reg2 >> 16) & 0xff;
     uint8_t progif = (reg2 >> 8) & 0xff;
-
-    // uint32_t reg3 = g_pci_read(bus, dev, func, 12);
-    // uint8_t header = (reg3 >> 16) & 0x7f;
 
     // const char *type = "?";
     const char *subtype = "?";
@@ -160,7 +157,8 @@ void pci_add_device(uint8_t bus, uint8_t dev, uint8_t func, uint32_t reg0) {
 }
 
 
-void pci_enumerate() {
+// 广度优先遍历各条 PCI 总线
+static void pci_bfs(void (*action)(uint8_t, uint8_t, uint8_t, uint32_t)) {
     uint8_t buses[256];
     uint8_t num = 1;
     buses[0] = 0;
@@ -186,21 +184,41 @@ void pci_enumerate() {
                     continue;
                 }
 
-                // uint32_t reg2 = g_pci_read(bus, dev, 0, 8);
-                // uint8_t classcode = (reg2 >> 24) & 0xff;
-                // uint8_t subclass = (reg2 >> 16) & 0xff;
-
-                pci_add_device(bus, dev, func, reg0);
+                action(bus, dev, func, reg0);
             }
         }
     }
 }
 
 
+// ata_pci.c
+void ata_pci_init(uint8_t bus, uint8_t dev, uint8_t func);
+
+
+void add_device(uint8_t bus, uint8_t dev, uint8_t func, uint32_t reg0) {
+    uint32_t reg2 = g_pci_read(bus, dev, func, 8);
+    uint8_t classcode = (reg2 >> 24) & 0xff;
+    uint8_t subclass = (reg2 >> 16) & 0xff;
+    // uint8_t progif = (reg2 >> 8) & 0xff;
+
+    (void)reg0;
+
+    if ((1 == classcode) && (1 == subclass)) {
+        ata_pci_init(bus, dev, func);
+    }
+}
+
+
+// TODO 检索到的设备添加到链表或平衡树里
+void pci_enumerate() {
+    pci_bfs(add_device);
+}
+
+
 static int show_pci(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
-    pci_enumerate();
+    pci_bfs(pci_show_device);
     return 0;
 }
 

@@ -315,6 +315,7 @@ static void root_proc() {
     test_spin_lock();
 #else
     pci_init(acpi_get_table("MCFG"));
+    pci_enumerate();
     i8042_init(); // PS/2 键盘控制器
 
     keyboard_init(); // 虚拟设备 /dev/kbd

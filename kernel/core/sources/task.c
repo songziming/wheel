@@ -81,7 +81,7 @@ void task_destroy(task_t *task) {
         context_free(task->process, task->stack);
     }
 
-    kernel_heap_free(task->name);
+    kernel_heap_free((void *)task->name);
 
     irq_spin_give(&task->spin, key);
 }

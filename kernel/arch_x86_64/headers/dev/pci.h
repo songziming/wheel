@@ -66,6 +66,6 @@ extern CONST void (*g_pci_write)(uint8_t, uint8_t, uint8_t, uint8_t, uint32_t);
 INIT_TEXT void pci_init(acpi_tbl_t *mcfg);
 void pci_add_driver(pci_driver_t *driver);
 
-void pci_walk_bus(uint8_t bus);
+void pci_enumerate();
 
 #endif // DEEV_PCI_H
