@@ -160,9 +160,11 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     local_apic_init(); // 设置中断控制器
     local_apic_timer_set(TIMER_FREQ, LOCAL_APIC_TIMER_PERIODIC);
 
+    // 准备 PCI 支持（需要写 rodata，要在换页表前执行）
+    pci_init(acpi_get_table("MCFG"));
+
     // 创建并加载内核页表，启用内存保护
     kernel_pgtable_init();
-    // kernel_proc_init();
     kernel_context_map_all();
     write_cr3(get_kernel_pgtable());
 
@@ -314,7 +316,7 @@ static void root_proc() {
     // 压力测试
     test_spin_lock();
 #else
-    pci_init(acpi_get_table("MCFG"));
+    // pci_init(acpi_get_table("MCFG"));
     pci_enumerate();
     i8042_init(); // PS/2 键盘控制器
 
