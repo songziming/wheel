@@ -1,5 +1,8 @@
 // IDE 硬盘驱动，利用 pci.h 定义的 read/write 函数
 
+// 通过 PCI 只能检测到 IDE controller，获取各通道的端口号和 IRQ
+// 具体对硬盘的操作还要通过 ata_pio 实现
+
 #include <dev/pci.h>
 #include <debug.h>
 
