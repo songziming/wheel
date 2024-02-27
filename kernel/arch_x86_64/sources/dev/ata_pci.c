@@ -8,6 +8,8 @@
 
 
 
+// ata_pio.c
+void ata_probe();
 
 
 void ata_pci_init(uint8_t bus, uint8_t dev, uint8_t func) {
@@ -116,4 +118,6 @@ void ata_pci_init(uint8_t bus, uint8_t dev, uint8_t func) {
         klog("PIC IRQ number %d", regf & 0xff);
     }
 
+    // 调用 PIO ATA
+    ata_probe();
 }
