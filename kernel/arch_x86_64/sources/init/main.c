@@ -19,9 +19,9 @@
 #include <dev/framebuf.h>
 #include <dev/i8259.h>
 #include <dev/i8042.h>
-#include <dev/pci.h>
 
 #include <wheel.h>
+#include <pci.h>
 #include <keyboard.h>
 #include <shell.h>
 
@@ -161,7 +161,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     local_apic_timer_set(TIMER_FREQ, LOCAL_APIC_TIMER_PERIODIC);
 
     // 准备 PCI 支持（需要写 rodata，要在换页表前执行）
-    pci_init(acpi_get_table("MCFG"));
+    arch_pci_init(acpi_get_table("MCFG"));
 
     // 创建并加载内核页表，启用内存保护
     kernel_pgtable_init();

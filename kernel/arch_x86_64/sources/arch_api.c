@@ -2,7 +2,9 @@
 #include <arch_mem.h>
 #include <arch_int.h>
 #include <cpu/local_apic.h>
+#include <cpu/rw.h>
 #include <wheel.h>
+#include <pci.h>
 
 
 
@@ -77,6 +79,57 @@ int unwind(size_t *addrs, int max) {
     uint64_t rbp;
     __asm__("movq %%rbp, %0" : "=r"(rbp));
     return arch_unwind(addrs, max, rbp);
+}
+
+
+
+//------------------------------------------------------------------------------
+// PCI 读写配置空间
+//------------------------------------------------------------------------------
+
+#define CONFIG_ADDR 0xcf8
+#define CONFIG_DATA 0xcfc
+
+static uint32_t pci_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg) {
+    ASSERT(dev < 32);
+    ASSERT(func < 8);
+    ASSERT(0 == (reg & 3));
+
+    uint32_t addr = ((uint32_t)bus  << 16)
+                  | ((uint32_t)dev  << 11)
+                  | ((uint32_t)func <<  8)
+                  |  (uint32_t)reg
+                  | 0x80000000U;
+    out32(CONFIG_ADDR, addr);
+    return in32(CONFIG_DATA);
+}
+
+static void pci_write(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg, uint32_t data) {
+    ASSERT(dev < 32);
+    ASSERT(func < 8);
+    ASSERT(0 == (reg & 3));
+
+    uint32_t addr = ((uint32_t)bus  << 16)
+                  | ((uint32_t)dev  << 11)
+                  | ((uint32_t)func <<  8)
+                  |  (uint32_t)reg
+                  | 0x80000000U;
+    out32(CONFIG_ADDR, addr);
+    out32(CONFIG_DATA, data);
+}
+
+// TODO PCIe 使用 MMIO 读写配置空间，而不是端口
+//      如果 ACPI 提供了 MCFG 表，说明支持 PCIe
+// TODO 实现一套 pcie 读写函数，像 xAPIC 和 x2APIC 通过函数指针动态选择
+
+
+INIT_TEXT void arch_pci_init(acpi_tbl_t *mcfg) {
+    if (NULL == mcfg) {
+        pci_init(pci_read, pci_write);
+    } else {
+        klog("MCFG at %p, supports PCI-E\n", mcfg);
+        pci_init(pci_read, pci_write);
+    }
 }
 
 

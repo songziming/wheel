@@ -12,6 +12,7 @@
 #define WEAK        __attribute__((weak))
 #define PURE        __attribute__((pure))
 #define NORETURN    __attribute__((noreturn))
+#define MALLOC      __attribute__((malloc))
 #define ALIAS(name) __attribute__((alias(name)))
 #define PRINTF(s,a) __attribute__((format(printf,s,a)))
 #define ALIGNED(x)  __attribute__((aligned(x)))

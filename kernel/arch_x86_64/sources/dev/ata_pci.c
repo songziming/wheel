@@ -3,7 +3,7 @@
 // 通过 PCI 只能检测到 IDE controller，获取各通道的端口号和 IRQ
 // 具体对硬盘的操作还要通过 ata_pio 实现
 
-#include <dev/pci.h>
+#include <pci.h>
 #include <debug.h>
 
 

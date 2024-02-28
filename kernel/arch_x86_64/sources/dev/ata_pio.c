@@ -3,7 +3,7 @@
 // 模拟器通常不提供 AHCI 支持，只能用 PIO 操作
 
 #include <wheel.h>
-#include <dev/pci.h>
+#include <pci.h>
 #include <cpu/rw.h>
 
 
@@ -95,6 +95,7 @@ static ata_dev_t *select_device(int id) {
 
     g_selected = id;
 
+    // TODO 应该开启 LBA
     out8(dev->cmd + 6, (ATA_SLAVE & dev->flags) ? 0xb0 : 0xa0);
     for (int i = 0; i < 14; ++i) {
         in8(dev->cmd + 7);
@@ -120,7 +121,7 @@ static int ata_identify(ata_dev_t *dev) {
     // 等待 IDENTIFY 结束
     while (in8(dev->cmd + 7) & STT_BUSY) {}
 
-    // SATA 和 ATAPI 对于 IDENTIFY 命令应该返回 ERR
+    // SATA 和 ATAPI 对于 IDENTIFY 命令应该返回 ERR，并设置 command block regs
     // 但某些 ATAPI 设备不遵循标准，不报 ERR，因此直接检查 command block regs
     // 对于 ATA，执行 IDENTIFY 的结果：in8(0x1f4)=0, in8(0x1f5)=0
     // 对于 ATAPI，执行 IDENTIFY 的结果：in8(0x1f4)=0x14, in8(0x1f5)=0xeb
@@ -136,53 +137,12 @@ static int ata_identify(ata_dev_t *dev) {
         klog("this is SATA!\n");
         return 0;
     } else if (r4 || r5) {
+        dev->type = -1;
         klog("unknown ATA device type %x-%x\n", r4, r5);
         return 0;
     }
 
-#if 0
-    // 继续 poll，直到 data ready 或出错
-    while (1) {
-        uint8_t status = in8(dev->cmd + 7);
-
-        // 如果出错，这可能是 ATAPI 或 SATA 设备
-        if (STT_ERR & status) {
-            union {
-                uint8_t  b[4];
-                uint32_t l;
-            } u;
-            u.b[0] = in8(dev->cmd+2);    // sector count
-            u.b[1] = in8(dev->cmd+3);    // lba low
-            u.b[2] = in8(dev->cmd+4);    // lba mid
-            u.b[3] = in8(dev->cmd+5);    // lba high
-
-            const char *type;
-            switch (u.l) {
-            case 0x00000101:
-            default:
-                type = "not ATA";
-                break;
-            case 0xeb140101:
-            case 0x96690101:
-                type = "ATA-PI";
-                dev->type = ATAPI;
-                break;
-            case 0xc33c0101:
-                type = "SATA";
-                dev->type = SATA;
-                break;
-            }
-
-            klog("cmd:%x %s is %s\n", dev->cmd, (ATA_SLAVE & dev->flags) ? "slave" : "master", type);
-            return 0;
-        }
-
-        if ((STT_DRQ & status) && !(STT_BUSY & status)) {
-            break;
-        }
-    }
-#endif
-
+    // 等待 data ready
     while (1) {
         uint8_t status = in8(dev->cmd + 7);
         if ((STT_DRQ & status) && !(STT_BUSY & status)) {
@@ -193,7 +153,6 @@ static int ata_identify(ata_dev_t *dev) {
     // 读取数据，共 256 个 uint16
     uint16_t info[256];
     for (int i = 0; i < 256; ++i) {
-        // while (0 == (in8(dev->cmd + 7) & STT_DRQ)) {}
         info[i] = in16(dev->cmd + 0);
     }
 
@@ -207,7 +166,6 @@ static int ata_identify(ata_dev_t *dev) {
     memcpy(dev->serial,   &info[10], 20);
     memcpy(dev->revision, &info[23], 8);
     memcpy(dev->model,    &info[27], 40);
-    // klog("serial %.20s, revision %.8s, model %.40s\n", dev->serial, dev->revision, dev->model);
 
     if (0 != (info[0] & 0x0080)) {
         dev->flags |= ATA_REMOVABLE;
@@ -246,15 +204,33 @@ static int ata_identify(ata_dev_t *dev) {
 }
 
 
+// 读取 n 个扇区
+static void ata_read(ata_dev_t *dev, uint64_t sec) {
+    ASSERT(NULL != dev);
 
-void ata_init(uint16_t cmd, uint16_t ctl, int slave) {
+    if (dev->flags & ATA_LBA48) {
+        sec &= 0x0000ffffffffffffUL; // lba-48
+    } else if (dev->flags & ATA_LBA) {
+        sec &= 0x0fffffffU; // lba-28
+    }
+
+    //
+}
+
+
+
+
+
+
+
+
+static INIT_TEXT void ata_check(uint16_t cmd, uint16_t ctl, int slave) {
     out8(cmd + 6, slave ? 0xb0 : 0xa0);
     for (int i = 0; i < 14; ++i) {
         in8(cmd + 7);
     }
     if (0 == in8(cmd + 7)) {
-        // klog("no device for cmd %x ctl %x %s\n", cmd, ctl, slave ? "slave" : "master");
-        return;
+        return; // 设备不存在
     }
 
     ata_dev_t *dev = &g_devices[g_ata_count];
@@ -274,9 +250,9 @@ void ata_init(uint16_t cmd, uint16_t ctl, int slave) {
 
 // 如果 PCI 设备枚举未找到任何 AHCI 再调用这个函数
 // 或者是找到了 PCI IDE 设备，却不支持 PCI native mode
-void ata_probe() {
-    ata_init(0x1f0, 0x3f6, 0);  // primary master
-    ata_init(0x1f0, 0x3f6, 1);  // primary slave
-    ata_init(0x170, 0x376, 0);  // secondary master
-    ata_init(0x170, 0x376, 1);  // secondary slave
+INIT_TEXT void ata_probe() {
+    ata_check(0x1f0, 0x3f6, 0); // primary master
+    ata_check(0x1f0, 0x3f6, 1); // primary slave
+    ata_check(0x170, 0x376, 0); // secondary master
+    ata_check(0x170, 0x376, 1); // secondary slave
 }

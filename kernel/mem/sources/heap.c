@@ -248,7 +248,7 @@ void heap_init(mem_heap_t *heap, void *buff, size_t size) {
     put_chunk_into_heap(heap, body_chk);
 }
 
-void *heap_alloc(mem_heap_t *heap, size_t size) {
+MALLOC void *heap_alloc(mem_heap_t *heap, size_t size) {
     ASSERT(NULL != heap);
 
     size += sizeof(chunk_hdr_t);
@@ -298,7 +298,7 @@ INIT_TEXT void kernel_heap_init() {
     heap_init(&g_common_heap, g_heap_buff, sizeof(g_heap_buff));
 }
 
-void *kernel_heap_alloc(size_t size) {
+MALLOC void *kernel_heap_alloc(size_t size) {
     ASSERT(NULL != g_common_heap.sizetree.root);
     return heap_alloc(&g_common_heap, size);
 }

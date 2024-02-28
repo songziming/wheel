@@ -9,6 +9,6 @@ size_t format(char *buf, size_t n, format_cb_t cb, void *para, const char *fmt, 
 size_t vsnprintk(char *buf, size_t n, const char *fmt, va_list args);
 PRINTF(3, 4) size_t snprintk(char *buf, size_t n, const char *fmt, ...);
 
-PRINTF(1, 2) char *strmake(const char *fmt, ...);
+PRINTF(1, 2) MALLOC char *strmake(const char *fmt, ...);
 
 #endif // FORMAT_H
