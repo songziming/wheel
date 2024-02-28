@@ -275,6 +275,34 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
 char _real_addr;
 char _real_end;
 
+
+
+// TODO 专门创建一个 init/drivers.c，用来注册各种设备的驱动
+// TODO 有些 PCI 驱动支持多种 vendor/device 组合
+
+void vmware_svga_init(uint8_t bus, uint8_t slot, uint8_t func); // vmware_svga.c
+void ata_pci_init(uint8_t bus, uint8_t slot, uint8_t func); // ata_pci.c
+
+
+typedef struct pci_drv {
+    uint16_t vendor;
+    uint16_t device;
+
+    uint8_t classcode;
+    uint8_t subclass;
+
+    void (*init)(uint8_t bus, uint8_t slot, uint8_t func);
+} pci_drv_t;
+
+static INIT_DATA pci_drv_t g_pci_drivers[] = {
+    { 0x15ad, 0x0405,   0, 0,   vmware_svga_init },
+    { 0xffff, 0xffff,   1, 1,   ata_pci_init }
+};
+static INIT_DATA size_t g_pci_drivers_num = sizeof(g_pci_drivers) / sizeof(g_pci_drivers[0]);
+
+
+
+
 // tty.c
 INIT_TEXT void shell_init();
 
@@ -314,14 +342,14 @@ static void root_proc() {
     // 压力测试
     test_spin_lock();
 #else
-    // pci_init(acpi_get_table("MCFG"));
+    // 注册各种设备的驱动
+
     pci_enumerate();
     i8042_init(); // PS/2 键盘控制器
 
-    keyboard_init(); // 虚拟设备 /dev/kbd
+    // 启动系统服务
+    keyboard_init();
     shell_init();
-    // TODO 文件系统
-    // common_init();
 
     // 初始化已将完成，回收 init section
     reclaim_init();
