@@ -21,8 +21,6 @@
 #include <dev/i8042.h>
 
 #include <wheel.h>
-#include <pci.h>
-#include <keyboard.h>
 #include <shell.h>
 
 

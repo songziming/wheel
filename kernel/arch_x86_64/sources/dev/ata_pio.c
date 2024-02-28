@@ -3,7 +3,7 @@
 // 模拟器通常不提供 AHCI 支持，只能用 PIO 操作
 
 #include <wheel.h>
-#include <pci.h>
+#include <block.h>
 #include <cpu/rw.h>
 
 
@@ -65,11 +65,12 @@ typedef struct ata_dev {
     char    model[40];
 
     int     ver;
-    int     sec_size;
-    int     sec_count;
+    blk_dev_t blk;
 } ata_dev_t;
 
 
+
+static blk_drv_t g_ata_driver;
 
 
 // TODO 使用自旋锁保护
@@ -77,10 +78,9 @@ typedef struct ata_dev {
 static int g_ata_count = 0;
 static ata_dev_t g_devices[4];
 
+
+#if 0
 static int g_selected = 0; // 当前选中的设备
-
-
-
 
 
 // 选中一个设备，接下来可以像这个设备收发命令
@@ -104,7 +104,7 @@ static ata_dev_t *select_device(int id) {
 
     return dev;
 }
-
+#endif
 
 
 
@@ -193,11 +193,11 @@ static int ata_identify(ata_dev_t *dev) {
         }
     }
 
-    dev->sec_size = 512;
+    dev->blk.sec_size = 512;
     if (dev->flags & ATA_LBA48) {
-        dev->sec_count = *(uint64_t *)&info[100];  // lba-48
+        dev->blk.sec_num = *(uint64_t *)&info[100]; // lba-48
     } else {
-        dev->sec_count = *(uint32_t *)&info[60];   // lba-28
+        dev->blk.sec_num = *(uint32_t *)&info[60];  // lba-28
     }
 
     return 1;
@@ -214,7 +214,7 @@ static void ata_read(ata_dev_t *dev, uint64_t sec) {
         sec &= 0x0fffffffU; // lba-28
     }
 
-    //
+    (void)sec;
 }
 
 
@@ -241,16 +241,28 @@ static INIT_TEXT void ata_check(uint16_t cmd, uint16_t ctl, int slave) {
     if (ata_identify(dev)) {
         ++g_ata_count;
         klog("serial %.20s, revision %.8s, model %.40s, ver=%d, sec-num %d\n",
-            dev->serial, dev->revision, dev->model, dev->ver, dev->sec_count);
+            dev->serial, dev->revision, dev->model, dev->ver, dev->blk.sec_num);
 
         // TODO 向系统注册一个块设备，设备名体现所在的通道
     }
 }
 
 
+static void ata_driver_read(blk_dev_t *dev, void *dst, uint32_t blk, uint32_t nblk) {
+    ata_dev_t *ata = containerof(dev, ata_dev_t, blk);
+    ata_read(ata, blk);
+
+    (void)dst;
+    (void)nblk;
+}
+
+
 // 如果 PCI 设备枚举未找到任何 AHCI 再调用这个函数
 // 或者是找到了 PCI IDE 设备，却不支持 PCI native mode
 INIT_TEXT void ata_probe() {
+    g_ata_driver.read = ata_driver_read;
+    register_block_driver(&g_ata_driver);
+
     ata_check(0x1f0, 0x3f6, 0); // primary master
     ata_check(0x1f0, 0x3f6, 1); // primary slave
     ata_check(0x170, 0x376, 0); // secondary master

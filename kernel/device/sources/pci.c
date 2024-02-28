@@ -1,9 +1,9 @@
 // PCI 设备管理
+// 本模块不含驱动，只负责发现设备，识别其类型，并注册到系统中
 // TODO PCIe 有何区别？加入对其的支持
 
 #include <wheel.h>
 #include <shell.h>
-#include <pci.h>
 
 
 
@@ -11,7 +11,7 @@
 typedef struct pci_dev {
     dlnode_t dl;
     uint8_t  bus;
-    uint8_t  dev;
+    uint8_t  slot;
     uint8_t  func;
 
     uint16_t vendor;
@@ -24,6 +24,8 @@ typedef struct pci_dev {
 
 
 
+// TODO 使用自旋锁保护
+
 // 记录所有 PCI 设备
 static dlnode_t g_pci_devs = DLNODE_INIT;
 
@@ -33,71 +35,6 @@ CONST pci_writer_t g_pci_write = NULL;
 
 static shell_cmd_t g_cmd_pci;
 
-
-//------------------------------------------------------------------------------
-// 设备枚举，广度搜索，启动时执行一次
-//------------------------------------------------------------------------------
-
-
-static INIT_TEXT void add_device(uint8_t bus, uint8_t dev, uint8_t func, uint32_t reg0) {
-    pci_dev_t *pci = kernel_heap_alloc(sizeof(pci_dev_t));
-    if (NULL == pci) {
-        klog("warning: cannot alloc pci dev\n");
-        return;
-    }
-
-    pci->bus = bus;
-    pci->dev = dev;
-    pci->func = func;
-
-    pci->vendor = reg0 & 0xffff;
-    pci->device = (reg0 >> 16) & 0xffff;
-
-    uint32_t reg2 = g_pci_read(bus, dev, func, 8);
-    pci->classcode = (reg2 >> 24) & 0xff;
-    pci->subclass = (reg2 >> 16) & 0xff;
-    pci->progif = (reg2 >> 8) & 0xff;
-
-    pci->dl = DLNODE_INIT;
-    dl_insert_before(&pci->dl, &g_pci_devs);
-}
-
-INIT_TEXT void pci_enumerate() {
-    ASSERT(NULL != g_pci_read);
-    ASSERT(NULL != g_pci_write);
-
-    dl_init_circular(&g_pci_devs);
-
-    uint8_t buses[256];
-    uint8_t num = 1;
-    buses[0] = 0;
-
-    while (num) {
-        uint8_t bus = buses[--num];
-        for (uint8_t dev = 0; dev < 32; ++dev) {
-            for (uint8_t func = 0; func < 8; ++func) {
-                uint32_t reg0 = g_pci_read(bus, dev, func, 0);
-                if (0xffff == (reg0 & 0xffff)) {
-                    if (0 == func) {
-                        func = 8;
-                    }
-                    continue;
-                }
-
-                // 如果是 PCI-to-PCI bridge，则需要遍历
-                uint32_t reg3 = g_pci_read(bus, dev, func, 12);
-                uint8_t type = (reg3 >> 16) & 0x7f;
-                if (1 == type) {
-                    uint32_t reg6 = g_pci_read(bus, dev, func, 0x18);
-                    buses[num++] = (reg6 >> 8) & 0xff;
-                    continue;
-                }
-
-                add_device(bus, dev, func, reg0);
-            }
-        }
-    }
-}
 
 
 //------------------------------------------------------------------------------
@@ -181,7 +118,7 @@ static void pci_show_dev(pci_dev_t *dev) {
     }
 
     klog("pci %x:%x:%x vendor=%04x device=%04x class/subclass/prog=%x/%x/%x %s\n",
-        dev->bus, dev->dev, dev->func, dev->vendor, dev->device,
+        dev->bus, dev->slot, dev->func, dev->vendor, dev->device,
         dev->classcode, dev->subclass, dev->progif, subtype);
 }
 
@@ -197,10 +134,8 @@ static int pci_show(int argc, char *argv[]) {
 }
 
 
-
-
 //------------------------------------------------------------------------------
-// PCI 注册读写函数，由 arch 调用
+// PCI 框架初始化
 //------------------------------------------------------------------------------
 
 INIT_TEXT void pci_init(pci_reader_t reader, pci_writer_t writer) {
@@ -217,3 +152,87 @@ INIT_TEXT void pci_init(pci_reader_t reader, pci_writer_t writer) {
     shell_add_cmd(&g_cmd_pci);
 }
 
+
+//------------------------------------------------------------------------------
+// 设备枚举，广度搜索，启动时执行一次
+//------------------------------------------------------------------------------
+
+// arch_x86_64/ata_pci.c
+void ata_pci_init(uint8_t bus, uint8_t slot, uint8_t func);
+
+// 有些类型的设备无需注册驱动，系统自带支持，也可以作为默认驱动
+static INIT_TEXT void process_known_dev(pci_dev_t *dev) {
+    if ((0x15ad == dev->vendor) && (0x0405 == dev->device)) {
+        // VMWare SVGA-II
+        // QEMU 可以使用参数 -vga vmware
+        return;
+    }
+
+    if ((1 == dev->classcode) && (1 == dev->subclass)) {
+        // IDE storage controller
+        // TODO 这类设备应该注册驱动，自动匹配
+        ata_pci_init(dev->bus, dev->slot, dev->func);
+    }
+}
+
+static INIT_TEXT pci_dev_t *add_device(uint8_t bus, uint8_t slot, uint8_t func, uint32_t reg0) {
+    pci_dev_t *dev = kernel_heap_alloc(sizeof(pci_dev_t));
+    if (NULL == dev) {
+        klog("warning: cannot alloc pci dev\n");
+        return NULL;
+    }
+
+    dev->bus  = bus;
+    dev->slot = slot;
+    dev->func = func;
+
+    dev->vendor = reg0 & 0xffff;
+    dev->device = (reg0 >> 16) & 0xffff;
+
+    uint32_t reg2 = g_pci_read(bus, slot, func, 8);
+    dev->classcode = (reg2 >> 24) & 0xff;
+    dev->subclass = (reg2 >> 16) & 0xff;
+    dev->progif = (reg2 >> 8) & 0xff;
+
+    dev->dl = DLNODE_INIT;
+    dl_insert_before(&dev->dl, &g_pci_devs);
+    return dev;
+}
+
+INIT_TEXT void pci_enumerate() {
+    ASSERT(NULL != g_pci_read);
+    ASSERT(NULL != g_pci_write);
+
+    dl_init_circular(&g_pci_devs);
+
+    uint8_t buses[256];
+    uint8_t num = 1;
+    buses[0] = 0;
+
+    while (num) {
+        uint8_t bus = buses[--num];
+        for (uint8_t slot = 0; slot < 32; ++slot) {
+            for (uint8_t func = 0; func < 8; ++func) {
+                uint32_t reg0 = g_pci_read(bus, slot, func, 0);
+                if (0xffff == (reg0 & 0xffff)) {
+                    if (0 == func) {
+                        func = 8;
+                    }
+                    continue;
+                }
+
+                // 如果是 PCI-to-PCI bridge，则也需要遍历
+                uint32_t reg3 = g_pci_read(bus, slot, func, 12);
+                uint8_t type = (reg3 >> 16) & 0x7f;
+                if (1 == type) {
+                    uint32_t reg6 = g_pci_read(bus, slot, func, 0x18);
+                    buses[num++] = (reg6 >> 8) & 0xff;
+                    continue;
+                }
+
+                pci_dev_t *dev = add_device(bus, slot, func, reg0);
+                process_known_dev(dev);
+            }
+        }
+    }
+}

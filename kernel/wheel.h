@@ -19,6 +19,10 @@
 #include <tick.h>
 #include <common.h>
 
+// device
+#include <keyboard.h>
+#include <pci.h>
+
 // lib
 #include <str.h>
 #include <format.h>

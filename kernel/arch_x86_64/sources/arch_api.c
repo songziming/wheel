@@ -4,7 +4,6 @@
 #include <cpu/local_apic.h>
 #include <cpu/rw.h>
 #include <wheel.h>
-#include <pci.h>
 
 
 
