@@ -62,6 +62,14 @@ void add_block_device(blk_dev_t *dev, blk_drv_t *drv) {
     dl_insert_after(&dev->dl, &g_block_devices);
 }
 
+blk_dev_t *get_block_device() {
+    if (dl_is_lastone(&g_block_devices)) {
+        return NULL;
+    }
+
+    return containerof(g_block_devices.next, blk_dev_t, dl);
+}
+
 
 //------------------------------------------------------------------------------
 // 封装的块读写函数

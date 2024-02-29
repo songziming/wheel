@@ -46,9 +46,41 @@ void test_spin_lock() {
 
 
 
-
+//------------------------------------------------------------------------------
+// 测试块设备读写
 //------------------------------------------------------------------------------
 
+// TODO 注册两个读写扇区的 shell 命令
+
+void test_block_io() {
+    blk_dev_t *dev = get_block_device();
+
+    if (NULL == dev) {
+        klog("no block device!\n");
+        return;
+    }
+
+    uint8_t *sec = kernel_heap_alloc(dev->sec_size);
+    if (NULL == sec) {
+        klog("cannot alloc space for sector!\n");
+        return;
+    }
+
+    block_read(dev, sec, 0, 1);
+    klog("sector 0:");
+    for (int i = 0; i < 10; ++i) {
+        klog(" %02x", sec[i]);
+    }
+    klog(".\n");
+
+    kernel_heap_free(sec);
+}
+
+
+
+//------------------------------------------------------------------------------
+// 测试任务调度
+//------------------------------------------------------------------------------
 
 static void task_a_proc() {
     for (int i = 0; i < 15; ++i) {

@@ -25,4 +25,9 @@ void block_dev_init();
 void register_block_driver(blk_drv_t *drv);
 void add_block_device(blk_dev_t *dev, blk_drv_t *drv);
 
+blk_dev_t *get_block_device();
+
+void block_read(blk_dev_t *dev, void *dst, uint32_t blk, uint32_t nblk);
+void block_write(blk_dev_t *dev, const void *src, uint32_t blk, uint32_t nblk);
+
 #endif // BLOCK_H

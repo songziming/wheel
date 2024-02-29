@@ -338,11 +338,13 @@ static void root_proc() {
     test_spin_lock();
 #endif
 
-
     // 注册各种设备的驱动
     block_dev_init();
 
     pci_enumerate(install_pci_dev);
+
+
+    test_block_io();
 
     i8042_init(); // PS/2 键盘控制器
 
