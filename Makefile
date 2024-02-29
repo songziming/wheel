@@ -34,12 +34,10 @@ define all_files
 endef
 
 
-KERNEL := kernel
 
-
-KDIRS := $(KERNEL)/arch_$(ARCH)
-KDIRS += $(filter-out $(wildcard $(KERNEL)/arch_*/.),$(wildcard $(KERNEL)/*/.))
-KINCS := $(patsubst %,%/headers,$(KDIRS)) $(KERNEL) $(KERNEL)/arch_$(ARCH)
+KDIRS := kernel/arch_$(ARCH)
+KDIRS += $(filter-out $(wildcard kernel/arch_*/.),$(wildcard kernel/*/.))
+KINCS := $(patsubst %,%/headers,$(KDIRS)) kernel kernel/arch_$(ARCH)
 KOBJS := $(patsubst %,$(OUT_DIR)/objs/%.ko,$(call all_files,$(KDIRS),sources))
 
 TSRCS := $(call all_files,$(KDIRS),tests) tools/kernel_test/test.c
@@ -55,7 +53,7 @@ else
     KCFLAGS += -O2 -DNDEBUG
 endif
 
-KLAYOUT := $(KERNEL)/arch_$(ARCH)/layout.ld
+KLAYOUT := kernel/arch_$(ARCH)/layout.ld
 KLFLAGS := -nostdlib --gc-sections -Map=$(OUT_MAP) -T $(KLAYOUT)  --no-warnings
 
 TCFLAGS := -g -DUNIT_TEST -Itools/kernel_test
@@ -71,7 +69,7 @@ ALL_OBJS := $(KOBJS) $(TOBJS)
 ALL_DEPS := $(patsubst %,%.d,$(ALL_OBJS))
 ALL_DIRS := $(sort $(dir $(ALL_DEPS)) $(ISO_DIR)/boot/grub)
 
-include $(KERNEL)/arch_$(ARCH)/option.mk
+include kernel/arch_$(ARCH)/option.mk
 
 
 

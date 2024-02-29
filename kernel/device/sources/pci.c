@@ -2,8 +2,8 @@
 // 本模块不含驱动，只负责发现设备，识别其类型，并注册到系统中
 // TODO PCIe 有何区别？加入对其的支持
 
-#include <wheel.h>
 #include <pci.h>
+#include <wheel.h>
 #include <shell.h>
 
 
@@ -11,12 +11,12 @@
 
 // TODO 使用自旋锁保护
 
-// 记录所有 PCI 设备
-static dlnode_t g_pci_devs = DLNODE_INIT;
-
 // PCI 配置空间读写函数，由 arch 提供
 CONST pci_reader_t g_pci_read = NULL;
 CONST pci_writer_t g_pci_write = NULL;
+
+// 记录所有 PCI 设备
+static CONST dlnode_t g_pci_devs = DLNODE_INIT;
 
 static shell_cmd_t g_cmd_pci;
 
@@ -26,7 +26,7 @@ static shell_cmd_t g_cmd_pci;
 // 信息显示
 //------------------------------------------------------------------------------
 
-static void pci_show_dev(pci_dev_t *dev) {
+static void pci_show_dev(const pci_dev_t *dev) {
     ASSERT(NULL != dev);
 
     // const char *type = "?";
@@ -111,16 +111,17 @@ static int pci_show(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
 
-    for (dlnode_t *i = g_pci_devs.next; i != &g_pci_devs; i = i->next) {
-        pci_show_dev(containerof(i, pci_dev_t, dl));
-    }
+    // for (dlnode_t *i = g_pci_devs.next; i != &g_pci_devs; i = i->next) {
+    //     pci_show_dev(containerof(i, pci_dev_t, dl));
+    // }
+    pci_enumerate(pci_show_dev);
 
     return 0;
 }
 
 
 //------------------------------------------------------------------------------
-// PCI 框架初始化
+// PCI 框架初始化、设备枚举
 //------------------------------------------------------------------------------
 
 INIT_TEXT void pci_init(pci_reader_t reader, pci_writer_t writer) {
@@ -137,31 +138,10 @@ INIT_TEXT void pci_init(pci_reader_t reader, pci_writer_t writer) {
     shell_add_cmd(&g_cmd_pci);
 }
 
-
-//------------------------------------------------------------------------------
-// 设备枚举，广度搜索，启动时执行一次
-//------------------------------------------------------------------------------
-
-// arch_x86_64/ata_pci.c
-void ata_pci_init(uint8_t bus, uint8_t slot, uint8_t func);
-
-// 有些类型的设备无需注册驱动，系统自带支持，也可以作为默认驱动
-static INIT_TEXT void process_known_dev(pci_dev_t *dev) {
-    if ((0x15ad == dev->vendor) && (0x0405 == dev->device)) {
-        // VMWare SVGA-II
-        // QEMU 可以使用参数 -vga vmware
-        return;
-    }
-
-    if ((1 == dev->classcode) && (1 == dev->subclass)) {
-        // IDE storage controller
-        // TODO 这类设备应该注册驱动，自动匹配
-        ata_pci_init(dev->bus, dev->slot, dev->func);
-    }
-}
-
+// 添加一个设备
 static INIT_TEXT pci_dev_t *add_device(uint8_t bus, uint8_t slot, uint8_t func, uint32_t reg0) {
-    pci_dev_t *dev = kernel_heap_alloc(sizeof(pci_dev_t));
+    // pci_dev_t *dev = kernel_heap_alloc(sizeof(pci_dev_t));
+    pci_dev_t *dev = early_alloc_ro(sizeof(pci_dev_t));
     if (NULL == dev) {
         klog("warning: cannot alloc pci dev\n");
         return NULL;
@@ -184,7 +164,8 @@ static INIT_TEXT pci_dev_t *add_device(uint8_t bus, uint8_t slot, uint8_t func, 
     return dev;
 }
 
-INIT_TEXT void pci_enumerate() {
+// 广度优先搜索
+INIT_TEXT void pci_probe() {
     ASSERT(NULL != g_pci_read);
     ASSERT(NULL != g_pci_write);
 
@@ -215,9 +196,20 @@ INIT_TEXT void pci_enumerate() {
                     continue;
                 }
 
-                pci_dev_t *dev = add_device(bus, slot, func, reg0);
-                process_known_dev(dev);
+                add_device(bus, slot, func, reg0);
             }
         }
     }
 }
+
+// 设备遍历
+void pci_enumerate(void (*cb)(const pci_dev_t *dev)) {
+    ASSERT(NULL != g_pci_devs.prev);
+    ASSERT(NULL != g_pci_devs.next);
+    ASSERT(NULL != cb);
+
+    for (dlnode_t *i = g_pci_devs.next; i != &g_pci_devs; i = i->next) {
+        cb(containerof(i, pci_dev_t, dl));
+    }
+}
+

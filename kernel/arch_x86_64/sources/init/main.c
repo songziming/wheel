@@ -19,6 +19,7 @@
 #include <dev/framebuf.h>
 #include <dev/i8259.h>
 #include <dev/i8042.h>
+#include <dev/ata.h>
 
 #include <wheel.h>
 #include <shell.h>
@@ -132,6 +133,10 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     //     set_log_func(serial_console_puts);
     // }
 
+    // 准备 PCI 支持
+    arch_pci_init(acpi_get_table("MCFG"));
+    pci_probe();
+
     // 切换正式 gdt，加载 idt
     gdt_init();
     gdt_load();
@@ -157,9 +162,6 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     io_apic_init_all();
     local_apic_init(); // 设置中断控制器
     local_apic_timer_set(TIMER_FREQ, LOCAL_APIC_TIMER_PERIODIC);
-
-    // 准备 PCI 支持（需要写 rodata，要在换页表前执行）
-    arch_pci_init(acpi_get_table("MCFG"));
 
     // 创建并加载内核页表，启用内存保护
     kernel_pgtable_init();
@@ -281,30 +283,23 @@ char _real_end;
 // TODO 有些 PCI 驱动支持多种 vendor/device 组合
 
 void vmware_svga_init(uint8_t bus, uint8_t slot, uint8_t func); // vmware_svga.c
-void ata_pci_init(uint8_t bus, uint8_t slot, uint8_t func); // ata_pci.c
+// void ata_pci_init(uint8_t bus, uint8_t slot, uint8_t func); // ata_pci.c
 
 
-// typedef struct pci_drv {
-//     uint16_t vendor;
-//     uint16_t device;
+// 识别 PCI 设备，调用驱动
+static INIT_TEXT void install_pci_dev(const pci_dev_t *dev) {
+    if ((0x15ad == dev->vendor) && (0x0405 == dev->device)) {
+        vmware_svga_init(dev->bus, dev->slot, dev->func);
+        return;
+    }
 
-//     uint8_t classcode;
-//     uint8_t subclass;
-
-//     void (*init)(uint8_t bus, uint8_t slot, uint8_t func);
-// } pci_drv_t;
-
-static INIT_DATA pci_drv_t g_pci_drivers[] = {
-    { 0x15ad, 0x0405,   0, 0,   vmware_svga_init },
-    { 0xffff, 0xffff,   1, 1,   ata_pci_init }
-};
-static INIT_DATA size_t g_pci_drivers_num = sizeof(g_pci_drivers) / sizeof(g_pci_drivers[0]);
+    if ((1 == dev->classcode) && (1 == dev->subclass)) {
+        ata_pci_init(dev);
+        return;
+    }
+}
 
 
-
-
-// tty.c
-INIT_TEXT void shell_init();
 
 // 第一个开始运行的任务
 static void root_proc() {
@@ -341,11 +336,14 @@ static void root_proc() {
 #if 0
     // 压力测试
     test_spin_lock();
-#else
+#endif
+
+
     // 注册各种设备的驱动
     block_dev_init();
 
-    pci_enumerate();
+    pci_enumerate(install_pci_dev);
+
     i8042_init(); // PS/2 键盘控制器
 
     // 启动系统服务
@@ -354,7 +352,6 @@ static void root_proc() {
 
     // 初始化已将完成，回收 init section
     reclaim_init();
-#endif
 }
 
 
