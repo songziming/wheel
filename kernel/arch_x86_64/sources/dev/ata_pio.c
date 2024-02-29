@@ -256,11 +256,21 @@ static void ata_driver_read(blk_dev_t *dev, void *dst, uint32_t blk, uint32_t nb
     (void)nblk;
 }
 
+static void ata_driver_write(blk_dev_t *dev, const void *src, uint32_t blk, uint32_t nblk) {
+    ata_dev_t *ata = containerof(dev, ata_dev_t, blk);
+    // ata_write(ata, blk);
+
+    (void)ata;
+    (void)src;
+    (void)nblk;
+}
+
 
 // 如果 PCI 设备枚举未找到任何 AHCI 再调用这个函数
 // 或者是找到了 PCI IDE 设备，却不支持 PCI native mode
 INIT_TEXT void ata_probe() {
     g_ata_driver.read = ata_driver_read;
+    g_ata_driver.write = ata_driver_write;
     register_block_driver(&g_ata_driver);
 
     ata_check(0x1f0, 0x3f6, 0); // primary master

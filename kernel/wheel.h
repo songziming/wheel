@@ -21,6 +21,7 @@
 
 // device
 #include <keyboard.h>
+#include <block.h>
 #include <pci.h>
 
 // lib

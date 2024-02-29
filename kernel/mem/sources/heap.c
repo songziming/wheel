@@ -291,11 +291,13 @@ void heap_free(mem_heap_t *heap, void *ptr) {
 
 
 static mem_heap_t g_common_heap = { SPIN_INIT, RBTREE_INIT, NULL, NULL };
-static uint8_t g_heap_buff[KERNEL_HEAP_SIZE];
+// static uint8_t g_heap_buff[KERNEL_HEAP_SIZE];
 
-INIT_TEXT void kernel_heap_init() {
+INIT_TEXT void kernel_heap_init(void *buff, size_t size) {
     ASSERT(NULL == g_common_heap.sizetree.root);
-    heap_init(&g_common_heap, g_heap_buff, sizeof(g_heap_buff));
+    ASSERT(NULL != buff);
+    // heap_init(&g_common_heap, g_heap_buff, sizeof(g_heap_buff));
+    heap_init(&g_common_heap, buff, size);
 }
 
 MALLOC void *kernel_heap_alloc(size_t size) {

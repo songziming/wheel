@@ -3,24 +3,9 @@
 // TODO PCIe 有何区别？加入对其的支持
 
 #include <wheel.h>
+#include <pci.h>
 #include <shell.h>
 
-
-
-
-typedef struct pci_dev {
-    dlnode_t dl;
-    uint8_t  bus;
-    uint8_t  slot;
-    uint8_t  func;
-
-    uint16_t vendor;
-    uint16_t device;
-
-    uint8_t  classcode;
-    uint8_t  subclass;
-    uint8_t  progif;
-} pci_dev_t;
 
 
 

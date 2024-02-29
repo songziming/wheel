@@ -27,13 +27,18 @@ static          vmrange_t g_range_text;
 static          vmrange_t g_range_rodata;   // 结束位置由 g_ro_buff 决定
 static          vmrange_t g_range_data;     // 结束位置由 g_rw_buff 决定
 
+// 给内核堆预留的 range
+static vmrange_t g_range_kheap;
+// static mem_heap_t g_common_heap = { SPIN_INIT, RBTREE_INIT, NULL, NULL };
+// static uint8_t g_heap_buff[KERNEL_HEAP_SIZE];
+
 static shell_cmd_t g_cmd_vm;
 
 
 
 // 将一段内存标记为内核占用，记录在地址空间里，也记录在物理内存管理器中
 // 地址必须按页对齐，因为涉及到物理页管理
-static INIT_TEXT void add_kernel_range(vmrange_t *rng,
+static INIT_TEXT void mark_kernel_section(vmrange_t *rng,
         void *addr, void *end, mmu_attr_t attrs, const char *desc) {
     // ASSERT(NULL != space);
     ASSERT(NULL != rng);
@@ -110,16 +115,26 @@ INIT_TEXT void mem_init() {
     page_init(ramtop);      // 分配页描述符数组
     early_alloc_disable();  // 禁用临时内存分配
 
+    // 获取当前内核结束位置（的虚拟地址）
+    char *kend_va = early_alloc_rw(0);
+
     // 记录内核的地址空间布局，也是后面建立页表的依据
     char *kernel_addr = (char *)KERNEL_TEXT_ADDR + KERNEL_LOAD_ADDR;
-    add_kernel_range(&g_range_init, kernel_addr, &_init_end, MMU_WRITE|MMU_EXEC, "kernel init");
-    add_kernel_range(&g_range_text, &_text_addr, &_text_end, MMU_EXEC, "kernel text");
-    add_kernel_range(&g_range_rodata, &_rodata_addr, early_alloc_ro(0), MMU_NONE, "kernel rodata");
-    add_kernel_range(&g_range_data, &_data_addr, early_alloc_rw(0), MMU_WRITE, "kernel data");
+    mark_kernel_section(&g_range_init, kernel_addr, &_init_end, MMU_WRITE|MMU_EXEC, "kernel init");
+    mark_kernel_section(&g_range_text, &_text_addr, &_text_end, MMU_EXEC, "kernel text");
+    mark_kernel_section(&g_range_rodata, &_rodata_addr, early_alloc_ro(0), MMU_NONE, "kernel rodata");
+    mark_kernel_section(&g_range_data, &_data_addr, kend_va, MMU_WRITE, "kernel data");
+
+    // 起始地址按页对齐，并留出一个 guard page
+    kend_va += 2 * PAGE_SIZE - 1;
+    kend_va = (char *)((size_t)kend_va & ~(PAGE_SIZE - 1));
+    mark_kernel_section(&g_range_kheap, kend_va, kend_va + KERNEL_HEAP_SIZE, MMU_WRITE, "kernel heap");
+    kernel_heap_init(kend_va, KERNEL_HEAP_SIZE);
+    kend_va += KERNEL_HEAP_SIZE;
 
     // 为 PCPU 划分空间，并将信息记录在 vmspace 中
     // PCPU 结束位置也是内核静态 sections 结束位置
-    pcpu_allocate((size_t)early_alloc_rw(0));
+    pcpu_allocate((size_t)kend_va);
 
     // 最后一个 range，获取内核结束位置
     context_t *kctx = get_kernel_context();

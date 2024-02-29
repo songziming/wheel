@@ -139,7 +139,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     idt_load();
 
     // 划分内存布局，启用物理页面管理
-    kernel_heap_init();
+    // kernel_heap_init();
     kernel_context_init();
     mem_init();
     gsbase_init(0);
@@ -284,15 +284,15 @@ void vmware_svga_init(uint8_t bus, uint8_t slot, uint8_t func); // vmware_svga.c
 void ata_pci_init(uint8_t bus, uint8_t slot, uint8_t func); // ata_pci.c
 
 
-typedef struct pci_drv {
-    uint16_t vendor;
-    uint16_t device;
+// typedef struct pci_drv {
+//     uint16_t vendor;
+//     uint16_t device;
 
-    uint8_t classcode;
-    uint8_t subclass;
+//     uint8_t classcode;
+//     uint8_t subclass;
 
-    void (*init)(uint8_t bus, uint8_t slot, uint8_t func);
-} pci_drv_t;
+//     void (*init)(uint8_t bus, uint8_t slot, uint8_t func);
+// } pci_drv_t;
 
 static INIT_DATA pci_drv_t g_pci_drivers[] = {
     { 0x15ad, 0x0405,   0, 0,   vmware_svga_init },
@@ -343,6 +343,7 @@ static void root_proc() {
     test_spin_lock();
 #else
     // 注册各种设备的驱动
+    block_dev_init();
 
     pci_enumerate();
     i8042_init(); // PS/2 键盘控制器

@@ -17,7 +17,7 @@ void heap_init(mem_heap_t *heap, void *buff, size_t size);
 MALLOC void *heap_alloc(mem_heap_t *heap, size_t size);
 void heap_free(mem_heap_t *heap, void *ptr);
 
-INIT_TEXT void kernel_heap_init();
+INIT_TEXT void kernel_heap_init(void *buff, size_t size);
 MALLOC void *kernel_heap_alloc(size_t size);
 void kernel_heap_free(void *ptr);
 

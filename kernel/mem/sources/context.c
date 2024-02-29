@@ -5,7 +5,7 @@
 #include <spin.h>
 
 
-static context_t g_kernel_ctx;
+static context_t g_kernel_ctx = { .head = DLNODE_INIT };
 
 
 //------------------------------------------------------------------------------
@@ -203,9 +203,12 @@ vmrange_t *context_query(context_t *ctx, size_t va) {
 
 // 只初始化虚拟地址空间，暂不关心页表
 INIT_TEXT void kernel_context_init() {
+    ASSERT(NULL == g_kernel_ctx.head.prev);
+    ASSERT(NULL == g_kernel_ctx.head.next);
+
     g_kernel_ctx.spin = SPIN_INIT;
-    dl_init_circular(&g_kernel_ctx.head);
     g_kernel_ctx.table = INVALID_ADDR;
+    dl_init_circular(&g_kernel_ctx.head);
 }
 
 context_t *get_kernel_context() {
@@ -215,6 +218,10 @@ context_t *get_kernel_context() {
 // 将一段内核地址范围标记在地址空间中，返回这段空间
 INIT_TEXT vmrange_t *kernel_context_mark(vmrange_t *rng, size_t va, size_t end,
         size_t pa, mmu_attr_t attrs, const char *desc) {
+    ASSERT(NULL != g_kernel_ctx.head.prev);
+    ASSERT(NULL != g_kernel_ctx.head.next);
+    ASSERT(INVALID_ADDR == g_kernel_ctx.table);
+
     ASSERT(NULL != rng);
     ASSERT(!dl_contains(&g_kernel_ctx.head, &rng->dl));
     ASSERT(va < end);
