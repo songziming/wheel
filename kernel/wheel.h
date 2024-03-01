@@ -20,8 +20,9 @@
 #include <common.h>
 
 // device
-#include <keyboard.h>
 #include <block.h>
+#include <partition.h>
+#include <keyboard.h>
 #include <pci.h>
 
 // lib

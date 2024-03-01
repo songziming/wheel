@@ -340,11 +340,14 @@ static void root_proc() {
 
     // 注册各种设备的驱动
     block_dev_init();
+    ata_driver_init();
+    partition_driver_init();
 
+    // 枚举 PCI 总线上的设备
     pci_enumerate(install_pci_dev);
 
 
-    test_block_io();
+    // test_block_io();
 
     i8042_init(); // PS/2 键盘控制器
 

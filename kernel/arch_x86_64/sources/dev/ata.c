@@ -239,14 +239,14 @@ static void select_device(ata_dev_t *dev) {
 }
 #endif
 
-static void ata_driver_read(blk_dev_t *dev, void *dst, uint64_t blk, uint32_t nblk) {
+static void ata_pio_read(blk_dev_t *dev, void *dst, uint64_t blk, uint32_t nblk) {
     ASSERT(NULL != dev);
     ASSERT(0 != nblk);
 
     ata_dev_t *ata = containerof(dev, ata_dev_t, blk);
     // select_device(ata);
 
-    // 如果是 LBA48，选择设备、发送 read_sector 命令所用的字节不同
+    // 如果是 LBA48，选择设备、发送命令所用的字节不同
     uint8_t sel, cmd;
     if (ATA_LBA48 & ata->flags) {
         sel = 0x40;
@@ -266,6 +266,7 @@ static void ata_driver_read(blk_dev_t *dev, void *dst, uint64_t blk, uint32_t nb
     }
     while(0 == (in8(ata->cmd + 7) & STT_READY)) {}
 
+    // 写入起始扇区号
     if (ata->flags & ATA_LBA48) {
         out8(ata->cmd + 2, (nblk >> 8) & 0xff);
         out8(ata->cmd + 3, (blk >> 24) & 0xff);  // LBA low
@@ -277,7 +278,8 @@ static void ata_driver_read(blk_dev_t *dev, void *dst, uint64_t blk, uint32_t nb
     out8(ata->cmd + 4, (blk >>  8) & 0xff);  // LBA mid
     out8(ata->cmd + 5, (blk >> 16) & 0xff);  // LBA high
 
-    out8(ata->cmd + 7, cmd); // 发送命令
+    // 发送命令
+    out8(ata->cmd + 7, cmd);
     for (int i = 0; i < 14; ++i) {
         in8(ata->cmd + 7);
     }
@@ -291,46 +293,100 @@ static void ata_driver_read(blk_dev_t *dev, void *dst, uint64_t blk, uint32_t nb
         }
     }
 
+    // 读取数据
     uint16_t *buff = (uint16_t *)dst;
     for (uint64_t i = 0; i < 256 * nblk; ++i) {
         buff[i] = in16(ata->cmd);
     }
 }
 
-static void ata_driver_write(blk_dev_t *dev, const void *src, uint64_t blk, uint32_t nblk) {
-    ata_dev_t *ata = containerof(dev, ata_dev_t, blk);
-    // ata_write(ata, blk);
+static void ata_pio_write(blk_dev_t *dev, const void *src, uint64_t blk, uint32_t nblk) {
+    ASSERT(NULL != dev);
+    ASSERT(0 != nblk);
 
-    (void)ata;
-    (void)src;
-    (void)blk;
-    (void)nblk;
+    ata_dev_t *ata = containerof(dev, ata_dev_t, blk);
+
+    // 如果是 LBA48，选择设备、发送命令所用的字节不同
+    uint8_t sel, cmd;
+    if (ATA_LBA48 & ata->flags) {
+        sel = 0x40;
+        cmd = 0x34; // WRITE_SECTORS_EXT
+    } else {
+        sel = 0xe0 | ((blk >> 24) & 0x0f);
+        cmd = 0x30; // WRITE_SECTORS
+    }
+    if (ATA_SLAVE & ata->flags) {
+        sel |= 0x10;
+    }
+
+    // 选择设备
+    out8(ata->cmd + 6, sel);
+    for (int i = 0; i < 14; ++i) {
+        in8(ata->cmd + 7);
+    }
+    while(0 == (in8(ata->cmd + 7) & STT_READY)) {}
+
+    // 写入起始扇区号
+    if (ata->flags & ATA_LBA48) {
+        out8(ata->cmd + 2, (nblk >> 8) & 0xff);
+        out8(ata->cmd + 3, (blk >> 24) & 0xff);  // LBA low
+        out8(ata->cmd + 4, (blk >> 32) & 0xff);  // LBA mid
+        out8(ata->cmd + 5, (blk >> 40) & 0xff);  // LBA high
+    }
+    out8(ata->cmd + 2, nblk & 0xff);
+    out8(ata->cmd + 3,  blk        & 0xff);  // LBA low
+    out8(ata->cmd + 4, (blk >>  8) & 0xff);  // LBA mid
+    out8(ata->cmd + 5, (blk >> 16) & 0xff);  // LBA high
+
+    // 发送命令
+    out8(ata->cmd + 7, cmd);
+    for (int i = 0; i < 14; ++i) {
+        in8(ata->cmd + 7);
+    }
+    while (1) {
+        uint8_t status = in8(ata->cmd + 7);
+        if (status & STT_ERR) {
+            return; // TODO 出错，重置设备
+        }
+        if (!(status & STT_BUSY) && (status & STT_DRQ)) {
+            break;
+        }
+    }
+
+    // 写入数据
+    const uint16_t *buff = (const uint16_t *)src;
+    for (uint64_t i = 0; i < 256 * nblk; ++i) {
+        out16(ata->cmd, buff[i]); // = in16(ata->cmd);
+        cpu_pause();
+    }
+
+    // 清缓存
+    out16(ata->cmd + 7, 0xe7);
 }
 
 
 
 //------------------------------------------------------------------------------
-// 根据默认配置初始化 ATA 控制器
+// 初始化、创建设备
 //------------------------------------------------------------------------------
+
+// 注册驱动
+INIT_TEXT void ata_driver_init() {
+    g_ata_driver.read = ata_pio_read;
+    g_ata_driver.write = ata_pio_write;
+    register_block_driver(&g_ata_driver);
+}
 
 // 如果 PCI 设备枚举未找到任何 AHCI 再调用这个函数
 // 或者是找到了 PCI IDE 设备，却不支持 PCI native mode
 INIT_TEXT void ata_init() {
-    g_ata_driver.read = ata_driver_read;
-    g_ata_driver.write = ata_driver_write;
-    register_block_driver(&g_ata_driver);
-
     ata_check(0x1f0, 0x3f6, 0); // primary master
     ata_check(0x1f0, 0x3f6, 1); // primary slave
     ata_check(0x170, 0x376, 0); // secondary master
     ata_check(0x170, 0x376, 1); // secondary slave
 }
 
-
-//------------------------------------------------------------------------------
 // 根据 PCI 设备获取控制器映射的端口号
-//------------------------------------------------------------------------------
-
 INIT_TEXT void ata_pci_init(const pci_dev_t *dev) {
     ASSERT(NULL != dev);
 

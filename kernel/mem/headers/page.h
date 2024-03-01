@@ -11,6 +11,7 @@ typedef enum page_type {
     PT_KERNEL,          // 被内核代码数据占用
     PT_PGTBL,           // 页表结构使用
     PT_KERNEL_STACK,    // 任务的内核栈
+    PT_CACHE,           // 块设备缓存
 } page_type_t;
 
 

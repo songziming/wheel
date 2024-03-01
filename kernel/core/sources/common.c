@@ -70,8 +70,11 @@ void test_block_io() {
     klog("sector 0:");
     for (int i = 0; i < 10; ++i) {
         klog(" %02x", sec[i]);
+        sec[i] = i * 16;
     }
     klog(".\n");
+
+    block_write(dev, sec, 0, 1);
 
     kernel_heap_free(sec);
 }

@@ -168,7 +168,14 @@ void context_free(context_t *ctx, void *ptr) {
     int key = irq_spin_take(&ctx->spin);
 
     vmrange_t *rng = vm_locate(&g_kernel_ctx, (size_t)ptr);
-    ASSERT(NULL != rng);
+    if (NULL == rng) {
+        klog("warning: va %p not found in context\n", ptr);
+        return;
+    }
+    if (rng->addr != (size_t)ptr) {
+        klog("warning: va %p not start address of range %lx:%lx\n", ptr, rng->addr, rng->end);
+        return;
+    }
 
     mmu_unmap(ctx->table, rng->addr, rng->end);
     pages_free(rng->pa);
