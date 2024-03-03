@@ -188,6 +188,9 @@ static INIT_TEXT void ata_check(uint16_t cmd, uint16_t ctl, int slave) {
     dev->blk.name = strmake("ATA_%x_%s", cmd, slave ? "slave" : "master");
     add_block_device(&dev->blk, &g_ata_driver);
 
+    // 一块硬盘可能有多个分区
+    partitions_init(&dev->blk);
+
     klog("ata: %s, features:", dev->blk.name);
     if (ATA_REMOVABLE & dev->flags) {
         klog(" removable");
@@ -202,6 +205,16 @@ static INIT_TEXT void ata_check(uint16_t cmd, uint16_t ctl, int slave) {
         klog(" dma");
     }
     klog("\n");
+}
+
+
+
+//------------------------------------------------------------------------------
+// 如果出问题，就要充值设备
+//------------------------------------------------------------------------------
+
+static void ata_reset(ata_dev_t *dev) {
+    //
 }
 
 
@@ -427,19 +440,16 @@ INIT_TEXT void ata_pci_init(const pci_dev_t *dev) {
     // 如果某个 BAR 为零，说明这个设备使用默认端口
 
     // BAR0、BAR1 描述 channel0
+    uint16_t ch0_cmd = 0x1f0;
+    uint16_t ch0_ctl = 0x3f6;
     if (ch0_native) {
-        uint16_t ch0_cmd = 0x1f0;
-        uint16_t ch0_ctl = 0x3f6;
-
         uint32_t bar0 = g_pci_read(dev->bus, dev->slot, dev->func, 0x10);
-        if (0 != bar0) {
-            ASSERT(bar0 & 1);
+        uint32_t bar1 = g_pci_read(dev->bus, dev->slot, dev->func, 0x14);
+
+        if ((bar0 & 1) && (bar0 & ~3)) {
             ch0_cmd = (uint16_t)(bar0 & ~3);
         }
-
-        uint32_t bar1 = g_pci_read(dev->bus, dev->slot, dev->func, 0x14);
-        if (0 != bar1) {
-            ASSERT(bar1 & 1);
+        if ((bar1 & 1) && (bar1 & ~3)) {
             ch0_ctl = (uint16_t)(bar1 & ~3);
         }
 
@@ -447,19 +457,16 @@ INIT_TEXT void ata_pci_init(const pci_dev_t *dev) {
     }
 
     // BAR2、BAR3 描述 channel1
+    uint16_t ch1_cmd = 0x170;
+    uint16_t ch1_ctl = 0x376;
     if (ch1_native) {
-        uint16_t ch1_cmd = 0x170;
-        uint16_t ch1_ctl = 0x376;
-
         uint32_t bar2 = g_pci_read(dev->bus, dev->slot, dev->func, 0x18);
-        if (0 != bar2) {
-            ASSERT(bar2 & 1);
+        uint32_t bar3 = g_pci_read(dev->bus, dev->slot, dev->func, 0x1c);
+
+        if ((bar2 & 1) && (bar2 & ~3)) {
             ch1_cmd = (uint16_t)(bar2 & ~3);
         }
-
-        uint32_t bar3 = g_pci_read(dev->bus, dev->slot, dev->func, 0x1c);
-        if (0 != bar3) {
-            ASSERT(bar3 & 1);
+        if ((bar3 & 1) && (bar3 & ~3)) {
             ch1_ctl = (uint16_t)(bar3 & ~3);
         }
 
@@ -474,11 +481,10 @@ INIT_TEXT void ata_pci_init(const pci_dev_t *dev) {
         if (bar4 & 1) {
             ch0_bm = (uint16_t)(bar4 & ~3);
             ch1_bm = ch0_bm + 8;
-            klog("bus master IDE base 0x%x, 0x%x\n", ch0_bm, ch1_bm);
         } else {
-            klog("no bus master IDE\n");
             progif &= ~(1U << 7);
         }
+        // klog("bus master IDE base 0x%x, 0x%x\n", ch0_bm, ch1_bm);
     }
 
     // 只要有一个 channel 处于 PCI native mode

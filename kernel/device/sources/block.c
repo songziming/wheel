@@ -51,7 +51,7 @@ void register_block_driver(blk_drv_t *drv) {
     ASSERT(NULL != drv->read);
     ASSERT(NULL != drv->write);
 
-    dl_insert_after(&drv->dl, &g_block_drivers);
+    dl_insert_before(&drv->dl, &g_block_drivers);
 }
 
 void add_block_device(blk_dev_t *dev, blk_drv_t *drv) {
@@ -59,7 +59,7 @@ void add_block_device(blk_dev_t *dev, blk_drv_t *drv) {
     ASSERT(dl_contains(&g_block_drivers, &drv->dl));
 
     dev->drv = drv;
-    dl_insert_after(&dev->dl, &g_block_devices);
+    dl_insert_before(&dev->dl, &g_block_devices);
 }
 
 blk_dev_t *get_block_device() {

@@ -29,6 +29,13 @@ void semaphore_init(semaphore_t *sem, int n, int max) {
     sem->value = n;
 }
 
+
+// TODO
+// 目前的做法，实在任务栈上创建一个 pend_item，记录阻塞者
+// 如果 OS 尝试删除一个正在阻塞的任务，是无法找到这个 pend_item 的
+// 应该使用 task_t 里面的 q_node，并通过指针记录这个 task 位于哪个阻塞队列中
+
+
 // 可能阻塞
 void semaphore_take(semaphore_t *sem, int n) {
     ASSERT(NULL != sem);

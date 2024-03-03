@@ -52,31 +52,72 @@ cached_block_t *cached_block_create(blk_dev_t *blk) {
 // TODO 一次可能读取多个扇区，应该把需要连续读，连续写回的扇区操作合并
 static void cached_read(blk_dev_t *dev, void *dst, uint64_t blk, uint32_t nblk) {
     cached_block_t *cached = containerof(dev, cached_block_t, blk);
-    uint8_t *buff = (uint8_t *)dst;
     uint32_t sec_size = dev->sec_size;
+    uint8_t *data = (uint8_t *)dst;
+    uint8_t *temp = cached->cached_data + blk * sec_size;
 
     for (uint32_t i = 0; i < nblk; ++i) {
-        int id = (blk + i) & 255;
+        uint64_t id = (blk + i) & 255;
         uint64_t tag = (blk + i) & ~255UL;
         uint64_t sec = cached->cached_sec[id];
 
         if (CACHE_VALID & sec) {
             if (tag == (sec & ~255UL)) {
                 // 命中，直接从缓存 copy
+                memcpy(data, temp, sec_size);
+                goto next;
             } else if (CACHE_DIRTY & sec) {
-                // 首先把这个扇区写回
+                // 首先把缓存的扇区写回
+                uint64_t old_sec = (sec & ~255UL) | id;
+                uint8_t *old_temp = cached->cached_data + old_sec * sec_size;
+                block_write(cached->uncached, old_temp, old_sec, 1);
             }
         }
 
         // 从底层块设备读取数据，放在缓存里
-        block_read(cached->uncached, buff, blk + i, 1);
+        block_read(cached->uncached, data, blk + i, 1);
         cached->cached_sec[id] = tag | CACHE_VALID;
-        memcpy(cached->cached_data + id * sec_size, buff, sec_size);
+        memcpy(temp, data, sec_size);
+next:
+        temp += sec_size;
+        data += sec_size;
     }
 }
 
 static void cached_write(blk_dev_t *dev, const void *src, uint64_t blk, uint32_t nblk) {
-    //
+    cached_block_t *cached = containerof(dev, cached_block_t, blk);
+    uint32_t sec_size = dev->sec_size;
+    const uint8_t *data = (const uint8_t *)src;
+    uint8_t *temp = cached->cached_data + blk * sec_size;
+
+    for (uint32_t i = 0; i < nblk; ++i) {
+        uint64_t id = (blk + i) & 255;
+        uint64_t tag = (blk + i) & ~255UL;
+        uint64_t sec = cached->cached_sec[id];
+
+        if (CACHE_VALID & sec) {
+            if (tag == (sec & ~255UL)) {
+                // 命中，直接更新缓存
+                memcpy(cached->cached_data + id * sec_size, data, sec_size);
+                cached->cached_sec[id] |= CACHE_DIRTY;
+                goto next;
+            } else if (CACHE_DIRTY & sec) {
+                // 未命中，需要写回
+                // 这里有两个选择，将当前缓存的 sector 写回，还是把本次的 sector 写回？
+                // 这里选择的是 write-back
+                uint64_t old_sec = (sec & ~255UL) | id;
+                uint8_t *old_temp = cached->cached_data + old_sec * sec_size;
+                block_write(cached->uncached, old_temp, old_sec, 1);
+            }
+        }
+
+        // 将数据写在缓存里，而不是设备里
+        memcpy(temp, data, sec_size);
+        cached->cached_sec[id] = tag | CACHE_VALID | CACHE_DIRTY;
+next:
+        data += sec_size;
+        temp += sec_size;
+    }
 }
 
 void cached_block_init() {
