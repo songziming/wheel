@@ -112,8 +112,9 @@ void task_resume(task_t *task) {
 
 
 
-static void task_wakeup(void *arg) {
+static void task_wakeup(void *arg, void *sp) {
     task_t *task = (task_t *)arg;
+    (void)sp;
 
     int key = irq_spin_take(&task->spin);
     sched_cont(task, TASK_STOPPED);
@@ -130,7 +131,7 @@ void task_delay(int ticks) {
     irq_spin_give(&self->spin, key);
 
     work_t wait_work = WORK_INIT;
-    tick_delay(&wait_work, ticks, task_wakeup, self);
+    tick_delay(&wait_work, ticks, task_wakeup, self, NULL);
     arch_task_switch();
 }
 
@@ -148,7 +149,7 @@ void task_exit() {
     // 当前任务正在运行，不能此时删除 TCB
     // 下一次中断，任务已停止执行，才能删除任务
     work_t exit_work = WORK_INIT;
-    work_defer(&exit_work, (work_func_t)task_destroy, self);
+    work_defer(&exit_work, (work_func_t)task_destroy, self, NULL);
 
     // 立即切换到新任务
     arch_task_switch();

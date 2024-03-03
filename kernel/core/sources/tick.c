@@ -43,14 +43,15 @@ size_t tick_get() {
 }
 
 // caller 需要保证持有 work 的自旋锁
-void tick_delay(work_t *work, int tick, work_func_t func, void *arg) {
+void tick_delay(work_t *work, int tick, work_func_t func, void *arg1, void *arg2) {
     ASSERT(NULL != work);
     ASSERT(NULL != func);
     ASSERT(!dl_contains(&g_tick_q, &work->node));
 
     work->tick = tick;
     work->func = func;
-    work->arg = arg;
+    work->arg1 = arg1;
+    work->arg2 = arg2;
 
     int key = irq_spin_take(&g_tick_spin);
 
@@ -67,6 +68,16 @@ void tick_delay(work_t *work, int tick, work_func_t func, void *arg) {
     irq_spin_give(&g_tick_spin, key);
 }
 
+// 取消一个任务
+void work_cancel(work_t *work) {
+    ASSERT(NULL != work);
+
+    int key = irq_spin_take(&g_tick_spin);
+    ASSERT(dl_contains(&g_tick_q, &work->node));
+    dl_remove(&work->node);
+    irq_spin_give(&g_tick_spin, key);
+}
+
 // 每次时钟中断执行，每个 CPU 都执行
 void tick_advance() {
     sched_tick();
@@ -76,8 +87,11 @@ void tick_advance() {
     }
 
     // 只有 CPU-0 需要处理计时
-
     ++g_tick_count;
+
+    // 执行计时函数
+    // watchdog 执行过程中，可能又注册了新的定时函数，tick_q 可能发生表更
+    // 因此不断读取 tick_q 的头节点，而不是遍历链表
 
     int key = irq_spin_take(&g_tick_spin);
 
@@ -92,7 +106,7 @@ void tick_advance() {
 
         // 这个 work 函数内部可能注册新的 work，需要此处释放锁
         irq_spin_give(&g_tick_spin, key);
-        w->func(w->arg);
+        w->func(w->arg1, w->arg2);
         key = irq_spin_take(&g_tick_spin);
     }
 
@@ -116,12 +130,13 @@ INIT_TEXT void work_init() {
     }
 }
 
-void work_defer(work_t *work, work_func_t func, void *arg) {
+void work_defer(work_t *work, work_func_t func, void *arg1, void *arg2) {
     ASSERT(NULL != work);
     ASSERT(NULL != func);
 
     work->func = func;
-    work->arg = arg;
+    work->arg1 = arg1;
+    work->arg2 = arg2;
 
     spin_t *lock = this_ptr(&g_work_spin);
     dlnode_t *q = this_ptr(&g_work_q);
@@ -131,6 +146,7 @@ void work_defer(work_t *work, work_func_t func, void *arg) {
     irq_spin_give(lock, key);
 }
 
+
 // 在中断返回阶段执行，执行所有的函数
 void work_q_flush() {
     spin_t *lock = this_ptr(&g_work_spin);
@@ -138,14 +154,22 @@ void work_q_flush() {
 
     int key = irq_spin_take(lock);
 
-    // 执行所有的函数，并将队列清空
-    // func 内部可能删除 work_t，因此需要先访问后继，再执行函数
-    for (dlnode_t *i = q->next; i != q;) {
-        work_t *w = containerof(i, work_t, node);
-        i = i->next;
-        w->func(w->arg);
-    }
+    // work 函数在执行中可能又注册了新的 work，即 work_q 在迭代过程中更新了
+    // 这里先把头节点取出，改造为双向不循环链表，原本的头节点形成一个新的链表
+    // 这样就可以遍历原来的链表，还可以向新的链表注册延迟调用任务
+    dlnode_t *head = q->next;
+    dlnode_t *tail = q->prev;
+    head->prev = NULL;
+    tail->next = NULL;
     dl_init_circular(q);
+
+    // 执行 work 函数时临时释放锁，否则无法注册新的 work
+    for (dlnode_t *i = head; i; i = i->next) {
+        work_t *w = containerof(i, work_t, node);
+        irq_spin_give(lock, key);
+        w->func(w->arg1, w->arg2);
+        key = irq_spin_take(lock);
+    }
 
     irq_spin_give(lock, key);
 }

@@ -36,6 +36,42 @@ void semaphore_init(semaphore_t *sem, int n, int max) {
 // 应该使用 task_t 里面的 q_node，并通过指针记录这个 task 位于哪个阻塞队列中
 
 
+// TODO 需要准备一套直接操作任务状态的函数
+//      除了更新任务状态、就绪队列，还检查能否抢占，发送 IPI
+
+
+
+// 尚未得到信号量，但等待时间已过
+static void semaphore_wakeup(void *arg1, void *arg2) {
+    pend_item_t *pender = (pend_item_t *)arg1;
+    semaphore_t *sema = (semaphore_t *)arg2;
+
+    task_t *task = pender->task;
+
+    int key = irq_spin_take(&sema->spin);
+    raw_spin_take(&task->spin);
+
+    dl_remove(&pender->dl);
+    sched_cont(task, TASK_PENDING); // 恢复任务
+    int cpu = task->last_cpu;
+    uint16_t state = task->state;
+    raw_spin_give(&task->spin);
+
+    if (TASK_READY == state) {
+        if (cpu_index() != cpu) {
+            arch_send_resched(cpu); // 给目标 CPU 发送 IPI，触发调度
+        } else {
+            arch_task_switch();
+        }
+    }
+
+    raw_spin_give(&task->spin);
+    irq_spin_give(&sema->spin, key);
+}
+
+
+
+
 // 可能阻塞
 void semaphore_take(semaphore_t *sem, int n) {
     ASSERT(NULL != sem);
@@ -57,6 +93,8 @@ void semaphore_take(semaphore_t *sem, int n) {
     dl_insert_before(&item.dl, &sem->pend_q);
 
     // TODO 可以指定一个超时时间，使用 watchdog 唤醒任务，并返回失败
+    work_t work_timeout;
+    work_defer(&work_timeout, semaphore_wakeup, &item, &sem);
 
     // 阻塞当前任务
     raw_spin_take(&self->spin);
@@ -73,6 +111,8 @@ void semaphore_take(semaphore_t *sem, int n) {
     // TODO 任务重新开始执行，判断是否成功获得信号量
     //      还是因为超时或删除信号量导致的重启
     ASSERT(!dl_contains(&sem->pend_q, &item.dl));
+
+    //
 }
 
 
