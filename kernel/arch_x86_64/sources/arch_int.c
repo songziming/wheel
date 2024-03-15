@@ -94,6 +94,7 @@ void int_init() {
 void set_int_handler(int vec, int_handler_t handler) {
     ASSERT(vec >= 0);
     ASSERT(vec < 256);
+    ASSERT(NULL != handler);
     g_handlers[vec] = handler;
 }
 

@@ -154,22 +154,29 @@ void work_q_flush() {
 
     int key = irq_spin_take(lock);
 
+    if (dl_is_lastone(q)) {
+        irq_spin_give(lock, key);
+        return;
+    }
+
     // work 函数在执行中可能又注册了新的 work，即 work_q 在迭代过程中更新了
     // 这里先把头节点取出，改造为双向不循环链表，原本的头节点形成一个新的链表
     // 这样就可以遍历原来的链表，还可以向新的链表注册延迟调用任务
     dlnode_t *head = q->next;
     dlnode_t *tail = q->prev;
+    ASSERT(head != q);
+    ASSERT(tail != q);
     head->prev = NULL;
     tail->next = NULL;
     dl_init_circular(q);
+    irq_spin_give(lock, key);
 
     // 执行 work 函数时临时释放锁，否则无法注册新的 work
     for (dlnode_t *i = head; i; i = i->next) {
         work_t *w = containerof(i, work_t, node);
-        irq_spin_give(lock, key);
+        // irq_spin_give(lock, key);
         w->func(w->arg1, w->arg2);
-        key = irq_spin_take(lock);
+        // key = irq_spin_take(lock);
     }
 
-    irq_spin_give(lock, key);
 }

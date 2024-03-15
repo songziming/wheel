@@ -93,8 +93,11 @@ void semaphore_take(semaphore_t *sem, int n) {
     dl_insert_before(&item.dl, &sem->pend_q);
 
     // TODO 可以指定一个超时时间，使用 watchdog 唤醒任务，并返回失败
-    work_t work_timeout;
-    work_defer(&work_timeout, semaphore_wakeup, &item, &sem);
+    if (0) {
+        // TODO work_defer 在下一次中断执行，应该换成 tick_delay
+        work_t work_timeout;
+        work_defer(&work_timeout, semaphore_wakeup, &item, &sem);
+    }
 
     // 阻塞当前任务
     raw_spin_take(&self->spin);
