@@ -166,17 +166,14 @@ void work_q_flush() {
     dlnode_t *tail = q->prev;
     ASSERT(head != q);
     ASSERT(tail != q);
-    head->prev = NULL;
     tail->next = NULL;
     dl_init_circular(q);
     irq_spin_give(lock, key);
 
     // 执行 work 函数时临时释放锁，否则无法注册新的 work
-    for (dlnode_t *i = head; i; i = i->next) {
-        work_t *w = containerof(i, work_t, node);
-        // irq_spin_give(lock, key);
-        w->func(w->arg1, w->arg2);
-        // key = irq_spin_take(lock);
+    while (head) {
+        work_t *w = containerof(head, work_t, node);
+        head = head->next; // 先访问下一个 node，然后再执行 work
+        w->func(w->arg1, w->arg2); // work 执行中可能会删除 work_t 对象，导致无法访问 next 字段
     }
-
 }

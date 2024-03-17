@@ -9,8 +9,9 @@ typedef struct blk_dev blk_dev_t;
 
 struct blk_drv {
     dlnode_t dl;
-    void (*read)(blk_dev_t *dev, void *dst, uint64_t blk, uint32_t nblk);
-    void (*write)(blk_dev_t *dev, const void *src, uint64_t blk, uint32_t nblk);
+    void (*show)(blk_dev_t *dev);
+    void (*read)(blk_dev_t *dev, void *dst, uint64_t sec, uint64_t nsecs);
+    void (*write)(blk_dev_t *dev, const void *src, uint64_t sec, uint64_t nsecs);
 };
 
 struct blk_dev {
@@ -18,7 +19,7 @@ struct blk_dev {
     blk_drv_t *drv;
     const char *name;
     uint32_t sec_size;
-    uint32_t sec_num;
+    uint64_t sec_num;
 };
 
 void block_dev_init();

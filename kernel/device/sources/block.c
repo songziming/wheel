@@ -26,7 +26,12 @@ static int show_blocks(int argc, char *argv[]) {
 
     for (dlnode_t *i = g_block_devices.next; i != &g_block_devices; i = i->next) {
         blk_dev_t *blk = containerof(i, blk_dev_t, dl);
-        klog("%s, blk-size=%d, blk-num=%d\n", blk->name, blk->sec_size, blk->sec_num);
+        if (blk->drv->show) {
+            blk->drv->show(blk);
+        } else {
+            klog("%s, sec_size=%d, sec_count=%ld\n",
+                blk->name, blk->sec_size, blk->sec_num);
+        }
     }
 
     return 0;
