@@ -14,9 +14,7 @@ void set_log_func(log_func_t func) {
     g_log_func = func;
 }
 
-static void print_cb(void *para, const char *s, size_t n) {
-    (void)para;
-
+static void print_cb(UNUSED void *para, const char *s, size_t n) {
     // TODO 启动阶段，准备一段 buffer 作为临时文件缓冲区（ringbuf）
     //      临时 buffer 满了就覆盖最早写入的内容
     // TODO 文件系统启动之后，将调试输出写入文件磁盘

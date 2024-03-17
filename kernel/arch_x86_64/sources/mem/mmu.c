@@ -680,9 +680,7 @@ void mmu_walk(uint64_t tbl) {
 static CONST uint64_t g_kernel_cr3 = INVALID_ADDR;
 static shell_cmd_t g_cmd_mmu;
 
-static int mmu_proc(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
+static int mmu_proc(UNUSED int argc, UNUSED char *argv[]) {
     mmu_walk(read_cr3());
     return 0;
 }

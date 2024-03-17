@@ -100,8 +100,7 @@ static void task_b_proc() {
 }
 
 
-static void my_work(void *arg, void *t) {
-    (void)t;
+static void my_work(void *arg, UNUSED void *t) {
     klog("[executing watch dog %s]\n", (const char *)arg);
 }
 

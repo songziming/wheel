@@ -107,15 +107,8 @@ static void pci_show_dev(const pci_dev_t *dev) {
         dev->classcode, dev->subclass, dev->progif, subtype);
 }
 
-static int pci_show(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
-
-    // for (dlnode_t *i = g_pci_devs.next; i != &g_pci_devs; i = i->next) {
-    //     pci_show_dev(containerof(i, pci_dev_t, dl));
-    // }
+static int pci_show(UNUSED int argc, UNUSED char *argv[]) {
     pci_enumerate(pci_show_dev);
-
     return 0;
 }
 

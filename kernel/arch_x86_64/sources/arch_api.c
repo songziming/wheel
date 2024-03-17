@@ -165,16 +165,12 @@ void arch_tcb_init(arch_tcb_t *tcb, size_t entry, size_t stacktop, size_t args[4
 
 // 向其他 CPU 发送 IPI，通知其执行调度操作
 
-static void handle_resched(int vec, arch_regs_t *f) {
-    (void)vec;
-    (void)f;
+static void handle_resched(UNUSED int vec, UNUSED arch_regs_t *f) {
     local_apic_send_eoi();
     // 中断返回过程自动切换任务，无需任何处理
 }
 
-static void handle_stopall(int vec, arch_regs_t *f) {
-    (void)vec;
-    (void)f;
+static void handle_stopall(UNUSED int vec, UNUSED arch_regs_t *f) {
     // local_apic_send_eoi();
 
     __asm__("cli");

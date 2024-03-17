@@ -253,20 +253,13 @@ static void ata_show_info(blk_dev_t *blk) {
     klog("  model: %.40s\n", ata->model);
 
     klog("  features:");
-    if (ATA_REMOVABLE & ata->flags) {
-        klog(" removable");
-    }
-    if (ATA_LBA & ata->flags) {
-        klog(" lba");
-    }
-    if (ATA_LBA48 & ata->flags) {
-        klog(" lba48");
-    }
-    if (ATA_DMA & ata->flags) {
-        klog(" dma");
-    }
+    if (ATA_REMOVABLE & ata->flags) { klog(" removable"); }
+    if (ATA_LBA       & ata->flags) { klog(" lba"); }
+    if (ATA_LBA48     & ata->flags) { klog(" lba48"); }
+    if (ATA_DMA       & ata->flags) { klog(" dma"); }
     klog("\n");
 }
+
 
 
 //------------------------------------------------------------------------------
@@ -277,7 +270,7 @@ void ata_pio_read_sector(blk_dev_t *blk, void *dst, uint64_t sector, uint64_t nu
     ata_device_t *ata = containerof(blk, ata_device_t, blk);
     ata_channel_t *ch = &g_channels[(ata->flags & ATA_SECONDARY) ? 1 : 0];
 
-    // TODO 锁住 ata ch
+    // TODO 锁住 ata channel
 
     uint8_t sel = (ata->flags & ATA_SLAVE) ? 0xf0 : 0xe0; // 开启 LBA
     uint8_t cmd;

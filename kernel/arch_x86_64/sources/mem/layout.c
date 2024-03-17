@@ -77,10 +77,7 @@ static INIT_TEXT void add_kernel_gap(vmrange_t *prev, vmrange_t *curr) {
 // }
 
 
-static int show_vm(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
-
+static int show_vm(UNUSED int argc, UNUSED char *argv[]) {
     context_t *kctx = get_kernel_context();
 
     klog("virtual mem space:\n");

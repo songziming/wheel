@@ -112,9 +112,8 @@ void task_resume(task_t *task) {
 
 
 
-static void task_wakeup(void *arg, void *sp) {
+static void task_wakeup(void *arg, UNUSED void *sp) {
     task_t *task = (task_t *)arg;
-    (void)sp;
 
     int key = irq_spin_take(&task->spin);
     sched_cont(task, TASK_STOPPED);
