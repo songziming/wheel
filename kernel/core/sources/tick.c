@@ -34,6 +34,9 @@ static PCPU_BSS dlnode_t g_work_q;
 // 定时函数调用，在若干 tick 后的中断里执行（CPU-0）
 //------------------------------------------------------------------------------
 
+// 参考 Linux timer
+// 这部分逻辑可以独立到 timer.c，相关函数更名为 timer
+
 INIT_TEXT void tick_init() {
     dl_init_circular(&g_tick_q);
 }
@@ -67,6 +70,13 @@ void tick_delay(work_t *work, int tick, work_func_t func, void *arg1, void *arg2
 
     irq_spin_give(&g_tick_spin, key);
 }
+
+
+// 时钟中断里，首先从队列取出 work，然后再执行 work 函数
+// work_cancel 只能保证 work 不在队列里，有可能此时正在运行
+// 调用 work_cancel 之后的代码，一般假定 work-func 没有同时运行，可能竞争
+// Linux kernel 提供了 timer_delete_sync，能保证函数返回时，work-func 也停止运行
+// 我们也应该提供这样的同步版本
 
 // 取消一个任务
 void work_cancel(work_t *work) {

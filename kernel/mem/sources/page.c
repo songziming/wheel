@@ -315,7 +315,8 @@ static pfn_t block_alloc(uint8_t rank, pfn_t period, pfn_t phase, page_type_t ty
 // 公开的函数
 //------------------------------------------------------------------------------
 
-static uint64_t strtoul(const char *s) {
+// TODO 改名为 strtoul，放在 str.c，定义为若符号，避免与 libc 冲突
+static uint64_t strtou64(const char *s) {
     ASSERT(NULL != s);
 
     int base = 10;
@@ -347,7 +348,7 @@ static uint64_t strtoul(const char *s) {
 
 static int page_show(int argc, char *argv[]) {
     if (2 == argc) {
-        uint64_t addr = strtoul(argv[1]);
+        uint64_t addr = strtou64(argv[1]);
         size_t pn = addr >> PAGE_SHIFT;
 
         if (pn >= g_page_num) {
