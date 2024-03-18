@@ -30,6 +30,7 @@ void irq_spin_give(spin_t *lock, int key) {
 }
 
 
+#if 0
 
 void thiscpu_raw_spin_take(spin_t *lock) {
     ASSERT(is_pcpu_var(lock));
@@ -65,3 +66,5 @@ void thiscpu_irq_spin_give(spin_t *lock, int key) {
     thiscpu_atomic32_inc(&lock->service_counter);
     cpu_int_unlock(key);
 }
+
+#endif

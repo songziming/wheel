@@ -15,9 +15,9 @@ void raw_spin_give(spin_t *lock);
 int  irq_spin_take(spin_t *lock);
 void irq_spin_give(spin_t *lock, int key);
 
-void thiscpu_raw_spin_take(spin_t *lock);
-void thiscpu_raw_spin_give(spin_t *lock);
-int  thiscpu_irq_spin_take(spin_t *lock);
-void thiscpu_irq_spin_give(spin_t *lock, int key);
+// void thiscpu_raw_spin_take(spin_t *lock);
+// void thiscpu_raw_spin_give(spin_t *lock);
+// int  thiscpu_irq_spin_take(spin_t *lock);
+// void thiscpu_irq_spin_give(spin_t *lock, int key);
 
 #endif // SPIN_H

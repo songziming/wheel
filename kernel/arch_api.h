@@ -33,8 +33,8 @@ void cpu_int_unlock(int key);
 
 uint32_t atomic32_get(volatile uint32_t *ptr);
 uint32_t atomic32_inc(volatile uint32_t *ptr);
-uint32_t thiscpu_atomic32_get(volatile uint32_t *ptr);
-uint32_t thiscpu_atomic32_inc(volatile uint32_t *ptr);
+// uint32_t thiscpu_atomic32_get(volatile uint32_t *ptr);
+// uint32_t thiscpu_atomic32_inc(volatile uint32_t *ptr);
 
 
 //------------------------------------------------------------------------------

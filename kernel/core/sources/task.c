@@ -103,10 +103,15 @@ void task_resume(task_t *task) {
 
     // 不能在 sched_cont 内部切换任务，否则自旋锁无法释放
     int key = irq_spin_take(&task->spin);
-    sched_cont(task, TASK_STOPPED);
+    int cpu = sched_cont(task, TASK_STOPPED);
     irq_spin_give(&task->spin, key);
 
-    // TODO 判断有没有抢占，从而决定是否切换任务
+    // 可能抢占，触发一次任务切换
+    if (cpu_index() == cpu) {
+        arch_task_switch();
+    } else if (-1 != cpu) {
+        arch_send_resched(cpu);
+    }
 }
 
 
@@ -125,12 +130,13 @@ static void task_wakeup(void *arg, UNUSED void *sp) {
 void task_delay(int ticks) {
     task_t *self = THISCPU_GET(g_tid_prev);
 
-    int key = irq_spin_take(&self->spin);
-    sched_cont(self, TASK_STOPPED);
-    irq_spin_give(&self->spin, key);
-
     work_t wait_work = WORK_INIT;
     tick_delay(&wait_work, ticks, task_wakeup, self, NULL);
+
+    int key = irq_spin_take(&self->spin);
+    sched_stop(self, TASK_STOPPED);
+    irq_spin_give(&self->spin, key);
+
     arch_task_switch();
 }
 

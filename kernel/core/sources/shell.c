@@ -334,10 +334,15 @@ static void execute(char *line) {
 }
 
 
+
+#define PROMPT "kshell"
+
+
 // tty 拥有字符输出终端，可以控制显示什么内容
 // tty 启动之后应该禁用 klog，只能将字符串发给 /dev/log，logTask 负责不断读取并打印
 static void shell_proc() {
-    klog("\nkernel shell started\n%d> ", cpu_index());
+    klog("\nkernel shell started\n");
+    klog("%s> ", PROMPT);
     char cmd[1024 + 1];
     int len = 0;
 
@@ -354,7 +359,7 @@ static void shell_proc() {
             cmd[len] = '\0';
             execute(cmd); // 执行命令
             len = 0;
-            klog("%d> ", cpu_index()); // 打印下一个 prompt
+            klog("%s> ", PROMPT); // 打印下一个 prompt
             continue;
         }
 

@@ -52,21 +52,16 @@ static void semaphore_wakeup(void *arg1, void *arg2) {
     raw_spin_take(&task->spin);
 
     dl_remove(&pender->dl);
-    sched_cont(task, TASK_PENDING); // 恢复任务
-    int cpu = task->last_cpu;
-    uint16_t state = task->state;
-    raw_spin_give(&task->spin);
-
-    if (TASK_READY == state) {
-        if (cpu_index() != cpu) {
-            arch_send_resched(cpu); // 给目标 CPU 发送 IPI，触发调度
-        } else {
-            arch_task_switch();
-        }
-    }
+    int cpu = sched_cont(task, TASK_PENDING); // 恢复任务
 
     raw_spin_give(&task->spin);
     irq_spin_give(&sema->spin, key);
+
+    if (cpu_index() == cpu) {
+        arch_task_switch();
+    } else if (-1 != cpu) {
+        arch_send_resched(cpu);
+    }
 }
 
 
@@ -101,8 +96,7 @@ void semaphore_take(semaphore_t *sem, int n) {
 
     // 阻塞当前任务
     raw_spin_take(&self->spin);
-    uint16_t old = sched_stop(self, TASK_PENDING);
-    ASSERT(TASK_READY == old); // 当前任务必然处于就绪态
+    sched_stop(self, TASK_PENDING);
     raw_spin_give(&self->spin);
     irq_spin_give(&sem->spin, key);
 
@@ -165,19 +159,16 @@ void semaphore_give(semaphore_t *sem, int n) {
 
         task_t *task = item->task;
         raw_spin_take(&task->spin);
-        sched_cont(task, TASK_PENDING); // 恢复任务
-        int cpu = task->last_cpu;
-        uint16_t state = task->state;
+        int cpu = sched_cont(task, TASK_PENDING); // 恢复任务
+        // int cpu = task->last_cpu;
+        // uint16_t state = task->state;
         raw_spin_give(&task->spin);
 
-        if (TASK_READY != state) {
-            continue; // 任务还在等待其他资源
-        }
-
-        if (cpu_index() != cpu) {
-            arch_send_resched(cpu); // 给目标 CPU 发送 IPI，触发调度
-        } else {
+        if (cpu_index() == cpu) {
             resched_this_cpu = 1; // 现在先不切换，还要恢复后面的阻塞任务
+        } else if (-1 != cpu) {
+            // TODO 也可以设置一个 位图flag，遍历完毕后发送多播
+            arch_send_resched(cpu);
         }
     }
 

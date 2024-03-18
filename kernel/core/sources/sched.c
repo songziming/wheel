@@ -86,12 +86,12 @@ static void task_q_remove(task_q_t *q, task_t *tid) {
 
 
 //------------------------------------------------------------------------------
-// 就绪队列
+// 就绪队列管理
 //------------------------------------------------------------------------------
 
-static inline task_t *ready_q_head(ready_q_t *rdy) {
-    return task_q_head(&rdy->tasks);
-}
+// static inline task_t *ready_q_head(ready_q_t *rdy) {
+//     return task_q_head(&rdy->tasks);
+// }
 
 static inline void ready_q_insert(ready_q_t *rdy, task_t *tid) {
     task_q_push(&rdy->tasks, tid);
@@ -132,11 +132,78 @@ static int lowest_cpu() {
     return idx;
 }
 
+// 下面两个函数是任务状态切换的核心，涉及到就绪队列
+// 首先拿到任务的指针，然后拿到就绪队列的指针。先锁住任务，再锁住所在的队列，可能数据竞争。
+// TODO 更新了某个就绪队列，不一定发生抢占，可能最高优先级不变，这时不必发送 IPI，可以减少很多不必要的操作
+
+// 停止任务执行，从就绪队列中移除（目标任务可能位于其他 CPU）
+// 同时持有任务和所属就绪队列的自旋锁
+// 返回受影响的 CPU 的编号（-1 表示没有影响）
+int sched_stop(task_t *tid, uint16_t bits) {
+    ASSERT(NULL != tid);
+    // ASSERT(tid->spin.ticket_counter > tid->spin.service_counter);
+    ASSERT(0 != bits);
+
+    uint16_t state = tid->state;
+    int cpu = tid->last_cpu;
+    tid->state |= bits;
+
+    // 如果原任务不是就绪态，就不会影响 CPU
+    // 如果 last_cpu < 0，表示该任务未被放入就绪队列
+    if ((TASK_READY != state) || (cpu < 0)) {
+        return -1;
+    }
+
+    // 将任务从就绪队列中删除，同时更新 tid_next
+    ready_q_t *q = pcpu_ptr(cpu, &g_ready_q);
+    int key = irq_spin_take(&q->spin);
+    ready_q_remove(q, tid);
+    tid->last_cpu = -1;
+    *(task_t **)pcpu_ptr(cpu, &g_tid_next) = task_q_head(&q->tasks);
+    irq_spin_give(&q->spin, key);
+
+    // 返回有更新的就绪队列编号
+    return cpu;
+}
+
+// 取消 stoped 状态，如果变为就绪，就把任务放入就绪队列
+// 返回就绪队列有变更的 CPU 的编号
+int sched_cont(task_t *tid, uint16_t bits) {
+    ASSERT(NULL != tid);
+    // ASSERT(tid->spin.ticket_counter > tid->spin.service_counter);
+    ASSERT(0 != bits);
+
+    uint16_t old_state = tid->state;
+    tid->state &= ~bits;
+
+    // 如果任务原本就在运行，或者仍然无法运行
+    if ((TASK_READY == old_state) || (TASK_READY != tid->state)) {
+        return -1;
+    }
+
+    // 寻找一个就绪队列，将任务放入
+    if (tid->affinity >= 0) {
+        tid->last_cpu = tid->affinity;
+    } else {
+        tid->last_cpu = lowest_cpu();
+        ASSERT(tid->last_cpu >= 0);
+        ASSERT(tid->last_cpu < cpu_count());
+    }
+    ready_q_t *q = pcpu_ptr(tid->last_cpu, &g_ready_q);
+
+    int key = irq_spin_take(&q->spin);
+    ready_q_insert(q, tid);
+    *(task_t **)pcpu_ptr(tid->last_cpu, &g_tid_next) = task_q_head(&q->tasks);
+    irq_spin_give(&q->spin, key);
+
+    return tid->last_cpu;
+}
+
 // 每次时钟中断里执行（但是可能重入）
 // 首先锁住就绪队列，防止轮转过程中插入新的任务，导致当前任务不再是最高优先级
 void sched_tick() {
-    // ready_q_t *q = this_ptr(&g_ready_q);
-    int key = thiscpu_irq_spin_take(&g_ready_q.spin);
+    ready_q_t *q = this_ptr(&g_ready_q);
+    int key = irq_spin_take(&q->spin);
 
     // 读取 tid_next，而不是 tid_prev，如果不发生中断，tid_prev 就一直不更新
     // 因为 tid_prev 可能尚未更新，导致我们轮转的不是最高优先级任务
@@ -151,7 +218,7 @@ void sched_tick() {
     }
 
     raw_spin_give(&curr->spin);
-    thiscpu_irq_spin_give(&g_ready_q.spin, key);
+    irq_spin_give(&q->spin, key);
 }
 
 
@@ -204,118 +271,49 @@ void unpend_all(pend_q_t *q) {
 // sched 函数只负责更新就绪队列，不会切换任务，也不会发送 IPI
 
 
-// 挑选负载最轻的，优先级最低的 CPU
-static int select_cpu(task_t *tid) {
-    ASSERT(NULL != tid);
-    ASSERT(tid->spin.ticket_counter > tid->spin.service_counter);
+// // 挑选负载最轻的，优先级最低的 CPU
+// static int select_cpu(task_t *tid) {
+//     ASSERT(NULL != tid);
+//     ASSERT(tid->spin.ticket_counter > tid->spin.service_counter);
 
-    int lowest_cpu = 0;
-    int lowest_tick = 0; // 就绪队列总负载
-    int lowest_pri = 0; // 优先级
+//     int lowest_cpu = 0;
+//     int lowest_tick = 0; // 就绪队列总负载
+//     int lowest_pri = 0; // 优先级
 
-    // 优先选择之前运行的 CPU，缓存无需预热
-    if (tid->last_cpu >= 0) {
-        ASSERT(tid->affinity < 0);
-        lowest_cpu = tid->last_cpu;
-        ready_q_t *q = pcpu_ptr(lowest_cpu, &g_ready_q);
-        int key = irq_spin_take(&q->spin);
-        lowest_tick = q->total_tick;
-        lowest_pri = __builtin_ctz(q->tasks.priorities);
-        irq_spin_give(&q->spin, key);
-    }
+//     // 优先选择之前运行的 CPU，缓存无需预热
+//     if (tid->last_cpu >= 0) {
+//         ASSERT(tid->affinity < 0);
+//         lowest_cpu = tid->last_cpu;
+//         ready_q_t *q = pcpu_ptr(lowest_cpu, &g_ready_q);
+//         int key = irq_spin_take(&q->spin);
+//         lowest_tick = q->total_tick;
+//         lowest_pri = __builtin_ctz(q->tasks.priorities);
+//         irq_spin_give(&q->spin, key);
+//     }
 
-    for (int i = 0; i < cpu_count(); ++i) {
-        if (tid->last_cpu == i) {
-            continue;
-        }
+//     for (int i = 0; i < cpu_count(); ++i) {
+//         if (tid->last_cpu == i) {
+//             continue;
+//         }
 
-        ready_q_t *q = pcpu_ptr(i, &g_ready_q);
-        int key = irq_spin_take(&q->spin);
-        int tick = q->total_tick;
-        int pri = __builtin_ctz(q->tasks.priorities);
-        irq_spin_give(&q->spin, key);
+//         ready_q_t *q = pcpu_ptr(i, &g_ready_q);
+//         int key = irq_spin_take(&q->spin);
+//         int tick = q->total_tick;
+//         int pri = __builtin_ctz(q->tasks.priorities);
+//         irq_spin_give(&q->spin, key);
 
-        if (tick < lowest_tick) {
-            lowest_cpu = i;
-            lowest_tick = tick;
-            lowest_pri = pri;
-        } else if ((tick == lowest_tick) && (pri < lowest_pri)) {
-            lowest_cpu = i;
-            lowest_pri = pri;
-        }
-    }
+//         if (tick < lowest_tick) {
+//             lowest_cpu = i;
+//             lowest_tick = tick;
+//             lowest_pri = pri;
+//         } else if ((tick == lowest_tick) && (pri < lowest_pri)) {
+//             lowest_cpu = i;
+//             lowest_pri = pri;
+//         }
+//     }
 
-    return lowest_cpu;
-}
-
-
-
-
-// 因为某些原因停止任务执行，从就绪队列中移除
-// 可以操纵其他任务，可能来自其他 CPU
-// 同时持有任务和所属就绪队列的自旋锁
-uint16_t sched_stop(task_t *tid, uint16_t bits) {
-    ASSERT(NULL != tid);
-    ASSERT(tid->spin.ticket_counter > tid->spin.service_counter);
-    ASSERT(0 != bits);
-
-    uint16_t old_state = tid->state;
-    tid->state |= bits;
-
-    // 如果 last_cpu < 0，表示该任务从未运行过
-    if ((TASK_READY != old_state) || (tid->last_cpu < 0)) {
-        return old_state;
-    }
-
-    // 将任务从就绪队列中删除，同时更新 tid_next
-    ready_q_t *q = pcpu_ptr(tid->last_cpu, &g_ready_q);
-    int key = irq_spin_take(&q->spin);
-    ready_q_remove(q, tid);
-    task_t *head = ready_q_head(q);
-    *(task_t **)pcpu_ptr(tid->last_cpu, &g_tid_next) = head;
-    irq_spin_give(&q->spin, key);
-
-    return old_state;
-}
-
-
-// 取消 stoped 状态，如果变为就绪，就把任务放入就绪队列
-// TODO 应该返回修改之后的状态，而不是之前的
-uint16_t sched_cont(task_t *tid, uint16_t bits) {
-    ASSERT(NULL != tid);
-    ASSERT(tid->spin.ticket_counter > tid->spin.service_counter);
-    ASSERT(0 != bits);
-
-    uint16_t old_state = tid->state;
-    tid->state &= ~bits;
-    if (TASK_READY != tid->state) {
-        return old_state;
-    }
-
-    // 变为就绪态，放入一个就绪队列
-    if (tid->affinity >= 0) {
-        tid->last_cpu = tid->affinity;
-    } else {
-        tid->last_cpu = lowest_cpu(); // select_cpu(tid);
-        ASSERT(tid->last_cpu >= 0);
-        ASSERT(tid->last_cpu < cpu_count());
-        // tid->last_cpu = cpu_index();
-    }
-    ready_q_t *q = pcpu_ptr(tid->last_cpu, &g_ready_q);
-
-    int key = irq_spin_take(&q->spin);
-    ready_q_insert(q, tid);
-    task_t *head = ready_q_head(q);
-    *(task_t **)pcpu_ptr(tid->last_cpu, &g_tid_next) = head;
-    irq_spin_give(&q->spin, key);
-
-    // if ((&g_shell_tcb == tid) && (head != tid)) {
-    //     klog("[nopreempt]");
-    //     arch_send_stopall();
-    // }
-
-    return old_state;
-}
+//     return lowest_cpu;
+// }
 
 
 
