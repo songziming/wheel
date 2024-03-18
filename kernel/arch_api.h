@@ -7,6 +7,16 @@
 #include <arch_extra.h>
 
 
+// 有些宏必须由 arch_extra.h 提供
+#ifndef THISCPU_GET
+#error "macro THISCPU_GET not defined in arch_extra.h"
+#endif
+#ifndef THISCPU_SET
+#error "macro THISCPU_SET not defined in arch_extra.h"
+#endif
+
+
+
 //------------------------------------------------------------------------------
 // 基本
 //------------------------------------------------------------------------------
@@ -23,6 +33,8 @@ void cpu_int_unlock(int key);
 
 uint32_t atomic32_get(volatile uint32_t *ptr);
 uint32_t atomic32_inc(volatile uint32_t *ptr);
+uint32_t thiscpu_atomic32_get(volatile uint32_t *ptr);
+uint32_t thiscpu_atomic32_inc(volatile uint32_t *ptr);
 
 
 //------------------------------------------------------------------------------
@@ -50,6 +62,7 @@ INIT_TEXT void *early_alloc_rw(size_t size);
 int cpu_count();
 int cpu_index();
 
+int is_pcpu_var(void *ptr);
 void *pcpu_ptr(int idx, void *ptr);
 void *this_ptr(void *ptr);
 

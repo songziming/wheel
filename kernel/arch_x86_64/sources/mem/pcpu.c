@@ -5,10 +5,6 @@
 #include <wheel.h>
 
 
-
-
-
-
 // 多核环境下，每个处理器的私有数据区
 // 除了提供 per-cpu 变量支持，还包括异常栈、中断栈
 // 因为这些栈也是每个处理器私有的
@@ -39,11 +35,15 @@ PCPU_BSS vmrange_t g_range_pcpu_mc;
 PCPU_BSS vmrange_t g_range_pcpu_int;
 
 
+inline int is_pcpu_var(void *ptr) {
+    return ((char *)ptr >= &_pcpu_addr)
+        || ((char *)ptr < &_pcpu_bss_end);
+}
+
 inline void *pcpu_ptr(int idx, void *ptr) {
     ASSERT(0 != g_pcpu_offset);
     ASSERT(0 != g_pcpu_skip);
-    ASSERT((char *)ptr >= &_pcpu_addr);
-    ASSERT((char *)ptr < &_pcpu_bss_end);
+    ASSERT(is_pcpu_var(ptr));
     ASSERT(idx < cpu_count());
 
     return (uint8_t *)ptr + g_pcpu_offset + g_pcpu_skip * idx;
@@ -53,8 +53,7 @@ inline void *pcpu_ptr(int idx, void *ptr) {
 inline void *this_ptr(void *ptr) {
     ASSERT(0 != g_pcpu_offset);
     ASSERT(0 != g_pcpu_skip);
-    ASSERT((char *)ptr >= &_pcpu_addr);
-    ASSERT((char *)ptr < &_pcpu_bss_end);
+    ASSERT(is_pcpu_var(ptr));
 
     return (uint8_t *)ptr + read_gsbase();
 }
