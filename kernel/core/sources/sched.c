@@ -69,6 +69,7 @@ static void task_q_remove(task_q_t *q, task_t *tid) {
     int pri = tid->priority;
     ASSERT((1U << pri) & q->priorities);
     ASSERT(NULL != q->heads[pri]);
+    ASSERT((&tid->q_node == q->heads[pri]) || dl_contains(q->heads[pri], &tid->q_node));
 
     if (dl_is_lastone(&tid->q_node)) {
         ASSERT(&tid->q_node == q->heads[pri]);

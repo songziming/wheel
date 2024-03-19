@@ -40,13 +40,16 @@ static int check_gpt_partitions(blk_dev_t *blk) {
     ASSERT(NULL != blk);
 
     uint8_t *lba0 = kernel_heap_alloc(blk->sec_size);
-    if (memcmp(lba0, "EFI PART", 8)) {
+    block_read(blk, lba0, 0, 1);
+
+    if (0 == memcmp(lba0, "EFI PART", 8)) {
         klog("warning: GPT not supported!\n");
         kernel_heap_free(lba0);
         return 1;
     }
 
-    return 0;
+    kernel_heap_free(lba0);
+    return 1;
 }
 
 
@@ -57,6 +60,10 @@ static int check_gpt_partitions(blk_dev_t *blk) {
 
 // 我们不能假定分区表一定存在，只要发现不合理取值，就认为没有分区表
 // 所有检测都通过之后，才能创建分区设备，并注册到系统中
+
+static inline int chs_is_nonzero(mbr_chs_t *chs) {
+    return chs->head || chs->sector || chs->cylinder;
+}
 
 static void check_mbr_partitions(blk_dev_t *blk) {
     ASSERT(NULL != blk);
@@ -84,19 +91,23 @@ static void check_mbr_partitions(blk_dev_t *blk) {
         }
 
         // 相关字段不能全零，若全零说明分区表不合法
-        if (!entries[i].start.head && !entries[i].start.sector && !entries[i].start.cylinder) {
+        if (!chs_is_nonzero(&entries[i].start)) {
+            klog("mbr invalid, entry %d start chs zero!\n", i);
             return;
         }
-        if (!entries[i].end.head && !entries[i].end.sector && !entries[i].end.cylinder) {
+        if (!chs_is_nonzero(&entries[i].end)) {
+            klog("mbr invalid, entry %d end chs zero!\n", i);
             return;
         }
         if (!entries[i].start_lba || !entries[i].nsectors) {
+            klog("mbr invalid, entry %d LBA or size zero!\n", i);
             return;
         }
 
         // 如果这是扩展分区
         if ((5 == entries[i].system_id) || (15 == entries[i].system_id)) {
             if (-1 != extended_id) {
+                klog("mbr invalid, more than one extended partition!\n");
                 return;
             }
             extended_id = i;
@@ -108,6 +119,7 @@ static void check_mbr_partitions(blk_dev_t *blk) {
         // 如果是可引导分区
         if (0x80 == entries[i].boot) {
             if (-1 != bootable_id) {
+                klog("mbr invalid, more than one bootable partition!\n");
                 return;
             }
             bootable_id = i;
@@ -123,9 +135,11 @@ static void check_mbr_partitions(blk_dev_t *blk) {
             uint64_t j_start = entries[j].start_lba;
             uint64_t j_end = j_start + entries[j].nsectors;
             if ((j_start < i_start) && (i_start < j_end)) {
+                klog("mbr invalid, overlapping partitions!\n");
                 return;
             }
             if ((i_start < j_start) && (j_start < i_end)) {
+                klog("mbr invalid, overlapping partitions!\n");
                 return;
             }
         }
@@ -157,7 +171,7 @@ static void check_mbr_partitions(blk_dev_t *blk) {
 void partitions_init(blk_dev_t *blk) {
     ASSERT(NULL != blk);
 
-    // TODO 首先应该检查 GPT 分区表
+    // 首先应该检查 GPT 分区表，失败再检查 MBR
     if (check_gpt_partitions(blk)) {
         check_mbr_partitions(blk);
     }

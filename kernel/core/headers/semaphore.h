@@ -13,7 +13,7 @@ typedef struct semaphore {
 } semaphore_t;
 
 void semaphore_init(semaphore_t *sem, int n, int max);
-void semaphore_take(semaphore_t *sem, int n);
+void semaphore_take(semaphore_t *sem, int n, int timeout);
 void semaphore_give(semaphore_t *sem, int n);
 
 #endif // SEMAPHORE_H

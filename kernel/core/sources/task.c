@@ -130,8 +130,8 @@ static void task_wakeup(void *arg, UNUSED void *sp) {
 void task_delay(int ticks) {
     task_t *self = THISCPU_GET(g_tid_prev);
 
-    work_t wait_work = WORK_INIT;
-    tick_delay(&wait_work, ticks, task_wakeup, self, NULL);
+    timer_t wait;
+    timer_start(&wait, ticks, task_wakeup, self, NULL);
 
     int key = irq_spin_take(&self->spin);
     sched_stop(self, TASK_STOPPED);
@@ -153,8 +153,8 @@ void task_exit() {
 
     // 当前任务正在运行，不能此时删除 TCB
     // 下一次中断，任务已停止执行，才能删除任务
-    work_t exit_work = WORK_INIT;
-    work_defer(&exit_work, (work_func_t)task_destroy, self, NULL);
+    timer_t exit;
+    timer_start(&exit, 0, (timer_func_t)task_destroy, self, NULL);
 
     // 立即切换到新任务
     arch_task_switch();

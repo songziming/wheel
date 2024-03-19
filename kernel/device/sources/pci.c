@@ -117,7 +117,7 @@ static int pci_show(UNUSED int argc, UNUSED char *argv[]) {
 // PCI 框架初始化、设备枚举
 //------------------------------------------------------------------------------
 
-INIT_TEXT void pci_init(pci_reader_t reader, pci_writer_t writer) {
+INIT_TEXT void pci_lib_init(pci_reader_t reader, pci_writer_t writer) {
     ASSERT(NULL == g_pci_read);
     ASSERT(NULL == g_pci_write);
     ASSERT(NULL != reader);

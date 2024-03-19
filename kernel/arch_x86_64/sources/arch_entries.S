@@ -14,7 +14,7 @@
 .extern g_tid_prev
 .extern g_tid_next
 
-// tick.c
+// work.c
 .extern work_q_flush
 
 // task.c
@@ -230,7 +230,7 @@ int_nested_enter:
     cmpl    $0, %gs:(g_int_depth)
     jne     int_nested_return
 
-    // 执行延迟函数
+    // 执行异步函数
     subq    $16, %rsp
     call    work_q_flush
     addq    $16, %rsp

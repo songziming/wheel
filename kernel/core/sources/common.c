@@ -100,11 +100,11 @@ static void task_b_proc() {
 }
 
 
-static void my_work(void *arg, UNUSED void *t) {
-    klog("[executing watch dog %s]\n", (const char *)arg);
-}
+// static void my_work(void *arg, UNUSED void *t) {
+//     klog("[executing watch dog %s]\n", (const char *)arg);
+// }
 
-static work_t wa, wb;
+// static work_t wa, wb;
 
 
 // 平台无关的初始化流程，在根任务中调用
@@ -120,8 +120,8 @@ INIT_TEXT void common_init() {
     task_resume(&a_tcb);
     task_resume(&b_tcb);
 
-    tick_delay(&wa, 20, my_work, "WORK_20", 0);
-    tick_delay(&wb, 40, my_work, "WORK_40", 0);
+    // tick_delay(&wa, 20, my_work, "WORK_20", 0);
+    // tick_delay(&wb, 40, my_work, "WORK_40", 0);
 
     task_t *self = THISCPU_GET(g_tid_prev);
     task_stop(self);

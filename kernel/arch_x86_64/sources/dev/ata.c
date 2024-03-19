@@ -393,7 +393,7 @@ INIT_TEXT void ata_driver_init() {
 
 // classcode=1 subclass=1
 // 在初始化流程中调用
-INIT_TEXT void ata_pci_init(const pci_dev_t *dev) {
+INIT_TEXT void ata_pci_lib_init(const pci_dev_t *dev) {
     ASSERT(NULL != dev);
 
     // 开启 IO Enable bit

@@ -134,7 +134,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // }
 
     // 准备 PCI 支持
-    arch_pci_init(acpi_get_table("MCFG"));
+    arch_pci_lib_init(acpi_get_table("MCFG"));
     pci_probe();
 
     // 切换正式 gdt，加载 idt
@@ -172,8 +172,9 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     sched_init();
 
     // 准备延迟工作队列（此时中断关闭，不会触发tick）
-    tick_init();
-    work_init();
+    timer_lib_init();
+    // tick_init();
+    // work_init();
 
     // 首次中断保存上下文
     task_t dummy;
@@ -283,7 +284,7 @@ char _real_end;
 // TODO 有些 PCI 驱动支持多种 vendor/device 组合
 
 void vmware_svga_init(uint8_t bus, uint8_t slot, uint8_t func); // vmware_svga.c
-// void ata_pci_init(uint8_t bus, uint8_t slot, uint8_t func); // ata_pci.c
+// void ata_pci_lib_init(uint8_t bus, uint8_t slot, uint8_t func); // ata_pci.c
 
 
 // 识别 PCI 设备，调用驱动
@@ -294,7 +295,7 @@ static INIT_TEXT void install_pci_dev(const pci_dev_t *dev) {
     }
 
     if ((1 == dev->classcode) && (1 == dev->subclass)) {
-        ata_pci_init(dev);
+        ata_pci_lib_init(dev);
         return;
     }
 }
@@ -339,9 +340,9 @@ static void root_proc() {
 #endif
 
     // 注册各种设备的驱动
-    block_dev_init();
-    ata_driver_init();
+    block_device_lib_init();
     partition_driver_init();
+    ata_driver_init();
 
     // 枚举 PCI 总线上的设备
     pci_enumerate(install_pci_dev);

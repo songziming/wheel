@@ -22,7 +22,7 @@ struct blk_dev {
     uint64_t sec_num;
 };
 
-void block_dev_init();
+void block_device_lib_init();
 void register_block_driver(blk_drv_t *drv);
 void add_block_device(blk_dev_t *dev, blk_drv_t *drv);
 

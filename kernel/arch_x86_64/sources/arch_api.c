@@ -122,12 +122,12 @@ static void pci_write(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg, uint3
 // TODO 实现一套 pcie 读写函数，像 xAPIC 和 x2APIC 通过函数指针动态选择
 
 
-INIT_TEXT void arch_pci_init(acpi_tbl_t *mcfg) {
+INIT_TEXT void arch_pci_lib_init(acpi_tbl_t *mcfg) {
     if (NULL == mcfg) {
-        pci_init(pci_read, pci_write);
+        pci_lib_init(pci_read, pci_write);
     } else {
         klog("MCFG at %p, supports PCI-E\n", mcfg);
-        pci_init(pci_read, pci_write);
+        pci_lib_init(pci_read, pci_write);
     }
 }
 

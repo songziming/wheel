@@ -40,7 +40,7 @@ void keyboard_send(keycode_t key) {
 // 应该由 OS 提供一套 message queue 机制，结合 fifo 与信号量
 keycode_t keyboard_recv() {
     keycode_t key;
-    semaphore_take(&g_kbd_sem, 1);
+    semaphore_take(&g_kbd_sem, 1, 0);
     fifo_read(&g_kbd_fifo, &key, sizeof(key));
     return key;
 }

@@ -6,7 +6,7 @@
 
 
 
-// driver 还应该包括 pci 匹配标准，或者在注册 device 的时候同时指定 driver
+// TODO 并不需要记录所有的 driver，driver 只是一系列函数指针的集合
 
 
 // TODO 自旋锁保护？
@@ -33,7 +33,7 @@ static int show_blocks(UNUSED int argc, UNUSED char *argv[]) {
     return 0;
 }
 
-void block_dev_init() {
+void block_device_lib_init() {
     dl_init_circular(&g_block_devices);
     dl_init_circular(&g_block_drivers);
 

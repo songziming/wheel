@@ -84,6 +84,9 @@ dlnode_t *dl_remove(dlnode_t *node) {
     ASSERT(((prev == node) && (next == node))
         || ((prev != node) && (next != node)));
 
+    node->prev = NULL;
+    node->next = NULL;
+
     if ((prev != node) && (next != node)) {
         prev->next = next;
         next->prev = prev;

@@ -68,7 +68,7 @@ static void semaphore_wakeup(void *arg1, void *arg2) {
 
 
 // 可能阻塞
-void semaphore_take(semaphore_t *sem, int n) {
+void semaphore_take(semaphore_t *sem, int n, int timeout) {
     ASSERT(NULL != sem);
     ASSERT(n > 0);
 
@@ -87,11 +87,10 @@ void semaphore_take(semaphore_t *sem, int n) {
     item.require = n;
     dl_insert_before(&item.dl, &sem->pend_q);
 
-    // TODO 可以指定一个超时时间，使用 watchdog 唤醒任务，并返回失败
-    if (0) {
-        // TODO work_defer 在下一次中断执行，应该换成 tick_delay
-        work_t work_timeout;
-        work_defer(&work_timeout, semaphore_wakeup, &item, &sem);
+    // 指定了超时时间，则开启一个 timer
+    timer_t wakeup;
+    if (timeout) {
+        timer_start(&wakeup, timeout, semaphore_wakeup, &item, &sem);
     }
 
     // 阻塞当前任务
@@ -108,8 +107,6 @@ void semaphore_take(semaphore_t *sem, int n) {
     // TODO 任务重新开始执行，判断是否成功获得信号量
     //      还是因为超时或删除信号量导致的重启
     ASSERT(!dl_contains(&sem->pend_q, &item.dl));
-
-    //
 }
 
 

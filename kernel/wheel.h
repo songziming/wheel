@@ -17,6 +17,7 @@
 #include <task.h>
 #include <sched.h>
 #include <tick.h>
+#include <timer.h>
 #include <common.h>
 
 // device
