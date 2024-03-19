@@ -137,6 +137,8 @@ static int lowest_cpu() {
 // 首先拿到任务的指针，然后拿到就绪队列的指针。先锁住任务，再锁住所在的队列，可能数据竞争。
 // TODO 更新了某个就绪队列，不一定发生抢占，可能最高优先级不变，这时不必发送 IPI，可以减少很多不必要的操作
 
+// TODO 我们可以要求，只有自己可以停止任务的执行，不允许停止其他的 task
+
 // 停止任务执行，从就绪队列中移除（目标任务可能位于其他 CPU）
 // 同时持有任务和所属就绪队列的自旋锁
 // 返回受影响的 CPU 的编号（-1 表示没有影响）
@@ -166,6 +168,24 @@ int sched_stop(task_t *tid, uint16_t bits) {
     // 返回有更新的就绪队列编号
     return cpu;
 }
+
+
+// 停止当前任务
+void sched_stop_self(uint16_t bits) {
+    ASSERT(0 == cpu_int_depth());
+
+    // 当前任务一定处于就绪态
+    task_t *self = THISCPU_GET(g_tid_prev);
+    ready_q_t *q = this_ptr(&g_ready_q);
+
+    // 首先锁住队列，也就锁住了队列的内容
+    int key = irq_spin_take(&q->spin);
+    ready_q_remove(q, self);
+    self->last_cpu = -1;
+    THISCPU_SET(g_tid_next, task_q_head(&q->tasks));
+    irq_spin_give(&q->spin, key);
+}
+
 
 // 取消 stoped 状态，如果变为就绪，就把任务放入就绪队列
 // 返回就绪队列有变更的 CPU 的编号
@@ -203,6 +223,8 @@ int sched_cont(task_t *tid, uint16_t bits) {
 // 每次时钟中断里执行（但是可能重入）
 // 首先锁住就绪队列，防止轮转过程中插入新的任务，导致当前任务不再是最高优先级
 void sched_tick() {
+    ASSERT(cpu_int_depth());
+
     ready_q_t *q = this_ptr(&g_ready_q);
     int key = irq_spin_take(&q->spin);
 
