@@ -11,7 +11,8 @@
 extern PCPU_BSS task_t *g_tid_prev;
 extern PCPU_BSS task_t *g_tid_next;
 
-int sched_stop(task_t *task, uint16_t bits);
+// int sched_stop(task_t *task, uint16_t bits);
+task_t *sched_stop_self(uint16_t bits);
 int sched_cont(task_t *task, uint16_t bits);
 
 void sched_tick();

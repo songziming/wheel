@@ -72,6 +72,7 @@ void semaphore_take(semaphore_t *sem, int n, int timeout) {
     ASSERT(NULL != sem);
     ASSERT(n > 0);
 
+    // 锁住中断，避免执行被打断
     int key = irq_spin_take(&sem->spin);
     if (sem->value >= n) {
         sem->value -= n;
@@ -79,34 +80,31 @@ void semaphore_take(semaphore_t *sem, int n, int timeout) {
         return;
     }
 
-    // 在栈上创建一个 pend 节点，添加到信号量的阻塞队列中
-    // 阻塞任务的栈空间依然有效，正好可以用起来
-    pend_item_t item;
-    task_t *self = THISCPU_GET(g_tid_prev);
-    item.task = self;
-    item.require = n;
-    dl_insert_before(&item.dl, &sem->pend_q);
+    // 阻塞当前任务，从阻塞队列取出
+    task_t *self = sched_stop_self(TASK_PENDING);
 
     // 指定了超时时间，则开启一个 timer
     timer_t wakeup;
     if (timeout) {
-        timer_start(&wakeup, timeout, semaphore_wakeup, &item, &sem);
+        timer_start(&wakeup, timeout, semaphore_wakeup, self, &sem);
     }
 
-    // 阻塞当前任务
-    raw_spin_take(&self->spin);
-    sched_stop(self, TASK_PENDING);
-    raw_spin_give(&self->spin);
+    // 放入阻塞队列，放入的不是 TCB 里面的 q_node 字段，而是一个栈上的元素
+    pend_item_t pender;
+    pender.task = self;
+    pender.require = n;
+    ASSERT(!dl_contains(&sem->pend_q, &pender.dl));
+    dl_insert_before(&pender.dl, &sem->pend_q);
+
+    // 放开锁，切换到其他任务
     irq_spin_give(&sem->spin, key);
-
-    // TODO 有一种可能，将自身任务放入了阻塞队列，即将切换任务，立马得到了信号量
-    //      如果这时切换任务，会怎样？
-
     arch_task_switch();
 
-    // TODO 任务重新开始执行，判断是否成功获得信号量
-    //      还是因为超时或删除信号量导致的重启
-    ASSERT(!dl_contains(&sem->pend_q, &item.dl));
+    // 如果执行到这里，说明已重新恢复执行
+    // 需要检查恢复执行的原因，成功得到（可以查询 pender）
+    if (timeout) {
+        timer_cancel(&wakeup);
+    }
 }
 
 
@@ -140,6 +138,7 @@ void semaphore_give(semaphore_t *sem, int n) {
     }
 
     char resched_this_cpu = 0;
+    uint64_t resched_mask = 0;
 
     // 遍历阻塞队列，尝试唤醒
     for (dlnode_t *i = sem->pend_q.next; i != &sem->pend_q;) {
@@ -164,12 +163,18 @@ void semaphore_give(semaphore_t *sem, int n) {
         if (cpu_index() == cpu) {
             resched_this_cpu = 1; // 现在先不切换，还要恢复后面的阻塞任务
         } else if (-1 != cpu) {
-            // TODO 也可以设置一个 位图flag，遍历完毕后发送多播
-            arch_send_resched(cpu);
+            resched_mask |= 1UL << cpu; // 位图 flag，遍历完毕后发送多播
         }
     }
 
     irq_spin_give(&sem->spin, key);
+
+    // TODO 让 arch 支持多播？
+    for (int i = 0; i < cpu_count(); ++i, resched_mask >>= 1) {
+        if (resched_mask & 1) {
+            arch_send_resched(i);
+        }
+    }
 
     if (resched_this_cpu) {
         arch_task_switch();

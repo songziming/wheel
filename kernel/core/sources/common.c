@@ -123,8 +123,8 @@ INIT_TEXT void common_init() {
     // tick_delay(&wa, 20, my_work, "WORK_20", 0);
     // tick_delay(&wb, 40, my_work, "WORK_40", 0);
 
-    task_t *self = THISCPU_GET(g_tid_prev);
-    task_stop(self);
+    // task_t *self = THISCPU_GET(g_tid_prev);
+    // task_stop(self);
 
     klog("force switch task\n");
     arch_task_switch();

@@ -43,7 +43,7 @@ int task_create_ex(task_t *task, const char *name,
 
 int task_create(task_t *task, const char *name, uint8_t priority, void *entry);
 
-void task_stop(task_t *task);
+// void task_stop(task_t *task);
 void task_resume(task_t *task);
 
 void task_exit();

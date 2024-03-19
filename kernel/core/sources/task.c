@@ -88,16 +88,18 @@ void task_destroy(task_t *task) {
 
 
 
-void task_stop(task_t *task) {
-    ASSERT(NULL != task);
+// void task_stop(task_t *task) {
+//     ASSERT(NULL != task);
 
-    int key = irq_spin_take(&task->spin);
-    sched_stop(task, TASK_STOPPED);
-    irq_spin_give(&task->spin, key);
+//     int key = irq_spin_take(&task->spin);
+//     sched_stop(task, TASK_STOPPED);
+//     irq_spin_give(&task->spin, key);
 
-    // TODO 如果停止的是当前任务，需要立即切换
-}
+//     // TODO 如果停止的是当前任务，需要立即切换
+// }
 
+
+// 创建任务后，任务并不会立即运行
 void task_resume(task_t *task) {
     ASSERT(NULL != task);
 
@@ -128,15 +130,15 @@ static void task_wakeup(void *arg, UNUSED void *sp) {
 }
 
 void task_delay(int ticks) {
-    task_t *self = THISCPU_GET(g_tid_prev);
+    // 关闭中断，避免修改任务状态后发生 interrupt，导致
+    int key = cpu_int_lock();
+
+    task_t *self = sched_stop_self(TASK_STOPPED);
 
     timer_t wait;
     timer_start(&wait, ticks, task_wakeup, self, NULL);
 
-    int key = irq_spin_take(&self->spin);
-    sched_stop(self, TASK_STOPPED);
-    irq_spin_give(&self->spin, key);
-
+    cpu_int_unlock(key);
     arch_task_switch();
 }
 
@@ -144,18 +146,16 @@ void task_delay(int ticks) {
 
 // 退出当前任务
 void task_exit() {
-    task_t *self = THISCPU_GET(g_tid_prev);
+    int key = cpu_int_lock();
 
-    // 将任务标记为已删除（当前任务一定处于就绪态）
-    int key = irq_spin_take(&self->spin);
-    sched_stop(self, TASK_DELETED);
-    irq_spin_give(&self->spin, key);
+    task_t *self = sched_stop_self(TASK_DELETED);
 
     // 当前任务正在运行，不能此时删除 TCB
     // 下一次中断，任务已停止执行，才能删除任务
     timer_t exit;
     timer_start(&exit, 0, (timer_func_t)task_destroy, self, NULL);
 
-    // 立即切换到新任务
+    // 立即切换到新任务，顺便在中断返回过程释放任务栈
+    cpu_int_unlock(key);
     arch_task_switch();
 }

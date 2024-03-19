@@ -170,20 +170,26 @@ int sched_stop(task_t *tid, uint16_t bits) {
 }
 
 
-// 停止当前任务
-void sched_stop_self(uint16_t bits) {
+// 停止当前任务，从就绪队列取出
+// 必须在任务上下文执行，不能在中断上下文执行
+task_t *sched_stop_self(uint16_t bits) {
+    ASSERT(0 != bits);
+    // ASSERT(NULL != pend);
     ASSERT(0 == cpu_int_depth());
 
     // 当前任务一定处于就绪态
-    task_t *self = THISCPU_GET(g_tid_prev);
     ready_q_t *q = this_ptr(&g_ready_q);
+    task_t *self = THISCPU_GET(g_tid_prev);
 
-    // 首先锁住队列，也就锁住了队列的内容
+    // 锁住了队列，也就锁住了队列的内容
     int key = irq_spin_take(&q->spin);
+    self->state |= bits;
     ready_q_remove(q, self);
     self->last_cpu = -1;
     THISCPU_SET(g_tid_next, task_q_head(&q->tasks));
     irq_spin_give(&q->spin, key);
+
+    return self;
 }
 
 
@@ -250,17 +256,25 @@ void sched_tick() {
 // 阻塞状态管理
 //------------------------------------------------------------------------------
 
+#if 0
+
+static void unpend(task_t *tid, UNUSED void *a2) {
+    sched_cont(tid, TASK_PENDING);
+}
+
 // 将当前任务阻塞在队列上，当前任务一定处于运行状态
 void pend_on(pend_q_t *q, int timeout) {
     task_t *tid = THISCPU_GET(g_tid_prev);
 
+    timer_t timer;
     if (timeout) {
         // work_t timer;
+        timer_start(&timer, timeout, unpend, tid, NULL);
         klog("setting timer to fire %d ticks later\n", timeout);
     }
 
-    sched_stop(tid, TASK_PENDING); // 从所在就绪队列中移除，更新 tid_next
-    task_q_push(&q->tasks, tid); // 放进阻塞队列
+    // sched_stop(tid, TASK_PENDING); // 从所在就绪队列中移除，更新 tid_next
+    // task_q_push(&q->tasks, tid); // 放进阻塞队列
 
     arch_task_switch();
 }
@@ -278,6 +292,8 @@ void unpend_all(pend_q_t *q) {
         // TODO 记录每个 CPU 是否应该执行 reched ipi
     }
 }
+
+#endif
 
 
 //------------------------------------------------------------------------------
