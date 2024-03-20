@@ -87,18 +87,6 @@ void task_destroy(task_t *task) {
 }
 
 
-
-// void task_stop(task_t *task) {
-//     ASSERT(NULL != task);
-
-//     int key = irq_spin_take(&task->spin);
-//     sched_stop(task, TASK_STOPPED);
-//     irq_spin_give(&task->spin, key);
-
-//     // TODO 如果停止的是当前任务，需要立即切换
-// }
-
-
 // 创建任务后，任务并不会立即运行
 void task_resume(task_t *task) {
     ASSERT(NULL != task);
@@ -120,6 +108,8 @@ void task_resume(task_t *task) {
 
 
 static void task_wakeup(void *arg, UNUSED void *sp) {
+    ASSERT(cpu_int_depth());
+
     task_t *task = (task_t *)arg;
 
     int key = irq_spin_take(&task->spin);
@@ -128,6 +118,7 @@ static void task_wakeup(void *arg, UNUSED void *sp) {
 
     // 不需要切换任务，我们已经处于中断
 }
+
 
 void task_delay(int ticks) {
     // 关闭中断，避免修改任务状态后发生 interrupt，导致
@@ -141,7 +132,6 @@ void task_delay(int ticks) {
     cpu_int_unlock(key);
     arch_task_switch();
 }
-
 
 
 // 退出当前任务

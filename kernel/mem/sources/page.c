@@ -21,12 +21,6 @@ typedef struct page {
     page_info_t info;
 } page_t;
 
-// 相同类型的块可以组成链表（双向不循环）
-typedef struct pglist {
-    pfn_t head;
-    pfn_t tail;
-} pglist_t;
-
 
 
 // 全局页描述符数组，每个物理页面都对应一个结构体
@@ -45,6 +39,16 @@ static shell_cmd_t g_cmd_page;
 //------------------------------------------------------------------------------
 // 连续的物理页构成块，多个页块组成链表
 //------------------------------------------------------------------------------
+
+inline pfn_t prev_page_block(pfn_t blk) {
+    ASSERT(INVALID_PFN != blk);
+    return g_pages[blk].head ? g_pages[blk].prev : INVALID_PFN;
+}
+
+inline pfn_t next_page_block(pfn_t blk) {
+    ASSERT(INVALID_PFN != blk);
+    return g_pages[blk].head ? g_pages[blk].next : INVALID_PFN;
+}
 
 // 返回页所在的块
 pfn_t page_block_head(pfn_t pfn) {
@@ -271,8 +275,7 @@ static pfn_t block_alloc(uint8_t rank, pfn_t period, pfn_t phase, page_type_t ty
     ASSERT(0 == (phase & (size - 1)));
 
     for (uint8_t blk_rank = rank; blk_rank < RANK_NUM; ++blk_rank, size <<= 1) {
-        // 计算 phase 相对于当前 rank 的偏移量
-        pfn_t blk_phase = phase & ~(size - 1);
+        pfn_t blk_phase = phase & ~(size - 1); // phase 相对于当前 rank 的偏移量
 
         // 遍历本层的 free block，寻找目标 color
         pfn_t blk = g_blocks[blk_rank].head;
