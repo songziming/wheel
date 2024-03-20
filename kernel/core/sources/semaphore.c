@@ -24,9 +24,10 @@ void semaphore_init(semaphore_t *sem, int n, int max) {
     }
 
     sem->spin = SPIN_INIT;
-    dl_init_circular(&sem->pend_q);
+    // dl_init_circular(&sem->pend_q);
     sem->limit = max;
     sem->value = n;
+    priority_q_init(&sem->penders);
 }
 
 
@@ -43,19 +44,20 @@ void semaphore_init(semaphore_t *sem, int n, int max) {
 
 // 尚未得到信号量，但等待时间已过
 static void semaphore_wakeup(void *arg1, void *arg2) {
-    pend_item_t *pender = (pend_item_t *)arg1;
-    semaphore_t *sema = (semaphore_t *)arg2;
+    semaphore_t *sem = (semaphore_t *)arg1;
+    pend_item_t *pender = (pend_item_t *)arg2;
 
     task_t *task = pender->task;
 
-    int key = irq_spin_take(&sema->spin);
+    int key = irq_spin_take(&sem->spin);
     raw_spin_take(&task->spin);
 
-    dl_remove(&pender->dl);
+    priority_q_remove(&sem->penders, task, &pender->dl);
+    // dl_remove(&pender->dl);
     int cpu = sched_cont(task, TASK_PENDING); // 恢复任务
 
     raw_spin_give(&task->spin);
-    irq_spin_give(&sema->spin, key);
+    irq_spin_give(&sem->spin, key);
 
     if (cpu_index() == cpu) {
         arch_task_switch();
@@ -83,18 +85,19 @@ void semaphore_take(semaphore_t *sem, int n, int timeout) {
     // 阻塞当前任务，从阻塞队列取出
     task_t *self = sched_stop_self(TASK_PENDING);
 
-    // 指定了超时时间，则开启一个 timer
-    timer_t wakeup;
-    if (timeout) {
-        timer_start(&wakeup, timeout, semaphore_wakeup, self, &sem);
-    }
-
     // 放入阻塞队列，放入的不是 TCB 里面的 q_node 字段，而是一个栈上的元素
     pend_item_t pender;
     pender.task = self;
     pender.require = n;
-    ASSERT(!dl_contains(&sem->pend_q, &pender.dl));
-    dl_insert_before(&pender.dl, &sem->pend_q);
+    // ASSERT(!dl_contains(&sem->pend_q, &pender.dl));
+    // dl_insert_before(&pender.dl, &sem->pend_q);
+    priority_q_push(&sem->penders, self, &pender.dl);
+
+    // 指定了超时时间，则开启一个 timer
+    timer_t wakeup;
+    if (timeout) {
+        timer_start(&wakeup, timeout, semaphore_wakeup, &sem, &pender);
+    }
 
     // 放开锁，切换到其他任务
     irq_spin_give(&sem->spin, key);
@@ -106,10 +109,6 @@ void semaphore_take(semaphore_t *sem, int n, int timeout) {
         timer_cancel(&wakeup);
     }
 }
-
-
-
-// extern task_t g_shell_tcb;
 
 
 void semaphore_give(semaphore_t *sem, int n) {
@@ -124,16 +123,9 @@ void semaphore_give(semaphore_t *sem, int n) {
     }
 
     // 如果没有阻塞的任务就直接返回
-    if (dl_is_lastone(&sem->pend_q)) {
+    dlnode_t *head = priority_q_head(&sem->penders);
+    if (NULL == head) {
         irq_spin_give(&sem->spin, key);
-// #if 1
-//         key = irq_spin_take(&g_shell_tcb.spin);
-//         klog("(%d)", g_shell_tcb.state);
-//         if (g_shell_tcb.state) {
-//             klog("(%p:%p)", g_shell_tcb.q_node.prev, g_shell_tcb.q_node.next);
-//         }
-//         irq_spin_give(&g_shell_tcb.spin, key);
-// #endif
         return;
     }
 
@@ -141,23 +133,22 @@ void semaphore_give(semaphore_t *sem, int n) {
     uint64_t resched_mask = 0;
 
     // 遍历阻塞队列，尝试唤醒
-    for (dlnode_t *i = sem->pend_q.next; i != &sem->pend_q;) {
-        pend_item_t *item = containerof(i, pend_item_t, dl);
-        i = i->next; // 遍历的同时要删除节点，需要提前得到下一个 node
+    // for (dlnode_t *i = sem->pend_q.next; i != &sem->pend_q;) {
+    while (head && (sem->value > 0)) {
+        pend_item_t *item = containerof(head, pend_item_t, dl);
+        head = priority_q_head(&sem->penders);
 
         if (sem->value < item->require) {
-            klog("(nowake)");
             continue;
         }
 
         sem->value -= item->require;
-        dl_remove(&item->dl);
+        // dl_remove(&item->dl);
+        priority_q_remove(&sem->penders, item->task, &item->dl);
 
         task_t *task = item->task;
         raw_spin_take(&task->spin);
         int cpu = sched_cont(task, TASK_PENDING); // 恢复任务
-        // int cpu = task->last_cpu;
-        // uint16_t state = task->state;
         raw_spin_give(&task->spin);
 
         if (cpu_index() == cpu) {

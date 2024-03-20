@@ -6,21 +6,16 @@
 
 
 
-typedef struct task_q {
-    uint32_t  priorities; // 位图，表示队列包含的优先级
-    dlnode_t *heads[PRIORITY_NUM];
-} task_q_t;
-
 typedef struct ready_q {
     spin_t   spin;
     uint32_t total_tick; // 队列中所有任务的时间片之和
-    task_q_t tasks;
+    priority_q_t tasks;
 } ready_q_t;
 
-typedef struct pend_q {
-    spin_t   spin;
-    task_q_t tasks;
-} pend_q_t;
+// typedef struct pend_q {
+//     spin_t   spin;
+//     priority_q_t tasks;
+// } pend_q_t;
 
 
 
@@ -41,45 +36,52 @@ static shell_cmd_t g_cmd_sched;
 // 任务队列
 //------------------------------------------------------------------------------
 
-static void task_q_push(task_q_t *q, task_t *tid) {
+// 放入队列的元素可以是 task，也可以是 pender
+
+void priority_q_init(priority_q_t *q) {
+    q->priorities = 0U;
+    memset(q->heads, 0, PRIORITY_NUM * sizeof(dlnode_t *));
+}
+
+void priority_q_push(priority_q_t *q, task_t *tid, dlnode_t *dl) {
     int pri = tid->priority;
 
     if ((1U << pri) & q->priorities) {
         ASSERT(NULL != q->heads[pri]);
-        dl_insert_before(&tid->q_node, q->heads[pri]);
+        dl_insert_before(dl, q->heads[pri]);
     } else {
         ASSERT(NULL == q->heads[pri]);
-        dl_init_circular(&tid->q_node);
-        q->heads[pri] = &tid->q_node;
+        dl_init_circular(dl);
+        q->heads[pri] = dl;
         q->priorities |= 1U << pri;
     }
 }
 
-static task_t *task_q_head(task_q_t *q) {
+dlnode_t *priority_q_head(priority_q_t *q) {
     if (0 == q->priorities) {
         return NULL;
     }
 
     int top = __builtin_ctz(q->priorities);
     ASSERT(NULL != q->heads[top]);
-    return containerof(q->heads[top], task_t, q_node);
+    return q->heads[top];
 }
 
-static void task_q_remove(task_q_t *q, task_t *tid) {
+void priority_q_remove(priority_q_t *q, task_t *tid, dlnode_t *dl) {
     int pri = tid->priority;
     ASSERT((1U << pri) & q->priorities);
     ASSERT(NULL != q->heads[pri]);
-    ASSERT((&tid->q_node == q->heads[pri]) || dl_contains(q->heads[pri], &tid->q_node));
+    ASSERT((dl == q->heads[pri]) || dl_contains(q->heads[pri], dl));
 
-    if (dl_is_lastone(&tid->q_node)) {
-        ASSERT(&tid->q_node == q->heads[pri]);
+    if (dl_is_lastone(dl)) {
+        ASSERT(dl == q->heads[pri]);
         q->priorities &= ~(1U << pri);
         q->heads[pri] = NULL;
         return;
     }
 
-    dlnode_t *next = dl_remove(&tid->q_node);
-    if (&tid->q_node == q->heads[pri]) {
+    dlnode_t *next = dl_remove(dl);
+    if (dl == q->heads[pri]) {
         q->heads[pri] = next;
     }
 }
@@ -91,16 +93,16 @@ static void task_q_remove(task_q_t *q, task_t *tid) {
 //------------------------------------------------------------------------------
 
 // static inline task_t *ready_q_head(ready_q_t *rdy) {
-//     return task_q_head(&rdy->tasks);
+//     return priority_q_head(&rdy->tasks);
 // }
 
 static inline void ready_q_insert(ready_q_t *rdy, task_t *tid) {
-    task_q_push(&rdy->tasks, tid);
+    priority_q_push(&rdy->tasks, tid, &tid->q_node);
     rdy->total_tick += tid->tick_reload;
 }
 
 static void ready_q_remove(ready_q_t *rdy, task_t *tid) {
-    task_q_remove(&rdy->tasks, tid);
+    priority_q_remove(&rdy->tasks, tid, &tid->q_node);
     rdy->total_tick -= tid->tick_reload;
 }
 
@@ -139,6 +141,8 @@ static int lowest_cpu() {
 
 // TODO 我们可以要求，只有自己可以停止任务的执行，不允许停止其他的 task
 
+
+#if 0
 // 停止任务执行，从就绪队列中移除（目标任务可能位于其他 CPU）
 // 同时持有任务和所属就绪队列的自旋锁
 // 返回受影响的 CPU 的编号（-1 表示没有影响）
@@ -162,12 +166,13 @@ int sched_stop(task_t *tid, uint16_t bits) {
     int key = irq_spin_take(&q->spin);
     ready_q_remove(q, tid);
     tid->last_cpu = -1;
-    *(task_t **)pcpu_ptr(cpu, &g_tid_next) = task_q_head(&q->tasks);
+    *(task_t **)pcpu_ptr(cpu, &g_tid_next) = priority_q_head(&q->tasks);
     irq_spin_give(&q->spin, key);
 
     // 返回有更新的就绪队列编号
     return cpu;
 }
+#endif
 
 
 // 停止当前任务，从就绪队列取出
@@ -186,7 +191,8 @@ task_t *sched_stop_self(uint16_t bits) {
     self->state |= bits;
     ready_q_remove(q, self);
     self->last_cpu = -1;
-    THISCPU_SET(g_tid_next, task_q_head(&q->tasks));
+    task_t *head = containerof(priority_q_head(&q->tasks), task_t, q_node);
+    THISCPU_SET(g_tid_next, head);
     irq_spin_give(&q->spin, key);
 
     return self;
@@ -220,7 +226,8 @@ int sched_cont(task_t *tid, uint16_t bits) {
 
     int key = irq_spin_take(&q->spin);
     ready_q_insert(q, tid);
-    *(task_t **)pcpu_ptr(tid->last_cpu, &g_tid_next) = task_q_head(&q->tasks);
+    task_t *head = containerof(priority_q_head(&q->tasks), task_t, q_node);
+    *(task_t **)pcpu_ptr(tid->last_cpu, &g_tid_next) = head;
     irq_spin_give(&q->spin, key);
 
     return tid->last_cpu;
@@ -249,112 +256,6 @@ void sched_tick() {
     raw_spin_give(&curr->spin);
     irq_spin_give(&q->spin, key);
 }
-
-
-
-//------------------------------------------------------------------------------
-// 阻塞状态管理
-//------------------------------------------------------------------------------
-
-#if 0
-
-static void unpend(task_t *tid, UNUSED void *a2) {
-    sched_cont(tid, TASK_PENDING);
-}
-
-// 将当前任务阻塞在队列上，当前任务一定处于运行状态
-void pend_on(pend_q_t *q, int timeout) {
-    task_t *tid = THISCPU_GET(g_tid_prev);
-
-    timer_t timer;
-    if (timeout) {
-        // work_t timer;
-        timer_start(&timer, timeout, unpend, tid, NULL);
-        klog("setting timer to fire %d ticks later\n", timeout);
-    }
-
-    // sched_stop(tid, TASK_PENDING); // 从所在就绪队列中移除，更新 tid_next
-    // task_q_push(&q->tasks, tid); // 放进阻塞队列
-
-    arch_task_switch();
-}
-
-
-// 将队列里阻塞的任务全部唤醒
-void unpend_all(pend_q_t *q) {
-    while (1) {
-        task_t *tid = task_q_head(&q->tasks);
-        if (NULL == tid) {
-            return;
-        }
-
-        sched_cont(tid, TASK_PENDING);
-        // TODO 记录每个 CPU 是否应该执行 reched ipi
-    }
-}
-
-#endif
-
-
-//------------------------------------------------------------------------------
-// 多核任务调度，任务执行状态控制
-//------------------------------------------------------------------------------
-
-
-
-
-// 改变任务状态的函数也是在任务中调用，要注意改变当前任务状态的情况
-
-// 调用下面的函数，需要 caller 已经持有 tid->spin
-
-// sched 函数只负责更新就绪队列，不会切换任务，也不会发送 IPI
-
-
-// // 挑选负载最轻的，优先级最低的 CPU
-// static int select_cpu(task_t *tid) {
-//     ASSERT(NULL != tid);
-//     ASSERT(tid->spin.ticket_counter > tid->spin.service_counter);
-
-//     int lowest_cpu = 0;
-//     int lowest_tick = 0; // 就绪队列总负载
-//     int lowest_pri = 0; // 优先级
-
-//     // 优先选择之前运行的 CPU，缓存无需预热
-//     if (tid->last_cpu >= 0) {
-//         ASSERT(tid->affinity < 0);
-//         lowest_cpu = tid->last_cpu;
-//         ready_q_t *q = pcpu_ptr(lowest_cpu, &g_ready_q);
-//         int key = irq_spin_take(&q->spin);
-//         lowest_tick = q->total_tick;
-//         lowest_pri = __builtin_ctz(q->tasks.priorities);
-//         irq_spin_give(&q->spin, key);
-//     }
-
-//     for (int i = 0; i < cpu_count(); ++i) {
-//         if (tid->last_cpu == i) {
-//             continue;
-//         }
-
-//         ready_q_t *q = pcpu_ptr(i, &g_ready_q);
-//         int key = irq_spin_take(&q->spin);
-//         int tick = q->total_tick;
-//         int pri = __builtin_ctz(q->tasks.priorities);
-//         irq_spin_give(&q->spin, key);
-
-//         if (tick < lowest_tick) {
-//             lowest_cpu = i;
-//             lowest_tick = tick;
-//             lowest_pri = pri;
-//         } else if ((tick == lowest_tick) && (pri < lowest_pri)) {
-//             lowest_cpu = i;
-//             lowest_pri = pri;
-//         }
-//     }
-
-//     return lowest_cpu;
-// }
-
-
 
 
 //------------------------------------------------------------------------------
@@ -399,7 +300,8 @@ INIT_TEXT void sched_init() {
         ready_q_t *q = pcpu_ptr(i, &g_ready_q);
         q->spin = SPIN_INIT;
         q->total_tick = 0;
-        memset(&q->tasks, 0, sizeof(task_q_t));
+        priority_q_init(&q->tasks);
+        // memset(&q->tasks, 0, sizeof(priority_q_t));
         // ready_q_init(q);
 
         task_t *idle = pcpu_ptr(i, &g_idle_tcb);

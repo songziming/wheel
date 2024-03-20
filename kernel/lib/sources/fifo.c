@@ -33,8 +33,6 @@ size_t fifo_write(fifo_t *fifo, const void *ptr, size_t len, int force) {
     uint8_t *dst = fifo->data;
     size_t mask = fifo->size - 1;
 
-    // klog("writing %p:%ld to %p\n", src, len, dst);
-
     size_t copy = fifo->r_head + fifo->size - fifo->w_head;
     if (force || (copy > len)) {
         copy = len;
