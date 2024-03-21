@@ -33,6 +33,9 @@ static INIT_DATA volatile int g_cpu_started = 0; // 已完成启动的 CPU 数�
 static task_t root_tcb;
 
 
+static mb2_tag_vbe_t *g_vbe = NULL;
+
+
 static INIT_TEXT void mb1_init(uint32_t ebx);
 static INIT_TEXT void mb2_init(uint32_t ebx);
 static INIT_TEXT NORETURN void sys_init_ap();
@@ -56,6 +59,9 @@ static void serial_console_puts(const char *s, size_t n) {
 //------------------------------------------------------------------------------
 // BSP 初始化流程，使用初始栈，从 GRUB 跳转而来
 //------------------------------------------------------------------------------
+
+// vbe.c
+void vbe_parse(mb2_tag_vbe_t *tag);
 
 INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     if (AP_BOOT_MAGIC == eax) {
@@ -85,6 +91,11 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     } else {
         console_init();
         set_log_func(serial_console_puts);
+    }
+
+    // TODO 检查 vbe 详细信息
+    if (g_vbe) {
+        vbe_parse(g_vbe);
     }
 
     // 寻找 RSDP，并找出所有 ACPI 表
@@ -260,6 +271,12 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
                 g_fb.b.position  = fb->b_field_position;
                 g_fb.b.mask_size = fb->b_mask_size;
             }
+            break;
+        }
+        case MB2_TAG_TYPE_VBE: {
+            // TODO 还有 multiboot 1 也加入 VBE 支持
+            mb2_tag_vbe_t *vbe = (mb2_tag_vbe_t *)tag;
+            g_vbe = vbe;
             break;
         }
         default:
