@@ -26,6 +26,6 @@ size_t sym_locate(const char *name);
 const char *sym_resolve(size_t addr, size_t *rela);
 
 void print_frames(const size_t *frames, int num);
-void print_stacktrace();
+void klog_stacktrace();
 
 #endif // DEBUG_H

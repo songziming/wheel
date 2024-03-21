@@ -4,7 +4,7 @@
 #include <arch_api.h>
 #include <dev/acpi.h>
 
-int arch_unwind(size_t *addrs, int max, uint64_t rbp);
+int arch_unwind_from(size_t *addrs, int max, uint64_t rbp);
 
 INIT_TEXT void arch_pci_lib_init(acpi_tbl_t *mcfg);
 

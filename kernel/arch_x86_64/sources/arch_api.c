@@ -58,7 +58,7 @@ void emu_break() {
 //      |    old RBP    | <- RBP
 //      |  local var x  |
 //  low |  local var y  | <- RSP
-int arch_unwind(size_t *addrs, int max, uint64_t rbp) {
+int arch_unwind_from(size_t *addrs, int max, uint64_t rbp) {
     int i = 0;
 
     for (; (i < max) && (0 != rbp); ++i) {
@@ -74,10 +74,10 @@ int arch_unwind(size_t *addrs, int max, uint64_t rbp) {
 }
 
 // 获取当前调用栈，返回深度
-int unwind(size_t *addrs, int max) {
+int arch_unwind(size_t *addrs, int max) {
     uint64_t rbp;
     __asm__("movq %%rbp, %0" : "=r"(rbp));
-    return arch_unwind(addrs, max, rbp);
+    return arch_unwind_from(addrs, max, rbp);
 }
 
 

@@ -14,8 +14,8 @@ void handle_pagefault(int vec, arch_regs_t *f) {
     klog("#PF cpu-%d rip=%lx rsp=%lx\n", cpu_index(), f->rip, f->rsp);
 
     size_t frames[32];
-    // int depth = arch_unwind(frames, 32, f->rbp);
-    int depth = unwind(frames, 32);
+    // int depth = arch_unwind_from(frames, 32, f->rbp);
+    int depth = arch_unwind(frames, 32);
     print_frames(frames, depth);
 
     uint64_t va = read_cr2();

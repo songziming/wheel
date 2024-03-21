@@ -39,7 +39,7 @@ void handle_interrupt(int vec, arch_regs_t *f) {
     klog("interrupt %d\n", vec);
 
     size_t frames[32];
-    int depth = arch_unwind(frames, 32, f->rbp);
+    int depth = arch_unwind_from(frames, 32, f->rbp);
     print_frames(frames, depth);
 
     cpu_halt();

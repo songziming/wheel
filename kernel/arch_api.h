@@ -44,7 +44,7 @@ uint32_t atomic32_inc(volatile uint32_t *ptr);
 NORETURN void emu_exit(int ret);
 void emu_break();
 
-int unwind(size_t *addrs, int max);
+int arch_unwind(size_t *addrs, int max);
 
 
 //------------------------------------------------------------------------------

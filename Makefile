@@ -20,27 +20,33 @@ OUT_IMG := $(OUT_DIR)/disc.img
 OUT_TEST := $(OUT_DIR)/test
 
 
+define filterout # pattern list
+    $(foreach v,$(2),$(if $(findstring $(1),$(v)),,$(v)))
+endef
 
-define get_subdirs
+define all_nonarch_dirs
+    $(call filterout,arch,$(patsubst %/.,%,$(wildcard kernel/*/.)))
+endef
+
+define get_subdirs # dirs subdir-pattern
     $(foreach d,$(1),$(wildcard $(d)/$(2)))
 endef
 
-define get_sources
+define get_sources # dirs
     $(foreach d,$(1),$(shell find $(d) -name "*.S" -o -name "*.c" -o -name "*.cc"))
 endef
 
-define all_files
+define all_files # dirs mid_dir
     $(call get_sources,$(call get_subdirs,$(1),$(2)))
 endef
 
 
 
-KDIRS := kernel/arch_$(ARCH)
-KDIRS += $(filter-out $(wildcard kernel/arch_*/.),$(wildcard kernel/*/.))
-KINCS := $(patsubst %,%/headers,$(KDIRS)) kernel kernel/arch_$(ARCH)
+KDIRS := kernel/arch_$(ARCH) $(call all_nonarch_dirs)
+KINCS := kernel kernel/arch_$(ARCH) $(patsubst %,%/headers,$(KDIRS))
 KOBJS := $(patsubst %,$(OUT_DIR)/objs/%.ko,$(call all_files,$(KDIRS),sources))
 
-TSRCS := $(call all_files,$(KDIRS),tests) tools/kernel_test/test.c
+TSRCS := $(call all_files,$(KDIRS),tests) host_tools/kernel_test/test.c
 TOBJS := $(patsubst %,$(OUT_DIR)/objs/%.to,$(TSRCS))
 
 KCFLAGS := -std=c11 $(KINCS:%=-I%) -Wall -Wextra -Wshadow -Werror=implicit
@@ -104,14 +110,14 @@ $(OUT_ELF): $(KOBJS) | $(KLAYOUT)
 
 
 # 创建引导介质
-$(OUT_ISO): $(OUT_ELF) tools/grub.cfg
+$(OUT_ISO): $(OUT_ELF) host_tools/grub.cfg
 	@ cp $(OUT_ELF) $(ISO_DIR)/wheel.elf
-	@ cp tools/grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
-	@ grub-mkrescue -d tools/grub-i386-pc -o $@ $(ISO_DIR)
-$(OUT_IMG): $(OUT_ELF) tools/grub.cfg
-	@ tools/diskimg_create.sh $@
-	@ tools/diskimg_update.sh $(OUT_ELF) $@ wheel.elf
-	@ tools/diskimg_update.sh tools/grub.cfg $@ boot/grub/grub.cfg
+	@ cp host_tools/grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
+	@ grub-mkrescue -d host_tools/grub-i386-pc -o $@ $(ISO_DIR)
+$(OUT_IMG): $(OUT_ELF) host_tools/grub.cfg
+	@ host_tools/diskimg_create.sh $@
+	@ host_tools/diskimg_update.sh $(OUT_ELF) $@ wheel.elf
+	@ host_tools/diskimg_update.sh host_tools/grub.cfg $@ boot/grub/grub.cfg
 
 
 

@@ -1,3 +1,9 @@
+// 内核调试支持，可以拆分为多个模块
+//  - 调试输出，创建专门的 log-task，结合虚拟文件 /var/klog，负责记录输出
+//  - 内核符号表，尚不支持 dwarf 调试信息，目前内核尚不支持动态链接，如要支持内核模块，可以与符号表管理结合起来
+//  - 断言、异常，各种错误检查（栈溢出、ubsan、asan 等），应该开发一种蓝屏机制，将错误状态保存下来
+
+
 #include <debug.h>
 #include <wheel.h>
 #include <format.h>
@@ -219,9 +225,9 @@ void print_frames(const size_t *frames, int num) {
     }
 }
 
-void print_stacktrace() {
+void klog_stacktrace() {
     size_t frames[32];
-    int depth = unwind(frames, 32);
+    int depth = arch_unwind(frames, 32);
     print_frames(&frames[1], depth - 1);
 }
 
@@ -232,7 +238,7 @@ void print_stacktrace() {
 
 void handle_assert_fail(const char *file, const char *func, int line) {
     klog("Assert failed %s:%d, function %s\n", file, line, func);
-    print_stacktrace();
+    klog_stacktrace();
     // emu_exit(1);
     while (1) {
         cpu_halt();
@@ -249,6 +255,6 @@ const uintptr_t __stack_chk_guard = 0x595e9fbd94fda766ULL;
 
 NORETURN void __stack_chk_fail() {
     klog("fatal: stack smashing detected\n");
-    print_stacktrace();
+    klog_stacktrace();
     emu_exit(1);
 }
