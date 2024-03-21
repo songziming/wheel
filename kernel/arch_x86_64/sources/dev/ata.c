@@ -181,13 +181,13 @@ static INIT_TEXT void ata_detect(int secondary, int slave) {
 
     // verify flags.ata bit
     if (info[0] & 0x8000) {
-        klog("this is not ATA!\n");
+        klog("%s-%s not ATA!\n", name_channel, name_device);
         return;
     }
 
     // 我们要求 LBA 必须支持
     if (!(info[49] & 0x0200)) {
-        klog("ATA without LBA support!\n");
+        klog("%s-%s no LBA support!\n", name_channel, name_device);
         return;
     }
 

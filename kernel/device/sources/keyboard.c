@@ -13,13 +13,13 @@
 
 static keycode_t g_kbd_buff[KEYBOARD_BUFF_LEN];
 static fifo_t g_kbd_fifo = FIFO_INIT;
-static semaphore_t g_kbd_sem;
+static priority_semaphore_t g_kbd_sem;
 
 
 
 INIT_TEXT void keyboard_init() {
     fifo_init(&g_kbd_fifo, g_kbd_buff, sizeof(g_kbd_buff));
-    semaphore_init(&g_kbd_sem, 0, KEYBOARD_BUFF_LEN);
+    priority_semaphore_init(&g_kbd_sem, 0, KEYBOARD_BUFF_LEN);
 }
 
 
@@ -33,14 +33,14 @@ void keyboard_send(keycode_t key) {
     // }
 
     fifo_write(&g_kbd_fifo, &key, sizeof(key), 1);
-    semaphore_give(&g_kbd_sem, 1);
+    priority_semaphore_give(&g_kbd_sem, 1);
 }
 
 
 // 应该由 OS 提供一套 message queue 机制，结合 fifo 与信号量
 keycode_t keyboard_recv() {
     keycode_t key;
-    semaphore_take(&g_kbd_sem, 1, 0);
+    priority_semaphore_take(&g_kbd_sem, 1, 0);
     fifo_read(&g_kbd_fifo, &key, sizeof(key));
     return key;
 }

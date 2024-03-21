@@ -264,7 +264,7 @@ arch_task_switch:
     popq    %rax
 
     cmpq    $0, %gs:(g_int_depth)
-    jne     no_yield    // 处于中断上下文，不许切换任务（中断退出时会自动切换）
+    jne     no_yield    // 处于中断，不必切换任务（中断退出时会自动切换）
 
     movq    %gs:(g_tid_prev), %rsi
     movq    %gs:(g_tid_next), %rdi

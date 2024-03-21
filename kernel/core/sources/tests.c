@@ -11,7 +11,7 @@
 // 测试 IPC - 生产者消费者
 //------------------------------------------------------------------------------
 
-static semaphore_t g_sem;
+static priority_semaphore_t g_sem;
 
 static void func_producer() {
     //
@@ -22,7 +22,7 @@ static void func_consumer() {
 }
 
 static int test_ipc(UNUSED int argc, UNUSED char *argv[]) {
-    semaphore_init(&g_sem, 10, 10);
+    priority_semaphore_init(&g_sem, 10, 10);
 
     task_t p, c;
     task_create(&p, "producer", 10, func_producer);

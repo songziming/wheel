@@ -77,11 +77,6 @@ static void check_mbr_partitions(blk_dev_t *blk) {
     memcpy(entries, sec0 + 446, 64);
     kernel_heap_free(sec0);
 
-    // 最多四个主分区，记录每个主分区的起始扇区和扇区数量
-    // 扇区数量为零，表示这个分区不存在
-    // uint64_t primary_starts[4];
-    // uint64_t primary_counts[4] = { 0 };
-
     int bootable_id = -1; // 哪个分区是可引导的（最多一个）
     int extended_id = -1; // 哪个分区是扩展分区（最多一个）
 

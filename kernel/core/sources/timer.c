@@ -81,5 +81,3 @@ void timer_cancel(timer_t *timer) {
 
     irq_spin_give(&g_timer_spin, key);
 }
-
-
