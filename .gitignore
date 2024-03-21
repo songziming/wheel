@@ -5,5 +5,5 @@ build*/
 *.profraw
 *.profdata
 
-*.img
-*.lock
+/*.img
+/*.lock
