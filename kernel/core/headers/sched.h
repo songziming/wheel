@@ -15,6 +15,7 @@ extern PCPU_BSS task_t *g_tid_next;
 
 
 void priority_q_init(priority_q_t *q);
+int priority_q_contains(priority_q_t *q, task_t *tid, dlnode_t *dl);
 void priority_q_push(priority_q_t *q, task_t *tid, dlnode_t *dl);
 dlnode_t *priority_q_head(priority_q_t *q);
 void priority_q_remove(priority_q_t *q, task_t *tid, dlnode_t *dl);

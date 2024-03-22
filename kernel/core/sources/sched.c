@@ -43,6 +43,12 @@ void priority_q_init(priority_q_t *q) {
     memset(q->heads, 0, PRIORITY_NUM * sizeof(dlnode_t *));
 }
 
+int priority_q_contains(priority_q_t *q, task_t *tid, dlnode_t *dl) {
+    int pri = tid->priority;
+    dlnode_t *head = q->heads[pri];
+    return (dl == head) || (head && dl_contains(head, dl));
+}
+
 void priority_q_push(priority_q_t *q, task_t *tid, dlnode_t *dl) {
     int pri = tid->priority;
 
@@ -71,7 +77,8 @@ void priority_q_remove(priority_q_t *q, task_t *tid, dlnode_t *dl) {
     int pri = tid->priority;
     ASSERT((1U << pri) & q->priorities);
     ASSERT(NULL != q->heads[pri]);
-    ASSERT((dl == q->heads[pri]) || dl_contains(q->heads[pri], dl));
+    ASSERT(priority_q_contains(q, tid, dl));
+    // ASSERT((dl == q->heads[pri]) || dl_contains(q->heads[pri], dl));
 
     if (dl_is_lastone(dl)) {
         ASSERT(dl == q->heads[pri]);

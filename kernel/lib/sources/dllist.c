@@ -95,3 +95,27 @@ dlnode_t *dl_remove(dlnode_t *node) {
 
     return NULL;
 }
+
+dlnode_t *dl_pop_prev(dlnode_t *node) {
+    ASSERT(NULL != node);
+
+    if (dl_is_lastone(node)) {
+        return NULL;
+    }
+
+    dlnode_t *prev = node->prev;
+    dl_remove(prev);
+    return prev;
+}
+
+dlnode_t *dl_pop_next(dlnode_t *node) {
+    ASSERT(NULL != node);
+
+    if (dl_is_lastone(node)) {
+        return NULL;
+    }
+
+    dlnode_t *next = node->next;
+    dl_remove(next);
+    return next;
+}

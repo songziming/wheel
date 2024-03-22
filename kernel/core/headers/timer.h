@@ -20,5 +20,6 @@ void timer_proceed();
 
 void timer_start(timer_t *timer, int tick, timer_func_t func, void *a1, void *a2);
 void timer_cancel(timer_t *timer);
+void timer_cancel_sync(timer_t *timer);
 
 #endif // TIMER_H

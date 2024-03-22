@@ -10,12 +10,13 @@ typedef struct fifo {
     size_t   w_head;
 } fifo_t;
 
-#define FIFO_INIT ((fifo_t){ NULL,0,0,0 })
+void fifo_init(fifo_t *fifo, void *buff, size_t size);
+int  fifo_is_full(fifo_t *fifo);
+int  fifo_is_empty(fifo_t *fifo);
 
-void fifo_init(fifo_t *fifo, void *buff, size_t len);
-int fifo_is_full(fifo_t *fifo);
-int fifo_is_empty(fifo_t *fifo);
-size_t fifo_write(fifo_t *fifo, const void *ptr, size_t len, int force);
-size_t fifo_read(fifo_t *fifo, void *ptr, size_t len);
+size_t fifo_write(fifo_t *fifo, const void *ptr, size_t min, size_t max);
+void fifo_force_write(fifo_t *fifo, const void *ptr, size_t len);
+
+size_t fifo_read(fifo_t *fifo, void *ptr, size_t min, size_t max);
 
 #endif // FIFO_H

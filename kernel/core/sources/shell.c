@@ -11,6 +11,9 @@
 #include <wheel.h>
 
 
+// TODO 数字小键盘尚不支持
+
+
 // 一些按键的状态
 static char kbd_capslock = 0;
 static char kbd_numlock  = 1;

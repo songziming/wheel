@@ -19,5 +19,7 @@ void dl_insert_before(dlnode_t *node, dlnode_t *ref);
 void dl_insert_after(dlnode_t *node, dlnode_t *ref);
 
 dlnode_t *dl_remove(dlnode_t *node);
+dlnode_t *dl_pop_prev(dlnode_t *node);
+dlnode_t *dl_pop_next(dlnode_t *node);
 
 #endif // DLLIST_H

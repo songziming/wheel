@@ -40,9 +40,9 @@ mb2_header:
 .info_req_tag:
     .word   MB2_HEADER_TAG_INFORMATION_REQUEST
     .word   0
-    .long   8 + 5 * 4
+    .long   8 + 4 * 4
     .long   MB2_TAG_TYPE_MMAP
-    .long   MB2_TAG_TYPE_VBE
+    // .long   MB2_TAG_TYPE_VBE
     .long   MB2_TAG_TYPE_ELF_SECTIONS
     .long   MB2_TAG_TYPE_ACPI_OLD
     .long   MB2_TAG_TYPE_ACPI_NEW

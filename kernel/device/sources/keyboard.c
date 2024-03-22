@@ -12,7 +12,7 @@
 // 对 /dev/keyboard 文件的读写是线性的，自动序列化
 
 static keycode_t g_kbd_buff[KEYBOARD_BUFF_LEN];
-static fifo_t g_kbd_fifo = FIFO_INIT;
+static fifo_t g_kbd_fifo; // = FIFO_INIT;
 static priority_semaphore_t g_kbd_sem;
 
 
@@ -32,7 +32,7 @@ void keyboard_send(keycode_t key) {
     //     klog("<down:%x>", key);
     // }
 
-    fifo_write(&g_kbd_fifo, &key, sizeof(key), 1);
+    fifo_force_write(&g_kbd_fifo, &key, sizeof(key));
     priority_semaphore_give(&g_kbd_sem, 1);
 }
 
@@ -41,6 +41,6 @@ void keyboard_send(keycode_t key) {
 keycode_t keyboard_recv() {
     keycode_t key;
     priority_semaphore_take(&g_kbd_sem, 1, 0);
-    fifo_read(&g_kbd_fifo, &key, sizeof(key));
+    fifo_read(&g_kbd_fifo, &key, sizeof(key), sizeof(key));
     return key;
 }

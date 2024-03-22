@@ -6,6 +6,7 @@
 #include <wheel.h>
 
 
+
 // 代表一个阻塞的任务
 typedef struct pend_item {
     dlnode_t  dl;
@@ -57,14 +58,28 @@ static void semaphore_wakeup(semaphore_t *sem, pend_item_t *item,
     ASSERT(NULL != sem);
     ASSERT(NULL != item);
 
+    int key = irq_spin_take(&sem->spin);
     task_t *task = item->task;
 
-    int key = irq_spin_take(&sem->spin);
+    // 还有一种可能：超时 timer 在 CPU0 执行，同时另一个 CPU 将阻塞的任务恢复
+    // 因此锁住信号量之后，首先要检查 pend_item 还在不在队列中
+    // 而且 pend_item 是临时变量，如果动作慢了可能被恢复运行的 task 释放
+
+    // 这段代码可能与其他 CPU 竞争恢复目标任务
+    // 可能与恢复运行的目标任务竞争 pend_item 的访问
+
     if (fifo_q) {
-        ASSERT(dl_contains(fifo_q, &item->dl));
+        if (!dl_contains(fifo_q, &item->dl)) {
+            irq_spin_give(&sem->spin, key);
+            return;
+        }
         dl_remove(&item->dl);
     }
     if (priority_q) {
+        if (priority_q_contains(priority_q, task, &item->dl)) {
+            irq_spin_give(&sem->spin, key);
+            return;
+        }
         priority_q_remove(priority_q, task, &item->dl);
     }
     int cpu = sched_cont(task, TASK_PENDING); // 恢复任务
@@ -176,7 +191,7 @@ static void multi_send_resched(uint64_t mask) {
     }
 }
 
-void fifo_semaphore_give(fifo_semaphore_t *sem, int n) {
+int fifo_semaphore_give(fifo_semaphore_t *sem, int n) {
     ASSERT(NULL != sem);
     ASSERT(n > 0);
 
@@ -187,6 +202,7 @@ void fifo_semaphore_give(fifo_semaphore_t *sem, int n) {
 
     common->value += n;
     if (common->value > common->limit) {
+        n -= common->value - common->limit;
         common->value = common->limit;
     }
 
@@ -208,9 +224,11 @@ void fifo_semaphore_give(fifo_semaphore_t *sem, int n) {
 
     irq_spin_give(&common->spin, key);
     multi_send_resched(resched_mask);
+
+    return n;
 }
 
-void priority_semaphore_give(priority_semaphore_t *sem, int n) {
+int priority_semaphore_give(priority_semaphore_t *sem, int n) {
     ASSERT(NULL != sem);
     ASSERT(n > 0);
 
@@ -221,6 +239,7 @@ void priority_semaphore_give(priority_semaphore_t *sem, int n) {
 
     common->value += n;
     if (common->value > common->limit) {
+        n -= common->value - common->limit;
         common->value = common->limit;
     }
 
@@ -247,4 +266,6 @@ void priority_semaphore_give(priority_semaphore_t *sem, int n) {
 
     irq_spin_give(&common->spin, key);
     multi_send_resched(resched_mask);
+
+    return n;
 }

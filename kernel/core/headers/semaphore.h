@@ -3,7 +3,6 @@
 
 #include <def.h>
 #include "spin.h"
-// #include <dllist.h>
 #include "sched.h"
 
 typedef struct semaphore {
@@ -24,10 +23,10 @@ typedef struct priority_semaphore {
 
 void fifo_semaphore_init(fifo_semaphore_t *sem, int initial, int max);
 int  fifo_semaphore_take(fifo_semaphore_t *sem, int n, int timeout);
-void fifo_semaphore_give(fifo_semaphore_t *sem, int n);
+int  fifo_semaphore_give(fifo_semaphore_t *sem, int n);
 
 void priority_semaphore_init(priority_semaphore_t *sem, int initial, int max);
 int  priority_semaphore_take(priority_semaphore_t *sem, int n, int timeout);
-void priority_semaphore_give(priority_semaphore_t *sem, int n);
+int  priority_semaphore_give(priority_semaphore_t *sem, int n);
 
 #endif // SEMAPHORE_H
