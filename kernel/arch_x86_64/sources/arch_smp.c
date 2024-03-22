@@ -151,7 +151,7 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
             break;
         case MADT_TYPE_LOCAL_APIC: {
             madt_loapic_t *lo = (madt_loapic_t *)sub;
-            if (1 & lo->loapic_flags) {
+            if ((1 & lo->loapic_flags) && (g_loapic_num < MAX_CPU_COUNT)) {
                 ++g_loapic_num;
                 if (g_max_id < lo->id) {
                     g_max_id = lo->id;
@@ -161,7 +161,7 @@ INIT_TEXT void parse_madt(const madt_t *madt) {
         }
         case MADT_TYPE_LOCAL_X2APIC: {
             madt_lox2apic_t *lo = (madt_lox2apic_t *)sub;
-            if (1 & lo->loapic_flags) {
+            if ((1 & lo->loapic_flags) && (g_loapic_num < MAX_CPU_COUNT)) {
                 ++g_loapic_num;
                 if (g_max_id < lo->id) {
                     g_max_id = lo->id;

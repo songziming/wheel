@@ -32,7 +32,11 @@
 #define containerof(p,t,m) ((t *)((size_t)(p) - offsetof(t,m)))
 #endif
 
-// 使用 32-bit 整型表示页号，最多支持 4G-1 个物理页
+// 使用 uint64 表示 CPU 位图，最多支持 64 个核心
+typedef uint64_t cpuset_t;
+#define MAX_CPU_COUNT 64
+
+// 使用 uint32 表示页号，最多支持 4G-1 个物理页
 typedef uint32_t pfn_t;
 #define INVALID_PFN  0xffffffffU
 #define INVALID_ADDR 0xffffffffffffffffUL

@@ -29,8 +29,8 @@ typedef struct pglist {
 
 
 
-pfn_t prev_page_block(pfn_t blk);
-pfn_t next_page_block(pfn_t blk);
+// pfn_t prev_page_block(pfn_t blk);
+// pfn_t next_page_block(pfn_t blk);
 
 pfn_t page_block_head(pfn_t pfn);
 pfn_t page_block_size(pfn_t blk);

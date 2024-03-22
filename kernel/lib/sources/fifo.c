@@ -15,6 +15,13 @@ void fifo_init(fifo_t *fifo, void *buff, size_t size) {
     fifo->w_head = 0;
 }
 
+size_t fifo_data_size(fifo_t *fifo) {
+    return fifo->w_head - fifo->r_head;
+}
+
+size_t fifo_left_size(fifo_t *fifo) {
+    return fifo->size + fifo->r_head - fifo->w_head;
+}
 
 int fifo_is_full(fifo_t *fifo) {
     return (fifo->w_head - fifo->r_head) == fifo->size;

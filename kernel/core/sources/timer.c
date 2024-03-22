@@ -4,6 +4,7 @@
 #include <wheel.h>
 
 
+
 static dlnode_t g_timer_q;
 static spin_t g_queue_spin = SPIN_INIT; // 控制队列的锁
 static spin_t g_func_spin = SPIN_INIT; // 执行回调函数的锁
@@ -15,7 +16,7 @@ INIT_TEXT void timer_lib_init() {
 }
 
 
-// 在时钟中断里调用
+// 在时钟中断里调用，执行到时间的定时器
 void timer_proceed() {
     ASSERT(cpu_int_depth());
 
@@ -45,10 +46,9 @@ void timer_proceed() {
 }
 
 
-
 // 设置一个 singleshot 计时器
 // 如果传入的 tick==0，则下一次时钟中断就执行，如果当前就在时钟中断里，则本次执行
-void timer_start(timer_t *timer, int tick, timer_func_t func, void *a1, void *a2) {
+void timer_start(timer_t *timer, tick_t tick, timer_func_t func, void *a1, void *a2) {
     ASSERT(NULL != timer);
     ASSERT(NULL != func);
 
@@ -86,7 +86,6 @@ void timer_cancel(timer_t *timer) {
 
     irq_spin_give(&g_queue_spin, key);
 }
-
 
 // 保证在本函数返回后，timer 的回调函数未开始运行，或已结束运行
 void timer_cancel_sync(timer_t *timer) {

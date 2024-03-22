@@ -11,6 +11,10 @@ typedef struct fifo {
 } fifo_t;
 
 void fifo_init(fifo_t *fifo, void *buff, size_t size);
+
+size_t fifo_data_size(fifo_t *fifo);
+size_t fifo_left_size(fifo_t *fifo);
+
 int  fifo_is_full(fifo_t *fifo);
 int  fifo_is_empty(fifo_t *fifo);
 

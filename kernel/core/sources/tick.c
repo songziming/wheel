@@ -10,7 +10,7 @@ size_t tick_get() {
 }
 
 void tick_advance() {
-    sched_tick();
+    sched_rotate();
 
     if (0 != cpu_index()) {
         return;

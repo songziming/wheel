@@ -1,5 +1,6 @@
 #include <keyboard.h>
 #include <wheel.h>
+#include <pipe.h>
 #include <debug.h>
 #include <fifo.h>
 #include <semaphore.h>
@@ -12,14 +13,17 @@
 // 对 /dev/keyboard 文件的读写是线性的，自动序列化
 
 static keycode_t g_kbd_buff[KEYBOARD_BUFF_LEN];
-static fifo_t g_kbd_fifo; // = FIFO_INIT;
-static priority_semaphore_t g_kbd_sem;
+static pipe_t g_kbd_pipe;
+
+// static fifo_t g_kbd_fifo;
+// static priority_semaphore_t g_kbd_sem;
 
 
 
 INIT_TEXT void keyboard_init() {
-    fifo_init(&g_kbd_fifo, g_kbd_buff, sizeof(g_kbd_buff));
-    priority_semaphore_init(&g_kbd_sem, 0, KEYBOARD_BUFF_LEN);
+    pipe_init(&g_kbd_pipe, g_kbd_buff, sizeof(g_kbd_buff));
+    // fifo_init(&g_kbd_fifo, g_kbd_buff, sizeof(g_kbd_buff));
+    // priority_semaphore_init(&g_kbd_sem, 0, KEYBOARD_BUFF_LEN);
 }
 
 
@@ -32,15 +36,17 @@ void keyboard_send(keycode_t key) {
     //     klog("<down:%x>", key);
     // }
 
-    fifo_force_write(&g_kbd_fifo, &key, sizeof(key));
-    priority_semaphore_give(&g_kbd_sem, 1);
+    pipe_force_write(&g_kbd_pipe, &key, sizeof(key));
+    // fifo_force_write(&g_kbd_fifo, &key, sizeof(key));
+    // priority_semaphore_give(&g_kbd_sem, 1);
 }
 
 
 // 应该由 OS 提供一套 message queue 机制，结合 fifo 与信号量
 keycode_t keyboard_recv() {
     keycode_t key;
-    priority_semaphore_take(&g_kbd_sem, 1, 0);
-    fifo_read(&g_kbd_fifo, &key, sizeof(key), sizeof(key));
+    pipe_read(&g_kbd_pipe, &key, sizeof(key), sizeof(key), FOREVER);
+    // priority_semaphore_take(&g_kbd_sem, 1, 0);
+    // fifo_read(&g_kbd_fifo, &key, sizeof(key), sizeof(key));
     return key;
 }

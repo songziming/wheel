@@ -40,15 +40,15 @@ static shell_cmd_t g_cmd_page;
 // 连续的物理页构成块，多个页块组成链表
 //------------------------------------------------------------------------------
 
-inline pfn_t prev_page_block(pfn_t blk) {
-    ASSERT(INVALID_PFN != blk);
-    return g_pages[blk].head ? g_pages[blk].prev : INVALID_PFN;
-}
+// inline pfn_t prev_page_block(pfn_t blk) {
+//     ASSERT(INVALID_PFN != blk);
+//     return g_pages[blk].head ? g_pages[blk].prev : INVALID_PFN;
+// }
 
-inline pfn_t next_page_block(pfn_t blk) {
-    ASSERT(INVALID_PFN != blk);
-    return g_pages[blk].head ? g_pages[blk].next : INVALID_PFN;
-}
+// inline pfn_t next_page_block(pfn_t blk) {
+//     ASSERT(INVALID_PFN != blk);
+//     return g_pages[blk].head ? g_pages[blk].next : INVALID_PFN;
+// }
 
 // 返回页所在的块
 pfn_t page_block_head(pfn_t pfn) {

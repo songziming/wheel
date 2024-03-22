@@ -32,8 +32,6 @@
 
 #define VEC_GSI_BASE        0x40    // 外部中断起始编号
 
-#define VEC_LINUX_SYSCALL   0x80    // Linux 系统调用兼容层
-
 #define VEC_IPI_RESCHED     0xd0
 #define VEC_IPI_STOPALL     0xd1
 

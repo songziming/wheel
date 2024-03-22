@@ -22,9 +22,9 @@ void priority_q_remove(priority_q_t *q, task_t *tid, dlnode_t *dl);
 
 task_t *sched_stop_self(uint16_t bits);
 int sched_cont(task_t *task, uint16_t bits);
+void notify_resched(cpuset_t mask);
 
-void sched_tick();
-
-INIT_TEXT void sched_init();
+void sched_rotate();
+INIT_TEXT void sched_lib_init();
 
 #endif // SCHED_H

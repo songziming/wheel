@@ -28,12 +28,10 @@
 
 
 static INIT_DATA size_t g_rsdp = INVALID_ADDR;
+// static mb2_tag_vbe_t *g_vbe = NULL;
 static INIT_DATA fb_info_t g_fb = { .rows=0, .cols=0 };
 static INIT_DATA volatile int g_cpu_started = 0; // 已完成启动的 CPU 数量
 static task_t root_tcb;
-
-
-static mb2_tag_vbe_t *g_vbe = NULL;
 
 
 static INIT_TEXT void mb1_init(uint32_t ebx);
@@ -93,10 +91,9 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         set_log_func(serial_console_puts);
     }
 
-    // TODO 检查 vbe 详细信息
-    if (g_vbe) {
-        vbe_parse(g_vbe);
-    }
+    // if (g_vbe) {
+    //     vbe_parse(g_vbe);
+    // }
 
     // 寻找 RSDP，并找出所有 ACPI 表
     if (INVALID_ADDR == g_rsdp) {
@@ -180,7 +177,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     write_cr3(get_kernel_pgtable());
 
     // 准备就绪队列
-    sched_init();
+    sched_lib_init();
 
     // 准备延迟工作队列（此时中断关闭，不会触发tick）
     timer_lib_init();
@@ -273,12 +270,12 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
             }
             break;
         }
-        case MB2_TAG_TYPE_VBE: {
-            // TODO 还有 multiboot 1 也加入 VBE 支持
-            mb2_tag_vbe_t *vbe = (mb2_tag_vbe_t *)tag;
-            g_vbe = vbe;
-            break;
-        }
+        // case MB2_TAG_TYPE_VBE: {
+        //     // TODO 还有 multiboot 1 也加入 VBE 支持
+        //     mb2_tag_vbe_t *vbe = (mb2_tag_vbe_t *)tag;
+        //     g_vbe = vbe;
+        //     break;
+        // }
         default:
             break;
         }

@@ -176,21 +176,6 @@ int priority_semaphore_take(priority_semaphore_t *sem, int n, int timeout) {
 // 释放信号量，将阻塞的任务恢复，可以在任务和中断里执行
 //------------------------------------------------------------------------------
 
-static void multi_send_resched(uint64_t mask) {
-    int sched_self = mask & (1UL << cpu_index());
-    mask &= ~(1UL << cpu_index());
-
-    for (int i = 0; i < cpu_count(); ++i, mask >>= 1) {
-        if (mask & 1) {
-            arch_send_resched(i);
-        }
-    }
-
-    if (sched_self) {
-        arch_task_switch();
-    }
-}
-
 int fifo_semaphore_give(fifo_semaphore_t *sem, int n) {
     ASSERT(NULL != sem);
     ASSERT(n > 0);
@@ -206,7 +191,7 @@ int fifo_semaphore_give(fifo_semaphore_t *sem, int n) {
         common->value = common->limit;
     }
 
-    uint64_t resched_mask = 0;
+    cpuset_t resched_mask = 0;
     while ((common->value > 0) && !dl_is_lastone(pend_q)) {
         pend_item_t *item = containerof(pend_q->next, pend_item_t, dl);
         if (common->value < item->require) {
@@ -219,11 +204,13 @@ int fifo_semaphore_give(fifo_semaphore_t *sem, int n) {
 
         task_t *task = item->task;
         int cpu = sched_cont(task, TASK_PENDING); // 恢复任务
-        resched_mask |= 1UL << cpu;
+        if (cpu >= 0) {
+            resched_mask |= 1UL << cpu;
+        }
     }
 
     irq_spin_give(&common->spin, key);
-    multi_send_resched(resched_mask);
+    notify_resched(resched_mask);
 
     return n;
 }
@@ -243,7 +230,7 @@ int priority_semaphore_give(priority_semaphore_t *sem, int n) {
         common->value = common->limit;
     }
 
-    uint64_t resched_mask = 0;
+    cpuset_t resched_mask = 0;
     while (common->value > 0) {
         dlnode_t *head = priority_q_head(pend_q);
         if (NULL == head) {
@@ -261,11 +248,13 @@ int priority_semaphore_give(priority_semaphore_t *sem, int n) {
         item->got = item->require;
 
         int cpu = sched_cont(task, TASK_PENDING); // 恢复任务
-        resched_mask |= 1UL << cpu;
+        if (cpu >= 0) {
+            resched_mask |= 1UL << cpu;
+        }
     }
 
     irq_spin_give(&common->spin, key);
-    multi_send_resched(resched_mask);
+    notify_resched(resched_mask);
 
     return n;
 }

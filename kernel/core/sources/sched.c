@@ -99,10 +99,6 @@ void priority_q_remove(priority_q_t *q, task_t *tid, dlnode_t *dl) {
 // 就绪队列管理
 //------------------------------------------------------------------------------
 
-// static inline task_t *ready_q_head(ready_q_t *rdy) {
-//     return priority_q_head(&rdy->tasks);
-// }
-
 static inline void ready_q_insert(ready_q_t *rdy, task_t *tid) {
     priority_q_push(&rdy->tasks, tid, &tid->q_node);
     rdy->total_tick += tid->tick_reload;
@@ -141,45 +137,6 @@ static int lowest_cpu() {
 
     return idx;
 }
-
-// 下面两个函数是任务状态切换的核心，涉及到就绪队列
-// 首先拿到任务的指针，然后拿到就绪队列的指针。先锁住任务，再锁住所在的队列，可能数据竞争。
-// TODO 更新了某个就绪队列，不一定发生抢占，可能最高优先级不变，这时不必发送 IPI，可以减少很多不必要的操作
-
-// TODO 我们可以要求，只有自己可以停止任务的执行，不允许停止其他的 task
-
-
-#if 0
-// 停止任务执行，从就绪队列中移除（目标任务可能位于其他 CPU）
-// 同时持有任务和所属就绪队列的自旋锁
-// 返回受影响的 CPU 的编号（-1 表示没有影响）
-int sched_stop(task_t *tid, uint16_t bits) {
-    ASSERT(NULL != tid);
-    // ASSERT(tid->spin.ticket_counter > tid->spin.service_counter);
-    ASSERT(0 != bits);
-
-    uint16_t state = tid->state;
-    int cpu = tid->last_cpu;
-    tid->state |= bits;
-
-    // 如果原任务不是就绪态，就不会影响 CPU
-    // 如果 last_cpu < 0，表示该任务未被放入就绪队列
-    if ((TASK_READY != state) || (cpu < 0)) {
-        return -1;
-    }
-
-    // 将任务从就绪队列中删除，同时更新 tid_next
-    ready_q_t *q = pcpu_ptr(cpu, &g_ready_q);
-    int key = irq_spin_take(&q->spin);
-    ready_q_remove(q, tid);
-    tid->last_cpu = -1;
-    *(task_t **)pcpu_ptr(cpu, &g_tid_next) = priority_q_head(&q->tasks);
-    irq_spin_give(&q->spin, key);
-
-    // 返回有更新的就绪队列编号
-    return cpu;
-}
-#endif
 
 
 // 停止当前任务，从就绪队列取出
@@ -240,18 +197,38 @@ int sched_cont(task_t *tid, uint16_t bits) {
     return tid->last_cpu;
 }
 
-// 每次时钟中断里执行（但是可能重入）
-// 首先锁住就绪队列，防止轮转过程中插入新的任务，导致当前任务不再是最高优先级
-void sched_tick() {
+void notify_resched(cpuset_t mask) {
+    int sched_self = mask & (1UL << cpu_index());
+    mask &= ~(1UL << cpu_index());
+
+    for (int i = 0; i < cpu_count(); ++i, mask >>= 1) {
+        if (mask & 1) {
+            arch_send_resched(i);
+        }
+    }
+
+    if (sched_self) {
+        arch_task_switch();
+    }
+}
+
+
+
+//------------------------------------------------------------------------------
+// 时间片轮转，在中断里执行
+//------------------------------------------------------------------------------
+
+void sched_rotate() {
     ASSERT(cpu_int_depth());
 
+    // 需要锁住当前就绪队列，防止 tid_next 改变
     ready_q_t *q = this_ptr(&g_ready_q);
     int key = irq_spin_take(&q->spin);
 
-    // 读取 tid_next，而不是 tid_prev，如果不发生中断，tid_prev 就一直不更新
-    // 因为 tid_prev 可能尚未更新，导致我们轮转的不是最高优先级任务
+    // 这里应该读取 tid_next，而不是 tid_prev
+    // tid_prev 可能是一个已经阻塞的任务
     task_t *curr = THISCPU_GET(g_tid_next);
-    raw_spin_take(&curr->spin);
+    // raw_spin_take(&curr->spin);
 
     --curr->tick;
     if (0 == curr->tick) {
@@ -260,9 +237,10 @@ void sched_tick() {
         THISCPU_SET(g_tid_next, next);
     }
 
-    raw_spin_give(&curr->spin);
+    // raw_spin_give(&curr->spin);
     irq_spin_give(&q->spin, key);
 }
+
 
 
 //------------------------------------------------------------------------------
@@ -302,7 +280,7 @@ static int sched_show(UNUSED int argc, UNUSED char *argv[]) {
 
 
 // 初始化就绪队列，创建 idle 任务
-INIT_TEXT void sched_init() {
+INIT_TEXT void sched_lib_init() {
     for (int i = 0; i < cpu_count(); ++i) {
         ready_q_t *q = pcpu_ptr(i, &g_ready_q);
         q->spin = SPIN_INIT;
