@@ -8,7 +8,7 @@
 
 // 异常的 regs 是不完整的
 
-void handle_pagefault(UNUSED int vec, arch_regs_t *f) {
+void handle_pagefault(int vec UNUSED, arch_regs_t *f) {
     ASSERT(14 == vec);
 
     klog("#PF cpu-%d rip=%lx rsp=%lx\n", cpu_index(), f->rip, f->rsp);

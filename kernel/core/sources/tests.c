@@ -21,7 +21,7 @@ static void func_consumer() {
     //
 }
 
-static int test_ipc(UNUSED int argc, UNUSED char *argv[]) {
+static int test_ipc(int argc UNUSED, char *argv[] UNUSED) {
     priority_semaphore_init(&g_sem, 10, 10);
 
     task_t p, c;

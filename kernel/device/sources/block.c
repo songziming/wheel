@@ -20,7 +20,7 @@ static shell_cmd_t g_cmd_blk;
 // 块设备子系统初始化
 //------------------------------------------------------------------------------
 
-static int show_blocks(UNUSED int argc, UNUSED char *argv[]) {
+static int show_blocks(int argc UNUSED, char *argv[] UNUSED) {
     for (dlnode_t *i = g_block_devices.next; i != &g_block_devices; i = i->next) {
         blk_dev_t *blk = containerof(i, blk_dev_t, dl);
         if (blk->drv->show) {

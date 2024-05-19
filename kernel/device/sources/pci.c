@@ -107,7 +107,7 @@ static void pci_show_dev(const pci_dev_t *dev) {
         dev->classcode, dev->subclass, dev->progif, subtype);
 }
 
-static int pci_show(UNUSED int argc, UNUSED char *argv[]) {
+static int pci_show(int argc UNUSED, char *argv[] UNUSED) {
     pci_enumerate(pci_show_dev);
     return 0;
 }

@@ -107,7 +107,7 @@ void task_resume(task_t *task) {
 
 
 
-static void task_wakeup(void *arg, UNUSED void *sp) {
+static void task_wakeup(void *arg, void *sp UNUSED) {
     ASSERT(cpu_int_depth());
 
     task_t *task = (task_t *)arg;
@@ -134,6 +134,11 @@ void task_delay(int ticks) {
 }
 
 
+
+static void task_cleanup(void *a1, void *a2 UNUSED) {
+    task_destroy((task_t *)a1);
+}
+
 // 退出当前任务
 void task_exit() {
     int key = cpu_int_lock();
@@ -143,7 +148,7 @@ void task_exit() {
     // 当前任务正在运行，不能此时删除 TCB
     // 下一次中断，任务已停止执行，才能删除任务
     timer_t exit;
-    timer_start(&exit, 0, (timer_func_t)task_destroy, self, NULL);
+    timer_start(&exit, 0, task_cleanup, self, NULL);
 
     // 立即切换到新任务，顺便在中断返回过程释放任务栈
     cpu_int_unlock(key);

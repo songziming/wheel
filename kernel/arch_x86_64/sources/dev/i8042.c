@@ -216,7 +216,7 @@ static void handle_scancode(uint8_t code) {
 //     return 0;
 // }
 
-static void handle_keyboard(UNUSED int vec, UNUSED arch_regs_t *f) {
+static void handle_keyboard(int vec UNUSED, arch_regs_t *f UNUSED) {
     while (in8(PS2KBD_CTRL_PORT) & 1) {
         handle_scancode(in8(PS2KBD_DATA_PORT));
     }

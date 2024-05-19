@@ -159,33 +159,33 @@ static void x2_write_icr(uint32_t id, uint32_t lo) {
 //------------------------------------------------------------------------------
 
 // 这类中断一般不发生，无需发送 EOI
-static void handle_spurious(UNUSED int vec, UNUSED arch_regs_t *f) {
+static void handle_spurious(int vec UNUSED, arch_regs_t *f UNUSED) {
     klog("this cannot happen!\n");
 }
 
 // core/tick.c
 // void tick_advance();
 
-static void handle_timer(UNUSED int vec, UNUSED arch_regs_t *f) {
+static void handle_timer(int vec UNUSED, arch_regs_t *f UNUSED) {
     local_apic_send_eoi();
     tick_advance();
 }
 
 #if 0
 // corrected machine check error
-static void handle_cmci(UNUSED int vec, UNUSED arch_regs_t *f) {
+static void handle_cmci(int vec UNUSED, arch_regs_t *f UNUSED) {
 }
 
 // 核心温度超过危险值时触发该中断，温度再高就会关闭核心
-static void handle_thermal_monitor(UNUSED int vec, UNUSED arch_regs_t *f) {
+static void handle_thermal_monitor(int vec UNUSED, arch_regs_t *f UNUSED) {
 }
 
-static void handle_performance_counter(UNUSED int vec, UNUSED arch_regs_t *f) {
+static void handle_performance_counter(int vec UNUSED, arch_regs_t *f UNUSED) {
 }
 #endif
 
 // APIC 发生错误
-static void handle_error(UNUSED int vec, UNUSED arch_regs_t *f) {
+static void handle_error(int vec UNUSED, arch_regs_t *f UNUSED) {
     klog("fatal: Local APIC internal error!\n");
 }
 

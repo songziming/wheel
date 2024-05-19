@@ -256,7 +256,7 @@ static NORETURN void idle_proc() {
 }
 
 // 显示当前就绪任务
-static int sched_show(UNUSED int argc, UNUSED char *argv[]) {
+static int sched_show(int argc UNUSED, char *argv[] UNUSED) {
     for (int i = 0; i < cpu_count(); ++i) {
         klog("content of ready queue %d:\n", i);
         ready_q_t *q = pcpu_ptr(i, &g_ready_q);

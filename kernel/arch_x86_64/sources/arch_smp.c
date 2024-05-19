@@ -120,7 +120,7 @@ static void print_madt(const madt_t *madt) {
     }
 }
 
-static int show_smp(UNUSED int argc, UNUSED char *argv[]) {
+static int show_smp(int argc UNUSED, char *argv[] UNUSED) {
     print_madt(g_madt);
     return 0;
 }
