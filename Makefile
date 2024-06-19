@@ -54,7 +54,7 @@ KCFLAGS += -ffreestanding -fno-builtin -flto -ffunction-sections -fdata-sections
 ifeq ($(DEBUG),1)
     KCFLAGS += -g -DDEBUG -fstack-protector
     KCFLAGS += -fsanitize=undefined -fno-sanitize=function
-    # KCFLAGS += -fsanitize=kernel-address -fno-omit-frame-pointer
+    KCFLAGS += -fvisibility=hidden -fsanitize=cfi
 else
     KCFLAGS += -O2 -DNDEBUG
 endif
