@@ -1,3 +1,7 @@
+# how to use docker
+# 使用 image 创建后台容器：docker run -dit osdev
+
+
 FROM ubuntu:24.04
 
 ENV TZ=Asia/Shanghai
@@ -8,10 +12,17 @@ RUN echo $TZ > /etc/timezone
 RUN apt update
 RUN apt upgrade -y
 RUN apt install -y git build-essential wget cmake python3
+
+
+# 编译 grub 需要的依赖项
+RUN apt install -y flex bison autoconf automake autopoint gettext libtool pkg-config gawk
+
 # RUN apt install -y mtools xorriso
 
-# 下载工具链，从源码编译
+
 WORKDIR /root
+
+# 下载工具链，从源码编译
 RUN wget https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.6/llvm-project-18.1.6.src.tar.xz
 RUN tar -xf llvm-project-18.1.6.src.tar.xz
 RUN mkdir build-llvm && pushd build-llvm
@@ -22,5 +33,21 @@ RUN cmake ../llvm-project-18.1.6.src/llvm \
 RUN cmake --build . --parallel
 RUN cmake --build . --target install
 RUN popd
+RUN rm -rf build-llvm llvm-project-18.1.6.src
 
-# 下载 GRUB，从源码编译
+# # 下载 GRUB，从源码编译
+# # 这个版本的 grub 编译脚本有错误，缺少 extra_deps.lst 的编译规则
+# RUN wget https://ftp.gnu.org/gnu/grub/grub-2.12.tar.xz
+# RUN tar -xf grub-2.12.tar.xz
+# RUN cd grub-2.12
+# RUN sed -i '/EXTRA_DIST += grub-core\/genemuinitheader.sh/a EXTRA_DIST += grub-core\/extra_deps.lst' conf/Makefile.extra-dist
+
+# 从 git 获取 grub 代码
+RUN git clone --depth=1 https://git.savannah.gnu.org/git/grub.git
+RUN pushd grub
+RUN ./bootstrap
+RUN ./configure --target=x86_64 --with-platform=efi
+RUN make
+RUN make install
+RUN popd
+RUN rm -rf grub
