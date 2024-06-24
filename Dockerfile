@@ -16,6 +16,7 @@ RUN apt install -y git build-essential wget cmake python3
 
 # 编译 grub 需要的依赖项
 RUN apt install -y flex bison autoconf automake autopoint gettext libtool pkg-config gawk
+RUN apt install -y libdevmapper-dev liblzma-dev libfuse-dev libfuse3-dev
 
 # RUN apt install -y mtools xorriso
 
@@ -42,11 +43,15 @@ RUN rm -rf build-llvm llvm-project-18.1.6.src
 # RUN cd grub-2.12
 # RUN sed -i '/EXTRA_DIST += grub-core\/genemuinitheader.sh/a EXTRA_DIST += grub-core\/extra_deps.lst' conf/Makefile.extra-dist
 
-# 从 git 获取 grub 代码
+# 从 git 获取 grub 代码，编译 64-bit uefi 和 32-bit bios 两个版本
 RUN git clone --depth=1 https://git.savannah.gnu.org/git/grub.git
 RUN pushd grub
 RUN ./bootstrap
 RUN ./configure --target=x86_64 --with-platform=efi
+RUN make
+RUN make install
+RUN ./configure --target=i386 --with-platform=pc
+RUN make clean
 RUN make
 RUN make install
 RUN popd
