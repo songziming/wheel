@@ -5,6 +5,8 @@
 
 # $1 目标磁盘镜像
 
+SUDO=
+
 if [ -f "$1" ]; then
     exit 0
 fi
@@ -24,27 +26,33 @@ dd if=/dev/zero of=$1 bs=512 count=32768
 ) | fdisk $1
 
 # 创建两个loop文件，分别表示整块磁盘和主分区
-disk_loop=$(sudo losetup --show -f $1)
-part_loop=$(sudo losetup --show -f $1 -o 1M)
+disk_loop=$($SUDO losetup --show -f $1)
+part_loop=$($SUDO losetup --show -f $1 -o 1M)
 
 # 主分区格式化
-sudo mkfs.vfat $part_loop
+$SUDO mkfs.vfat $part_loop
 
 # 主分区文件系统挂载
 mount_dir=$(mktemp -d)
-sudo mount $part_loop $mount_dir
-sudo mkdir -p $mount_dir/boot/grub
+$SUDO mount $part_loop $mount_dir
+$SUDO mkdir -p $mount_dir/boot/grub
+
+# 写入 grub 配置文件
+cp $(dirname $0)/grub.cfg $mount_dir/boot/grub
+
+# TODO 将内核文件 wheel.bin 也复制进来
 
 # 安装引导器
-sudo grub-install \
+$SUDO grub-install \
     --no-floppy \
-    --directory=$(dirname $0)/grub-i386-pc \
     --root-directory=$mount_dir \
     --modules="normal part_msdos ext2 multiboot" \
     $disk_loop
 
+# --directory=$(dirname $0)/grub-i386-pc \
+
 # 清理
-sudo umount $mount_dir
+$SUDO umount $mount_dir
 rm -rf $mount_dir
-sudo losetup -d $disk_loop
-sudo losetup -d $part_loop
+$SUDO losetup -d $disk_loop
+$SUDO losetup -d $part_loop
