@@ -46,6 +46,7 @@ cp $(dirname $0)/grub.cfg $mount_dir/boot/grub
 $SUDO grub-install \
     --no-floppy \
     --root-directory=$mount_dir \
+    --locale-directory=/usr/share/locale \
     --modules="normal part_msdos ext2 multiboot" \
     $disk_loop
 

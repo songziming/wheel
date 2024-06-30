@@ -17,11 +17,12 @@ RUN apt install -y git build-essential wget cmake python3
 # 编译 grub 需要的依赖项
 RUN apt install -y flex bison autoconf automake autopoint gettext libtool pkg-config gawk
 RUN apt install -y libdevmapper-dev liblzma-dev libfuse-dev libfuse3-dev
+# RUN apt install -y libfreetype-dev
 
 
 # 创建引导镜像的依赖项
-RUN apt install -y dosfstools
-# RUN apt install -y mtools xorriso
+RUN apt install -y dosfstools mtools
+# xorriso
 
 
 WORKDIR /root
@@ -61,4 +62,4 @@ RUN popd
 RUN rm -rf grub
 
 # grub 需要一个目录，需要手动创建
-RUN mkdir -p /usr/local/share/locale
+# RUN ln -sf /usr/share/locale /usr/local/share/locale
