@@ -42,15 +42,18 @@ cp $(dirname $0)/grub.cfg $mount_dir/boot/grub
 
 # TODO 将内核文件 wheel.bin 也复制进来
 
-# 安装引导器
+# 安装引导器（BIOS 版本）
 $SUDO grub-install \
+    --target=i386-pc \
     --no-floppy \
     --root-directory=$mount_dir \
-    --locale-directory=/usr/share/locale \
-    --modules="normal part_msdos ext2 multiboot" \
+    --modules="normal part_msdos ext2 multiboot biosdev" \
     $disk_loop
 
 # --directory=$(dirname $0)/grub-i386-pc \
+
+# TODO 创建 uefi 版本的引导器，就是一个普通文件，拷贝到 FAT32 分区即可
+
 
 # 清理
 $SUDO umount $mount_dir

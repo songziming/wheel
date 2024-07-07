@@ -15,9 +15,9 @@ COV_DIR := $(OUT_DIR)/cov
 
 OUT_ELF := $(OUT_DIR)/wheel.elf
 OUT_MAP := $(OUT_DIR)/wheel.map
-OUT_ISO := $(OUT_DIR)/wheel.iso
-OUT_IMG := $(OUT_DIR)/disc.img
-OUT_TEST := $(OUT_DIR)/test
+OUT_ISO := $(OUT_DIR)/cd.iso
+OUT_IMG := $(OUT_DIR)/hd.img
+OUT_KUT := $(OUT_DIR)/test
 
 
 define filterout # pattern list
@@ -84,7 +84,7 @@ include kernel/arch_$(ARCH)/option.mk
 kernel: $(OUT_ELF)
 iso: $(OUT_ISO)
 img: $(OUT_IMG)
-test: $(OUT_TEST)
+test: $(OUT_KUT)
 cov: $(COV_DIR)
 
 clean:
@@ -127,22 +127,22 @@ $(OUT_DIR)/objs/%.c.to: %.c
 	$(TCC) -c -DC_FILE -std=c11 $(KINCS:%=-I%) $(TCFLAGS) $(DEP_GEN) -o $@ $<
 $(OUT_DIR)/objs/%.cc.to: %.cc
 	$(TXX) -c -DC_FILE -std=c++14 -fpermissive $(TCFLAGS) $(DEP_GEN) -o $@ $<
-$(OUT_TEST): $(TOBJS)
+$(OUT_KUT): $(TOBJS)
 	$(TXX) $(TCFLAGS) -o $@ $^ -lm -pthread
 
 
 
 # 生成代码覆盖率报告
-$(COV_RAW): $(OUT_TEST)
+$(COV_RAW): $(OUT_KUT)
 	LLVM_PROFILE_FILE=$@ $<
 $(COV_DAT): $(COV_RAW)
 	llvm-profdata merge -sparse $< -o $@
-$(COV_DIR): $(COV_DAT) | $(OUT_TEST)
-	llvm-cov show $(OUT_TEST) -instr-profile=$< -format=html -o $@
+$(COV_DIR): $(COV_DAT) | $(OUT_KUT)
+	llvm-cov show $(OUT_KUT) -instr-profile=$< -format=html -o $@
 
 
 
-# # 生成代码覆盖率报告
+# # 生成代码覆盖率报告（GCC）
 # FORCE: ;
 # $(GCOV_FULL): FORCE
 # 	lcov -d $(OUT_DIR) -b . -c -o $@
