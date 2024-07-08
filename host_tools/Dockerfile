@@ -11,7 +11,9 @@ WORKDIR /root
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime
 RUN echo $TZ > /etc/timezone
 
-RUN apt update && apt install -y --no-install-recommends \
+RUN apt update && \
+    apt install -y --reinstall ca-certificates && \
+    apt install -y --no-install-recommends \
         git gawk gettext pkg-config build-essential cmake python3 \
         autoconf automake autopoint \
         flex bison libfreetype-dev fonts-unifont \
