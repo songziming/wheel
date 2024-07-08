@@ -8,11 +8,13 @@ Wheel is an operating system, written from scratch.
 
 ## prepare toolchain
 
+Create docker image for compiling kernel and generating bootable image.
+
 ```bash
-docker build host_tools -t wheel --build-arg NJOBS=8
+cat host_tools/Dockerfile | docker build - -t osdev --build-arg NJOBS=8
 ```
 
-Check `host_tools/Dockerfile` for instructions 
+You can also check `host_tools/Dockerfile` for envsetup instructions.
 
 ## build and test
 

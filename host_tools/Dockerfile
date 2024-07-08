@@ -6,14 +6,17 @@ FROM ubuntu:24.04
 
 ENV TZ=Asia/Shanghai
 
+WORKDIR /root
+
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime
 RUN echo $TZ > /etc/timezone
 
-RUN apt update
-RUN apt install -y git gawk build-essential cmake python3
-RUN apt install -y autoconf automake autopoint gettext pkg-config
-RUN apt install -y flex bison libfreetype-dev fonts-unifont
-RUN apt install -y fdisk dosfstools mtools xorriso
+RUN apt update && apt install -y --no-install-recommends \
+        git gawk gettext pkg-config build-essential cmake python3 \
+        autoconf automake autopoint \
+        flex bison libfreetype-dev fonts-unifont \
+        fdisk dosfstools mtools xorriso && \
+    rm -rf /var/lib/apt/lists/*
 
 # RUN wget https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.6/llvm-project-18.1.6.src.tar.xz
 # RUN tar -xf llvm-project-18.1.6.src.tar.xz
@@ -23,38 +26,29 @@ RUN apt install -y fdisk dosfstools mtools xorriso
 # RUN sed -i '/EXTRA_DIST += grub-core\/genemuinitheader.sh/a EXTRA_DIST += grub-core\/extra_deps.lst' \
 #     grub-2.12/conf/Makefile.extra-dist
 
-# 获取源码，准备临时编译目录
-WORKDIR /root
-RUN git clone --depth=1 https://github.com/llvm/llvm-project.git
-RUN git clone --depth=1 https://git.savannah.gnu.org/git/grub.git
-RUN mkdir build_llvm
-RUN mkdir build_grub_bios
-RUN mkdir build_grub_uefi
+# 编译内核工具链
+RUN git clone --depth=1 https://github.com/llvm/llvm-project.git            && \
+    mkdir build && cd build                                                 && \
+    cmake ../llvm-project/llvm \
+        -DLLVM_ENABLE_PROJECTS="clang;lld;compiler-rt" \
+        -DLLVM_TARGETS_TO_BUILD=X86 \
+        -DCMAKE_BUILD_TYPE=Release                                          && \
+    cmake --build . --parallel ${NJOBS}                                     && \
+    cmake --build . --target install                                        && \
+    cd .. && rm -rf llvm-project build
 
-# 构建内核工具链
-WORKDIR build_llvm
-RUN cmake ../llvm-project/llvm \
-    -DLLVM_ENABLE_PROJECTS="clang;lld;compiler-rt" \
-    -DLLVM_TARGETS_TO_BUILD=X86 \
-    -DCMAKE_BUILD_TYPE=Release
-RUN cmake --build . --parallel ${NJOBS}
-RUN cmake --build . --target install
-
-# 构建引导器（bios）
-WORKDIR build_grub_bios
-RUN ../configure --target=i386 --with-platform=pc
-RUN make -j ${NJOBS}
-RUN make install
-
-# 构建引导器（uefi）
-WORKDIR build_grub_uefi
-RUN ../configure --target=x86_64 --with-platform=efi --enable-grub-mkfont
-RUN make -j ${NJOBS}
-RUN make install
-
-# 删除临时目录
-WORKDIR /root
-RUN rm -rf llvm-project grub build_*
+# 编译引导器 GRUB，包括 bios 和 uefi 两个版本
+RUN git clone --depth=1 https://git.savannah.gnu.org/git/grub.git           && \
+    cd grub && ./bootstrap                                                  && \
+    mkdir build_bios && cd build_bios                                       && \
+    ./configure --target=i386 --with-platform=pc                            && \
+    make -j ${NJOBS}                                                        && \
+    make install                                                            && \
+    cd .. && mkdir build_uefi && cd build_uefi                              && \
+    ./configure --target=x86_64 --with-platform=efi --enable-grub-mkfont    && \
+    make -j ${NJOBS}                                                        && \
+    make install                                                            && \
+    cd ../.. && rm -rf grub
 
 # 准备字体文件，不然 grub-mkrescue/grub-install 会报错
 RUN grub-mkfont -o /usr/local/share/grub/unicode.pf2 /usr/share/fonts/opentype/unifont/unifont.otf
