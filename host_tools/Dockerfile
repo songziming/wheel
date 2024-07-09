@@ -35,8 +35,8 @@ RUN git clone --depth=1 https://github.com/llvm/llvm-project.git            && \
         -DLLVM_ENABLE_PROJECTS="clang;lld;compiler-rt" \
         -DLLVM_TARGETS_TO_BUILD=X86 \
         -DCMAKE_BUILD_TYPE=Release                                          && \
-    cmake --build . --parallel ${NJOBS}                                     && \
-    cmake --build . --target install                                        && \
+    make                                                                    && \
+    make install                                                            && \
     cd .. && rm -rf llvm-project build
 
 # 编译引导器 GRUB，包括 bios 和 uefi 两个版本
