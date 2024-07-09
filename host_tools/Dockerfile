@@ -43,11 +43,11 @@ RUN git clone --depth=1 https://github.com/llvm/llvm-project.git            && \
 RUN git clone --depth=1 https://git.savannah.gnu.org/git/grub.git           && \
     cd grub && ./bootstrap                                                  && \
     mkdir build_bios && cd build_bios                                       && \
-    ./configure --target=i386 --with-platform=pc                            && \
+    ../configure --target=i386 --with-platform=pc                           && \
     make -j ${NJOBS}                                                        && \
     make install                                                            && \
     cd .. && mkdir build_uefi && cd build_uefi                              && \
-    ./configure --target=x86_64 --with-platform=efi --enable-grub-mkfont    && \
+    ../configure --target=x86_64 --with-platform=efi --enable-grub-mkfont   && \
     make -j ${NJOBS}                                                        && \
     make install                                                            && \
     cd ../.. && rm -rf grub
