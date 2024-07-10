@@ -1,1 +1,1 @@
-@ docker run --name osdever --rm -v .:/mnt/wheel -w /mnt/wheel --privileged=true wheel make %*
+@ docker run --rm -v .:/mnt/wheel -w /mnt/wheel --privileged=true wheel make %*

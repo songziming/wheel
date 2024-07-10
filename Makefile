@@ -114,11 +114,11 @@ $(OUT_ISO): $(OUT_ELF) host_tools/grub.cfg
 	@ cp $(OUT_ELF) $(ISO_DIR)/wheel.elf
 	@ cp host_tools/grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
 	@ grub-mkrescue -o $@ $(ISO_DIR)
-# @ grub-mkrescue -d host_tools/grub-i386-pc -o $@ $(ISO_DIR)
 $(OUT_IMG): $(OUT_ELF) host_tools/grub.cfg
 	@ host_tools/diskimg_create.sh $@
-	@ host_tools/diskimg_update.sh $(OUT_ELF) $@ wheel.elf
-	@ host_tools/diskimg_update.sh host_tools/grub.cfg $@ boot/grub/grub.cfg
+	@ mmd   -i $(OUT_IMG)@@1M -D s ::/boot/grub
+	@ mcopy -i $(OUT_IMG)@@1M -D o -nv host_tools/grub.cfg ::/boot/grub/grub.cfg
+	@ mcopy -i $(OUT_IMG)@@1M -D o -nv $(OUT_ELF) ::/wheel.elf
 
 
 
