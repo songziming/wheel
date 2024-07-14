@@ -2,7 +2,6 @@
 
 # 创建虚拟磁盘并安装 grub，硬盘只有一个主分区，起始偏移 1M
 # $1 目标磁盘镜像
-# $2 内核镜像
 
 if [ "$EUID" -ne 0 ]
     then echo "run this script as root"
@@ -13,15 +12,16 @@ fi
 dd if=/dev/zero of=$1 bs=512 count=32768
 
 # 创建分区表，主分区从 1M 开始
-(
-    echo    n       # new partition
-    echo    p       # primary
-    echo    1       # partition number
-    echo    2048    # first sector, skip firt 1M
-    echo    32767   # last sector
-    echo    a       # bootable
-    echo    w       # write
-) | fdisk $1
+# 起始扇区号 2048，结尾扇区号 32767
+fdisk $1 << EOF
+n
+p
+1
+2048
+32767
+a
+w
+EOF
 
 # 创建两个loop文件，分别表示整块磁盘和主分区
 disk_loop=$(losetup --show -f $1)

@@ -1,10 +1,13 @@
-# build script for wheel os
+# build script for wheel kernel
 
 DEBUG   ?= 1
-ARCH    := x86_64
+KTEST   ?= $(DEBUG)
+
+ARCH    ?= x86_64
 
 # 编译内核用的编译器和链接器
 KCC     := clang --target=$(ARCH)-pc-none-elf
+KXX     := clang++ --target=$(ARCH)-pc-none-elf
 KLD     := ld.lld
 TCC     := clang
 TXX     := clang++
@@ -60,7 +63,7 @@ else
 endif
 
 KLAYOUT := kernel/arch_$(ARCH)/layout.ld
-KLFLAGS := -nostdlib --gc-sections -Map=$(OUT_MAP) -T $(KLAYOUT)  --no-warnings
+KLFLAGS := -nostdlib --gc-sections -Map=$(OUT_MAP) -T $(KLAYOUT) --no-warnings
 
 TCFLAGS := -g -DUNIT_TEST -Ihost_tools/kernel_test
 TCFLAGS += -fsanitize=address -fprofile-instr-generate -fcoverage-mapping
@@ -104,6 +107,8 @@ $(OUT_DIR)/objs/%.S.ko: %.S
 	$(KCC) -c -DS_FILE $(KCFLAGS) $(DEP_GEN) -o $@ $<
 $(OUT_DIR)/objs/%.c.ko: %.c
 	$(KCC) -c -DC_FILE $(KCFLAGS) $(DEP_GEN) -o $@ $<
+$(OUT_DIR)/objs/%.c.ko: %.cpp
+	$(KXX) -c -DC_FILE $(KCFLAGS) $(DEP_GEN) -o $@ $<
 $(OUT_ELF): $(KOBJS) | $(KLAYOUT)
 	$(KLD) $(KLFLAGS) -o $@ $^
 
@@ -115,7 +120,7 @@ $(OUT_ISO): $(OUT_ELF) host_tools/grub.cfg
 	@ cp host_tools/grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
 	@ grub-mkrescue -o $@ $(ISO_DIR)
 $(OUT_IMG): $(OUT_ELF) host_tools/grub.cfg
-	@ host_tools/diskimg_create.sh $@
+	@ host_tools/mkimage.sh $@
 	@ mmd   -i $(OUT_IMG)@@1M -D s ::/boot/grub
 	@ mcopy -i $(OUT_IMG)@@1M -D o -nv host_tools/grub.cfg ::/boot/grub/grub.cfg
 	@ mcopy -i $(OUT_IMG)@@1M -D o -nv $(OUT_ELF) ::/wheel.elf
