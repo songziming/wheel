@@ -59,7 +59,7 @@
 
 #ifdef C_FILE
 
-#include <def.h>
+#include <common.h>
 
 typedef struct mb2_header {
     uint32_t magic;         // must be MB2_MAGIC

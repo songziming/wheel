@@ -22,8 +22,8 @@ OUT_IMG := $(OUT_DIR)/hd.img
 KERNEL := kernel_new
 
 KSUBDIRS := $(patsubst %/,%,$(wildcard $(KERNEL)/*/))
-KSUBDIRS := $(filter-out $(wildcard $(KERNEL)/1_arch*), $(KSUBDIRS))
-KSUBDIRS := $(KERNEL)/1_arch_$(ARCH) $(KSUBDIRS)
+KSUBDIRS := $(filter-out $(wildcard $(KERNEL)/arch*), $(KSUBDIRS))
+KSUBDIRS := $(KERNEL)/arch_$(ARCH) $(KSUBDIRS)
 
 KSOURCES := $(foreach d,$(KSUBDIRS),$(shell find $(d) -name "*.S" -o -name "*.c"))
 KOBJECTS := $(patsubst $(KERNEL)/%,$(OUT_DIR)/%.o,$(KSOURCES))
@@ -51,12 +51,12 @@ ifeq ($(KASAN),1)
     CFLAGS += -mllvm -asan-globals=false
 endif
 
-LAYOUT := $(KERNEL)/1_arch_$(ARCH)/layout.ld
+LAYOUT := $(KERNEL)/arch_$(ARCH)/layout.ld
 LFLAGS := -nostdlib --gc-sections -Map=$(OUT_MAP) -T $(LAYOUT) --no-warnings
 
 DEPGEN = -MT $@ -MMD -MP -MF $(patsubst %.o,%.d,$@)
 
-include $(KERNEL)/1_arch_$(ARCH)/config.mk
+include $(KERNEL)/arch_$(ARCH)/config.mk
 
 ################################################################################
 

@@ -28,7 +28,7 @@
 
 #ifdef C_FILE
 
-#include <def.h>
+#include <common.h>
 
 // The symbol table for a.out
 typedef struct mb1_aout_sym_tbl {
