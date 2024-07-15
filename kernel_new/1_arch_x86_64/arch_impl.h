@@ -1,9 +1,10 @@
 #ifndef ARCH_IMPL_H
 #define ARCH_IMPL_H
 
-#define PAGE_SHIFT  12
-#define PAGE_SIZE   0x1000
+#define PAGE_SHIFT      12
+#define PAGE_SIZE       0x1000
 
+#define INIT_STACK_SIZE 0x1000
 
 #ifdef C_FILE
 

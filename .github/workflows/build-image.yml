@@ -1,0 +1,35 @@
+name: Build Wheel OS
+run-name: ${{github.actor}} is running build
+
+on:
+  - push
+
+jobs:
+
+  build-wheel-on-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: prepare dev env
+        run: echo "sourcing envsetup"
+      - name: cheskout repo
+        uses: actions/checkout@v4
+
+      - name: restore caches
+        id: restore_caches
+        uses: actions/cache/restore@v4
+        with:
+          key: ${{runner.os}}-caches
+          path: build/hd.img
+
+      - name: generate hd image
+        if: steps.restore_caches.outputs.cache-hit != 'true'
+        run: host_tools/mkimage.sh build/hd.img
+
+      - name: save caches
+        id: cache-primes-save
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            path/to/dependencies
+            some/other/dependencies
+          key: ${{ steps.restore_caches.outputs.cache-primary-key }}
