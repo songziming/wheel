@@ -14,6 +14,7 @@ OUT_DIR := build
 ISO_DIR := $(OUT_DIR)/iso
 OUT_ELF := $(OUT_DIR)/wheel.elf
 OUT_MAP := $(OUT_DIR)/wheel.map
+OUT_LIB := $(OUT_DIR)/wheel.so  # 单元测试用
 OUT_ISO := $(OUT_DIR)/cd.iso
 OUT_IMG := $(OUT_DIR)/hd.img
 
@@ -85,6 +86,9 @@ $(OUT_DIR)/%.c.o: $(KERNEL)/%.c
 
 $(OUT_ELF): $(KOBJECTS)
 	$(LD) $(LFLAGS) -o $@ $^
+
+$(OUT_LIB): $(KOBJECTS)
+	$(LD) -shared -o $@ $^
 
 $(OUT_ISO): $(OUT_ELF) host_tools/grub.cfg | $(ISO_DIR)/boot/grub/
 	cp $(OUT_ELF) $(ISO_DIR)/wheel.elf

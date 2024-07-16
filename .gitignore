@@ -1,5 +1,5 @@
 .vscode/
-build*/
+/build*
 
 *.bak
 *.profraw

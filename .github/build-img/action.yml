@@ -1,0 +1,10 @@
+name: 'build osdev image'
+description: 'build docker image with all osdev dependencies'
+
+# inputs:
+
+# outputs:
+
+runs:
+  using: 'docker'
+  image: 'host_tools/Dockerfile'
