@@ -8,6 +8,8 @@ jobs:
 
   build-wheel-on-ubuntu:
     runs-on: ubuntu-latest
+    container:
+      image: ./host_tools/Dockerfile
     steps:
       - name: prepare dev env
         run: echo "sourcing envsetup"
@@ -15,8 +17,10 @@ jobs:
       - name: cheskout repo
         uses: actions/checkout@v4
 
-      - name: run docker
-        uses: .github/build-img
+      # - name: run docker
+      #   uses: .github/build-img
+
+      //
 
       # - name: restore caches
       #   id: restore_caches
