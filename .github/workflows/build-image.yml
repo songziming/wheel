@@ -15,8 +15,8 @@ jobs:
       - name: cheskout repo
         uses: actions/checkout@v4
 
-      - name: build docker image
-        run: docker build . --file host_tools/Dockerfile -t osdev
+      # - name: build docker image
+      #   run: docker build . --file host_tools/Dockerfile -t osdev
 
       # - name: run docker
       #   uses: .github/build-img
