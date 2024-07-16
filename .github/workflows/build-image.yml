@@ -8,14 +8,15 @@ jobs:
 
   build-wheel-on-ubuntu:
     runs-on: ubuntu-latest
-    container:
-      image: ./host_tools/Dockerfile
     steps:
       - name: prepare dev env
         run: echo "sourcing envsetup"
 
       - name: cheskout repo
         uses: actions/checkout@v4
+
+      - name: build docker image
+        run: docker build . --file host_tools/Dockerfile -t osdev
 
       # - name: run docker
       #   uses: .github/build-img
