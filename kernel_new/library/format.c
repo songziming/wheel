@@ -1,4 +1,4 @@
-#include "printk.h"
+#include "format.h"
 #include "string.h"
 
 
@@ -9,7 +9,7 @@ typedef struct fmt_context {
     char       *buf;
     char       *end;
     format_cb_t cb;
-    void       *para;
+    // void       *para;
     size_t      len; // 已经通过 cb 输出的长度
 } fmt_context_t;
 
@@ -17,7 +17,7 @@ typedef struct fmt_context {
 static inline void fmt_flush(fmt_context_t *ctx) {
     if (NULL != ctx->cb) {
         size_t len = (size_t)(ctx->ptr - ctx->buf);
-        ctx->cb(ctx->para, ctx->buf, len);
+        ctx->cb(ctx->buf, len);
         ctx->ptr  = ctx->buf;
         ctx->len += len;
     }
@@ -60,7 +60,7 @@ static void fmt_string(fmt_context_t *ctx, const char *str, uint32_t flags, int 
         str = "(null)";
     }
 
-    int len = strnlen(str, -1);
+    int len = (int)strlen(str);
     if ((0 <= precision) && (precision < len)) {
         len = precision;
     }
@@ -207,13 +207,13 @@ static void fmt_number(fmt_context_t *ctx, uint64_t abs, int base, uint32_t flag
 // 如果能完整地格式化，则返回0
 // 如果不能完整格式化（目标buf不够大），则返回值表示fmt前面多少字节已经完成格式化
 // 如果回调函数para为空，则最多打印n个字符到buf
-size_t format(char *buf, size_t n, format_cb_t cb, void *para, const char *fmt, va_list args) {
+size_t format(char *buf, size_t n, format_cb_t cb, const char *fmt, va_list args) {
     fmt_context_t ctx;
     ctx.ptr  = buf;
     ctx.buf  = buf;
     ctx.end  = buf + n;
     ctx.cb   = cb;
-    ctx.para = para;
+    // ctx.para = para;
     ctx.len  = 0;
 
     while (*fmt) {
@@ -376,7 +376,7 @@ size_t format(char *buf, size_t n, format_cb_t cb, void *para, const char *fmt, 
 }
 
 size_t vsnprintk(char *buf, size_t n, const char *fmt, va_list args) {
-    size_t len = format(buf, n, NULL, NULL, fmt, args);
+    size_t len = format(buf, n, NULL, fmt, args);
 
     if (NULL != buf) {
         if (len < n) {

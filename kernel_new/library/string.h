@@ -3,7 +3,8 @@
 
 #include <common.h>
 
-WEAK size_t strnlen(const char *s, size_t n);
+WEAK size_t strlen(const char *s);
+WEAK int    strcmp(const char *s1, const char *s2);
 WEAK int    strncmp(const char *s1, const char *s2, size_t n);
 WEAK char  *strncpy(char *dst, const char *src, size_t n);
 

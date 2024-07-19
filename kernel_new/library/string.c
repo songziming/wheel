@@ -6,13 +6,21 @@
 // 其中 memcpy 需要支持 src==dst 的情况
 
 #include "string.h"
-// #include <wheel.h>
 
 
-WEAK size_t strnlen(const char *s, size_t n) {
+WEAK size_t strlen(const char *s) {
     const char *p = s;
-    for (; *p && n; ++p, --n) {}
+    for (; *p; ++p) {}
     return (size_t)(p - s);
+}
+
+WEAK int strcmp(const char *s1, const char *s2) {
+    for (; *s1 || *s2; ++s1, ++s2) {
+        if (*s1 != *s2) {
+            return (int)*s1 - (int)*s2;
+        }
+    }
+    return 0;
 }
 
 WEAK int strncmp(const char *s1, const char *s2, size_t n) {
