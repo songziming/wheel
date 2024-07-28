@@ -1,5 +1,10 @@
-#include <early_alloc.h>
+#include "early_alloc.h"
 #include <wheel.h>
+#include <debug.h>
+
+
+// 启动阶段的临时内存分配
+// 类似 linux/mm/memblock.c
 
 
 #define ALIGNMENT 16
@@ -70,7 +75,7 @@ INIT_TEXT void early_alloc_disable() {
     g_rw_buff.end = g_rw_buff.ptr;
 
 #ifdef DEBUG
-    klog("early-ro used 0x%zx, end=%p\n", (size_t)(g_ro_buff.end - g_ro_data), g_ro_buff.end);
-    klog("early-rw used 0x%zx, end=%p\n", (size_t)(g_rw_buff.end - g_rw_data), g_rw_buff.end);
+    log("early-ro used 0x%zx, end=%p\n", (size_t)(g_ro_buff.end - g_ro_data), g_ro_buff.end);
+    log("early-rw used 0x%zx, end=%p\n", (size_t)(g_rw_buff.end - g_rw_data), g_rw_buff.end);
 #endif
 }
