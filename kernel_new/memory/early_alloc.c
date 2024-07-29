@@ -43,7 +43,7 @@ static INIT_TEXT void *buff_alloc(buff_t *buff, size_t n) {
 INIT_TEXT void *early_alloc_ro(size_t n) {
     void *p = buff_alloc(&g_ro_buff, n);
     if (NULL == p) {
-        log("fatal: %s failed allocating %d\n", __func__, n);
+        log("fatal: %s failed allocating 0x%x\n", __func__, n);
         return NULL;
     }
     return p;
@@ -52,7 +52,7 @@ INIT_TEXT void *early_alloc_ro(size_t n) {
 INIT_TEXT void *early_alloc_rw(size_t n) {
     void *p = buff_alloc(&g_rw_buff, n);
     if (NULL == p) {
-        log("fatal: %s failed allocating %d\n", __func__, n);
+        log("fatal: %s failed allocating 0x%x\n", __func__, n);
         return NULL;
     }
     return p;

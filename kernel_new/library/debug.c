@@ -3,9 +3,9 @@
 #include "string.h"
 
 
-
-// TODO 做成函数指针，由 arch 设置 log_handler
-// void serial_puts(const char *s, size_t n);
+//------------------------------------------------------------------------------
+// 打印调试输出
+//------------------------------------------------------------------------------
 
 static void (*g_log_func)(const char *, size_t) = NULL;
 
@@ -27,10 +27,23 @@ void log(const char *fmt, ...) {
 }
 
 
+//------------------------------------------------------------------------------
+// 处理断言失败
+//------------------------------------------------------------------------------
 
+void assertion_fail(const char *file, const char *func, int line) {
+    log("Assertion fail: %s:%s %d\n", file, func, line);
+}
+
+
+//------------------------------------------------------------------------------
+// 栈溢出保护，编译选项 -fstack-protector
+//------------------------------------------------------------------------------
 
 // linux kernel 把 stack protector 放在了 panic.c 里面
+
 const uintptr_t __stack_chk_guard = 0x595e9fbd94fda766ULL;
+
 void __stack_chk_fail() {
     log("fatal: stack smashing detected\n");
     // klog_stacktrace();

@@ -38,6 +38,6 @@ typedef uint64_t cpuset_t;
 // 使用 uint32 表示页号，最多支持 4G-1 个物理页
 typedef uint32_t pfn_t;
 #define INVALID_PFN  0xffffffffU
-#define INVALID_ADDR 0xffffffffffffffffUL
+// #define INVALID_ADDR 0xffffffffffffffffUL
 
 #endif // COMMON_H
