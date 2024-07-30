@@ -3,6 +3,7 @@
 
 #include <common.h>
 
-void parse_kernel_symtab(void *ptr, uint32_t entsize, int num);
+void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num);
+void dump_symbols();
 
 #endif // SYMBOLS_H

@@ -1,5 +1,6 @@
 #include <wheel.h>
 #include <debug.h>
+#include <symbols.h>
 #include <mem_map.h>
 
 #include "multiboot1.h"
@@ -73,7 +74,11 @@ static INIT_TEXT void mb1_init(uint32_t ebx UNUSED) {
     }
 
     if (MB1_INFO_ELF_SHDR & info->flags) {
-        log("MB1 elf symbols\n");
+        // log("MB1 elf symbols\n");
+        // parse_kernel_symtab(
+        // (void *)(size_t)info->elf.addr, info->elf.size, info->elf.num);
+        mb1_elf_sec_tbl_t *elf = &info->elf;
+        parse_kernel_symtab((void *)(size_t)elf->addr, elf->size, elf->num);
     }
 
     if (MB1_INFO_FRAMEBUFFER_INFO & info->flags) {
@@ -108,9 +113,11 @@ static INIT_TEXT void mb2_init(uint32_t ebx UNUSED) {
         case MB2_TAG_TYPE_MMAP:
             mb2_parse_mmap(tag);
             break;
-        case MB2_TAG_TYPE_ELF_SECTIONS:
-            log("MB2 elf symbols\n");
+        case MB2_TAG_TYPE_ELF_SECTIONS: {
+            mb2_tag_elf_sections_t *elf = (mb2_tag_elf_sections_t *)tag;
+            parse_kernel_symtab(elf->sections, elf->entsize, elf->num);
             break;
+        }
         case MB2_TAG_TYPE_FRAMEBUFFER: {
             mb2_tag_framebuffer_t *fb = (mb2_tag_framebuffer_t *)tag;
             if (1 == fb->type && 32 == fb->bpp) {
@@ -166,16 +173,20 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     }
 
     if (g_is_graphical) {
-        // set_log_func(framebuf_puts);
         set_log_func(gui_log);
     } else {
         console_init();
-        // set_log_func(console_puts);
         set_log_func(text_log);
+    }
+
+    if (0 == g_rsdp) {
+        // TODO probe acpi rsdp
     }
 
     log("welcome to wheel os\n");
     log("build time %s %s\n", __DATE__, __TIME__);
+
+    dump_symbols();
 
 end:
     while (1) {}
