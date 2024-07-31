@@ -9,6 +9,7 @@
 #include <devices/serial.h>
 #include <devices/console.h>
 #include <devices/framebuf.h>
+#include <devices/acpi.h>
 
 
 static INIT_DATA size_t g_rsdp = 0;
@@ -180,13 +181,19 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     }
 
     if (0 == g_rsdp) {
-        // TODO probe acpi rsdp
+        g_rsdp = acpi_probe_rsdp();
+    }
+    if (0 == g_rsdp) {
+        log("fatal: ACPI::RSDP not found\n");
+        goto end;
     }
 
     log("welcome to wheel os\n");
     log("build time %s %s\n", __DATE__, __TIME__);
 
     dump_symbols();
+
+    acpi_show_tables();
 
 end:
     while (1) {}

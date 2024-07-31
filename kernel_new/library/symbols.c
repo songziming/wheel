@@ -72,7 +72,8 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num) {
     g_syms = early_alloc_ro(g_sym_num * sizeof(symbol_t));
     char *str_buf = early_alloc_ro(strbuf_len);
     int sym_idx = 0;
-    int str_idx = 0;
+    // int str_idx = 0;
+    char *str_ptr = str_buf;
 
     for (unsigned i = 0; i < num; ++i) {
         const Elf64_Shdr *sec = &secs[i];
@@ -105,18 +106,18 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num) {
 
             g_syms[sym_idx].addr = sym->st_value;
             g_syms[sym_idx].size = sym->st_size;
-            g_syms[sym_idx].name = str_buf + str_idx;
+            g_syms[sym_idx].name = str_ptr;
 
             size_t copysize = strlen(name) + 1;
-            memcpy(g_syms[sym_idx].name, name, copysize);
+            memcpy(str_ptr, name, copysize);
 
             ++sym_idx;
-            str_idx += copysize;
+            str_ptr += copysize;
         }
     }
 
     ASSERT(sym_idx == g_sym_num);
-    ASSERT(str_idx == strbuf_len);
+    ASSERT(str_ptr == str_buf + strbuf_len);
 }
 
 // size_t sym_locate(const char *name) {

@@ -13,6 +13,7 @@ typedef struct mem_range {
     mem_type_t type;
 } mem_range_t;
 
+// TODO 可以改为双链表，不需要提前统计 range 个数，还可以不按顺序添加
 static INIT_DATA int          g_mem_range_max = 0;
 static CONST     int          g_mem_range_num = 0;
 static CONST     mem_range_t *g_mem_ranges    = NULL;
@@ -47,4 +48,17 @@ INIT_TEXT void mem_map_add(size_t start, size_t end, mem_type_t type) {
     rng->start = start;
     rng->end   = end;
     rng->type  = type;
+}
+
+mem_type_t mem_block_type(size_t addr) {
+    for (int i = 0; i < g_mem_range_num; ++i) {
+        if (g_mem_ranges[i].start > addr) {
+            continue;
+        }
+        if (addr < g_mem_ranges[i].end) {
+            return g_mem_ranges[i].type;
+        }
+        break;
+    }
+    return MEM_RESERVED;
 }
