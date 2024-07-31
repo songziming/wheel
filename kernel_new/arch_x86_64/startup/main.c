@@ -190,6 +190,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     log("welcome to wheel os\n");
     log("build time %s %s\n", __DATE__, __TIME__);
+    acpi_parse_rsdp(g_rsdp);
 
     dump_symbols();
 

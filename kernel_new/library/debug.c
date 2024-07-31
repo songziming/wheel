@@ -31,8 +31,8 @@ void log(const char *fmt, ...) {
 // 处理断言失败
 //------------------------------------------------------------------------------
 
-void assertion_fail(const char *file, const char *func, int line) {
-    log("Assertion fail: %s:%s %d\n", file, func, line);
+void assertion_fail(const char *file, int line, const char *func) {
+    log("Assertion fail: %s:%d func:%s\n", file, line, func);
 }
 
 
