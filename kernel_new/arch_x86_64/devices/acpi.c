@@ -196,3 +196,19 @@ void acpi_show_tables() {
     }
     log("\n");
 }
+
+// 根据签名寻找 ACPI 表
+acpi_tbl_t *acpi_find_table(const char sig[4]) {
+    ASSERT(0 != g_table_num);
+    ASSERT(NULL != g_tables);
+
+    for (int i = 0; i < g_table_num; ++i) {
+        if (NULL == g_tables[i]) {
+            continue;
+        }
+        if (0 == strncmp(sig, g_tables[i]->signature, 4)) {
+            return g_tables[i];
+        }
+    }
+    return NULL;
+}

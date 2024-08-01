@@ -19,7 +19,6 @@ INIT_TEXT size_t acpi_probe_rsdp();
 INIT_TEXT void acpi_parse_rsdp(size_t rsdp);
 
 void acpi_show_tables();
-
-// acpi_tbl_t *acpi_get_table(const char sig[4]);
+acpi_tbl_t *acpi_find_table(const char sig[4]);
 
 #endif // ACPI_H
