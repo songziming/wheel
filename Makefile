@@ -4,6 +4,7 @@ DEBUG ?= 1
 UBSAN ?= $(DEBUG)
 KASAN ?= 0 #$(DEBUG)
 KTEST ?= $(DEBUG)
+KCOV  ?= 1
 
 ARCH  ?= x86_64
 
@@ -66,6 +67,11 @@ endif
 
 LAYOUT := $(KERNEL)/arch_$(ARCH)/layout.ld
 LFLAGS := -nostdlib --gc-sections -Map=$(OUT_MAP) -T $(LAYOUT) --no-warnings
+
+ifeq ($(KCOV),1)
+    CFLAGS += -fprofile-instr-generate -fcoverage-mapping -fcoverage-mcdc
+    # LFLAGS += -fprofile-instr-generate -fcoverage-mapping -fcoverage-mcdc
+endif
 
 DEPGEN = -MT $@ -MMD -MP -MF $(patsubst %.o,%.d,$@)
 
