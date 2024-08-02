@@ -1,6 +1,6 @@
 #include "console.h"
 #include <arch_impl.h>
-#include <liba/rw.h>
+#include <generic/rw.h>
 #include <early_alloc.h>
 #include <string.h>
 

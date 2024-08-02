@@ -1,4 +1,4 @@
-#include <common.h>
+#include "cpuinfo.h"
 #include "rw.h"
 
 
