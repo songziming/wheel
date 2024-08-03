@@ -13,6 +13,7 @@
 #include <devices/acpi.h>
 #include <devices/acpi_madt.h>
 
+#include <generic/cpuinfo.h>
 #include <generic/smp.h>
 
 
@@ -184,6 +185,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         console_init();
         set_log_func(text_log);
     }
+
+    parse_cpuinfo();
 
     log("welcome to wheel os\n");
     log("build time %s %s\n", __DATE__, __TIME__);
