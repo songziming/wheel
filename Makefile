@@ -8,8 +8,8 @@ KCOV  ?= 1
 
 ARCH  ?= x86_64
 
-CC := clang --target=$(ARCH)-pc-none-elf
-LD := ld.lld
+# CC := clang --target=$(ARCH)-pc-none-elf
+# LD := ld.lld
 
 
 #-------------------------------------------------------------------------------
@@ -37,49 +37,55 @@ KSUBDIRS := $(KERNEL)/arch_$(ARCH) $(KSUBDIRS)
 
 # 内核源码
 KSOURCES := $(foreach d,$(KSUBDIRS),$(shell find $(d) -name "*.S" -o -name "*.c"))
-KOBJECTS := $(patsubst %,$(OUT_DIR)/%.o,$(KSOURCES))
+KOBJECTS := $(patsubst %,$(OUT_DIR)/%.ko,$(KSOURCES))
 
 # 单元测试文件
-TSOURCES := $(wildcard kernel_test/*.c)
-TOBJECTS := $(patsubst %,$(OUT_DIR)/%.o,$(TSOURCES))
+TSOURCES := $(wildcard kernel_test/*.c) $(filter %.c,$(KSOURCES))
+TOBJECTS := $(patsubst %,$(OUT_DIR)/%.to,$(TSOURCES))
 
 # 依赖文件和输出目录
-DEPENDS  := $(patsubst %.o,%.d,$(KOBJECTS) $(TOBJECTS))
+DEPENDS  := $(patsubst %,%.d,$(KOBJECTS) $(TOBJECTS))
 OBJDIRS  := $(sort $(dir $(DEPENDS)))
 
 
 #-------------------------------------------------------------------------------
-# 内核编译选项
+# 编译链接选项
 #-------------------------------------------------------------------------------
 
-CFLAGS := -std=c11 $(KSUBDIRS:%=-I%) -Wall -Wextra -Wshadow -Werror=implicit
-CFLAGS += -ffreestanding -fno-builtin -flto -ffunction-sections -fdata-sections
+CFLAGS := -std=c11 $(KSUBDIRS:%=-I%) -ffunction-sections -fdata-sections
+
+STANDALONE := -ffreestanding -fno-builtin
+COVERAGE := -fprofile-instr-generate -fcoverage-mapping
+
+# 编译内核用的参数
+KCFLAGS := $(CFLAGS) -target $(ARCH)-pc-none-elf -flto -Wall -Wextra -Wshadow -Werror=implicit
+
+# 编译测试代码用的参数
+TCFLAGS := $(CFLAGS) -fsanitize=address
+
+KLFLAGS := -nostdlib --gc-sections -Map=$(OUT_MAP) -T $(KERNEL)/arch_$(ARCH)/layout.ld --no-warnings
+
+DEPGEN = -MT $@ -MMD -MP -MF $@.d
 
 ifeq ($(DEBUG),1)
-    CFLAGS += -g -DDEBUG -fstack-protector -fno-omit-frame-pointer
+    KCFLAGS += -g -DDEBUG -fstack-protector -fno-omit-frame-pointer
 else
-    CFLAGS += -O2 -DNDEBUG
+    KCFLAGS += -O2 -DNDEBUG
 endif
 
 ifeq ($(UBSAN),1)
-    CFLAGS += -fsanitize=undefined
+    KCFLAGS += -fsanitize=undefined
 endif
 
 ifeq ($(KASAN),1)
-    CFLAGS += -fsanitize=kernel-address
-    CFLAGS += -mllvm -asan-mapping-offset=0xdfffe00000000000
-    CFLAGS += -mllvm -asan-globals=false
+    KCFLAGS += -fsanitize=kernel-address
+    KCFLAGS += -mllvm -asan-mapping-offset=0xdfffe00000000000
+    KCFLAGS += -mllvm -asan-globals=false
 endif
-
-LAYOUT := $(KERNEL)/arch_$(ARCH)/layout.ld
-LFLAGS := -nostdlib --gc-sections -Map=$(OUT_MAP) -T $(LAYOUT) --no-warnings
 
 ifeq ($(KCOV),1)
-    CFLAGS += -fprofile-instr-generate -fcoverage-mapping -fcoverage-mcdc
-    # LFLAGS += -fprofile-instr-generate -fcoverage-mapping -fcoverage-mcdc
+    KCFLAGS += -fprofile-instr-generate -fcoverage-mapping -fcoverage-mcdc
 endif
-
-DEPGEN = -MT $@ -MMD -MP -MF $(patsubst %.o,%.d,$@)
 
 include $(KERNEL)/arch_$(ARCH)/config.mk
 
@@ -110,21 +116,23 @@ $(KOBJECTS) $(TOBJECTS): | $(OBJDIRS)
 $(OUT_DIR)/%/:
 	mkdir -p $@
 
-$(OUT_DIR)/%.S.o: %.S
-	$(CC) -c -DS_FILE $(CFLAGS) $(DEPGEN) -o $@ $<
+$(OUT_DIR)/%.S.ko: %.S
+	clang -c -DS_FILE $(KCFLAGS) $(STANDALONE) $(DEPGEN) -o $@ $<
 
-$(OUT_DIR)/$(KERNEL)/%.c.o: $(KERNEL)/%.c
-	$(CC) -c -DC_FILE $(CFLAGS) $(DEPGEN) -o $@ $<
-
-# TODO 编译选项与内核有共用的部分，可以替换成变量
-$(OUT_DIR)/kernel_test/%.c.o: kernel_test/%.c
-	clang -c -DC_FILE -std=c11 $(KSUBDIRS:%=-I%) $(DEPGEN) -o $@ $<
+$(OUT_DIR)/%.c.ko: %.c # 内核代码，用于内核
+	clang -c -DC_FILE $(KCFLAGS) $(STANDALONE) $(DEPGEN) -o $@ $<
 
 $(OUT_ELF): $(KOBJECTS)
-	$(LD) $(LFLAGS) -o $@ $^
+	ld.lld $(KLFLAGS) -o $@ $^
 
-$(OUT_TEST): $(filter %.c.o,$(KOBJECTS)) $(TOBJECTS)
-	clang -flto -fuse-ld=lld -o $@ $^
+$(OUT_DIR)/$(KERNEL)/%.c.to: $(KERNEL)/%.c # 内核代码，用于单元测试
+	clang -c -DC_FILE $(TCFLAGS) $(STANDALONE) $(COVERAGE) $(DEPGEN) -o $@ $<
+
+$(OUT_DIR)/kernel_test/%.c.to: kernel_test/%.c # 单元测试代码，用于单元测试
+	clang -c -DC_FILE $(TCFLAGS) $(DEPGEN) -o $@ $<
+
+$(OUT_TEST): $(TOBJECTS)
+	clang -fuse-ld=lld -lasan -o $@ $^
 
 $(OUT_ISO): $(OUT_ELF) host_tools/grub.cfg | $(ISO_DIR)/boot/grub/
 	cp $(OUT_ELF) $(ISO_DIR)/wheel.elf
