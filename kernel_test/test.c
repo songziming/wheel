@@ -68,13 +68,13 @@ static void run_test_case(testitem_t *item) {
 // TODO 解析命令行，可以只运行某些 suite
 
 int main() {
-    size_t num = (size_t)(&__stop_testitems - &__start_testitems) / sizeof(testitem_t *);
-    testitem_t **items = (testitem_t **)&__start_testitems;
+    size_t num = (size_t)(&__stop_testitems - &__start_testitems) / sizeof(testitem_t);
+    testitem_t *items = (testitem_t *)&__start_testitems;
 
     // 统计 suite、test 名称字符串长度上限
     for (size_t i = 0; i < num; ++i) {
-        int l1 = (int)strlen(items[i]->_suite);
-        int l2 = (int)strlen(items[i]->_test);
+        int l1 = (int)strlen(items[i]._suite);
+        int l2 = (int)strlen(items[i]._test);
         if (suite_maxlen < l1) {
             suite_maxlen = l1;
         }
@@ -85,7 +85,7 @@ int main() {
 
     // 逐一运行每个测试
     for (size_t i = 0; i < num; ++i) {
-        curr_item = items[i];
+        curr_item = &items[i];
         run_test_case(curr_item);
     }
 

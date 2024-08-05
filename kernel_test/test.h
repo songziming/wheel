@@ -22,17 +22,17 @@ typedef struct testitem {
 #define TESTSECT __attribute__((section("testitems"), used))
 
 #define TEST_F(suite, test, setup, teardown)    \
-    void FUNCNAME(suite, test)();               \
-    static testitem_t ITEMNAME(suite, test) = { \
-        #suite,                                 \
-        #test,                                  \
-        setup,                                  \
-        teardown,                               \
-        FUNCNAME(suite, test)                   \
-    };                                          \
-    static TESTSECT testitem_t *ITEMPTR(suite, test) \
-        = & ITEMNAME(suite, test); \
-    void FUNCNAME(suite, test)()
+void FUNCNAME(suite, test)();                   \
+TESTSECT testitem_t ITEMNAME(suite, test) = {   \
+    #suite,                                     \
+    #test,                                      \
+    setup,                                      \
+    teardown,                                   \
+    FUNCNAME(suite, test)                       \
+};                                              \
+void FUNCNAME(suite, test)()
+
+#define TEST(suite, test) TEST_F(suite, test, NULL, NULL)
 
 void report_test_fail(const char *file, const char *func, int line, const char *msg, ...);
 
