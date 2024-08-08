@@ -2,6 +2,7 @@
 #include <debug.h>
 #include <symbols.h>
 #include <mem_map.h>
+#include <early_alloc.h>
 
 #include "multiboot1.h"
 #include "multiboot2.h"
@@ -15,6 +16,7 @@
 
 #include <generic/cpuinfo.h>
 #include <generic/smp.h>
+#include <generic/gdt_idt_tss.h>
 
 
 static INIT_DATA size_t g_rsdp = 0;
@@ -170,6 +172,9 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     serial_init();
     set_log_func(serial_puts);
 
+    parse_cpuinfo();
+    // TODO 开启相关CPU功能
+
     // 解析 multiboot 信息
     switch (eax) {
     case MB1_BOOTLOADER_MAGIC: mb1_init(ebx); break;
@@ -185,8 +190,6 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         console_init();
         set_log_func(text_log);
     }
-
-    parse_cpuinfo();
 
     log("welcome to wheel os\n");
     log("build time %s %s\n", __DATE__, __TIME__);
@@ -206,6 +209,22 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         goto end;
     }
     parse_madt(madt);
+
+    // TODO 检查 Acpi::DMAR，判断是否需要 interrupt remapping
+    // TODO 检查 Acpi::SRAT，获取 numa 信息（个人电脑一般不需要）
+
+    // 关键数据已经备份，可以放开 early-alloc 长度限制
+    early_rw_unlock();
+
+    // TODO 检查 Acpi::MCFG，分析 PCIe 信息
+
+    // 切换到正式的 GDT，加载 IDT
+    gdt_init();
+    gdt_load();
+    idt_init();
+    idt_load();
+
+    // TODO 划分内存布局，启用物理页面管理
 
     dump_symbols();
     acpi_show_tables();

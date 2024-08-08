@@ -1,4 +1,5 @@
 #include "early_alloc.h"
+#include "mem_map.h"
 #include <wheel.h>
 #include <debug.h>
 
@@ -60,12 +61,8 @@ INIT_TEXT void *early_alloc_rw(size_t n) {
 
 // 将 early_rw 可分配范围延长到所在内存的上限
 INIT_TEXT void early_rw_unlock() {
-    // size_t ptr = (size_t)g_rw_buff.ptr - KERNEL_TEXT_ADDR;
-    // pmrange_t *rng = pmmap_locate(ptr);
-    // ASSERT(NULL != rng);
-    // ASSERT(PM_AVAILABLE == rng->type);
-
-    // g_rw_buff.end = (uint8_t *)rng->end + KERNEL_TEXT_ADDR;
+    size_t ptr = (size_t)g_rw_buff.ptr - KERNEL_TEXT_ADDR;
+    g_rw_buff.end = (uint8_t *)mem_block_end(ptr) + KERNEL_TEXT_ADDR;
 }
 
 

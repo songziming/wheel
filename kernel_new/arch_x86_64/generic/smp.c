@@ -152,3 +152,17 @@ INIT_TEXT void parse_madt(madt_t *madt) {
     //      因此要等 IO APIC 记录完成再统计
 
 }
+
+
+//------------------------------------------------------------------------------
+// 实现 interface
+//------------------------------------------------------------------------------
+
+// inline int cpu_count() {
+//     ASSERT(0 != g_loapic_num);
+//     return g_loapic_num;
+// }
+
+// inline int cpu_index() {
+//     return 0;
+// }

@@ -489,7 +489,6 @@ INIT_TEXT void parse_cpuinfo() {
     // g_tsc_ratio[0] = b;
     // g_tsc_ratio[1] = a;
 
-
     // 获取各级缓存信息，获取方式与 vendor 有关
     if (0 == memcmp(g_cpu_vendor, VENDOR_INTEL, 12)) {
         intel_get_cache_info();

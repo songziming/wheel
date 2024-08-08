@@ -50,6 +50,21 @@ INIT_TEXT void mem_map_add(size_t start, size_t end, mem_type_t type) {
     rng->type  = type;
 }
 
+// 获取所在 memblock 的结束位置
+// TODO 直接返回 memblock 结构体更合适
+INIT_TEXT size_t mem_block_end(size_t addr) {
+    for (int i = 0; i < g_mem_range_num; ++i) {
+        if (g_mem_ranges[i].start > addr) {
+            continue;
+        }
+        if (addr < g_mem_ranges[i].end) {
+            return g_mem_ranges[i].end;
+        }
+        break;
+    }
+    return 0;
+}
+
 mem_type_t mem_block_type(size_t addr) {
     for (int i = 0; i < g_mem_range_num; ++i) {
         if (g_mem_ranges[i].start > addr) {
@@ -61,19 +76,4 @@ mem_type_t mem_block_type(size_t addr) {
         break;
     }
     return MEM_RESERVED;
-}
-
-// 获取所在 memblock 的结束位置
-// TODO 直接返回 memblock 结构体更合适
-size_t mem_block_end(size_t addr) {
-    for (int i = 0; i < g_mem_range_num; ++i) {
-        if (g_mem_ranges[i].start > addr) {
-            continue;
-        }
-        if (addr < g_mem_ranges[i].end) {
-            return g_mem_ranges[i].end;
-        }
-        break;
-    }
-    return 0;
 }
