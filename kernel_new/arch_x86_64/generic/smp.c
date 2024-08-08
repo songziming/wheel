@@ -1,4 +1,5 @@
 #include "smp.h"
+#include <arch_intf.h>
 #include <devices/acpi.h>
 #include <devices/acpi_madt.h>
 #include <early_alloc.h>
@@ -158,11 +159,11 @@ INIT_TEXT void parse_madt(madt_t *madt) {
 // 实现 interface
 //------------------------------------------------------------------------------
 
-// inline int cpu_count() {
-//     ASSERT(0 != g_loapic_num);
-//     return g_loapic_num;
-// }
+inline int cpu_count() {
+    ASSERT(0 != g_loapic_num);
+    return g_loapic_num;
+}
 
-// inline int cpu_index() {
-//     return 0;
-// }
+inline int cpu_index() {
+    return 0;
+}

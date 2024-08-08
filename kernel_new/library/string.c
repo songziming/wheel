@@ -106,3 +106,18 @@ WEAK void *memmove(void *dst, const void *src, size_t n) {
 
     return dst;
 }
+
+
+// #ifdef UNIT_TEST
+
+// // 单元测试程序引用了 libc，其中的 string 函数会覆盖这里的实现
+// // 定义别名，通过这些别名进行测试
+// size_t kstrnlen(const char *s, size_t n) ALIAS("strnlen");
+// size_t kstrncmp(const char *s1, const char *s2, size_t n) ALIAS("strncmp");
+// char  *kstrncpy(char *dst, const char *src, size_t n) ALIAS("strncpy");
+// void *kmemset(void *buf, int x, size_t n) ALIAS("memset");
+// int   kmemcmp(const void *s1, const void *s2, size_t n) ALIAS("memcmp");
+// void *kmemcpy(void *dst, const void *src, size_t n) ALIAS("memcpy");
+// void *kmemmove(void *dst, const void *src, size_t n) ALIAS("memmove");
+
+// #endif // UNIT_TEST
