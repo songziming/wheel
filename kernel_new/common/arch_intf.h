@@ -3,10 +3,6 @@
 
 #include "common.h"
 
-
-INIT_TEXT void *early_alloc_ro(size_t size);
-INIT_TEXT void *early_alloc_rw(size_t size);
-
 NORETURN void emu_exit(int ret);
 void emu_break();
 int arch_unwind(size_t *addrs, int max);
