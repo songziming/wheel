@@ -2,7 +2,7 @@
 #include <arch_impl.h>
 #include <generic/rw.h>
 #include <early_alloc.h>
-#include <string.h>
+#include <str.h>
 
 
 // VGA 寄存器

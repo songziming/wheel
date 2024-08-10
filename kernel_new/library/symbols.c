@@ -2,7 +2,7 @@
 #include "elf.h"
 #include <debug.h>
 #include <early_alloc.h>
-#include <string.h>
+#include <str.h>
 
 
 // 管理内核符号表

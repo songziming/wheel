@@ -1,4 +1,5 @@
 #include "test.h"
+#include <str.h>
 #include <string.h>
 
 // TODO 需要调用内核版本的 string，而不是标准库里面的

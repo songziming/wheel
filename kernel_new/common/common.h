@@ -8,8 +8,7 @@
 
 #define UNUSED      __attribute__((unused))
 #define PACKED      __attribute__((packed))
-// #define WEAK        __attribute__((weak))
-#define WEAK
+#define WEAK        __attribute__((weak))
 #define PURE        __attribute__((pure))
 #define NORETURN    __attribute__((noreturn))
 #define MALLOC      __attribute__((malloc))
@@ -23,6 +22,13 @@
 #define INIT_BSS    SECTION(".init.bss")
 #define PCPU_DATA   SECTION(".pcpu.data")
 #define PCPU_BSS    SECTION(".pcpu.bss")
+
+#ifdef UNIT_TEST
+    // #define WEAK static
+    #define ALIAS(name) __attribute__((alias(name)))
+#else
+    #define WEAK __attribute__((weak))
+#endif
 
 #ifndef offsetof
 #define offsetof(t,m) ((size_t)&((t *)0)->m)

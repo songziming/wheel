@@ -1,7 +1,7 @@
 #include "framebuf.h"
 #include <arch_impl.h>
 #include <early_alloc.h>
-#include <string.h>
+#include <str.h>
 
 
 // 图形化终端，仅支持 32-bit bpp

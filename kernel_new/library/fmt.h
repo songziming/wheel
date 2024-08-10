@@ -1,5 +1,5 @@
-#ifndef FORMAT_H
-#define FORMAT_H
+#ifndef FMT_H
+#define FMT_H
 
 #include <common.h>
 
@@ -9,4 +9,4 @@ size_t format(char *buf, size_t n, format_cb_t cb, const char *fmt, va_list args
 size_t vsnprintk(char *buf, size_t n, const char *fmt, va_list args);
 PRINTF(3, 4) size_t snprintk(char *buf, size_t n, const char *fmt, ...);
 
-#endif // FORMAT_H
+#endif // FMT_H

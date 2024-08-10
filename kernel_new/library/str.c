@@ -5,7 +5,7 @@
 // GCC 规定，freestanding 环境下需要实现四个函数：memcpy、memmove、memset、memcmp
 // 其中 memcpy 需要支持 src==dst 的情况
 
-#include "string.h"
+#include "str.h"
 
 
 WEAK size_t strlen(const char *s) {
@@ -108,17 +108,17 @@ WEAK void *memmove(void *dst, const void *src, size_t n) {
 }
 
 
-// #ifdef UNIT_TEST
+#ifdef UNIT_TEST
 
-// // 单元测试程序引用了 libc，其中的 string 函数会覆盖这里的实现
-// // 定义别名，通过这些别名进行测试
-// size_t kstrlen(const char *s, size_t n) __attribute__((alias("strlen")));
-// size_t kstrcmp(const char *s1, const char *s2) __attribute__((alias("strcmp")));
-// size_t kstrncmp(const char *s1, const char *s2, size_t n) __attribute__((alias("strncmp")));
-// char  *kstrncpy(char *dst, const char *src, size_t n) __attribute__((alias("strncpy")));
-// void  *kmemset(void *buf, int x, size_t n) __attribute__((alias("memset")));
-// int    kmemcmp(const void *s1, const void *s2, size_t n) __attribute__((alias("memcmp")));
-// void  *kmemcpy(void *dst, const void *src, size_t n) __attribute__((alias("memcpy")));
-// // void  *kmemmove(void *dst, const void *src, size_t n) __attribute__((alias("memmove")));
+// 单元测试程序引用了 libc，其中的 string 函数会覆盖这里的实现
+// 定义别名，通过这些别名进行测试
+size_t kstrlen(const char *s, size_t n) __attribute__((alias("strlen")));
+size_t kstrcmp(const char *s1, const char *s2) __attribute__((alias("strcmp")));
+size_t kstrncmp(const char *s1, const char *s2, size_t n) __attribute__((alias("strncmp")));
+char  *kstrncpy(char *dst, const char *src, size_t n) __attribute__((alias("strncpy")));
+void  *kmemset(void *buf, int x, size_t n) __attribute__((alias("memset")));
+int    kmemcmp(const void *s1, const void *s2, size_t n) __attribute__((alias("memcmp")));
+void  *kmemcpy(void *dst, const void *src, size_t n) __attribute__((alias("memcpy")));
+// void  *kmemmove(void *dst, const void *src, size_t n) __attribute__((alias("memmove")));
 
-// #endif // UNIT_TEST
+#endif // UNIT_TEST

@@ -1,6 +1,6 @@
 #include "gdt_idt_tss.h"
 #include <debug.h>
-#include <string.h>
+#include <str.h>
 #include <early_alloc.h>
 #include <arch_intf.h>
 
