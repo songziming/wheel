@@ -8,7 +8,8 @@
 
 #define UNUSED      __attribute__((unused))
 #define PACKED      __attribute__((packed))
-#define WEAK        __attribute__((weak))
+// #define WEAK        __attribute__((weak))
+#define WEAK
 #define PURE        __attribute__((pure))
 #define NORETURN    __attribute__((noreturn))
 #define MALLOC      __attribute__((malloc))

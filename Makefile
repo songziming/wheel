@@ -149,7 +149,7 @@ $(OUT_DIR)/$(KERNEL)/%.c.to: $(KERNEL)/%.c
 $(OUT_DIR)/kernel_test/%.c.to: kernel_test/%.c
 	clang -c -DC_FILE $(TCFLAGS) $(MAKEDEP) -o $@ $<
 $(OUT_TEST): $(TOBJECTS)
-	clang -fuse-ld=lld $(TLFLAGS) $(MAKECOV) -lasan -lm -pthread -o $@ $^
+	clang -fuse-ld=lld $(TLFLAGS) $(MAKECOV) -o $@ $^ -lasan
 
 # 运行单元测试，生成代码覆盖率文件
 $(COV_RAW): $(OUT_TEST)

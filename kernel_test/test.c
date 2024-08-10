@@ -1,10 +1,9 @@
+#include "test.h"
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
 #include <setjmp.h>
-// #include <execinfo.h>
-
-#include "test.h"
 
 #define RED     "\033[0;31m"
 #define GREEN   "\033[0;32m"
@@ -66,6 +65,7 @@ static void run_test_case(testitem_t *item) {
 
 
 // TODO 解析命令行，可以只运行某些 suite
+// TODO 解析环境变量 LLVM_PROFILE_FILE，设置输出文件位置
 
 int main() {
     size_t num = (size_t)(&__stop_testitems - &__start_testitems) / sizeof(testitem_t);

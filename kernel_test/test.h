@@ -1,5 +1,5 @@
-#ifndef TEST_C
-#define TEST_C
+#ifndef TEST_H
+#define TEST_H
 
 // 单元测试支持，可以与内核编译在一起，也可以作为应用程序在 host 环境下运行
 
@@ -42,4 +42,4 @@ void report_test_fail(const char *file, const char *func, int line, const char *
     } \
 } while (0)
 
-#endif // TEST_C
+#endif // TEST_H
