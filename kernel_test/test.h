@@ -19,7 +19,7 @@ typedef struct testitem {
 #define ITEMNAME(suite, test) CONCAT(item_, FUNCNAME(suite, test))
 #define ITEMPTR(suite, test)  CONCAT(ptr_, FUNCNAME(suite, test))
 
-#define TESTSECT __attribute__((section("testitems"), used))
+#define TESTSECT __attribute__((section("testitems"),used,retain))
 
 #define TEST_F(suite, test, setup, teardown)    \
 void FUNCNAME(suite, test)();                   \

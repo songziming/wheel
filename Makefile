@@ -25,6 +25,7 @@ COV_DIR := $(OUT_DIR)/coverage
 COV_RAW := $(OUT_DIR)/test.profraw
 COV_DAT := $(OUT_DIR)/test.profdata
 
+
 #-------------------------------------------------------------------------------
 # 内核文件列表
 #-------------------------------------------------------------------------------
@@ -61,7 +62,8 @@ KCFLAGS += -Wall -Wextra -Wshadow -Werror=implicit
 KLFLAGS := -T $(KERNEL)/arch_$(ARCH)/layout.ld -Map=$(OUT_MAP)
 KLFLAGS += -nostdlib --gc-sections --no-warnings
 
-TCFLAGS := $(CFLAGS) -g -DUNITTEST -fsanitize=address
+TCFLAGS := $(CFLAGS) -g -DUNIT_TEST -fsanitize=address
+TLFLAGS := -Wl,--gc-sections
 
 BAREMETAL := -ffreestanding -fno-builtin
 MAKECOV := -fprofile-instr-generate -fcoverage-mapping
@@ -147,7 +149,7 @@ $(OUT_DIR)/$(KERNEL)/%.c.to: $(KERNEL)/%.c
 $(OUT_DIR)/kernel_test/%.c.to: kernel_test/%.c
 	clang -c -DC_FILE $(TCFLAGS) $(MAKEDEP) -o $@ $<
 $(OUT_TEST): $(TOBJECTS)
-	clang -fuse-ld=lld $(MAKECOV) -lasan -lm -pthread -o $@ $^
+	clang -fuse-ld=lld $(TLFLAGS) $(MAKECOV) -lasan -lm -pthread -o $@ $^
 
 # 运行单元测试，生成代码覆盖率文件
 $(COV_RAW): $(OUT_TEST)
