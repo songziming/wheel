@@ -1,8 +1,8 @@
 #include <wheel.h>
-#include <debug.h>
-#include <symbols.h>
-#include <mem_map.h>
-#include <early_alloc.h>
+#include <library/debug.h>
+#include <library/symbols.h>
+#include <memory/mem_map.h>
+#include <memory/early_alloc.h>
 
 #include "multiboot1.h"
 #include "multiboot2.h"

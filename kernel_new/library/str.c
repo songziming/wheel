@@ -8,6 +8,12 @@
 #include "str.h"
 
 
+#ifdef UNIT_TEST
+#define QUALIFIER static
+#else
+#define QUALIFIER
+#endif // UNIT_TEST
+
 WEAK size_t strlen(const char *s) {
     const char *p = s;
     for (; *p; ++p) {}

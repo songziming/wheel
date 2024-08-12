@@ -42,6 +42,8 @@ void assertion_fail(const char *file, int line, const char *func) {
 
 // linux kernel 把 stack protector 放在了 panic.c 里面
 
+#ifndef UNIT_TEST
+
 const uintptr_t __stack_chk_guard = 0x595e9fbd94fda766ULL;
 
 void __stack_chk_fail() {
@@ -49,3 +51,5 @@ void __stack_chk_fail() {
     // klog_stacktrace();
     // emu_exit(1);
 }
+
+#endif // UNIT_TEST

@@ -1,7 +1,7 @@
 #include "early_alloc.h"
 #include "mem_map.h"
 #include <wheel.h>
-#include <debug.h>
+#include <library/debug.h>
 
 
 // 启动阶段的临时内存分配

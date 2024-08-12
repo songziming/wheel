@@ -1,8 +1,8 @@
 #include "console.h"
 #include <arch_impl.h>
 #include <generic/rw.h>
-#include <early_alloc.h>
-#include <str.h>
+#include <memory/early_alloc.h>
+#include <library/str.h>
 
 
 // VGA 寄存器

@@ -1,7 +1,7 @@
 #include "gdt_idt_tss.h"
-#include <debug.h>
-#include <str.h>
-#include <early_alloc.h>
+#include <library/debug.h>
+#include <library/str.h>
+#include <memory/early_alloc.h>
 #include <arch_intf.h>
 
 

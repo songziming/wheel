@@ -1,9 +1,9 @@
 #include "acpi.h"
 #include <arch_impl.h>
-#include <mem_map.h>
-#include <debug.h>
-#include <early_alloc.h>
-#include <str.h>
+#include <memory/mem_map.h>
+#include <library/debug.h>
+#include <memory/early_alloc.h>
+#include <library/str.h>
 
 
 

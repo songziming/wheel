@@ -37,12 +37,15 @@ KSUBDIRS := $(patsubst %/,%,$(wildcard $(KERNEL)/*/))
 KSUBDIRS := $(filter-out $(wildcard $(KERNEL)/arch*), $(KSUBDIRS))
 KSUBDIRS := $(KERNEL)/arch_$(ARCH) $(KSUBDIRS)
 
+# KSUBDIRS := memory
+
 # 内核源码
 KSOURCES := $(foreach d,$(KSUBDIRS),$(shell find $(d) -name "*.S" -o -name "*.c"))
 KOBJECTS := $(patsubst %,$(OUT_DIR)/%.ko,$(KSOURCES))
 
 # 单元测试文件
 TSOURCES := $(wildcard kernel_test/*.c) $(filter %.c,$(KSOURCES))
+TSOURCES := $(filter-out $(KERNEL)/library/str.c,$(TSOURCES)) # 去掉一些文件
 TOBJECTS := $(patsubst %,$(OUT_DIR)/%.to,$(TSOURCES))
 
 # 依赖文件和输出目录
@@ -54,7 +57,7 @@ OBJDIRS  := $(sort $(dir $(DEPENDS)))
 # 编译链接选项
 #-------------------------------------------------------------------------------
 
-CFLAGS := -std=c11 $(KSUBDIRS:%=-I%) -ffunction-sections -fdata-sections
+CFLAGS := -std=c11 -I$(KERNEL) -I$(KERNEL)/arch_$(ARCH) -ffunction-sections -fdata-sections
 
 KCFLAGS := $(CFLAGS) -target $(ARCH)-pc-none-elf -flto
 KCFLAGS += -Wall -Wextra -Wshadow -Werror=implicit
@@ -64,6 +67,7 @@ KLFLAGS += -nostdlib --gc-sections --no-warnings
 
 TCFLAGS := $(CFLAGS) -g -DUNIT_TEST -fsanitize=address
 TLFLAGS := -Wl,--gc-sections
+# TLFLAGS := -Wl,--gc-sections -static-libgcc -static -static-libsan -fsanitize=address
 
 BAREMETAL := -ffreestanding -fno-builtin
 MAKECOV := -fprofile-instr-generate -fcoverage-mapping

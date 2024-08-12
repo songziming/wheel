@@ -12,6 +12,18 @@ WEAK void  *memset(void *buf, int x, size_t n);
 WEAK int    memcmp(const void *s1, const void *s2, size_t n);
 WEAK void  *memcpy(void *dst, const void *src, size_t n);
 
+
+
+#ifndef STRING_ALIAS
+
+// 内核代码包含这部分，单元测试代码没有这部分
+#define strlen  kstrlen
+#define strcmp  kstrcmp
+#define strncmp kstrncmp
+
+#endif // NO_STD_NAMES
+
+
 #ifdef UNIT_TEST
 
 size_t kstrlen(const char *s, size_t n);

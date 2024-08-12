@@ -1,8 +1,8 @@
 #include "symbols.h"
 #include "elf.h"
-#include <debug.h>
-#include <early_alloc.h>
-#include <str.h>
+#include "debug.h"
+#include "str.h"
+#include <memory/early_alloc.h>
 
 
 // 管理内核符号表

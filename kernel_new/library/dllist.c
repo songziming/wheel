@@ -2,7 +2,7 @@
 // 也可以将一个节点当作头节点来使用
 
 #include "dllist.h"
-#include <debug.h>
+#include "debug.h"
 
 
 // 由一个节点构成自环

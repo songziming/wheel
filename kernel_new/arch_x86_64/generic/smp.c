@@ -2,8 +2,8 @@
 #include <arch_intf.h>
 #include <devices/acpi.h>
 #include <devices/acpi_madt.h>
-#include <early_alloc.h>
-#include <debug.h>
+#include <memory/early_alloc.h>
+#include <library/debug.h>
 
 
 //------------------------------------------------------------------------------

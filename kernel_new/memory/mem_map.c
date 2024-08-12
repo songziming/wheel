@@ -1,5 +1,5 @@
 #include "mem_map.h"
-#include <debug.h>
+#include <library/debug.h>
 #include "early_alloc.h"
 
 

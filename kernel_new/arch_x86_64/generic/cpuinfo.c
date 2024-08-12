@@ -1,7 +1,7 @@
 #include "cpuinfo.h"
 #include "rw.h"
-#include <str.h>
-#include <debug.h>
+#include <library/str.h>
+#include <library/debug.h>
 
 
 // Linux kernel 代码中，cpuid 是一个设备文件，因此 cpuid.c 只能看到向系统注册设备，将文件读写转换为 cpuid 指令的逻辑
