@@ -45,7 +45,7 @@ KOBJECTS := $(patsubst %,$(OUT_DIR)/%.ko,$(KSOURCES))
 
 # 单元测试文件
 TSOURCES := $(wildcard kernel_test/*.c) $(filter %.c,$(KSOURCES))
-TSOURCES := $(filter-out $(KERNEL)/library/str.c,$(TSOURCES)) # 去掉一些文件
+# TSOURCES := $(filter-out $(KERNEL)/library/str.c,$(TSOURCES)) # 去掉一些文件
 TOBJECTS := $(patsubst %,$(OUT_DIR)/%.to,$(TSOURCES))
 
 # 依赖文件和输出目录

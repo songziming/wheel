@@ -6,29 +6,21 @@
 #include <stdarg.h>
 #include <limits.h>
 
-#define UNUSED      __attribute__((unused))
-#define PACKED      __attribute__((packed))
-#define WEAK        __attribute__((weak))
-#define PURE        __attribute__((pure))
-#define NORETURN    __attribute__((noreturn))
-#define MALLOC      __attribute__((malloc))
-// #define ALIAS(name) __attribute__((alias(name)))
-#define PRINTF(s,a) __attribute__((format(printf,s,a)))
-#define ALIGNED(x)  __attribute__((aligned(x)))
-#define SECTION(x)  __attribute__((section(x)))
-#define CONST       SECTION(".rodata")
-#define INIT_TEXT   SECTION(".init.text")
-#define INIT_DATA   SECTION(".init.data")
-#define INIT_BSS    SECTION(".init.bss")
-#define PCPU_DATA   SECTION(".pcpu.data")
-#define PCPU_BSS    SECTION(".pcpu.bss")
-
-#ifdef UNIT_TEST
-    // #define WEAK static
-    #define ALIAS(name) __attribute__((alias(name)))
-#else
-    #define WEAK __attribute__((weak))
-#endif
+#define UNUSED          __attribute__((unused))
+#define PACKED          __attribute__((packed))
+#define PURE            __attribute__((pure))
+#define NORETURN        __attribute__((noreturn))
+#define MALLOC          __attribute__((malloc))
+#define WEAKALIAS(name) __attribute__((weak, alias(name)))
+#define PRINTF(s,a)     __attribute__((format(printf,s,a)))
+#define ALIGNED(x)      __attribute__((aligned(x)))
+#define SECTION(x)      __attribute__((section(x)))
+#define CONST           SECTION(".rodata")
+#define INIT_TEXT       SECTION(".init.text")
+#define INIT_DATA       SECTION(".init.data")
+#define INIT_BSS        SECTION(".init.bss")
+#define PCPU_DATA       SECTION(".pcpu.data")
+#define PCPU_BSS        SECTION(".pcpu.bss")
 
 #ifndef offsetof
 #define offsetof(t,m) ((size_t)&((t *)0)->m)

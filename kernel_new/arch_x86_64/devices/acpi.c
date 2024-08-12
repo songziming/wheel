@@ -206,7 +206,7 @@ acpi_tbl_t *acpi_find_table(const char sig[4]) {
         if (NULL == g_tables[i]) {
             continue;
         }
-        if (0 == strncmp(sig, g_tables[i]->signature, 4)) {
+        if (0 == memcmp(sig, g_tables[i]->signature, 4)) {
             return g_tables[i];
         }
     }

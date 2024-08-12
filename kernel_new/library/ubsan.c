@@ -48,48 +48,48 @@ void __ubsan_handle_type_mismatch(type_mismatch_data_t *data, uintptr_t ptr) {
     type_mismatch_common(&data->location, data->type, data->alignment, data->type_check_kind, ptr);
 }
 
-WEAK void __ubsan_handle_type_mismatch_v1(type_mismatch_data_v1_t *data, uintptr_t ptr) {
+void __ubsan_handle_type_mismatch_v1(type_mismatch_data_v1_t *data, uintptr_t ptr) {
     type_mismatch_common(&data->location, data->type, 1UL << data->log_alignment, data->type_check_kind, ptr);
 }
 
 
 
-WEAK void __ubsan_handle_add_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
+void __ubsan_handle_add_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
     log("\nubsan: addition overflow\n");
     log_location(loc);
     klog_stacktrace();
     // emu_exit(1);
 }
 
-WEAK void __ubsan_handle_sub_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
+void __ubsan_handle_sub_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
     log("\nubsan: subtraction overflow\n");
     log_location(loc);
     klog_stacktrace();
     // emu_exit(1);
 }
 
-WEAK void __ubsan_handle_mul_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
+void __ubsan_handle_mul_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
     log("\nubsan: multiplication overflow\n");
     log_location(loc);
     klog_stacktrace();
     // emu_exit(1);
 }
 
-WEAK void __ubsan_handle_negate_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
+void __ubsan_handle_negate_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
     log("\nubsan: negation overflow\n");
     log_location(loc);
     klog_stacktrace();
     // emu_exit(1);
 }
 
-WEAK void __ubsan_handle_divrem_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
+void __ubsan_handle_divrem_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
     log("\nubsan: division remainder overflow\n");
     log_location(loc);
     klog_stacktrace();
     // emu_exit(1);
 }
 
-WEAK void __ubsan_handle_pointer_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
+void __ubsan_handle_pointer_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
     log("\nubsan: pointer overflow\n");
     log_location(loc);
     klog_stacktrace();
@@ -97,28 +97,28 @@ WEAK void __ubsan_handle_pointer_overflow(source_location_t *loc, uintptr_t a UN
 }
 
 
-WEAK void __ubsan_handle_out_of_bounds(out_of_bounds_data_t *data, uintptr_t idx) {
+void __ubsan_handle_out_of_bounds(out_of_bounds_data_t *data, uintptr_t idx) {
     log("\nubsan: index %ld out of bound\n", idx);
     log_location(&data->location);
     klog_stacktrace();
     // emu_exit(1);
 }
 
-WEAK void __ubsan_handle_shift_out_of_bounds(shift_data_t *data, uintptr_t lhs UNUSED, uintptr_t rhs UNUSED) {
+void __ubsan_handle_shift_out_of_bounds(shift_data_t *data, uintptr_t lhs UNUSED, uintptr_t rhs UNUSED) {
     log("\nubsan: shift out of bound\n");
     log_location(&data->location);
     klog_stacktrace();
     // emu_exit(1);
 }
 
-WEAK void __ubsan_handle_function_type_mismatch(source_location_t *loc) {
+void __ubsan_handle_function_type_mismatch(source_location_t *loc) {
     log("\nubsan: function type mismatch\n");
     log_location(loc);
     klog_stacktrace();
     // emu_exit(1);
 }
 
-WEAK void __ubsan_handle_invalid_builtin(source_location_t *loc) {
+void __ubsan_handle_invalid_builtin(source_location_t *loc) {
     log("\nubsan: invalid builtin\n");
     log_location(loc);
     klog_stacktrace();
