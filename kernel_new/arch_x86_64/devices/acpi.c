@@ -3,7 +3,7 @@
 #include <memory/mem_map.h>
 #include <library/debug.h>
 #include <memory/early_alloc.h>
-#include <library/str.h>
+#include <library/string.h>
 
 
 

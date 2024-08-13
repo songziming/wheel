@@ -1,6 +1,6 @@
 #include "cpuinfo.h"
 #include "rw.h"
-#include <library/str.h>
+#include <library/string.h>
 #include <library/debug.h>
 
 

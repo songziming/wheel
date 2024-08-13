@@ -34,12 +34,20 @@ void FUNCNAME(suite, test)()
 
 #define TEST(suite, test) TEST_F(suite, test, NULL, NULL)
 
-void report_test_fail(const char *file, const char *func, int line, const char *msg, ...);
+void report_test_fail(const char *file, int line, const char *msg, ...);
 
-#define EXPECT_TRUE(cond, ...) do { \
+#define EXPECT(cond, ...) do { \
     if (!(cond)) { \
-        report_test_fail(__FILE__, __func__, __LINE__, ""__VA_ARGS__); \
+        report_test_fail(__FILE__, __LINE__, ""__VA_ARGS__); \
     } \
+} while (0)
+
+#define EXPECT_EQ(v1, v2, ...) do { \
+    __typeof__(v1) __v1 = (v1); \
+    __typeof__(v2) __v2 = (v2); \
+    if (__v1 != __v2) {         \
+        report_test_fail(__FILE__, __LINE__, ""__VA_ARGS__);    \
+    }   \
 } while (0)
 
 #endif // TEST_H

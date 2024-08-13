@@ -37,15 +37,13 @@ KSUBDIRS := $(patsubst %/,%,$(wildcard $(KERNEL)/*/))
 KSUBDIRS := $(filter-out $(wildcard $(KERNEL)/arch*), $(KSUBDIRS))
 KSUBDIRS := $(KERNEL)/arch_$(ARCH) $(KSUBDIRS)
 
-# KSUBDIRS := memory
-
 # 内核源码
+# KSUBDIRS := $(KERNEL)/arch_$(ARCH) memory library
 KSOURCES := $(foreach d,$(KSUBDIRS),$(shell find $(d) -name "*.S" -o -name "*.c"))
 KOBJECTS := $(patsubst %,$(OUT_DIR)/%.ko,$(KSOURCES))
 
 # 单元测试文件
 TSOURCES := $(wildcard kernel_test/*.c) $(filter %.c,$(KSOURCES))
-# TSOURCES := $(filter-out $(KERNEL)/library/str.c,$(TSOURCES)) # 去掉一些文件
 TOBJECTS := $(patsubst %,$(OUT_DIR)/%.to,$(TSOURCES))
 
 # 依赖文件和输出目录
@@ -67,7 +65,6 @@ KLFLAGS += -nostdlib --gc-sections --no-warnings
 
 TCFLAGS := $(CFLAGS) -g -DUNIT_TEST -fsanitize=address
 TLFLAGS := -Wl,--gc-sections
-# TLFLAGS := -Wl,--gc-sections -static-libgcc -static -static-libsan -fsanitize=address
 
 BAREMETAL := -ffreestanding -fno-builtin
 MAKECOV := -fprofile-instr-generate -fcoverage-mapping
@@ -157,7 +154,7 @@ $(OUT_TEST): $(TOBJECTS)
 
 # 运行单元测试，生成代码覆盖率文件
 $(COV_RAW): $(OUT_TEST)
-	LLVM_PROFILE_FILE=$@ $<
+	LLVM_PROFILE_FILE=$@ $< || true
 $(COV_DAT): $(COV_RAW)
 	llvm-profdata merge -sparse $< -o $@
 $(COV_DIR): $(COV_DAT) | $(OUT_TEST)

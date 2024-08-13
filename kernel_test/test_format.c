@@ -1,9 +1,9 @@
 #include "test.h"
-#include <library/fmt.h>
 
 #include <stdlib.h>
 #include <string.h>
 
+#include <library/format.h>
 
 
 // static void printer(char **dst, const char *s, size_t n) {
@@ -24,7 +24,7 @@
 // }
 
 // static void compare_and_free(const char *s1, char *s2) {
-//     EXPECT_TRUE(0 == strcmp(s1, s2));
+//     EXPECT(0 == strcmp(s1, s2));
 //     free(s2);
 // }
 
@@ -34,19 +34,19 @@
 // }
 
 TEST(Format, Length) {
-    EXPECT_TRUE(6 == snprintk(NULL, 0, "%d", 123456));
-    EXPECT_TRUE(4 == snprintk(NULL, 0, "%.4s", "hello"));
-    EXPECT_TRUE(0 == snprintk(NULL, 0, "%.0s", "goodbye"));
+    EXPECT(6 == snprintk(NULL, 0, "%d", 123456));
+    EXPECT(4 == snprintk(NULL, 0, "%.4s", "hello"));
+    EXPECT(0 == snprintk(NULL, 0, "%.0s", "goodbye"));
 }
 
 TEST(Format, String) {
     char buff[1024];
 
     snprintk(buff, sizeof(buff), "hello %s", "world");
-    EXPECT_TRUE(0 == strcmp(buff, "hello world"));
+    EXPECT(0 == strcmp(buff, "hello world"));
 
     snprintk(buff, sizeof(buff), "%s", "");
-    EXPECT_TRUE(0 == strcmp(buff, ""));
+    EXPECT(0 == strcmp(buff, ""));
 }
 
 TEST(Format, Number) {
@@ -110,6 +110,6 @@ TEST(Format, Number) {
     char buff[1024];
     for (int i = 0; i < case_count; ++i) {
         snprintk(buff, sizeof(buff), test_cases[i].fmt, test_cases[i].val);
-        EXPECT_TRUE(0 == strcmp(buff, test_cases[i].res));
+        EXPECT(0 == strcmp(buff, test_cases[i].res));
     }
 }

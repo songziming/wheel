@@ -2,7 +2,7 @@
 // 避免使用和标准库相同的函数名，避免单元测试符号冲突
 // 都是弱符号，arch 模块可以提供更高效的版本，覆盖默认实现
 
-#include "str.h"
+#include "string.h"
 
 
 size_t def_strlen(const char *s) {
@@ -11,14 +11,14 @@ size_t def_strlen(const char *s) {
     return (size_t)(p - s);
 }
 
-int def_strcmp(const char *s1, const char *s2) {
-    for (; *s1 || *s2; ++s1, ++s2) {
-        if (*s1 != *s2) {
-            return (int)*s1 - (int)*s2;
-        }
-    }
-    return 0;
-}
+// int def_strcmp(const char *s1, const char *s2) {
+//     for (; *s1 || *s2; ++s1, ++s2) {
+//         if (*s1 != *s2) {
+//             return (int)*s1 - (int)*s2;
+//         }
+//     }
+//     return 0;
+// }
 
 void *def_memset(void *buf, int x, size_t n) {
     uint8_t v = x;
@@ -61,7 +61,7 @@ void *def_memcpy(void *dst, const void *src, size_t n) {
 #ifndef UNIT_TEST
 
 size_t strlen(const char *s)                            WEAKALIAS("def_strlen");
-int    strcmp(const char *s1, const char *s2)           WEAKALIAS("def_strcmp");
+// int    strcmp(const char *s1, const char *s2)           WEAKALIAS("def_strcmp");
 void  *memset(void *buf, int x, size_t n)               WEAKALIAS("def_memset");
 int    memcmp(const void *s1, const void *s2, size_t n) WEAKALIAS("def_memcmp");
 void  *memcpy(void *dst, const void *src, size_t n)     WEAKALIAS("def_memcpy");

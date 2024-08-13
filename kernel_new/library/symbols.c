@@ -1,7 +1,7 @@
 #include "symbols.h"
 #include "elf.h"
 #include "debug.h"
-#include "str.h"
+#include "string.h"
 #include <memory/early_alloc.h>
 
 
