@@ -45,8 +45,8 @@ static void run_test_case(testitem_t *item) {
         (int)suite_len, item->_suite,
         (int)test_len, item->_test);
 
-    if (item->_setup) {
-        item->_setup();
+    if (item->_prepare) {
+        item->_prepare();
     }
 
     if (0 == setjmp(curr_env)) {

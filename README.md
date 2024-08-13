@@ -1,5 +1,7 @@
 # Wheel Operating System
 
+![test status](https://github.com/songziming/wheel/actions/workflows/host-test.yml/badge.svg)
+
 Wheel is an operating system, written from scratch.
 
 64-bit higher half kernel, multiprocessor support, preemptive scheduling, ring-0 only, simple kernel shell.

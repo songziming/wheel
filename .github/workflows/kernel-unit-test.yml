@@ -1,4 +1,4 @@
-name: Run unit test on host
+name: Kernel unit test
 
 on:
   - push

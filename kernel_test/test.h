@@ -7,7 +7,7 @@ typedef struct testitem {
     const char *_suite;
     const char *_test;
 
-    void (*_setup)();
+    void (*_prepare)();
     void (*_teardown)();
     void (*_func)();
 } testitem_t;
@@ -21,12 +21,12 @@ typedef struct testitem {
 
 #define TESTSECT __attribute__((section("testitems"),used,retain))
 
-#define TEST_F(suite, test, setup, teardown)    \
+#define TEST_F(suite, test, prepare, teardown)  \
 void FUNCNAME(suite, test)();                   \
 TESTSECT testitem_t ITEMNAME(suite, test) = {   \
     #suite,                                     \
     #test,                                      \
-    setup,                                      \
+    prepare,                                    \
     teardown,                                   \
     FUNCNAME(suite, test)                       \
 };                                              \

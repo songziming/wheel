@@ -1,37 +1,53 @@
 #include "test.h"
-
 #include <stdlib.h>
 #include <string.h>
-
 #include <library/format.h>
 
 
-// static void printer(char **dst, const char *s, size_t n) {
-//     int len = *dst ? strlen(*dst) : 0;
-//     *dst = (char *)realloc(*dst, len + n + 1);
-//     memcpy(*dst + len, s, n);
-//     (*dst)[len + n] = '\0';
-// }
 
-// static char *my_vprint(const char *fmt, ...) {
-//     static char tmp[8];
-//     char *str = NULL;
-//     va_list args;
-//     va_start(args, fmt);
-//     format(tmp, sizeof(tmp), (format_cb_t)printer, &str, fmt, args);
-//     va_end(args);
-//     return str;
-// }
+static size_t dst_len = 0;
+static size_t dst_max = 0;
+static char  *dst_buf = NULL;
 
-// static void compare_and_free(const char *s1, char *s2) {
-//     EXPECT(0 == strcmp(s1, s2));
-//     free(s2);
-// }
+static void dst_prepare() {
+    dst_max = 16;
+    dst_buf = malloc(dst_max);
+}
 
-// TEST(Format, Split) {
-//     compare_and_free("abcdefghijklmn", my_vprint("abcdefghijklmn"));
-//     compare_and_free("1234_hello_5678", my_vprint("1234%s5678", "_hello_"));
-// }
+static void dst_teardown() {
+    dst_len = 0;
+    dst_max = 0;
+    free(dst_buf);
+}
+
+static void dst_print(const char *s, size_t n) {
+    while (dst_len + n >= dst_max) {
+        dst_max <<= 1;
+        dst_buf = realloc(dst_buf, dst_max);
+    }
+    memcpy(dst_buf + dst_len, s, n);
+    dst_len += n;
+    dst_buf[dst_len] = '\0';
+}
+
+static void print_n_check(const char *wanted, const char *fmt, ...) {
+    static char tmp[8];
+    va_list args;
+    va_start(args, fmt);
+    dst_prepare();
+    format(tmp, sizeof(tmp), dst_print, fmt, args);
+    va_end(args);
+
+    EXPECT(0 == strcmp(wanted, dst_buf), "expected %s, got %s", wanted, dst_buf);
+    dst_teardown();
+}
+
+TEST(Format, Split) {
+    print_n_check("abcdefghijklmn", "abcdefghijklmn");
+    print_n_check("1234_hello_5678", "1234%s5678", "_hello_");
+    print_n_check("1234_hello_world_5678", "1234%s5678", "_hello_world_");
+    print_n_check("hello_1234567890_world", "hello_%ld_world", 1234567890L);
+}
 
 TEST(Format, Length) {
     EXPECT(6 == snprintk(NULL, 0, "%d", 123456));
