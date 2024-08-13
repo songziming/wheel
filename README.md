@@ -1,6 +1,6 @@
 # Wheel Operating System
 
-![test status](https://github.com/songziming/wheel/actions/workflows/host-test.yml/badge.svg)
+![test status](https://github.com/songziming/wheel/actions/workflows/kernel-unit-test.yml/badge.svg)
 
 Wheel is an operating system, written from scratch.
 

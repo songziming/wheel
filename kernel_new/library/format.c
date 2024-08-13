@@ -5,19 +5,18 @@
 // 使用循环缓冲区接收格式化之后的字符串
 // 缓冲区填满了，就执行回调函数输出，然后重置缓冲区
 typedef struct fmt_context {
-    char       *ptr;
-    char       *buf;
-    char       *end;
-    format_cb_t cb;
-    // void       *para;
-    size_t      len; // 已经通过 cb 输出的长度
+    char   *buf;
+    char   *end;
+    char   *ptr;
+    size_t  len; // 已经通过 put 输出的长度
+    void (*put)(const char *, size_t);
 } fmt_context_t;
 
 
 static inline void fmt_flush(fmt_context_t *ctx) {
-    if (NULL != ctx->cb) {
+    if (NULL != ctx->put) {
         size_t len = (size_t)(ctx->ptr - ctx->buf);
-        ctx->cb(ctx->buf, len);
+        ctx->put(ctx->buf, len);
         ctx->ptr  = ctx->buf;
         ctx->len += len;
     }
@@ -207,14 +206,13 @@ static void fmt_number(fmt_context_t *ctx, uint64_t abs, int base, uint32_t flag
 // 如果能完整地格式化，则返回0
 // 如果不能完整格式化（目标buf不够大），则返回值表示fmt前面多少字节已经完成格式化
 // 如果回调函数para为空，则最多打印n个字符到buf
-size_t format(char *buf, size_t n, format_cb_t cb, const char *fmt, va_list args) {
+size_t format(char *buf, size_t n, void (*func)(const char *, size_t), const char *fmt, va_list args) {
     fmt_context_t ctx;
-    ctx.ptr  = buf;
-    ctx.buf  = buf;
-    ctx.end  = buf + n;
-    ctx.cb   = cb;
-    // ctx.para = para;
-    ctx.len  = 0;
+    ctx.buf = buf;
+    ctx.end = buf + n;
+    ctx.ptr = buf;
+    ctx.len = 0;
+    ctx.put = func;
 
     while (*fmt) {
         if ('%' != *fmt) {

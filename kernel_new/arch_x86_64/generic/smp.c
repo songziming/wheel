@@ -164,6 +164,6 @@ inline int cpu_count() {
     return g_loapic_num;
 }
 
-inline int cpu_index() {
-    return 0;
-}
+// inline int cpu_index() {
+//     return 0;
+// }

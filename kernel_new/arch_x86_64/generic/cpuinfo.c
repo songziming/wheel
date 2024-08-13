@@ -38,7 +38,6 @@ CONST cache_info_t g_l2_info;
 CONST cache_info_t g_l3_info;
 
 
-
 //------------------------------------------------------------------------------
 // AMD 获取缓存信息
 //------------------------------------------------------------------------------
@@ -501,3 +500,7 @@ INIT_TEXT void parse_cpuinfo() {
         log("unknown vendor name '%.12s'\n", g_cpu_vendor);
     }
 }
+
+INIT_TEXT void detect_cpu_features() {}
+
+INIT_TEXT void enable_cpu_features() {}
