@@ -13,6 +13,7 @@ INIT_TEXT void mem_map_reserve(int n);
 INIT_TEXT void mem_map_add(size_t start, size_t end, mem_type_t type);
 INIT_TEXT size_t mem_block_end(size_t addr);
 
+void mem_map_show();
 mem_type_t mem_block_type(size_t addr);
 
 #endif // MEM_MAP_H

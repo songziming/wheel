@@ -3,6 +3,7 @@
 #include <generic/rw.h>
 #include <memory/early_alloc.h>
 #include <library/string.h>
+#include <library/spin.h>
 
 
 // VGA 寄存器
@@ -13,9 +14,11 @@
 #define ROWS 25
 #define COLS 80
 
+static spin_t g_console_lock;
+
 // 显存读取速度很慢，因此内存中预留离屏缓冲区
-static CONST uint16_t *g_vram = NULL;
 static CONST uint16_t *g_vbuf = NULL;
+static CONST uint16_t *g_vram = NULL;
 
 static uint8_t  g_text_color;
 static unsigned g_caret_row;    // 光标所在行（g_vbuf）
@@ -26,6 +29,8 @@ static unsigned g_start_row;    // g_vram 首行在 g_vbuf 中的行号
 INIT_TEXT void console_init() {
     // ASSERT(NULL == g_vram);
     // ASSERT(NULL == g_vbuf);
+
+    spin_init(&g_console_lock);
 
     g_text_color = 0x0f; // 黑底白字
     g_caret_row = 0;
@@ -102,15 +107,17 @@ static void draw_char(char c) {
 }
 
 void console_putc(char c) {
+    int key = irq_spin_take(&g_console_lock);
     draw_char(c);
     set_caret((g_caret_row - g_start_row) * COLS + g_caret_col);
+    irq_spin_give(&g_console_lock, key);
 }
 
 void console_puts(const char *s, size_t n) {
-    // int key = irq_spin_take(&g_console_spin);
+    int key = irq_spin_take(&g_console_lock);
     for (size_t i = 0; i < n; ++i) {
         draw_char(s[i]);
     }
     set_caret((g_caret_row - g_start_row) * COLS + g_caret_col);
-    // irq_spin_give(&g_console_spin, key);
+    irq_spin_give(&g_console_lock, key);
 }

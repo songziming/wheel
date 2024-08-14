@@ -60,9 +60,16 @@ INIT_TEXT size_t mem_block_end(size_t addr) {
         if (addr < g_mem_ranges[i].end) {
             return g_mem_ranges[i].end;
         }
-        break;
     }
     return 0;
+}
+
+void mem_map_show() {
+    for (int i = 0; i < g_mem_range_num; ++i) {
+        mem_range_t *rng = &g_mem_ranges[i];
+        log("start=0x%08lx, end=0x%08lx, type=%d\n",
+            rng->start, rng->end, rng->type);
+    }
 }
 
 mem_type_t mem_block_type(size_t addr) {
@@ -73,7 +80,6 @@ mem_type_t mem_block_type(size_t addr) {
         if (addr < g_mem_ranges[i].end) {
             return g_mem_ranges[i].type;
         }
-        break;
     }
     return MEM_RESERVED;
 }

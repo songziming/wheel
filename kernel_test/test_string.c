@@ -17,16 +17,18 @@ TEST(Str, Length) {
 //     EXPECT(0 != def_memcmp("abc", "abd", 3));
 // }
 
-// // 符号函数，正数返回 1，负数返回 -1，零返回零
-// static int sgn(int x) {
-//     return (x > 0) - (x < 0);
-// }
 
-// TEST(Str, Standard) {
-//     const char *s1 = "hello";
-//     const char *s2 = "world";
-//     EXPECT(sgn(def_strcmp(s1, s2)) == sgn(strcmp(s1, s2)));
-// }
+// 符号函数，正数返回 1，负数返回 -1，零返回零
+static int sgn(int x) {
+    return (x > 0) - (x < 0);
+}
+
+TEST(Str, Standard) {
+    const char *s1 = "hello";
+    const char *s2 = "world";
+    EXPECT(sgn(def_strcmp(s1, s2)) == sgn(strcmp(s1, s2)));
+    EXPECT(sgn(def_strcmp(s2, s1)) == sgn(strcmp(s2, s1)));
+}
 
 // TEST(Str, Copy) {
 //     char dst[10];

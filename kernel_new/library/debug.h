@@ -5,6 +5,7 @@
 
 void set_log_func(void (*func)(const char *, size_t));
 void log(const char *fmt, ...);
+void log_stacktrace();
 
 void assertion_fail(const char *file, int line, const char *func);
 #define ASSERT(x) do { \

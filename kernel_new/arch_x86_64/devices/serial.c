@@ -2,15 +2,16 @@
 
 #include "serial.h"
 #include <generic/rw.h>
-// #include <spin.h>
+#include <library/spin.h>
 
 
 #define COM1_PORT 0x3f8
 #define BOCHS_PORT 0xe9
 
-// static spin_t serial_spin = SPIN_INIT;
+static spin_t g_serial_lock;
 
 INIT_TEXT void serial_init() {
+    spin_init(&g_serial_lock);
     out8(COM1_PORT + 1, 0x00);      // disable all interrupts
     out8(COM1_PORT + 3, 0x80);      // enable DLAB (set baud rate divisor)
     out8(COM1_PORT + 0, 0x03);      // set divisor to 3 (lo byte) 38400 baud
@@ -29,9 +30,9 @@ void serial_putc(char c) {
 }
 
 void serial_puts(const char *s, size_t n) {
-    // int key = irq_spin_take(&serial_spin);
+    int key = irq_spin_take(&g_serial_lock);
     for (size_t i = 0; i < n; ++i) {
         serial_putc(s[i]);
     }
-    // irq_spin_give(&serial_spin, key);
+    irq_spin_give(&g_serial_lock, key);
 }

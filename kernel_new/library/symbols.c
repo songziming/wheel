@@ -14,12 +14,13 @@ typedef struct symbol {
     const char *name;
 } symbol_t;
 
-static CONST int         g_sym_num = 0;
-static CONST symbol_t   *g_syms    = NULL;
+static CONST int       g_sym_num = 0;
+static CONST symbol_t *g_syms    = NULL;
 
 
 // 遍历每个符号表两次，第一次统计符号数量和符号名长度，第二次备份符号数据
 // TODO 还可以处理 debug section，识别 dwarf 调试信息
+//      查看符号时可以精确到行号
 INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num) {
     if (sizeof(Elf64_Shdr) != entsize) {
         log("section entry size %d\n", entsize);
@@ -32,24 +33,22 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num) {
     size_t strbuf_len = 0; // 符号名字符串总长
 
     for (unsigned i = 0; i < num; ++i) {
-        const Elf64_Shdr *sec = &secs[i];
-        if ((SHT_SYMTAB != sec->sh_type) && (SHT_DYNSYM != sec->sh_type)) {
+        const Elf64_Shdr sec = secs[i];
+        if ((SHT_SYMTAB != sec.sh_type) && (SHT_DYNSYM != sec.sh_type)) {
             continue;
         }
-        if ((SHN_UNDEF == sec->sh_link) || (sec->sh_link >= num)) {
-            continue;
-        }
-
-        const Elf64_Shdr *link = &secs[sec->sh_link];
-        if (SHT_STRTAB != link->sh_type) {
+        if ((SHN_UNDEF == sec.sh_link) || (sec.sh_link >= num)) {
             continue;
         }
 
-        size_t sym_num = sec->sh_size / sec->sh_entsize;
-        const Elf64_Sym *symtab = (const Elf64_Sym *)sec->sh_addr;
-        const char *strtab = (const char *)link->sh_addr;
+        const Elf64_Shdr link = secs[sec.sh_link];
+        if (SHT_STRTAB != link.sh_type) {
+            continue;
+        }
 
-        // log("%d symbols, strtab length %d\n", sym_num, strtab_size);
+        size_t sym_num = sec.sh_size / sec.sh_entsize;
+        const Elf64_Sym *symtab = (const Elf64_Sym *)sec.sh_addr;
+        const char *strtab = (const char *)link.sh_addr;
 
         // 遍历该表中的每个符号，只记录函数类型的符号
         for (size_t j = 1; j < sym_num; ++j) {
@@ -72,26 +71,26 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num) {
     g_syms = early_alloc_ro(g_sym_num * sizeof(symbol_t));
     char *str_buf = early_alloc_ro(strbuf_len);
     int sym_idx = 0;
-    // int str_idx = 0;
     char *str_ptr = str_buf;
 
+    // 不应直接访问内存里的 ELF 符号表，可能未对齐
     for (unsigned i = 0; i < num; ++i) {
-        const Elf64_Shdr *sec = &secs[i];
-        if ((SHT_SYMTAB != sec->sh_type) && (SHT_DYNSYM != sec->sh_type)) {
+        const Elf64_Shdr sec = secs[i];
+        if ((SHT_SYMTAB != sec.sh_type) && (SHT_DYNSYM != sec.sh_type)) {
             continue;
         }
-        if ((SHN_UNDEF == sec->sh_link) || (sec->sh_link >= num)) {
-            continue;
-        }
-
-        const Elf64_Shdr *link = &secs[sec->sh_link];
-        if (SHT_STRTAB != link->sh_type) {
+        if ((SHN_UNDEF == sec.sh_link) || (sec.sh_link >= num)) {
             continue;
         }
 
-        size_t sym_num = sec->sh_size / sec->sh_entsize;
-        const Elf64_Sym *symtab = (const Elf64_Sym *)sec->sh_addr;
-        const char *strtab = (const char *)link->sh_addr;
+        const Elf64_Shdr link = secs[sec.sh_link];
+        if (SHT_STRTAB != link.sh_type) {
+            continue;
+        }
+
+        size_t sym_num = sec.sh_size / sec.sh_entsize;
+        const Elf64_Sym *symtab = (const Elf64_Sym *)sec.sh_addr;
+        const char *strtab = (const char *)link.sh_addr;
 
         for (size_t j = 1; j < sym_num; ++j) {
             const Elf64_Sym *sym = &symtab[j];
@@ -120,16 +119,38 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num) {
     ASSERT(str_ptr == str_buf + strbuf_len);
 }
 
-// size_t sym_locate(const char *name) {
-//     //
-// }
-
-// const char *sym_resolve(size_t addr, size_t *rela) {
-//     //
-// }
-
-void dump_symbols() {
+size_t sym_locate(const char *name) {
     for (int i = 0; i < g_sym_num; ++i) {
-        log("addr: %016lx, sym: %s\n", g_syms[i].addr, g_syms[i].name);
+        if (strcmp(name, g_syms[i].name)) {
+            continue;
+        }
+        return g_syms[i].addr;
     }
+
+    return 0;
 }
+
+const char *sym_resolve(size_t addr, size_t *rela) {
+    for (int i = 0; i < g_sym_num; ++i) {
+        size_t start = g_syms[i].addr;
+        size_t end = start + g_syms[i].size;
+        if ((addr < start) || (addr >= end)) {
+            continue;
+        }
+        if (rela) {
+            *rela = addr - start;
+        }
+        return g_syms[i].name;
+    }
+
+    if (rela) {
+        *rela = addr;
+    }
+    return NULL;
+}
+
+// void dump_symbols() {
+//     for (int i = 0; i < g_sym_num; ++i) {
+//         log("addr: %016lx, sym: %s\n", g_syms[i].addr, g_syms[i].name);
+//     }
+// }

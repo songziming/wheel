@@ -1,6 +1,8 @@
 #include "debug.h"
 #include "format.h"
 #include "string.h"
+#include "symbols.h"
+#include <arch_intf.h>
 
 
 //------------------------------------------------------------------------------
@@ -24,6 +26,25 @@ void log(const char *fmt, ...) {
     va_start(args, fmt);
     format(tmp, sizeof(tmp), g_log_func, fmt, args);
     va_end(args);
+}
+
+
+//------------------------------------------------------------------------------
+// 输出调用栈
+//------------------------------------------------------------------------------
+
+void print_frames(const size_t *frames, int num) {
+    for (int i = 0; i < num; ++i) {
+        size_t rela;
+        const char *name = sym_resolve(frames[i], &rela);
+        log(" -> frame %2d: %s + 0x%zx\n", i, name, rela);
+    }
+}
+
+void log_stacktrace() {
+    size_t frames[32];
+    int depth = arch_unwind(frames, 32);
+    print_frames(&frames[1], depth - 1);
 }
 
 

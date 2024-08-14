@@ -213,6 +213,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // TODO 检查 Acpi::DMAR，判断是否需要 interrupt remapping
     // TODO 检查 Acpi::SRAT，获取 numa 信息（个人电脑一般不需要）
 
+    mem_map_show();
+
     // 关键数据已经备份，可以放开 early-alloc 长度限制
     early_rw_unlock();
 
@@ -226,7 +228,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // TODO 划分内存布局，启用物理页面管理
 
-    dump_symbols();
+    // dump_symbols();
     acpi_show_tables();
 
 end:

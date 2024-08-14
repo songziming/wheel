@@ -29,7 +29,7 @@
 
 #define INIT_STACK_SIZE 0x1000
 
-#define EARLY_RO_SIZE   0x1000
+#define EARLY_RO_SIZE   0x4000
 #define EARLY_RW_SIZE   0x800000
 
 
