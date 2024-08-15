@@ -1,7 +1,7 @@
 #include <wheel.h>
 #include <library/debug.h>
 #include <library/symbols.h>
-#include <memory/mem_map.h>
+#include <memory/mem_block.h>
 #include <memory/early_alloc.h>
 
 #include "multiboot1.h"
@@ -17,6 +17,7 @@
 #include <generic/cpuinfo.h>
 #include <generic/smp.h>
 #include <generic/gdt_idt_tss.h>
+#include <generic/mem.h>
 
 
 static INIT_DATA size_t g_rsdp = 0;
@@ -35,7 +36,7 @@ static INIT_TEXT void mb1_parse_mmap(uint32_t mmap, uint32_t len) {
         ++range_num;
     }
 
-    mem_map_reserve(range_num);
+    mem_block_reserve(range_num);
 
     for (uint32_t off = 0; off < len;) {
         mb1_mmap_entry_t *ent = (mb1_mmap_entry_t *)(size_t)(mmap +off);
@@ -44,7 +45,7 @@ static INIT_TEXT void mb1_parse_mmap(uint32_t mmap, uint32_t len) {
         mem_type_t type = (MB1_MEMORY_AVAILABLE == ent->type)
             ? MEM_AVAILABLE : MEM_RESERVED;
 
-        mem_map_add(ent->addr, ent->addr + ent->len, type);
+        mem_block_add(ent->addr, ent->addr + ent->len, type);
     }
 }
 
@@ -53,7 +54,7 @@ static INIT_TEXT void mb2_parse_mmap(void *tag) {
     uint32_t mmap_len = mmap->tag.size - sizeof(mb2_tag_mmap_t);
     int range_num = (int)(mmap_len / mmap->entry_size);
 
-    mem_map_reserve(range_num);
+    mem_block_reserve(range_num);
 
     for (int i = 0; i < range_num; ++i) {
         mb2_mmap_entry_t *ent = &mmap->entries[i];
@@ -65,7 +66,7 @@ static INIT_TEXT void mb2_parse_mmap(void *tag) {
         default:                          type = MEM_RESERVED;    break;
         }
 
-        mem_map_add(ent->addr, ent->addr + ent->len, type);
+        mem_block_add(ent->addr, ent->addr + ent->len, type);
     }
 }
 
@@ -86,7 +87,7 @@ static INIT_TEXT void mb1_init(uint32_t ebx UNUSED) {
         // parse_kernel_symtab(
         // (void *)(size_t)info->elf.addr, info->elf.size, info->elf.num);
         mb1_elf_sec_tbl_t *elf = &info->elf;
-        parse_kernel_symtab((void *)(size_t)elf->addr, elf->size, elf->num);
+        parse_kernel_symtab((void *)(size_t)elf->addr, elf->size, elf->num, elf->shndx);
     }
 
     if (MB1_INFO_FRAMEBUFFER_INFO & info->flags) {
@@ -123,7 +124,7 @@ static INIT_TEXT void mb2_init(uint32_t ebx UNUSED) {
             break;
         case MB2_TAG_TYPE_ELF_SECTIONS: {
             mb2_tag_elf_sections_t *elf = (mb2_tag_elf_sections_t *)tag;
-            parse_kernel_symtab(elf->sections, elf->entsize, elf->num);
+            parse_kernel_symtab(elf->sections, elf->entsize, elf->num, elf->shndx);
             break;
         }
         case MB2_TAG_TYPE_FRAMEBUFFER: {
@@ -213,12 +214,13 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // TODO 检查 Acpi::DMAR，判断是否需要 interrupt remapping
     // TODO 检查 Acpi::SRAT，获取 numa 信息（个人电脑一般不需要）
 
-    mem_map_show();
+    mem_block_show();
 
     // 关键数据已经备份，可以放开 early-alloc 长度限制
     early_rw_unlock();
 
     // TODO 检查 Acpi::MCFG，分析 PCIe 信息
+    // TODO 遍历 PCI 总线，识别并注册 PCI 外设
 
     // 切换到正式的 GDT，加载 IDT
     gdt_init();
@@ -227,6 +229,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     idt_load();
 
     // TODO 划分内存布局，启用物理页面管理
+    // gsbase_init(0);
 
     // dump_symbols();
     acpi_show_tables();

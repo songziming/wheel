@@ -21,7 +21,7 @@ static CONST symbol_t *g_syms    = NULL;
 // 遍历每个符号表两次，第一次统计符号数量和符号名长度，第二次备份符号数据
 // TODO 还可以处理 debug section，识别 dwarf 调试信息
 //      查看符号时可以精确到行号
-INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num) {
+INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, unsigned shstrndx) {
     if (sizeof(Elf64_Shdr) != entsize) {
         log("section entry size %d\n", entsize);
         return;
@@ -29,11 +29,25 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num) {
 
     const Elf64_Shdr *secs = (const Elf64_Shdr *)ptr;
 
+    const char *shname = NULL;
+    if ((SHN_UNDEF != shstrndx) && (shstrndx < num)) {
+        const Elf64_Shdr shstr = secs[shstrndx];
+        if (SHT_STRTAB == shstr.sh_type) {
+            shname = (const char *)shstr.sh_addr;
+        }
+    }
+
     g_sym_num = 0;
     size_t strbuf_len = 0; // 符号名字符串总长
 
     for (unsigned i = 0; i < num; ++i) {
         const Elf64_Shdr sec = secs[i];
+
+        log("section %d type=%d name=%s\n", i, sec.sh_type, &shname[sec.sh_name]);
+        if (SHT_PROGBITS == sec.sh_type) {
+            log("   addr=0x%lx, size=0x%lx\n", sec.sh_addr, sec.sh_size);
+        }
+
         if ((SHT_SYMTAB != sec.sh_type) && (SHT_DYNSYM != sec.sh_type)) {
             continue;
         }

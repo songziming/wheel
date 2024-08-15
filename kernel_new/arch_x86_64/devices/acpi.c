@@ -1,6 +1,6 @@
 #include "acpi.h"
 #include <arch_impl.h>
-#include <memory/mem_map.h>
+#include <memory/mem_block.h>
 #include <library/debug.h>
 #include <memory/early_alloc.h>
 #include <library/string.h>

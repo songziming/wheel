@@ -7,6 +7,8 @@
 // Linux kernel 代码中，cpuid 是一个设备文件，因此 cpuid.c 只能看到向系统注册设备，将文件读写转换为 cpuid 指令的逻辑
 // 真正执行 cpuid 的代码位于 cpuflags.c，相关代码还有 cpucheck.c
 
+// TODO 此模块适合改名为 cpufeatures.c
+
 
 #define VENDOR_INTEL "GenuineIntel"
 #define VENDOR_AMD   "AuthenticAMD"
@@ -25,12 +27,6 @@ static CONST uint8_t g_cpu_family;
 
 CONST uint32_t g_cpu_features;
 
-typedef struct cache_info {
-    size_t line_size;
-    size_t sets;        // 有多少个 set
-    size_t ways;        // 每个 set 有多少 tag，0 表示全相连，-1 表示无效
-    size_t total_size;
-} cache_info_t;
 
 CONST cache_info_t g_l1d_info;
 CONST cache_info_t g_l1i_info;

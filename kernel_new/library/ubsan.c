@@ -8,7 +8,7 @@
 
 // static void log(const char *s UNUSED, ...) {}
 
-static void klog_stacktrace() {}
+// static void log_stacktrace() {}
 
 static void log_location(source_location_t *loc) {
     log("location: %s:%d,%d\n", loc->file, loc->line, loc->column);
@@ -40,7 +40,7 @@ static void type_mismatch_common(source_location_t *loc, type_descriptor_t *type
             TYPE_CHECK_KINFS[kind], ptr, type->name);
     }
     log_location(loc);
-    klog_stacktrace();
+    log_stacktrace();
     // emu_exit(1);
 }
 
@@ -57,42 +57,42 @@ void __ubsan_handle_type_mismatch_v1(type_mismatch_data_v1_t *data, uintptr_t pt
 void __ubsan_handle_add_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
     log("\nubsan: addition overflow\n");
     log_location(loc);
-    klog_stacktrace();
+    log_stacktrace();
     // emu_exit(1);
 }
 
 void __ubsan_handle_sub_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
     log("\nubsan: subtraction overflow\n");
     log_location(loc);
-    klog_stacktrace();
+    log_stacktrace();
     // emu_exit(1);
 }
 
 void __ubsan_handle_mul_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
     log("\nubsan: multiplication overflow\n");
     log_location(loc);
-    klog_stacktrace();
+    log_stacktrace();
     // emu_exit(1);
 }
 
 void __ubsan_handle_negate_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
     log("\nubsan: negation overflow\n");
     log_location(loc);
-    klog_stacktrace();
+    log_stacktrace();
     // emu_exit(1);
 }
 
 void __ubsan_handle_divrem_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
     log("\nubsan: division remainder overflow\n");
     log_location(loc);
-    klog_stacktrace();
+    log_stacktrace();
     // emu_exit(1);
 }
 
 void __ubsan_handle_pointer_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
     log("\nubsan: pointer overflow\n");
     log_location(loc);
-    klog_stacktrace();
+    log_stacktrace();
     // emu_exit(1);
 }
 
@@ -100,28 +100,28 @@ void __ubsan_handle_pointer_overflow(source_location_t *loc, uintptr_t a UNUSED,
 void __ubsan_handle_out_of_bounds(out_of_bounds_data_t *data, uintptr_t idx) {
     log("\nubsan: index %ld out of bound\n", idx);
     log_location(&data->location);
-    klog_stacktrace();
+    log_stacktrace();
     // emu_exit(1);
 }
 
 void __ubsan_handle_shift_out_of_bounds(shift_data_t *data, uintptr_t lhs UNUSED, uintptr_t rhs UNUSED) {
     log("\nubsan: shift out of bound\n");
     log_location(&data->location);
-    klog_stacktrace();
+    log_stacktrace();
     // emu_exit(1);
 }
 
 void __ubsan_handle_function_type_mismatch(source_location_t *loc) {
     log("\nubsan: function type mismatch\n");
     log_location(loc);
-    klog_stacktrace();
+    log_stacktrace();
     // emu_exit(1);
 }
 
 void __ubsan_handle_invalid_builtin(source_location_t *loc) {
     log("\nubsan: invalid builtin\n");
     log_location(loc);
-    klog_stacktrace();
+    log_stacktrace();
     // emu_exit(1);
 }
 

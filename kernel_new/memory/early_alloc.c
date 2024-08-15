@@ -1,5 +1,5 @@
 #include "early_alloc.h"
-#include "mem_map.h"
+#include "mem_block.h"
 #include <wheel.h>
 #include <library/debug.h>
 
@@ -51,7 +51,6 @@ INIT_TEXT void *early_alloc_ro(size_t n) {
         log("current %p/%p\n", g_ro_buff.ptr, g_ro_buff.end);
         log_stacktrace();
         cpu_halt();
-        return NULL;
     }
     return p;
 }
@@ -63,7 +62,6 @@ INIT_TEXT void *early_alloc_rw(size_t n) {
         log("current %p/%p\n", g_rw_buff.ptr, g_rw_buff.end);
         log_stacktrace();
         cpu_halt();
-        return NULL;
     }
     return p;
 }
