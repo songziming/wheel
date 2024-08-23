@@ -5,7 +5,7 @@
 #include <memory/early_alloc.h>
 
 
-// 管理内核符号表
+// 管理内核符号表，以及调试信息
 
 
 typedef struct symbol {
@@ -16,6 +16,30 @@ typedef struct symbol {
 
 static CONST int       g_sym_num = 0;
 static CONST symbol_t *g_syms    = NULL;
+
+
+// // 64-bit initial length field
+// typedef struct
+
+// full and partial compilation unit header
+typedef struct cu_header {
+    uint32_t    fixed;
+    uint64_t    length;
+    uint16_t    version;
+    uint8_t     unit_type;
+    uint8_t     address_size;
+    uint64_t    debug_abbrev_offset;
+} PACKED cu_header_t;
+
+// 解析 .debug_info
+static void parse_debug_info(void *data, size_t size) {
+    size_t pos = 0;
+    while (pos < size) {
+        cu_header_t *cu = (cu_header_t *)((char *)data + pos);
+        log("compile unit at %ld\n", pos);
+        pos += cu->length;
+    }
+}
 
 
 // 遍历每个符号表两次，第一次统计符号数量和符号名长度，第二次备份符号数据
@@ -43,9 +67,14 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, un
     for (unsigned i = 0; i < num; ++i) {
         const Elf64_Shdr sec = secs[i];
 
-        log("section %d type=%d name=%s\n", i, sec.sh_type, &shname[sec.sh_name]);
-        if (SHT_PROGBITS == sec.sh_type) {
-            log("   addr=0x%lx, size=0x%lx\n", sec.sh_addr, sec.sh_size);
+        if (NULL != shname) {
+            // log("section %d type=%d name=%s\n", i, sec.sh_type, &shname[sec.sh_name]);
+            // if (SHT_PROGBITS == sec.sh_type) {
+            //     log("   addr=0x%lx, size=0x%lx\n", sec.sh_addr, sec.sh_size);
+            // }
+            if (0 == strcmp(".debug_info", &shname[sec.sh_name])) {
+                parse_debug_info((void *)sec.sh_addr, sec.sh_size);
+            }
         }
 
         if ((SHT_SYMTAB != sec.sh_type) && (SHT_DYNSYM != sec.sh_type)) {
