@@ -3,6 +3,7 @@
 #include "debug.h"
 #include "string.h"
 #include <memory/early_alloc.h>
+#include "dwarf.h"
 
 
 // 管理内核符号表，以及调试信息
@@ -64,16 +65,37 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, un
     g_sym_num = 0;
     size_t strbuf_len = 0; // 符号名字符串总长
 
+    // 记录调试信息所在 section 的编号，0 表示未找到
+    const char *dbg_str = NULL;
+    const char *dbg_line_str = NULL;
+    const uint8_t *dbg_line = NULL;
+    size_t dbg_line_size = 0;
+    // int dbg_line = 0;
+    // int dbg_str = 0;
+    // int dbg_line_str = 0;
+
     for (unsigned i = 0; i < num; ++i) {
         const Elf64_Shdr sec = secs[i];
 
         if (NULL != shname) {
+            const char *name = &shname[sec.sh_name];
             // log("section %d type=%d name=%s\n", i, sec.sh_type, &shname[sec.sh_name]);
             // if (SHT_PROGBITS == sec.sh_type) {
             //     log("   addr=0x%lx, size=0x%lx\n", sec.sh_addr, sec.sh_size);
             // }
-            if (0 == strcmp(".debug_info", &shname[sec.sh_name])) {
-                parse_debug_info((void *)sec.sh_addr, sec.sh_size);
+            // if (0 == strcmp(".debug_info", &shname[sec.sh_name])) {
+            //     parse_debug_info((void *)sec.sh_addr, sec.sh_size);
+            // }
+            if (0 == strcmp(".debug_str", name)) {
+                dbg_str = (const char *)sec.sh_addr;
+            }
+            if (0 == strcmp(".debug_line_str", name)) {
+                dbg_line_str = (const char *)sec.sh_addr;
+            }
+            if (0 == strcmp(".debug_line", name)) {
+                dbg_line = (uint8_t *)sec.sh_addr;
+                dbg_line_size = sec.sh_size;
+                // parse_debug_line((uint8_t *)sec.sh_addr, sec.sh_size);
             }
         }
 
@@ -108,6 +130,11 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, un
             strbuf_len += strlen(name) + 1; // 包含字符串末尾的 '\0'
             ++g_sym_num;
         }
+    }
+
+    // 如果找到了调试信息，则解析行号映射信息
+    if (0 != dbg_line_size) {
+        parse_debug_line(dbg_line, dbg_line_size, dbg_str, dbg_line_str);
     }
 
     // 为符号表和符号名字符串表分配空间

@@ -47,6 +47,7 @@ static INIT_TEXT void *buff_alloc(buff_t *buff, size_t n) {
 INIT_TEXT void *early_alloc_ro(size_t n) {
     void *p = buff_alloc(&g_ro_buff, n);
     if (NULL == p) {
+        // TODO ro 模式分配失败，还可以用 rw 模式补救
         log("fatal: %s failed allocating 0x%x\n", __func__, n);
         log("current %p/%p\n", g_ro_buff.ptr, g_ro_buff.end);
         log_stacktrace();
