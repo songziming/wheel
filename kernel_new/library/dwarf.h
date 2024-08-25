@@ -28,9 +28,9 @@ typedef struct initial_length {
 typedef enum type_code {
     DW_LNCT_path            = 0x01,
     DW_LNCT_directory_index = 0x02,
-    DW_LNCT_timestamp       = 0x3,
-    DW_LNCT_size            = 0x4,
-    DW_LNCT_MD5             = 0x5,
+    DW_LNCT_timestamp       = 0x03,
+    DW_LNCT_size            = 0x04,
+    DW_LNCT_MD5             = 0x05,
     DW_LNCT_lo_user         = 0x2000,
     DW_LNCT_hi_user         = 0x3fff,
 } type_code_t;
@@ -98,6 +98,6 @@ enum line_number_opcode {
     DW_LNS_set_isa              = 0x0c,
 };
 
-void parse_debug_line(uint8_t *data, size_t size, const char *dbg_str, const char *dbg_line_str);
+void parse_debug_line(const uint8_t *data, size_t size, const char *dbg_str, const char *dbg_line_str);
 
 #endif // DWARF_H

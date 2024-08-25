@@ -26,6 +26,7 @@ typedef struct line_num_state {
 
 static const char *show_type_code(type_code_t code) {
     switch (code) {
+    default: return "other-type";
     case DW_LNCT_path:            return "path";
     case DW_LNCT_directory_index: return "directory_index";
     case DW_LNCT_timestamp:       return "timestamp";
@@ -84,6 +85,16 @@ static const char *show_format(form_t form) {
 }
 
 
+
+// 解析器状态
+typedef struct decoder {
+    const uint8_t *ptr;
+    const uint8_t *end;
+    size_t         wordsize; // 表示当前 unit 是 32-bit 还是 64-bit
+    const char    *dbg_str;
+    const char    *dbg_line_str;
+} decoder_t;
+
 // static size_t form_size(form_t form) {
 //     switch (form) {
 //     default:
@@ -94,139 +105,227 @@ static const char *show_format(form_t form) {
 // }
 
 
-// 应该创建一个 directory 对象，方便后面解析过程引用
-// filename 格式与 directory 类似，也用这个函数解析
-static uint8_t *parse_directory_entry(uint8_t *data, const uint8_t *format, uint8_t format_len, size_t wordsize, const char *dbg_str, const char *dbg_line_str) {
-    for (int i = 0; i < format_len; ++i) {
-        const char *key = show_type_code(format[2 * i]);
-        log("    %s = ", key);
+// DWARF 文件里，整型字段使用 LEB128 变长编码
+// 每个字节只有 7-bit 有效数字，最高位表示该字节是否为最后一个字节
 
-        // const char *val = NULL;
-        size_t offset = 0;
+uint64_t decode_uleb128(decoder_t *state) {
+    uint64_t value = 0;
+    int shift = 0;
 
-        switch (format[2 * i + 1]) {
-        case DW_FORM_string:
-            log("%s\n", (const char *)data);
-            data += strlen((const char *)data);
-            continue;
-        case DW_FORM_strp:
-            // val = dbg_str;
-            memcpy(&offset, data, wordsize);
-            log("%s\n", dbg_str + offset);
-            data += wordsize;
-            break;
-        case DW_FORM_line_strp:
-            // val = dbg_line_str;
-            memcpy(&offset, data, wordsize);
-            log("%s\n", dbg_line_str + offset);
-            data += wordsize;
-            break;
-        case DW_FORM_udata:
-            // TODO 应该是 LEB-128 类型，是变长的
-            log("%d\n", *data);
-            ++data;
-            break;
-        case DW_FORM_data16:
-            log("\n");
-            data += 16;
-            break;
-        default:
-            log("    unsupported FORM %s\n", show_format(format[2 * i + 1]));
-            break;
+    while (state->ptr < state->end) {
+        uint8_t byte = *state->ptr++;
+        value |= (uint64_t)(byte & 0x7f) << shift;
+        shift += 7;
+        if (0 == (byte & 0x80)) {
+            return value;
         }
     }
 
-    return data;
+    log("dwarf ULEB128 out-of-range\n");
+    return 0;
+}
+
+int64_t decode_sleb128(decoder_t *state) {
+    int64_t value = 0;
+    int shift = 0;
+
+    while (state->ptr < state->end) {
+        uint8_t byte = *state->ptr++;
+        value |= (int64_t)(byte & 0x7f) << shift;
+        shift += 7;
+        if (0 == (byte & 0x80)) {
+            if (byte & 0x40) {
+                value |= -(1L << shift); // 如果是有符号数，需要符号扩展
+            }
+            return value;
+        }
+    }
+
+    log("dwarf SLEB128 out-of-range\n");
+    return 0;
+}
+
+size_t decode_size(decoder_t *state) {
+    size_t addr = 0;
+    memcpy(&addr, state->ptr, state->wordsize);
+    state->ptr += state->wordsize;
+    return addr;
+}
+
+uint16_t decode_uhalf(decoder_t *state) {
+    uint16_t value;
+    memcpy(&value, state->ptr, sizeof(uint16_t));
+    state->ptr += sizeof(uint16_t);
+    return value;
+}
+
+size_t decode_initial_length(decoder_t *state) {
+    state->wordsize = sizeof(uint32_t);
+
+    size_t length = 0;
+    memcpy(&length, state->ptr, state->wordsize);
+    state->ptr += state->wordsize;
+
+    if (0xffffffff == length) {
+        state->wordsize = sizeof(uint64_t);
+        memcpy(&length, state->ptr, state->wordsize);
+        state->ptr += state->wordsize;
+    }
+
+    return length;
+}
+
+
+// directory entry 与 filename entry 都可以用这个函数
+static void parse_entry(decoder_t *state, const uint8_t *format, uint8_t format_len) {
+    for (int i = 0; i < format_len; ++i) {
+        const char *key = show_type_code(format[2 * i]);
+        log("    ~ %s = ", key);
+
+        switch (format[2 * i + 1]) {
+        case DW_FORM_string:
+            log("%s\n", (const char *)state->ptr);
+            state->ptr += strlen((const char *)state->ptr);
+            break;
+        case DW_FORM_strp:
+            log("%s\n", state->dbg_str + decode_size(state));
+            break;
+        case DW_FORM_line_strp:
+            log("%s\n", state->dbg_line_str + decode_size(state));
+            break;
+        case DW_FORM_data1:
+            log("%d\n", *state->ptr++);
+            break;
+        case DW_FORM_data2:
+            log("%d\n", decode_uhalf(state));
+            break;
+        case DW_FORM_udata:
+            log("%ld\n", decode_uleb128(state));
+            break;
+        case DW_FORM_data16:
+            for (int j = 0; j < 16; ++j) {
+                log("%X", state->ptr[j]);
+            }
+            log("\n");
+            state->ptr += 16;
+            break;
+        default:
+            log("unsupported FORM %s\n", show_format(format[2 * i + 1]));
+            break;
+        }
+    }
 }
 
 // 解析一个 unit，返回下一个 unit 的地址
-static uint8_t *parse_debug_line_unit(uint8_t *data, const char *dbg_str, const char *dbg_line_str) {
-    size_t wordsize = sizeof(uint32_t);
+// uint8_t *data, const char *dbg_str, const char *dbg_line_str
+static const uint8_t *parse_debug_line_unit(decoder_t *state) {
+    size_t unit_length = decode_initial_length(state); // 同时更新 wordsize
+    const uint8_t *end = state->ptr + unit_length;
 
-    size_t unit_length = 0;
-    memcpy(&unit_length, data, wordsize);
-    data += wordsize;
-
-    if (0xffffffff == unit_length) {
-        wordsize = sizeof(uint64_t);
-        memcpy(&unit_length, data, wordsize);
-        data += wordsize;
-    }
-
-    uint8_t *end = data + unit_length;
-
-    uint16_t version;
-    memcpy(&version, data, sizeof(uint16_t));
-    data += sizeof(uint16_t);
-
+    uint16_t version = decode_uhalf(state);
     if (5 != version) {
         log("we only support dwarf v5, but got %d\n", version);
         return end;
     }
 
-    uint8_t address_size = *data++;
-    uint8_t segment_selector_size = *data++;
+    uint8_t address_size = *state->ptr++;
+    uint8_t segment_selector_size = *state->ptr++;
 
-    size_t header_length = 0;
-    memcpy(&header_length, data, wordsize);
-    data += wordsize;
+    size_t header_length = decode_size(state);
+    const uint8_t *opcodes = state->ptr + header_length;
 
-    uint8_t *opcodes = data + header_length;
-
-    uint8_t minimum_instruction_length = *data++;
-    uint8_t maximum_operations_per_instruction = *data++;
-    uint8_t default_is_stmt = *data++;
-    int8_t  line_base = *(int8_t *)data++;
-    uint8_t line_range = *data++;
-    uint8_t opcode_base = *data++;
+    uint8_t minimum_instruction_length = *state->ptr++;
+    uint8_t maximum_operations_per_instruction = *state->ptr++;
+    uint8_t default_is_stmt = *state->ptr++;
+    int8_t  line_base = *(int8_t *)state->ptr++;
+    uint8_t line_range = *state->ptr++;
+    uint8_t opcode_base = *state->ptr++;
 
     // 表示每个 opcode 各有多少个参数
-    uint8_t *standard_opcode_lengths = data;
-    data += opcode_base - 1;
+    const uint8_t *standard_opcode_lengths = state->ptr;
+    state->ptr += opcode_base - 1;
 
-    log("=====================================================\n");
-    log("debug line header length %ld\n", unit_length);
-    log("version=%d, addr-size=%d, sel-size=%d\n", version, address_size, segment_selector_size);
-    log("header length %ld\n", header_length);
-    log("min_ins_len=%d, max_ops_per_ins=%d\n", minimum_instruction_length, maximum_operations_per_instruction);
-    log("default is_stmt=%d\n", default_is_stmt);
-    log("line_base=%d, line_range=%d, op_base=%d\n", line_base, line_range, opcode_base);
+    log("- unit length %ld\n", unit_length);
+    log("- version=%d, addr-size=%d, sel-size=%d\n", version, address_size, segment_selector_size);
+    log("- header length %ld\n", header_length);
+    log("- min_ins_len=%d, max_ops_per_ins=%d\n", minimum_instruction_length, maximum_operations_per_instruction);
+    log("- default is_stmt=%d\n", default_is_stmt);
+    log("- line_base=%d, line_range=%d, op_base=%d\n", line_base, line_range, opcode_base);
 
-    // for (int i = 0; i + 1 < opcode_base; ++i) {
-    //     log(" -> standard opcode[%d] len %d\n", i, standard_opcode_lengths[i]);
-    // }
+    log("- opcode nargs: [ %d", standard_opcode_lengths[0]);
+    for (int i = 1; i + 1 < opcode_base; ++i) {
+        log(", %d", standard_opcode_lengths[i]);
+    }
+    log(" ]\n");
 
-    uint8_t directory_entry_format_count = *data++;
-    uint8_t *directory_formats = data;
-    // for (int i = 0; i < directory_entry_format_count; ++i) {
-    //     log(" #> directory field %s: %s\n", show_type_code(data[0]), show_format(data[1]));
-    //     data += 2;
-    // }
-    data += directory_entry_format_count * 2;
+    // format 数组应该是 LEB128，但合法取值都小于 128，理论上应该只占一个字节
+    // 有些 user specific type code 取值可能超过一个字节，可以尝试 alloca
+    // 不然这里就要动态申请内存，用来保存 format 字典
+    uint8_t directory_entry_format_count = *state->ptr++;
+    const uint8_t *directory_formats = state->ptr;
+    state->ptr += directory_entry_format_count * 2;
 
-    uint8_t directories_count = *data++;
-    for (int i = 0; i < directories_count; ++i) {
-        log("Directory #%d:\n", i);
-        data = parse_directory_entry(data, directory_formats, directory_entry_format_count, wordsize, dbg_str, dbg_line_str);
+    // uint8_t directories_count = *state->ptr++;
+    uint64_t directories_count = decode_uleb128(state);
+    log("- %d directory entries:\n", directories_count);
+    for (unsigned i = 0; i < directories_count; ++i) {
+        log("  * Directory #%d:\n", i);
+        parse_entry(state, directory_formats, directory_entry_format_count);
     }
 
-    uint8_t file_name_entry_format_count = *data++;
-    uint8_t *file_name_formats = data;
-    data += file_name_entry_format_count * 2;
+    // LEB128，道理和 directory entry format 相同
+    uint8_t file_name_entry_format_count = *state->ptr++;
+    const uint8_t *file_name_formats = state->ptr;
+    state->ptr += file_name_entry_format_count * 2;
 
-    uint8_t file_name_count = *data++;
-    for (int i = 0; i < file_name_count; ++i) {
-        log("File #%d:\n", i);
-        data = parse_directory_entry(data, file_name_formats, file_name_entry_format_count, wordsize, dbg_str, dbg_line_str);
+    // uint8_t file_name_count = *state->ptr++;
+    uint64_t file_name_count = decode_uleb128(state);
+    log("- %d file name entries:\n", file_name_count);
+    for (unsigned i = 0; i < file_name_count; ++i) {
+        log("  * File name #%d:\n", i);
+        parse_entry(state, file_name_formats, file_name_entry_format_count);
     }
 
-    log("---------------------------------\n");
+    // 解析执行指令
+    while (opcodes < end) {
+        uint8_t op = *opcodes++;
+
+        if (op >= opcode_base) {
+            continue; // 扩展指令
+        }
+
+        // 解析标准指令
+        switch (op) {
+        case DW_LNS_copy:           break;
+        case DW_LNS_advance_pc:     break;
+        case DW_LNS_advance_line:   break;
+        case DW_LNS_set_file:       break;
+        case DW_LNS_set_column:     break;
+        }
+    }
+
     return end;
 }
 
-void parse_debug_line(uint8_t *data, size_t size, const char *dbg_str, const char *dbg_line_str) {
-    uint8_t *end = data + size;
-    while (data < end) {
-        data = parse_debug_line_unit(data, dbg_str, dbg_line_str);
+// 解析内核符号表时，根据 section 名称找到 debug_line、debug_str、debug_line_str 三个调试信息段
+// 调用这个函数，解析行号信息，这样在断言失败、打印调用栈时可以显示对应的源码位置，而不只是所在函数
+// 本函数在开机阶段调用一次，将行号信息保存下来
+void parse_debug_line(const uint8_t *data, size_t size, const char *dbg_str, const char *dbg_line_str) {
+    decoder_t state;
+    state.ptr = data;
+    state.end = data + size;
+    state.dbg_str = dbg_str;
+    state.dbg_line_str = dbg_line_str;
+
+    for (int i = 0; state.ptr < state.end; ++i) {
+        log("---------------------------------\n");
+        log("Debug Line Unit #%d:\n", i);
+        state.ptr = parse_debug_line_unit(&state);
     }
+    log("---------------------------------\n");
+}
+
+// 寻找指定内存地址对应的源码位置
+void show_line_info() {
+    // TODO
 }
