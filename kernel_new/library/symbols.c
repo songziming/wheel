@@ -66,13 +66,11 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, un
     size_t strbuf_len = 0; // 符号名字符串总长
 
     // 记录调试信息所在 section 的编号，0 表示未找到
-    const char *dbg_str = NULL;
-    const char *dbg_line_str = NULL;
-    const uint8_t *dbg_line = NULL;
-    size_t dbg_line_size = 0;
-    // int dbg_line = 0;
-    // int dbg_str = 0;
-    // int dbg_line_str = 0;
+    dwarf_line_t dbg_line = {0};
+    // const char *dbg_str = NULL;
+    // const char *dbg_line_str = NULL;
+    // const uint8_t *dbg_line = NULL;
+    // size_t dbg_line_size = 0;
 
     for (unsigned i = 0; i < num; ++i) {
         const Elf64_Shdr sec = secs[i];
@@ -87,15 +85,16 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, un
             //     parse_debug_info((void *)sec.sh_addr, sec.sh_size);
             // }
             if (0 == strcmp(".debug_str", name)) {
-                dbg_str = (const char *)sec.sh_addr;
+                dbg_line.str = (const char *)sec.sh_addr;
+                dbg_line.str_size = sec.sh_size;
             }
             if (0 == strcmp(".debug_line_str", name)) {
-                dbg_line_str = (const char *)sec.sh_addr;
+                dbg_line.line_str = (const char *)sec.sh_addr;
+                dbg_line.line_str_size = sec.sh_size;
             }
             if (0 == strcmp(".debug_line", name)) {
-                dbg_line = (uint8_t *)sec.sh_addr;
-                dbg_line_size = sec.sh_size;
-                // parse_debug_line((uint8_t *)sec.sh_addr, sec.sh_size);
+                dbg_line.ptr = (uint8_t *)sec.sh_addr;
+                dbg_line.end = dbg_line.ptr + sec.sh_size;
             }
         }
 
@@ -133,9 +132,7 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, un
     }
 
     // 如果找到了调试信息，则解析行号映射信息
-    if (0 != dbg_line_size) {
-        parse_debug_line(dbg_line, dbg_line_size, dbg_str, dbg_line_str);
-    }
+    parse_debug_line(&dbg_line);
 
     // 为符号表和符号名字符串表分配空间
     g_syms = early_alloc_ro(g_sym_num * sizeof(symbol_t));

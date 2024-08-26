@@ -71,7 +71,7 @@ MAKECOV := -fprofile-instr-generate -fcoverage-mapping
 MAKEDEP = -MT $@ -MMD -MP -MF $@.d
 
 ifeq ($(DEBUG),1)
-    KCFLAGS += -g -DDEBUG -fstack-protector -fno-omit-frame-pointer
+    KCFLAGS += -g -gdwarf-5 -DDEBUG -fstack-protector -fno-omit-frame-pointer
 else
     KCFLAGS += -O2 -DNDEBUG
 endif

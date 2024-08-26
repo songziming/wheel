@@ -18,12 +18,6 @@ enum unit_header_type {
     DW_UT_hi_user       = 0xff,
 };
 
-typedef struct initial_length {
-    uint32_t fixed; // 0xffffffff
-    uint64_t length;
-} PACKED initial_length_t;
-
-
 // line number content type code
 typedef enum type_code {
     DW_LNCT_path            = 0x01,
@@ -98,6 +92,17 @@ enum line_number_opcode {
     DW_LNS_set_isa              = 0x0c,
 };
 
-void parse_debug_line(const uint8_t *data, size_t size, const char *dbg_str, const char *dbg_line_str);
+// 解析器状态
+typedef struct decoder {
+    const uint8_t *ptr;
+    const uint8_t *end;
+    const char    *str;
+    size_t         str_size;
+    const char    *line_str;
+    size_t         line_str_size;
+    size_t         wordsize; // 表示当前 unit 是 32-bit 还是 64-bit
+} dwarf_line_t;
+
+void parse_debug_line(dwarf_line_t *line);
 
 #endif // DWARF_H

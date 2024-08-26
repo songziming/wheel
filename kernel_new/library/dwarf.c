@@ -2,6 +2,7 @@
 #include "string.h"
 #include "debug.h"
 
+
 // line number information state machine registers
 typedef struct line_num_state {
     uint64_t address;
@@ -20,8 +21,6 @@ typedef struct line_num_state {
     unsigned isa;
     unsigned discriminator;
 } line_num_state_t;
-
-
 
 
 static const char *show_type_code(type_code_t code) {
@@ -86,15 +85,6 @@ static const char *show_format(form_t form) {
 
 
 
-// 解析器状态
-typedef struct decoder {
-    const uint8_t *ptr;
-    const uint8_t *end;
-    size_t         wordsize; // 表示当前 unit 是 32-bit 还是 64-bit
-    const char    *dbg_str;
-    const char    *dbg_line_str;
-} decoder_t;
-
 // static size_t form_size(form_t form) {
 //     switch (form) {
 //     default:
@@ -108,7 +98,7 @@ typedef struct decoder {
 // DWARF 文件里，整型字段使用 LEB128 变长编码
 // 每个字节只有 7-bit 有效数字，最高位表示该字节是否为最后一个字节
 
-uint64_t decode_uleb128(decoder_t *state) {
+static uint64_t decode_uleb128(dwarf_line_t *state) {
     uint64_t value = 0;
     int shift = 0;
 
@@ -125,7 +115,7 @@ uint64_t decode_uleb128(decoder_t *state) {
     return 0;
 }
 
-int64_t decode_sleb128(decoder_t *state) {
+static int64_t decode_sleb128(dwarf_line_t *state) {
     int64_t value = 0;
     int shift = 0;
 
@@ -145,21 +135,21 @@ int64_t decode_sleb128(decoder_t *state) {
     return 0;
 }
 
-size_t decode_size(decoder_t *state) {
+static size_t decode_size(dwarf_line_t *state) {
     size_t addr = 0;
     memcpy(&addr, state->ptr, state->wordsize);
     state->ptr += state->wordsize;
     return addr;
 }
 
-uint16_t decode_uhalf(decoder_t *state) {
+static uint16_t decode_uhalf(dwarf_line_t *state) {
     uint16_t value;
     memcpy(&value, state->ptr, sizeof(uint16_t));
     state->ptr += sizeof(uint16_t);
     return value;
 }
 
-size_t decode_initial_length(decoder_t *state) {
+static size_t decode_initial_length(dwarf_line_t *state) {
     state->wordsize = sizeof(uint32_t);
 
     size_t length = 0;
@@ -177,7 +167,7 @@ size_t decode_initial_length(decoder_t *state) {
 
 
 // directory entry 与 filename entry 都可以用这个函数
-static void parse_entry(decoder_t *state, const uint8_t *format, uint8_t format_len) {
+static void parse_entry(dwarf_line_t *state, const uint8_t *format, uint8_t format_len) {
     for (int i = 0; i < format_len; ++i) {
         const char *key = show_type_code(format[2 * i]);
         log("    ~ %s = ", key);
@@ -187,12 +177,24 @@ static void parse_entry(decoder_t *state, const uint8_t *format, uint8_t format_
             log("%s\n", (const char *)state->ptr);
             state->ptr += strlen((const char *)state->ptr);
             break;
-        case DW_FORM_strp:
-            log("%s\n", state->dbg_str + decode_size(state));
+        case DW_FORM_strp: {
+            size_t pos = decode_size(state);
+            if (pos < state->str_size) {
+                log("%s\n", state->str + pos);
+            } else {
+                log("null\n");
+            }
             break;
-        case DW_FORM_line_strp:
-            log("%s\n", state->dbg_line_str + decode_size(state));
+        }
+        case DW_FORM_line_strp: {
+            size_t pos = decode_size(state);
+            if (pos < state->line_str_size) {
+                log("%s\n", state->line_str + pos);
+            } else {
+                log("null\n");
+            }
             break;
+        }
         case DW_FORM_data1:
             log("%d\n", *state->ptr++);
             break;
@@ -217,8 +219,8 @@ static void parse_entry(decoder_t *state, const uint8_t *format, uint8_t format_
 }
 
 // 解析一个 unit，返回下一个 unit 的地址
-// uint8_t *data, const char *dbg_str, const char *dbg_line_str
-static const uint8_t *parse_debug_line_unit(decoder_t *state) {
+// uint8_t *data, const char *str, const char *line_str
+static const uint8_t *parse_debug_line_unit(dwarf_line_t *state) {
     size_t unit_length = decode_initial_length(state); // 同时更新 wordsize
     const uint8_t *end = state->ptr + unit_length;
 
@@ -287,6 +289,7 @@ static const uint8_t *parse_debug_line_unit(decoder_t *state) {
     }
 
     // 解析执行指令
+    log("- %d bytes of opcodes remaining\n", (int)(end - opcodes));
     while (opcodes < end) {
         uint8_t op = *opcodes++;
 
@@ -310,19 +313,15 @@ static const uint8_t *parse_debug_line_unit(decoder_t *state) {
 // 解析内核符号表时，根据 section 名称找到 debug_line、debug_str、debug_line_str 三个调试信息段
 // 调用这个函数，解析行号信息，这样在断言失败、打印调用栈时可以显示对应的源码位置，而不只是所在函数
 // 本函数在开机阶段调用一次，将行号信息保存下来
-void parse_debug_line(const uint8_t *data, size_t size, const char *dbg_str, const char *dbg_line_str) {
-    decoder_t state;
-    state.ptr = data;
-    state.end = data + size;
-    state.dbg_str = dbg_str;
-    state.dbg_line_str = dbg_line_str;
+void parse_debug_line(dwarf_line_t *line) {
+    const char *hr = "---------------------------------\n";
 
-    for (int i = 0; state.ptr < state.end; ++i) {
-        log("---------------------------------\n");
+    for (int i = 0; line->ptr < line->end; ++i) {
+        log(hr);
         log("Debug Line Unit #%d:\n", i);
-        state.ptr = parse_debug_line_unit(&state);
+        line->ptr = parse_debug_line_unit(line);
     }
-    log("---------------------------------\n");
+    log(hr);
 }
 
 // 寻找指定内存地址对应的源码位置
