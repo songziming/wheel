@@ -125,4 +125,10 @@ void __ubsan_handle_invalid_builtin(source_location_t *loc) {
     // emu_exit(1);
 }
 
+void __ubsan_handle_vla_bound_not_positive(vla_bound_data_t *data, unsigned long bound) {
+    log("\nubsan: vla bound not positive %lu\n", bound);
+    log_location(&data->location);
+    log_stacktrace();
+}
+
 #endif // UNIT_TEST

@@ -41,4 +41,9 @@ typedef struct shift_data {
     type_descriptor_t *rhs_type;
 } shift_data_t;
 
+typedef struct vla_bound_data {
+    source_location_t location;
+    type_descriptor_t *type;
+} vla_bound_data_t;
+
 #endif // UBSAN_H
