@@ -83,6 +83,24 @@ static const char *show_format(form_t form) {
     }
 }
 
+static const char *show_opcode(opcode_t op) {
+    switch (op) {
+    default:                        return "unknown            ";
+    case DW_LNS_copy:               return "copy               ";
+    case DW_LNS_advance_pc:         return "advance_pc         ";
+    case DW_LNS_advance_line:       return "advance_line       ";
+    case DW_LNS_set_file:           return "set_file           ";
+    case DW_LNS_set_column:         return "set_column         ";
+    case DW_LNS_negate_stmt:        return "negate_stmt        ";
+    case DW_LNS_set_basic_block:    return "set_basic_block    ";
+    case DW_LNS_const_add_pc:       return "const_add_pc       ";
+    case DW_LNS_fixed_advance_pc:   return "fixed_advance_pc   ";
+    case DW_LNS_set_prologue_end:   return "set_prologue_end   ";
+    case DW_LNS_set_epilogue_begin: return "set_epilogue_begin ";
+    case DW_LNS_set_isa:            return "set_isa            ";
+    }
+}
+
 
 
 // static size_t form_size(form_t form) {
@@ -167,7 +185,7 @@ static size_t decode_initial_length(dwarf_line_t *state) {
 
 
 // directory entry 与 filename entry 都可以用这个函数
-static void parse_entry(dwarf_line_t *state, const uint8_t *format, uint8_t format_len) {
+static void parse_entry(dwarf_line_t *state, const uint64_t *format, uint8_t format_len) {
     for (int i = 0; i < format_len; ++i) {
         const char *key = show_type_code(format[2 * i]);
         log("    ~ %s = ", key);
@@ -264,8 +282,12 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *state) {
     // 有些 user specific type code 取值可能超过一个字节，可以尝试 alloca
     // 不然这里就要动态申请内存，用来保存 format 字典
     uint8_t directory_entry_format_count = *state->ptr++;
-    const uint8_t *directory_formats = state->ptr;
-    state->ptr += directory_entry_format_count * 2;
+    // const uint8_t *directory_formats = state->ptr;
+    // state->ptr += directory_entry_format_count * 2;
+    uint64_t directory_formats[directory_entry_format_count * 2];
+    for (int i = 0; i < directory_entry_format_count * 2; ++i) {
+        directory_formats[i] = decode_uleb128(state);
+    }
 
     // uint8_t directories_count = *state->ptr++;
     uint64_t directories_count = decode_uleb128(state);
@@ -277,8 +299,12 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *state) {
 
     // LEB128，道理和 directory entry format 相同
     uint8_t file_name_entry_format_count = *state->ptr++;
-    const uint8_t *file_name_formats = state->ptr;
-    state->ptr += file_name_entry_format_count * 2;
+    // const uint8_t *file_name_formats = state->ptr;
+    // state->ptr += file_name_entry_format_count * 2;
+    uint64_t file_name_formats[file_name_entry_format_count * 2];
+    for (int i = 0; i < file_name_entry_format_count; ++i) {
+        file_name_formats[i] = decode_uleb128(state);
+    }
 
     // uint8_t file_name_count = *state->ptr++;
     uint64_t file_name_count = decode_uleb128(state);
@@ -289,22 +315,33 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *state) {
     }
 
     // 解析执行指令
-    log("- %d bytes of opcodes remaining\n", (int)(end - opcodes));
-    while (opcodes < end) {
-        uint8_t op = *opcodes++;
+    log("- %d bytes of opcodes remaining:\n", (int)(end - opcodes));
+    log(">> current pointer %p, opcode %p\n", state->ptr, opcodes);
+    while (state->ptr < end) {
+        uint8_t op = *state->ptr++;
 
+        // 特殊指令，没有参数
         if (op >= opcode_base) {
-            continue; // 扩展指令
+            log("  ~ special op %d\n", op);
+            continue;
         }
 
-        // 解析标准指令
-        switch (op) {
-        case DW_LNS_copy:           break;
-        case DW_LNS_advance_pc:     break;
-        case DW_LNS_advance_line:   break;
-        case DW_LNS_set_file:       break;
-        case DW_LNS_set_column:     break;
+        // 扩展指令
+        if (0 == op) {
+            uint64_t nbytes = decode_uleb128(state);
+            uint8_t eop = *state->ptr;
+            state->ptr += nbytes;
+            log("  ~ extended [%d]\n", eop);
+            continue;
         }
+
+        // 标准指令
+        log("  ~ standard %s", show_opcode(op));
+        int nargs = standard_opcode_lengths[op];
+        for (int i = 0; i < nargs; ++i) {
+            log(" %u", decode_uleb128(state));
+        }
+        log("\n");
     }
 
     return end;
@@ -314,14 +351,14 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *state) {
 // 调用这个函数，解析行号信息，这样在断言失败、打印调用栈时可以显示对应的源码位置，而不只是所在函数
 // 本函数在开机阶段调用一次，将行号信息保存下来
 void parse_debug_line(dwarf_line_t *line) {
-    const char *hr = "---------------------------------\n";
+    const char *hr = "====================";
 
     for (int i = 0; line->ptr < line->end; ++i) {
-        log(hr);
+        log("%s%s%s%s\n", hr, hr, hr, hr);
         log("Debug Line Unit #%d:\n", i);
         line->ptr = parse_debug_line_unit(line);
     }
-    log(hr);
+    log("%s%s%s%s\n", hr, hr, hr, hr);
 }
 
 // 寻找指定内存地址对应的源码位置

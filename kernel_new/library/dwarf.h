@@ -77,7 +77,7 @@ typedef enum form {
 } form_t;
 
 // line number standard opcode encodings
-enum line_number_opcode {
+typedef enum line_number_opcode {
     DW_LNS_copy                 = 0x01,
     DW_LNS_advance_pc           = 0x02,
     DW_LNS_advance_line         = 0x03,
@@ -90,7 +90,7 @@ enum line_number_opcode {
     DW_LNS_set_prologue_end     = 0x0a,
     DW_LNS_set_epilogue_begin   = 0x0b,
     DW_LNS_set_isa              = 0x0c,
-};
+} opcode_t;
 
 // 解析器状态
 typedef struct decoder {
