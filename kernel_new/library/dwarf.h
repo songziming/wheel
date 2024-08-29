@@ -7,16 +7,16 @@
 // TODO Dwarf 有没有官方的类型定义头文件？
 
 
-enum unit_header_type {
-    DW_UT_compile       = 0x01,
-    DW_UT_type          = 0x02,
-    DW_UT_partial       = 0x03,
-    DW_UT_skeleton      = 0x04,
-    DW_UT_split_compile = 0x05,
-    DW_UT_split_type    = 0x06,
-    DW_UT_lo_user       = 0x80,
-    DW_UT_hi_user       = 0xff,
-};
+// enum unit_header_type {
+//     DW_UT_compile       = 0x01,
+//     DW_UT_type          = 0x02,
+//     DW_UT_partial       = 0x03,
+//     DW_UT_skeleton      = 0x04,
+//     DW_UT_split_compile = 0x05,
+//     DW_UT_split_type    = 0x06,
+//     DW_UT_lo_user       = 0x80,
+//     DW_UT_hi_user       = 0xff,
+// };
 
 // line number content type code
 typedef enum type_code {
@@ -77,7 +77,7 @@ typedef enum form {
 } form_t;
 
 // line number standard opcode encodings
-typedef enum line_number_opcode {
+typedef enum line_number_std_opcode {
     DW_LNS_copy                 = 0x01,
     DW_LNS_advance_pc           = 0x02,
     DW_LNS_advance_line         = 0x03,
@@ -90,7 +90,16 @@ typedef enum line_number_opcode {
     DW_LNS_set_prologue_end     = 0x0a,
     DW_LNS_set_epilogue_begin   = 0x0b,
     DW_LNS_set_isa              = 0x0c,
-} opcode_t;
+} std_opcode_t;
+
+// line number program extended opcodes
+typedef enum line_number_ext_opcode {
+    DW_LNE_end_sequence      = 0x01,
+    DW_LNE_set_address       = 0x02,
+    DW_LNE_set_discriminator = 0x04,
+    DW_LNE_lo_user           = 0x80,
+    DW_LNE_hi_user           = 0xff,
+} ext_opcode_t;
 
 // 解析器状态
 typedef struct decoder {

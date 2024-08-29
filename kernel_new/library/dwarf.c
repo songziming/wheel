@@ -22,7 +22,6 @@ typedef struct line_num_state {
     unsigned discriminator;
 } line_num_state_t;
 
-
 static const char *show_type_code(type_code_t code) {
     switch (code) {
     default: return "other-type";
@@ -83,7 +82,7 @@ static const char *show_format(form_t form) {
     }
 }
 
-static const char *show_opcode(opcode_t op) {
+static const char *show_std_opcode(std_opcode_t op) {
     switch (op) {
     default:                        return "unknown            ";
     case DW_LNS_copy:               return "copy               ";
@@ -101,17 +100,16 @@ static const char *show_opcode(opcode_t op) {
     }
 }
 
-
-
-// static size_t form_size(form_t form) {
-//     switch (form) {
-//     default:
-//         log("unsupported form %s\n", show_format(form));
-//         return 0;
-//     case DW_FORM_string
-//     }
-// }
-
+static const char *show_ext_opcode(ext_opcode_t op) {
+    switch (op) {
+    default:                       return "unknown";
+    case DW_LNE_end_sequence:      return "end_sequence";
+    case DW_LNE_set_address:       return "set_address";
+    case DW_LNE_set_discriminator: return "set_discriminator";
+    case DW_LNE_lo_user:           return "lo_user";
+    case DW_LNE_hi_user:           return "hi_user";
+    }
+}
 
 // DWARF 文件里，整型字段使用 LEB128 变长编码
 // 每个字节只有 7-bit 有效数字，最高位表示该字节是否为最后一个字节
@@ -183,7 +181,6 @@ static size_t decode_initial_length(dwarf_line_t *state) {
     return length;
 }
 
-
 // directory entry 与 filename entry 都可以用这个函数
 static void parse_entry(dwarf_line_t *state, const uint64_t *format, uint8_t format_len) {
     for (int i = 0; i < format_len; ++i) {
@@ -237,6 +234,21 @@ static void parse_entry(dwarf_line_t *state, const uint64_t *format, uint8_t for
     }
 }
 
+
+static void state_init() {
+    //
+}
+
+static void exec_std_op(std_opcode_t op, const uint8_t *nargs) {
+    switch (op) {
+    case DW_LNS_copy:
+        ASSERT(0 == nargs[op - 1]);
+        break;
+    case DW_LNS_advance_pc:
+        ASSERT(1 == nargs[op - 1]);
+    }
+}
+
 // 解析一个 unit，返回下一个 unit 的地址
 // uint8_t *data, const char *str, const char *line_str
 static const uint8_t *parse_debug_line_unit(dwarf_line_t *state) {
@@ -284,14 +296,11 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *state) {
     // 有些 user specific type code 取值可能超过一个字节，可以尝试 alloca
     // 不然这里就要动态申请内存，用来保存 format 字典
     uint8_t directory_entry_format_count = *state->ptr++;
-    // const uint8_t *directory_formats = state->ptr;
-    // state->ptr += directory_entry_format_count * 2;
     uint64_t directory_formats[directory_entry_format_count * 2];
     for (int i = 0; i < directory_entry_format_count * 2; ++i) {
         directory_formats[i] = decode_uleb128(state);
     }
 
-    // uint8_t directories_count = *state->ptr++;
     uint64_t directories_count = decode_uleb128(state);
     log("- %d directory entries:\n", directories_count);
     for (unsigned i = 0; i < directories_count; ++i) {
@@ -301,14 +310,11 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *state) {
 
     // LEB128，道理和 directory entry format 相同
     uint8_t file_name_entry_format_count = *state->ptr++;
-    // const uint8_t *file_name_formats = state->ptr;
-    // state->ptr += file_name_entry_format_count * 2;
     uint64_t file_name_formats[file_name_entry_format_count * 2];
     for (int i = 0; i < file_name_entry_format_count * 2; ++i) {
         file_name_formats[i] = decode_uleb128(state);
     }
 
-    // uint8_t file_name_count = *state->ptr++;
     uint64_t file_name_count = decode_uleb128(state);
     log("- %d file name entries:\n", file_name_count);
     for (unsigned i = 0; i < file_name_count; ++i) {
@@ -331,7 +337,6 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *state) {
 
         // 特殊指令，没有参数
         if (op >= opcode_base) {
-            // log("  ~ special op %d\n", op);
             op -= opcode_base;
             int op_adv = (int)op / line_range;
             int line_inc = (int)op % line_range + line_base;
@@ -344,13 +349,13 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *state) {
             uint64_t nbytes = decode_uleb128(state);
             uint8_t eop = *state->ptr;
             state->ptr += nbytes;
-            log("extended %d\n", eop);
+            log("extended %d: %s\n", eop, show_ext_opcode(eop));
             continue;
         }
 
         // 标准指令
-        log("standard %s", show_opcode(op));
-        int nargs = standard_opcode_lengths[op - 1]; // 索引从
+        log("standard %s", show_std_opcode(op));
+        int nargs = standard_opcode_lengths[op - 1]; // 索引从 1 开始
         for (int i = 0; i < nargs; ++i) {
             log(" %u", decode_uleb128(state));
         }
