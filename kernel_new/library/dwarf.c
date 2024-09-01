@@ -3,25 +3,6 @@
 #include "debug.h"
 
 
-// line number information state machine registers
-typedef struct line_num_state {
-    uint64_t address;
-    unsigned op_index;
-    unsigned file;
-    unsigned line;
-    unsigned column;
-
-    // 布尔类型，可以替换为 bitfield
-    int      is_stmt;
-    int      basic_block;
-    int      end_sequence;
-    int      prologue_end;
-    int      epilogue_begin;
-
-    unsigned isa;
-    unsigned discriminator;
-} line_num_state_t;
-
 static const char *show_type_code(type_code_t code) {
     switch (code) {
     default: return "other-type";
@@ -235,8 +216,33 @@ static void parse_entry(dwarf_line_t *state, const uint64_t *format, uint8_t for
 }
 
 
-static void state_init() {
-    //
+
+
+
+
+// line number information state machine registers
+typedef struct line_num_state {
+    uint64_t address;
+    unsigned op_index;
+    unsigned file;
+    unsigned line;
+    unsigned column;
+
+    // 布尔类型，可以替换为 bitfield
+    int      is_stmt;
+    int      basic_block;
+    int      end_sequence;
+    int      prologue_end;
+    int      epilogue_begin;
+
+    unsigned isa;
+    unsigned discriminator;
+} line_num_state_t;
+
+static void line_number_state_init(line_num_state_t *state) {
+    memset(state, 0, sizeof(line_num_state_t));
+    state->file = 1;
+    state->line = 1;
 }
 
 static void exec_std_op(std_opcode_t op, const uint8_t *nargs) {
@@ -251,38 +257,43 @@ static void exec_std_op(std_opcode_t op, const uint8_t *nargs) {
 
 // 解析一个 unit，返回下一个 unit 的地址
 // uint8_t *data, const char *str, const char *line_str
-static const uint8_t *parse_debug_line_unit(dwarf_line_t *state) {
-    const uint8_t *unit_start = state->ptr;
-    size_t unit_length = decode_initial_length(state); // 同时更新 wordsize
-    const uint8_t *end = state->ptr + unit_length;
+static const uint8_t *parse_debug_line_unit(dwarf_line_t *dwarf) {
+    const uint8_t *unit_start = dwarf->ptr;
+    size_t unit_length = decode_initial_length(dwarf); // 同时更新 wordsize
+    const uint8_t *end = dwarf->ptr + unit_length;
 
-    uint16_t version = decode_uhalf(state);
+    line_num_state_t state;
+    line_number_state_init(&state);
+
+    uint16_t version = decode_uhalf(dwarf);
     if (5 != version) {
         log("we only support dwarf v5, but got %d\n", version);
         return end;
     }
 
-    uint8_t address_size = *state->ptr++;
-    uint8_t segment_selector_size = *state->ptr++;
+    uint8_t address_size = *dwarf->ptr++;
+    uint8_t segment_selector_size = *dwarf->ptr++;
 
-    size_t header_length = decode_size(state);
-    const uint8_t *opcodes = state->ptr + header_length;
+    size_t header_length = decode_size(dwarf);
+    const uint8_t *opcodes = dwarf->ptr + header_length;
 
-    uint8_t minimum_instruction_length = *state->ptr++;
-    uint8_t maximum_operations_per_instruction = *state->ptr++;
-    uint8_t default_is_stmt = *state->ptr++;
-    int8_t  line_base = *(int8_t *)state->ptr++;
-    uint8_t line_range = *state->ptr++;
-    uint8_t opcode_base = *state->ptr++;
+    uint8_t min_inst_length = *dwarf->ptr++;
+    uint8_t max_ops_per_inst = *dwarf->ptr++;
+    uint8_t default_is_stmt = *dwarf->ptr++;
+    int8_t  line_base = *(int8_t *)dwarf->ptr++;
+    uint8_t line_range = *dwarf->ptr++;
+    uint8_t opcode_base = *dwarf->ptr++;
+
+    state.is_stmt = default_is_stmt;
 
     // 表示每个 opcode 各有多少个参数
-    const uint8_t *standard_opcode_lengths = state->ptr;
-    state->ptr += opcode_base - 1;
+    const uint8_t *standard_opcode_lengths = dwarf->ptr;
+    dwarf->ptr += opcode_base - 1;
 
     log("- unit length %ld\n", unit_length);
     log("- version=%d, addr-size=%d, sel-size=%d\n", version, address_size, segment_selector_size);
     log("- header length %ld\n", header_length);
-    log("- min_ins_len=%d, max_ops_per_ins=%d\n", minimum_instruction_length, maximum_operations_per_instruction);
+    log("- min_ins_len=%d, max_ops_per_inst=%d\n", min_inst_length, max_ops_per_inst);
     log("- default is_stmt=%d\n", default_is_stmt);
     log("- line_base=%d, line_range=%d, op_base=%d\n", line_base, line_range, opcode_base);
 
@@ -295,45 +306,45 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *state) {
     // format 数组应该是 LEB128，但合法取值都小于 128，理论上应该只占一个字节
     // 有些 user specific type code 取值可能超过一个字节，可以尝试 alloca
     // 不然这里就要动态申请内存，用来保存 format 字典
-    uint8_t directory_entry_format_count = *state->ptr++;
+    uint8_t directory_entry_format_count = *dwarf->ptr++;
     uint64_t directory_formats[directory_entry_format_count * 2];
     for (int i = 0; i < directory_entry_format_count * 2; ++i) {
-        directory_formats[i] = decode_uleb128(state);
+        directory_formats[i] = decode_uleb128(dwarf);
     }
 
-    uint64_t directories_count = decode_uleb128(state);
+    uint64_t directories_count = decode_uleb128(dwarf);
     log("- %d directory entries:\n", directories_count);
     for (unsigned i = 0; i < directories_count; ++i) {
         log("  * Directory #%d:\n", i);
-        parse_entry(state, directory_formats, directory_entry_format_count);
+        parse_entry(dwarf, directory_formats, directory_entry_format_count);
     }
 
     // LEB128，道理和 directory entry format 相同
-    uint8_t file_name_entry_format_count = *state->ptr++;
+    uint8_t file_name_entry_format_count = *dwarf->ptr++;
     uint64_t file_name_formats[file_name_entry_format_count * 2];
     for (int i = 0; i < file_name_entry_format_count * 2; ++i) {
-        file_name_formats[i] = decode_uleb128(state);
+        file_name_formats[i] = decode_uleb128(dwarf);
     }
 
-    uint64_t file_name_count = decode_uleb128(state);
+    uint64_t file_name_count = decode_uleb128(dwarf);
     log("- %d file name entries:\n", file_name_count);
     for (unsigned i = 0; i < file_name_count; ++i) {
         log("  * File name #%d:\n", i);
-        parse_entry(state, file_name_formats, file_name_entry_format_count);
+        parse_entry(dwarf, file_name_formats, file_name_entry_format_count);
     }
 
     // 接下来应该是指令
-    if (opcodes != state->ptr) {
-        log(">> current pointer %p, opcode %p\n", state->ptr, opcodes);
+    if (opcodes != dwarf->ptr) {
+        log(">> current pointer %p, opcode %p\n", dwarf->ptr, opcodes);
     }
 
     // 解析执行指令，更新状态机
     log("- %d bytes of opcodes remaining:\n", (int)(end - opcodes));
-    while (state->ptr < end) {
-        size_t rela = (size_t)(state->ptr - unit_start);
+    while (dwarf->ptr < end) {
+        size_t rela = (size_t)(dwarf->ptr - unit_start);
         log("  [%lx] ", rela);
 
-        uint8_t op = *state->ptr++;
+        uint8_t op = *dwarf->ptr++;
 
         // 特殊指令，没有参数
         if (op >= opcode_base) {
@@ -341,14 +352,18 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *state) {
             int op_adv = (int)op / line_range;
             int line_inc = (int)op % line_range + line_base;
             log("special %d: addr+=%d, line=%d\n", op, op_adv, line_inc);
+
+            unsigned new_op = state.op_index + op_adv;
+            state.op_index = new_op % max_ops_per_inst;
+            state.address += min_inst_length * (new_op / max_ops_per_inst);
             continue;
         }
 
         // 扩展指令
         if (0 == op) {
-            uint64_t nbytes = decode_uleb128(state);
-            uint8_t eop = *state->ptr;
-            state->ptr += nbytes;
+            uint64_t nbytes = decode_uleb128(dwarf);
+            uint8_t eop = *dwarf->ptr;
+            dwarf->ptr += nbytes;
             log("extended %d: %s\n", eop, show_ext_opcode(eop));
             continue;
         }
@@ -357,7 +372,7 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *state) {
         log("standard %s", show_std_opcode(op));
         int nargs = standard_opcode_lengths[op - 1]; // 索引从 1 开始
         for (int i = 0; i < nargs; ++i) {
-            log(" %u", decode_uleb128(state));
+            log(" %u", decode_uleb128(dwarf));
         }
         log("\n");
     }

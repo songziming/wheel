@@ -3,8 +3,10 @@
 #include "debug.h"
 #include "string.h"
 #include <memory/early_alloc.h>
-#include "dwarf.h"
 
+#ifdef PARSE_DWARF
+#include "dwarf.h"
+#endif
 
 // 管理内核符号表，以及调试信息
 
@@ -19,34 +21,10 @@ static CONST int       g_sym_num = 0;
 static CONST symbol_t *g_syms    = NULL;
 
 
-// // 64-bit initial length field
-// typedef struct
-
-// full and partial compilation unit header
-typedef struct cu_header {
-    uint32_t    fixed;
-    uint64_t    length;
-    uint16_t    version;
-    uint8_t     unit_type;
-    uint8_t     address_size;
-    uint64_t    debug_abbrev_offset;
-} PACKED cu_header_t;
-
-// 解析 .debug_info
-static void parse_debug_info(void *data, size_t size) {
-    size_t pos = 0;
-    while (pos < size) {
-        cu_header_t *cu = (cu_header_t *)((char *)data + pos);
-        log("compile unit at %ld\n", pos);
-        pos += cu->length;
-    }
-}
-
-
 // 遍历每个符号表两次，第一次统计符号数量和符号名长度，第二次备份符号数据
 // TODO 还可以处理 debug section，识别 dwarf 调试信息
 //      查看符号时可以精确到行号
-INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, unsigned shstrndx) {
+INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, unsigned shstrndx UNUSED) {
     if (sizeof(Elf64_Shdr) != entsize) {
         log("section entry size %d\n", entsize);
         return;
@@ -54,6 +32,8 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, un
 
     const Elf64_Shdr *secs = (const Elf64_Shdr *)ptr;
 
+#ifdef PARSE_DWARF
+    // 段名字符串，匹配 debug 信息需要
     const char *shname = NULL;
     if ((SHN_UNDEF != shstrndx) && (shstrndx < num)) {
         const Elf64_Shdr shstr = secs[shstrndx];
@@ -62,28 +42,19 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, un
         }
     }
 
-    g_sym_num = 0;
-    size_t strbuf_len = 0; // 符号名字符串总长
-
     // 记录调试信息所在 section 的编号，0 表示未找到
     dwarf_line_t dbg_line = {0};
-    // const char *dbg_str = NULL;
-    // const char *dbg_line_str = NULL;
-    // const uint8_t *dbg_line = NULL;
-    // size_t dbg_line_size = 0;
+#endif // PARSE_DWARF
+
+    g_sym_num = 0;
+    size_t strbuf_len = 0; // 符号名字符串总长
 
     for (unsigned i = 0; i < num; ++i) {
         const Elf64_Shdr sec = secs[i];
 
+#ifdef PARSE_DWARF
         if (NULL != shname) {
             const char *name = &shname[sec.sh_name];
-            // log("section %d type=%d name=%s\n", i, sec.sh_type, &shname[sec.sh_name]);
-            // if (SHT_PROGBITS == sec.sh_type) {
-            //     log("   addr=0x%lx, size=0x%lx\n", sec.sh_addr, sec.sh_size);
-            // }
-            // if (0 == strcmp(".debug_info", &shname[sec.sh_name])) {
-            //     parse_debug_info((void *)sec.sh_addr, sec.sh_size);
-            // }
             if (0 == strcmp(".debug_str", name)) {
                 dbg_line.str = (const char *)sec.sh_addr;
                 dbg_line.str_size = sec.sh_size;
@@ -97,6 +68,7 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, un
                 dbg_line.end = dbg_line.ptr + sec.sh_size;
             }
         }
+#endif // PARSE_DWARF
 
         if ((SHT_SYMTAB != sec.sh_type) && (SHT_DYNSYM != sec.sh_type)) {
             continue;
@@ -131,8 +103,10 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, un
         }
     }
 
+#ifdef PARSE_DWARF
     // 如果找到了调试信息，则解析行号映射信息
     parse_debug_line(&dbg_line);
+#endif
 
     // 为符号表和符号名字符串表分配空间
     g_syms = early_alloc_ro(g_sym_num * sizeof(symbol_t));
