@@ -4,6 +4,8 @@
 #include "string.h"
 #include <memory/early_alloc.h>
 
+#define PARSE_DWARF
+
 #ifdef PARSE_DWARF
 #include "dwarf.h"
 #endif

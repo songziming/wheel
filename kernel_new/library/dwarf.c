@@ -112,6 +112,7 @@ static uint64_t decode_uleb128(dwarf_line_t *state) {
     return 0;
 }
 
+#if 0
 static int64_t decode_sleb128(dwarf_line_t *state) {
     int64_t value = 0;
     int shift = 0;
@@ -131,6 +132,7 @@ static int64_t decode_sleb128(dwarf_line_t *state) {
     log("dwarf SLEB128 out-of-range\n");
     return 0;
 }
+#endif
 
 static size_t decode_size(dwarf_line_t *state) {
     size_t addr = 0;
@@ -243,16 +245,6 @@ static void line_number_state_init(line_num_state_t *state) {
     memset(state, 0, sizeof(line_num_state_t));
     state->file = 1;
     state->line = 1;
-}
-
-static void exec_std_op(std_opcode_t op, const uint8_t *nargs) {
-    switch (op) {
-    case DW_LNS_copy:
-        ASSERT(0 == nargs[op - 1]);
-        break;
-    case DW_LNS_advance_pc:
-        ASSERT(1 == nargs[op - 1]);
-    }
 }
 
 // 解析一个 unit，返回下一个 unit 的地址
@@ -369,12 +361,52 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *dwarf) {
         }
 
         // 标准指令
-        log("standard %s", show_std_opcode(op));
-        int nargs = standard_opcode_lengths[op - 1]; // 索引从 1 开始
-        for (int i = 0; i < nargs; ++i) {
-            log(" %u", decode_uleb128(dwarf));
+        switch (op) {
+        case DW_LNS_advance_pc:
+            ASSERT(1 == standard_opcode_lengths[op - 1]);
+            state.address += decode_uleb128(dwarf);
+            // TODO 同时也要修改 op_index，行为细节和 special op 一样
+            // TODO 可以把 special_op 的行为封装为函数，在这里直接调用
+            break;
+        case DW_LNS_advance_line:
+            ASSERT(1 == standard_opcode_lengths[op - 1]);
+            state.line += decode_uleb128(dwarf);
+            break;
+        case DW_LNS_set_file:
+            ASSERT(1 == standard_opcode_lengths[op - 1]);
+            state.file = decode_uleb128(dwarf);
+            break;
+        case DW_LNS_const_add_pc:
+            ASSERT(0 == standard_opcode_lengths[op - 1]);
+            // TODO 相当于 special op 255
+            break;
+        case DW_LNS_fixed_advance_pc:
+            // 这个指令参数不是 LEB128，而是 uhalf
+            state.address += decode_uhalf(dwarf);
+            state.op_index = 0;
+            break;
+        case DW_LNS_copy:
+            // TODO 在 addr2line 矩阵中增加一行，使用当前状态机取值
+            break;
+        default:
+            log("standard %s\n", show_std_opcode(op));
+            for (int i = 0; i < standard_opcode_lengths[op - 1]; ++i) {
+                decode_uleb128(dwarf);
+            }
+            break;
+
+        // case DW_LNS_negate_stmt:        return "negate_stmt        ";
+        // case DW_LNS_set_basic_block:    return "set_basic_block    ";
+        // case DW_LNS_set_prologue_end:   return "set_prologue_end   ";
+        // case DW_LNS_set_epilogue_begin: return "set_epilogue_begin ";
+        // case DW_LNS_set_isa:            return "set_isa            ";
         }
-        log("\n");
+        
+        // int nargs = standard_opcode_lengths[op - 1]; // 索引从 1 开始
+        // for (int i = 0; i < nargs; ++i) {
+        //     log(" %u", decode_uleb128(dwarf));
+        // }
+        // log("\n");
     }
 
     return end;
