@@ -83,7 +83,7 @@ void __ubsan_handle_negate_overflow(source_location_t *loc, uintptr_t a UNUSED, 
 }
 
 void __ubsan_handle_divrem_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
-    log("\nubsan: division remainder overflow\n");
+    log("\nubsan: division remainder overflow %lu/%lu\n", a, b);
     log_location(loc);
     log_stacktrace();
     // emu_exit(1);
