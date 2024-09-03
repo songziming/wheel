@@ -226,6 +226,8 @@ typedef struct line_num_state {
     uint8_t opcode_base;
     uint8_t min_ins_len; // 指令长度（最大公约数）
     uint8_t ops_per_ins; // 指令包含的 operation 数量
+    uint8_t address_size;
+    uint8_t *nargs;
 
     const char **filenames;
 
@@ -287,8 +289,101 @@ static void add_row(line_num_state_t *state) {
 
 
 
+// 解析到 end-sequence 截至，创建一个新的 sequence 对象
+// 可以传入不同的 writer，对同一段 opcodes 解析两次，第一次分析需要的内存大小，第二次才生成自己格式的编码
+static void parse_opcodes(dwarf_line_t *dwarf, const uint8_t *unit_end, line_num_state_t *state) {
+    // 解析执行指令，更新状态机
+    state->seq.row_count = 0;
+    while (dwarf->ptr < unit_end) {
+        int op = *dwarf->ptr++;
 
-// 解析一个 unit，返回下一个 unit 的地址
+        // 特殊指令，没有参数
+        if (op >= state->opcode_base) {
+            op -= state->opcode_base;
+            state->regs.line += op % state->line_range + state->line_base;
+            advance_pc(state, op / state->line_range);
+            add_row(state);
+            continue;
+        }
+
+        // 扩展指令
+        if (0 == op) {
+            uint64_t nbytes = decode_uleb128(dwarf);
+            const uint8_t *eop = dwarf->ptr;
+            dwarf->ptr += nbytes;
+            switch (eop[0]) {
+            case DW_LNE_end_sequence:
+                ASSERT(1 == nbytes);
+                state->seq.end_addr = state->regs.addr;
+                log("  + sequence 0x%lx-0x%lx, %s\n",
+                    state->seq.start_addr, state->regs.addr, state->seq.file);
+                regs_init(&state->regs);
+                state->seq.row_count = 0;
+                // 准备创建新的 sequence
+                break;
+            case DW_LNE_set_address:
+                ASSERT(state->address_size + 1 == nbytes);
+                ASSERT(0 == state->seq.row_count);   // 此命令不能出现在 sequence 中间
+                state->regs.addr = 0;
+                memcpy(&state->regs.addr, eop + 1, nbytes - 1);
+                // log("  ~ extended set address to 0x%lx\n", state->regs.addr);
+                break;
+            default:
+                // log("  ~ extended %s\n", show_ext_opcode(eop[0]));
+                break;
+            }
+            continue;
+        }
+
+        // 标准指令
+        switch (op) {
+        case DW_LNS_copy:
+            add_row(state);
+            break;
+        case DW_LNS_advance_pc:
+            ASSERT(1 == state->nargs[op - 1]);
+            advance_pc(state, decode_uleb128(dwarf));
+            break;
+        case DW_LNS_advance_line: {
+            ASSERT(1 == state->nargs[op - 1]);
+            int64_t adv = decode_sleb128(dwarf);
+            if ((int64_t)state->regs.line + adv < 0) {
+                state->regs.line = 0;
+            } else {
+                state->regs.line += adv;
+            }
+            break;
+        }
+        case DW_LNS_set_file:
+            ASSERT(1 == state->nargs[op - 1]);
+            ASSERT(0 == state->seq.row_count);   // 此命令不能出现在 sequence 中间
+            state->regs.file = decode_uleb128(dwarf);
+            log("set file to %s\n", state->filenames[state->regs.file]);
+            break;
+        case DW_LNS_const_add_pc:
+            // 相当于 special opcode 255，但是不更新 line，而且不新增行
+            ASSERT(0 == state->nargs[op - 1]);
+            advance_pc(state, (255 - state->opcode_base) / state->line_range);
+            break;
+        case DW_LNS_fixed_advance_pc:
+            // 这个指令参数不是 LEB128，而是 uhalf
+            state->regs.addr += decode_uhalf(dwarf);
+            state->regs.opix = 0;
+            break;
+        default:
+            // log("standard %s\n", show_std_opcode(op));
+            for (int i = 0; i < state->nargs[op - 1]; ++i) {
+                decode_uleb128(dwarf);
+            }
+            break;
+        }
+    }
+}
+
+
+
+
+// 解析一个 unit，返回下一个 unit 的地址，每个 unit 可能包含多个 sequence
 // uint8_t *data, const char *str, const char *line_str
 static const uint8_t *parse_debug_line_unit(dwarf_line_t *dwarf) {
     // const uint8_t *unit_start = dwarf->ptr;
@@ -304,10 +399,10 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *dwarf) {
         return end;
     }
 
-    uint8_t address_size = *dwarf->ptr++;
+    state.address_size = *dwarf->ptr++;
     UNUSED uint8_t segment_selector_size = *dwarf->ptr++;
-    if (sizeof(size_t) != address_size) {
-        log("address size is %d\n", address_size);
+    if (sizeof(size_t) != state.address_size) {
+        log("address size is %d\n", state.address_size);
     }
 
     size_t header_length = decode_size(dwarf);
@@ -321,7 +416,7 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *dwarf) {
     state.opcode_base = *dwarf->ptr++;
 
     // 表示每个标准 opcode 有多少个 LEB128 参数
-    const uint8_t *standard_opcode_lengths = dwarf->ptr;
+    state.nargs = dwarf->ptr;
     dwarf->ptr += state.opcode_base - 1;
 
     uint8_t dir_format_len = *dwarf->ptr++;
@@ -353,6 +448,9 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *dwarf) {
         log(">> current pointer %p, opcode %p\n", dwarf->ptr, opcodes);
     }
 
+    parse_opcodes(dwarf, end, &state);
+
+#if 0
     // 解析执行指令，更新状态机
     state.seq.row_count = 0;
     while (dwarf->ptr < end) {
@@ -383,7 +481,7 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *dwarf) {
                 // 准备创建新的 sequence
                 break;
             case DW_LNE_set_address:
-                ASSERT(address_size + 1 == nbytes);
+                ASSERT(state.address_size + 1 == nbytes);
                 ASSERT(0 == state.seq.row_count);   // 此命令不能出现在 sequence 中间
                 state.regs.addr = 0;
                 memcpy(&state.regs.addr, eop + 1, nbytes - 1);
@@ -402,11 +500,11 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *dwarf) {
             add_row(&state);
             break;
         case DW_LNS_advance_pc:
-            ASSERT(1 == standard_opcode_lengths[op - 1]);
+            ASSERT(1 == state.nargs[op - 1]);
             advance_pc(&state, decode_uleb128(dwarf));
             break;
         case DW_LNS_advance_line: {
-            ASSERT(1 == standard_opcode_lengths[op - 1]);
+            ASSERT(1 == state.nargs[op - 1]);
             int64_t adv = decode_sleb128(dwarf);
             if ((int64_t)state.regs.line + adv < 0) {
                 state.regs.line = 0;
@@ -416,14 +514,14 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *dwarf) {
             break;
         }
         case DW_LNS_set_file:
-            ASSERT(1 == standard_opcode_lengths[op - 1]);
+            ASSERT(1 == state.nargs[op - 1]);
             ASSERT(0 == state.seq.row_count);   // 此命令不能出现在 sequence 中间
             state.regs.file = decode_uleb128(dwarf);
             log("set file to %s\n", filenames[state.regs.file]);
             break;
         case DW_LNS_const_add_pc:
             // 相当于 special opcode 255，但是不更新 line，而且不新增行
-            ASSERT(0 == standard_opcode_lengths[op - 1]);
+            ASSERT(0 == state.nargs[op - 1]);
             advance_pc(&state, (255 - state.opcode_base) / state.line_range);
             break;
         case DW_LNS_fixed_advance_pc:
@@ -433,12 +531,13 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *dwarf) {
             break;
         default:
             // log("standard %s\n", show_std_opcode(op));
-            for (int i = 0; i < standard_opcode_lengths[op - 1]; ++i) {
+            for (int i = 0; i < state.nargs[op - 1]; ++i) {
                 decode_uleb128(dwarf);
             }
             break;
         }
     }
+#endif
 
     return end;
 }
