@@ -3,7 +3,7 @@
 #include "debug.h"
 
 
-#include "dwarf_show.h"
+// #include "dwarf_show.h"
 
 
 
@@ -208,7 +208,7 @@ typedef struct line_number_regs {
 // 代表一段连续指令，映射相同的文件
 typedef struct sequence {
     uint64_t    start_addr;
-    uint64_t    last_addr; // 含
+    uint64_t    end_addr; // sequence 有效范围之后的第一个字节
     const char *file;
     int         start_line;
 
@@ -232,6 +232,12 @@ typedef struct line_num_state {
     line_number_regs_t regs;    // 状态机寄存器
     sequence_t      seq; // 目前正在构建的序列
 } line_num_state_t;
+
+
+// // 识别出来的 addr2line 数据，使用自己的格式保存
+// typedef struct addr2line {
+//     //
+// } addr2line_t;
 
 
 
@@ -262,19 +268,25 @@ static void add_row(line_num_state_t *state) {
     //      我们只需输出两行之间的 delta
     log("  > addr 0x%016lx --> %d:%d\n", state->regs.addr, state->regs.file, state->regs.line);
 
+    state->seq.prev_line = state->regs.line;
+
     // 如果这是第一行，则这一行的取值就是当前 sequence 的取值
     if (0 == state->seq.row_count) {
         state->seq.start_addr = state->regs.addr;
         state->seq.start_line = state->regs.line;
         state->seq.file = state->filenames[state->regs.file];
-    } else {
-        int line_delta = state->regs.line - state->seq.prev_line;
-        int addr_delta = state->regs.addr - state->seq.prev_addr;
     }
+    // else {
+    //     int line_delta = state->regs.line - state->seq.prev_line;
+    //     int addr_delta = state->regs.addr - state->seq.prev_addr;
+    // }
     ++state->seq.row_count;
-    state->seq.prev_line = state->regs.line;
-    state->seq.prev_addr = state->regs.addr;
+    // state->seq.prev_line = state->regs.line;
+    // state->seq.prev_addr = state->regs.addr;
 }
+
+
+
 
 // 解析一个 unit，返回下一个 unit 的地址
 // uint8_t *data, const char *str, const char *line_str
@@ -306,30 +318,12 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *dwarf) {
     UNUSED uint8_t default_is_stmt = *dwarf->ptr++;
     state.line_base = *(int8_t *)dwarf->ptr++;
     state.line_range = *dwarf->ptr++;
-    uint8_t opcode_base = *dwarf->ptr++;
-
-    // state.is_stmt = default_is_stmt;
+    state.opcode_base = *dwarf->ptr++;
 
     // 表示每个标准 opcode 有多少个 LEB128 参数
     const uint8_t *standard_opcode_lengths = dwarf->ptr;
-    dwarf->ptr += opcode_base - 1;
+    dwarf->ptr += state.opcode_base - 1;
 
-    // log("- unit length %ld\n", unit_length);
-    // log("- version=%d, addr-size=%d, sel-size=%d\n", version, address_size, segment_selector_size);
-    // log("- header length %ld\n", header_length);
-    // log("- min_ins_len=%d, ops_per_ins=%d\n", min_ins_len, ops_per_ins);
-    // log("- default is_stmt=%d\n", default_is_stmt);
-    // log("- line_base=%d, line_range=%d, op_base=%d\n", line_base, line_range, opcode_base);
-
-    // log("- opcode nargs: [ %d", standard_opcode_lengths[0]);
-    // for (int i = 1; i + 1 < opcode_base; ++i) {
-    //     log(", %d", standard_opcode_lengths[i]);
-    // }
-    // log(" ]\n");
-
-    // format 数组应该是 LEB128，但合法取值都小于 128，理论上应该只占一个字节
-    // 有些 user specific type code 取值可能超过一个字节，可以尝试 alloca
-    // 不然这里就要动态申请内存，用来保存 format 字典
     uint8_t dir_format_len = *dwarf->ptr++;
     uint64_t dir_formats[dir_format_len * 2];
     for (int i = 0; i < dir_format_len * 2; ++i) {
@@ -337,28 +331,21 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *dwarf) {
     }
 
     uint64_t dir_count = decode_uleb128(dwarf);
-    // log("- %d directory entries:\n", dir_count);
     for (unsigned i = 0; i < dir_count; ++i) {
-        // log("  * Directory #%d:\n", i);
-        // parse_entry(dwarf, dir_formats, dir_format_len);
         parse_entry_path(dwarf, dir_formats, dir_format_len);
     }
 
-    // LEB128，道理和 directory entry format 相同
     uint8_t file_format_len = *dwarf->ptr++;
     uint64_t file_formats[file_format_len * 2];
     for (int i = 0; i < file_format_len * 2; ++i) {
         file_formats[i] = decode_uleb128(dwarf);
     }
 
-    uint64_t file_name_count = decode_uleb128(dwarf);
-    const char *file_names[file_name_count];
-    state.filenames = file_names;
-    // log("- %d file name entries:\n", file_name_count);
-    for (unsigned i = 0; i < file_name_count; ++i) {
-        // log("  * File name #%d:\n", i);
-        // parse_entry(dwarf, file_formats, file_format_len);
-        file_names[i] = parse_entry_path(dwarf, file_formats, file_format_len);
+    uint64_t filename_count = decode_uleb128(dwarf);
+    const char *filenames[filename_count];
+    state.filenames = filenames; // TODO 可以换成 alloca
+    for (unsigned i = 0; i < filename_count; ++i) {
+        filenames[i] = parse_entry_path(dwarf, file_formats, file_format_len);
     }
 
     // 接下来应该是指令
@@ -367,17 +354,13 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *dwarf) {
     }
 
     // 解析执行指令，更新状态机
-    // log("- %d bytes of opcodes remaining:\n", (int)(end - opcodes));
     state.seq.row_count = 0;
     while (dwarf->ptr < end) {
-        // size_t rela = (size_t)(dwarf->ptr - unit_start);
-        // log("  [%lx] ", rela);
-
         int op = *dwarf->ptr++;
 
         // 特殊指令，没有参数
-        if (op >= opcode_base) {
-            op -= opcode_base;
+        if (op >= state.opcode_base) {
+            op -= state.opcode_base;
             state.regs.line += op % state.line_range + state.line_base;
             advance_pc(&state, op / state.line_range);
             add_row(&state);
@@ -392,7 +375,7 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *dwarf) {
             switch (eop[0]) {
             case DW_LNE_end_sequence:
                 ASSERT(1 == nbytes);
-                state.seq.last_addr = state.regs.addr;
+                state.seq.end_addr = state.regs.addr;
                 log("  + sequence 0x%lx-0x%lx, %s\n",
                     state.seq.start_addr, state.regs.addr, state.seq.file);
                 regs_init(&state.regs);
@@ -436,12 +419,12 @@ static const uint8_t *parse_debug_line_unit(dwarf_line_t *dwarf) {
             ASSERT(1 == standard_opcode_lengths[op - 1]);
             ASSERT(0 == state.seq.row_count);   // 此命令不能出现在 sequence 中间
             state.regs.file = decode_uleb128(dwarf);
-            log("set file to %s\n", file_names[state.regs.file]);
+            log("set file to %s\n", filenames[state.regs.file]);
             break;
         case DW_LNS_const_add_pc:
             // 相当于 special opcode 255，但是不更新 line，而且不新增行
             ASSERT(0 == standard_opcode_lengths[op - 1]);
-            advance_pc(&state, (255 - opcode_base) / state.line_range);
+            advance_pc(&state, (255 - state.opcode_base) / state.line_range);
             break;
         case DW_LNS_fixed_advance_pc:
             // 这个指令参数不是 LEB128，而是 uhalf
