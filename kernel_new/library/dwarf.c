@@ -12,8 +12,9 @@ static void advance_pc(sequence_t *seq, line_number_state_t *state, int op_advan
     seq->curr.addr += new_opix / state->unit.ops_per_ins * state->unit.min_ins_len;
 }
 
-// 在 addr2line 矩阵中新增一行，可以在这里检查目标地址
-// 需要把前一行的内容保存下来，使用相邻两行才能检查范围
+// 在 addr2line 矩阵中新增一行
+// 并不真的保存一行数据，而是计算不同存储格式下的内存占用量
+// 选出最合适的存储方式再真地保存 addr2line
 static void add_row(sequence_t *seq) {
     if ((0 != seq->row_count) && (seq->prev.line == seq->curr.line)) {
         return;
@@ -66,16 +67,9 @@ static void parse_opcodes(sequence_t *seq, line_number_state_t *state, const uin
             switch (eop[0]) {
             case DW_LNE_end_sequence:
                 ASSERT(1 == nbytes);
-                seq->end_addr = seq->curr.addr;
-                // log("  + sequence 0x%lx-0x%lx, %s\n",
-                //     seq->start_addr, state->regs.addr, seq->file);
-                log("  + end-of-sequence, %d rows\n", seq->row_count);
-                add_row(seq);
+                seq->end_addr = seq->curr.addr; // 此地址是 sequence 范围之外的
+                // add_row(seq);
                 return;
-                // regs_init(&state->regs);
-                // seq->row_count = 0;
-                // // 准备创建新的 sequence
-                break;
             case DW_LNE_set_address:
                 ASSERT(state->unit.address_size + 1 == nbytes);
                 ASSERT(0 == seq->row_count); // 此命令不能出现在 sequence 中间
@@ -214,6 +208,7 @@ static const uint8_t *parse_debug_line_unit(line_number_state_t *state) {
         // regs_init(&state->regs);
         // seq->row_count = 0;
         parse_opcodes(&seq, state, unit_end);
+        log("this sequence uses %d bytes\n", seq.bytes_in_leb128);
         // state->ptr = seq_start;
         // parse_opcodes(state, unit_end);
     }

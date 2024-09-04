@@ -85,8 +85,8 @@ int encode_sleb128(int64_t value, uint8_t *dst) {
         if (negative) {
             value |= -(1 << (sizeof(size_t) - 1));
         }
-        if (((0 == value) && !(byte & 0x80)) ||
-            ((-1 == value) && (byte & 0x80))) {
+        if (((0 == value) && !(byte & 0x40)) ||
+            ((-1 == value) && (byte & 0x40))) {
             more = 0;
         } else {
             byte |= 0x80;
