@@ -66,8 +66,8 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, un
                 dbg_line.line_str_size = sec.sh_size;
             }
             if (0 == strcmp(".debug_line", name)) {
-                dbg_line.ptr = (uint8_t *)sec.sh_addr;
-                dbg_line.end = dbg_line.ptr + sec.sh_size;
+                dbg_line.line = (uint8_t *)sec.sh_addr;
+                dbg_line.line_end = dbg_line.line + sec.sh_size;
             }
         }
 #endif // PARSE_DWARF

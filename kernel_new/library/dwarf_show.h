@@ -1,6 +1,6 @@
 #include "dwarf.h"
 
-static const char *show_type_code(type_code_t code) {
+static const char *show_type_code(dwarf_content_type_t code) {
     switch (code) {
     default: return "other-type";
     case DW_LNCT_path:            return "path";
@@ -11,7 +11,7 @@ static const char *show_type_code(type_code_t code) {
     }
 }
 
-static const char *show_format(form_t form) {
+static const char *show_format(dwarf_form_t form) {
     switch (form) {
     default:                     return "unknown";
     case DW_FORM_addr:           return "addr";

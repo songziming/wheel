@@ -4,22 +4,9 @@
 #include <common.h>
 
 // 以 DWARF v5 为准
-// TODO Dwarf 有没有官方的类型定义头文件？
-
-
-// enum unit_header_type {
-//     DW_UT_compile       = 0x01,
-//     DW_UT_type          = 0x02,
-//     DW_UT_partial       = 0x03,
-//     DW_UT_skeleton      = 0x04,
-//     DW_UT_split_compile = 0x05,
-//     DW_UT_split_type    = 0x06,
-//     DW_UT_lo_user       = 0x80,
-//     DW_UT_hi_user       = 0xff,
-// };
 
 // line number content type code
-typedef enum type_code {
+typedef enum dwarf_content_type {
     DW_LNCT_path            = 0x01,
     DW_LNCT_directory_index = 0x02,
     DW_LNCT_timestamp       = 0x03,
@@ -27,10 +14,10 @@ typedef enum type_code {
     DW_LNCT_MD5             = 0x05,
     DW_LNCT_lo_user         = 0x2000,
     DW_LNCT_hi_user         = 0x3fff,
-} type_code_t;
+} dwarf_content_type_t;
 
 // attribute form encodings
-typedef enum form {
+typedef enum dwarf_form {
     DW_FORM_addr            = 0x01,
     DW_FORM_block2          = 0x03,
     DW_FORM_block4          = 0x04,
@@ -74,10 +61,10 @@ typedef enum form {
     DW_FORM_addrx2          = 0x2a,
     DW_FORM_addrx3          = 0x2b,
     DW_FORM_addrx4          = 0x2c,
-} form_t;
+} dwarf_form_t;
 
 // line number standard opcode encodings
-typedef enum line_number_std_opcode {
+typedef enum std_opcode {
     DW_LNS_copy                 = 0x01,
     DW_LNS_advance_pc           = 0x02,
     DW_LNS_advance_line         = 0x03,
@@ -93,7 +80,7 @@ typedef enum line_number_std_opcode {
 } std_opcode_t;
 
 // line number program extended opcodes
-typedef enum line_number_ext_opcode {
+typedef enum ext_opcode {
     DW_LNE_end_sequence      = 0x01,
     DW_LNE_set_address       = 0x02,
     DW_LNE_set_discriminator = 0x04,
@@ -101,16 +88,83 @@ typedef enum line_number_ext_opcode {
     DW_LNE_hi_user           = 0xff,
 } ext_opcode_t;
 
-// 解析器状态
-typedef struct decoder {
-    const uint8_t *ptr;
-    const uint8_t *end;
-    const char    *str;
+
+// dwarf 调试信息，来自 elf sections
+typedef struct dwarf_line {
+    // const uint8_t *ptr;
+    // const uint8_t *end;
+    const uint8_t *line;        // .debug_line
+    const uint8_t *line_end;
+    const char    *str;         // .debug_str
     size_t         str_size;
-    const char    *line_str;
+    const char    *line_str;    // .debug_line_str
     size_t         line_str_size;
-    size_t         wordsize; // 表示当前 unit 是 32-bit 还是 64-bit
+    // size_t         wordsize; // 表示当前 unit 是 32-bit 还是 64-bit
 } dwarf_line_t;
+
+
+// dwarf_line 分为多个 unit，每个 unit 开头都是 program header
+// 从 program header 解析出来如下信息
+typedef struct line_number_unit {
+    size_t  wordsize;   // 当前 unit 使用 32-bit 还是 64-bit
+    uint8_t address_size;
+
+    int8_t  line_base;
+    uint8_t line_range;
+    uint8_t opcode_base;
+    uint8_t min_ins_len; // 指令长度（最大公约数）
+    uint8_t ops_per_ins; // 指令包含的 operation 数量
+
+    const uint8_t *nargs; // 长度 opcode_base - 1
+    // int         nfiles;
+    const char **filenames;
+} line_number_unit_t;
+
+
+
+// 状态机寄存器
+typedef struct line_number_regs {
+    uint64_t addr;
+    unsigned opix;
+    unsigned file;
+    unsigned line;
+} line_number_regs_t;
+
+
+// 代表一段连续指令，映射相同的文件
+typedef struct sequence {
+    uint64_t    start_addr;
+    uint64_t    end_addr; // sequence 有效范围之后的第一个字节
+    const char *file;
+    int         start_line;
+
+    unsigned    prev_line;  // addr2line 矩阵前一行的代码行号
+    uint64_t    prev_addr;
+    int         row_count;  // addr2line 矩阵已经有了多少行
+} sequence_t;
+
+// line number information state machine registers
+typedef struct line_number_state {
+    const dwarf_line_t  *line;
+    const uint8_t       *ptr; // 目前读取到了哪个字节
+
+    line_number_unit_t   unit;
+
+    // // 从 program header 解析出来的信息
+    // size_t  wordsize;   // 正在解析的 unit 是 32-bit 还是 64-bit
+    // int8_t  line_base;
+    // uint8_t line_range;
+    // uint8_t opcode_base;
+    // uint8_t min_ins_len; // 指令长度（最大公约数）
+    // uint8_t ops_per_ins; // 指令包含的 operation 数量
+    // uint8_t address_size;
+    // uint8_t *nargs;
+
+    // const char **filenames;
+
+    line_number_regs_t regs;    // 状态机寄存器
+    sequence_t      seq; // 目前正在构建的序列
+} line_number_state_t;
 
 void parse_debug_line(dwarf_line_t *line);
 
