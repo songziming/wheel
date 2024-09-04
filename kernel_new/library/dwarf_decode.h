@@ -4,7 +4,7 @@
 // DWARF 文件里，整型字段使用 LEB128 变长编码
 // 每个字节只有 7-bit 有效数字，最高位表示该字节是否为最后一个字节
 
-static uint64_t decode_uleb128(line_number_state_t *state) {
+uint64_t decode_uleb128(line_number_state_t *state) {
     uint64_t value = 0;
     int shift = 0;
 
@@ -20,7 +20,43 @@ static uint64_t decode_uleb128(line_number_state_t *state) {
     return 0;
 }
 
-static int64_t decode_sleb128(line_number_state_t *state) {
+uint64_t raw_decode_uleb128(const uint8_t *src, const uint8_t *end, const uint8_t **after) {
+    uint64_t value = 0;
+    int shift = 0;
+
+    while (src < end) {
+        uint8_t byte = *src++;
+        value |= (uint64_t)(byte & 0x7f) << shift;
+        shift += 7;
+        if (0 == (byte & 0x80)) {
+            goto out;
+        }
+    }
+    value = 0;
+out:
+    if (NULL != after) {
+        *after = src;
+    }
+    return value;
+}
+
+int encode_uleb128(uint64_t value, uint8_t *dst) {
+    int n = 0;
+    do {
+        uint8_t byte = value & 0x7f;
+        value >>= 7;
+        if (0 != value) {
+            byte |= 0x80;
+        }
+        if (NULL != dst) {
+            dst[n] = byte;
+        }
+        ++n;
+    } while (0 != value);
+    return n;
+}
+
+int64_t decode_sleb128(line_number_state_t *state) {
     int64_t value = 0;
     int shift = 0;
 
@@ -39,21 +75,45 @@ static int64_t decode_sleb128(line_number_state_t *state) {
     return 0;
 }
 
-static size_t decode_size(line_number_state_t *state) {
+int encode_sleb128(int64_t value, uint8_t *dst) {
+    int n = 0;
+    int more = 1;
+    char negative = (value < 0) ? 1 : 0;
+    while (more) {
+        uint8_t byte = value & 0x7f;
+        value >>= 7;
+        if (negative) {
+            value |= -(1 << (sizeof(size_t) - 1));
+        }
+        if (((0 == value) && !(byte & 0x80)) ||
+            ((-1 == value) && (byte & 0x80))) {
+            more = 0;
+        } else {
+            byte |= 0x80;
+        }
+        if (NULL != dst) {
+            dst[n] = byte;
+        }
+        ++n;
+    }
+    return n;
+}
+
+size_t decode_size(line_number_state_t *state) {
     size_t addr = 0;
     memcpy(&addr, state->ptr, state->unit.wordsize);
     state->ptr += state->unit.wordsize;
     return addr;
 }
 
-static uint16_t decode_uhalf(line_number_state_t *state) {
+uint16_t decode_uhalf(line_number_state_t *state) {
     uint16_t value;
     memcpy(&value, state->ptr, sizeof(uint16_t));
     state->ptr += sizeof(uint16_t);
     return value;
 }
 
-static size_t decode_initial_length(line_number_state_t *state) {
+size_t decode_initial_length(line_number_state_t *state) {
     state->unit.wordsize = sizeof(uint32_t);
 
     size_t length = 0;
@@ -70,7 +130,7 @@ static size_t decode_initial_length(line_number_state_t *state) {
 }
 
 // 解析一个字段，只返回字符串类型的
-static const char *parse_field_str(line_number_state_t *state, dwarf_form_t form) {
+const char *parse_field_str(line_number_state_t *state, dwarf_form_t form) {
     const char *s = NULL;
     switch (form) {
     case DW_FORM_string:
@@ -111,7 +171,7 @@ static const char *parse_field_str(line_number_state_t *state, dwarf_form_t form
 }
 
 // 解析 directory entry 或 filename entry，只返回 path 字段
-static const char *parse_entry_path(line_number_state_t *state, const uint64_t *formats, uint8_t format_len) {
+const char *parse_entry_path(line_number_state_t *state, const uint64_t *formats, uint8_t format_len) {
     const char *path = NULL;
 
     for (int i = 0; i < format_len; ++i) {

@@ -116,20 +116,16 @@ typedef struct line_number_unit {
     uint8_t ops_per_ins; // 指令包含的 operation 数量
 
     const uint8_t *nargs; // 长度 opcode_base - 1
-    // int         nfiles;
     const char **filenames;
 } line_number_unit_t;
 
 
-
-// 状态机寄存器
-typedef struct line_number_regs {
-    uint64_t addr;
-    unsigned opix;
-    unsigned file;
-    unsigned line;
-} line_number_regs_t;
-
+// addr2line 矩阵中的一行
+typedef struct sequence_row {
+    uint64_t    addr;
+    unsigned    opix;
+    int         line;
+} sequence_row_t;
 
 // 代表一段连续指令，映射相同的文件
 typedef struct sequence {
@@ -138,9 +134,16 @@ typedef struct sequence {
     const char *file;
     int         start_line;
 
-    unsigned    prev_line;  // addr2line 矩阵前一行的代码行号
-    uint64_t    prev_addr;
+    sequence_row_t prev;
+    sequence_row_t curr;
     int         row_count;  // addr2line 矩阵已经有了多少行
+
+    // 尝试多种数据压缩存储方式，计算每一种存储方式占用的内存
+    // 第二次解析 opcodes 时，选择最节省空间的方式存储
+    int         bytes_in_leb128;
+
+    // unsigned    prev_line;  // addr2line 矩阵前一行的代码行号
+    // uint64_t    prev_addr;
 } sequence_t;
 
 // line number information state machine registers
@@ -150,20 +153,6 @@ typedef struct line_number_state {
 
     line_number_unit_t   unit;
 
-    // // 从 program header 解析出来的信息
-    // size_t  wordsize;   // 正在解析的 unit 是 32-bit 还是 64-bit
-    // int8_t  line_base;
-    // uint8_t line_range;
-    // uint8_t opcode_base;
-    // uint8_t min_ins_len; // 指令长度（最大公约数）
-    // uint8_t ops_per_ins; // 指令包含的 operation 数量
-    // uint8_t address_size;
-    // uint8_t *nargs;
-
-    // const char **filenames;
-
-    line_number_regs_t regs;    // 状态机寄存器
-    sequence_t      seq; // 目前正在构建的序列
 } line_number_state_t;
 
 void parse_debug_line(dwarf_line_t *line);

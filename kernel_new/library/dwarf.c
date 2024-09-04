@@ -6,91 +6,55 @@
 #include "dwarf_decode.h"
 
 
-
-
-// // line number information state machine registers
-// typedef struct line_num_state {
-//     // 从 program header 解析出来的信息
-//     size_t  wordsize;   // 正在解析的 unit 是 32-bit 还是 64-bit
-//     int8_t  line_base;
-//     uint8_t line_range;
-//     uint8_t opcode_base;
-//     uint8_t min_ins_len; // 指令长度（最大公约数）
-//     uint8_t ops_per_ins; // 指令包含的 operation 数量
-//     uint8_t address_size;
-//     uint8_t *nargs;
-
-//     const char **filenames;
-
-//     line_number_regs_t regs;    // 状态机寄存器
-//     sequence_t      seq; // 目前正在构建的序列
-// } line_number_state_t;
-
-
-
-
-
-
-// 这里 dwarf 5 标准可能写错了，file 初值应该是 0，column 初值应是 1
-// 但既然文档这么写，其他工具应该也是按这个行为开发的
-static void regs_init(line_number_regs_t *regs) {
-    memset(regs, 0, sizeof(line_number_regs_t));
-    regs->file = 1;
-    regs->line = 1;
-}
-
-static void advance_pc(line_number_state_t *state, int op_advance) {
-    int new_opix = op_advance + state->regs.opix;
-    state->regs.opix  = new_opix % state->unit.ops_per_ins;
-    state->regs.addr += new_opix / state->unit.ops_per_ins * state->unit.min_ins_len;
+static void advance_pc(sequence_t *seq, line_number_state_t *state, int op_advance) {
+    int new_opix = op_advance + seq->curr.opix;
+    seq->curr.opix  = new_opix % state->unit.ops_per_ins;
+    seq->curr.addr += new_opix / state->unit.ops_per_ins * state->unit.min_ins_len;
 }
 
 // 在 addr2line 矩阵中新增一行，可以在这里检查目标地址
 // 需要把前一行的内容保存下来，使用相邻两行才能检查范围
-static void add_row(line_number_state_t *state) {
-
-    // 我们不关心列号、代码类型等信息，如果行号未发生变化，
-    if ((0 != state->seq.row_count) && (state->seq.prev_line == state->regs.line)) {
+static void add_row(sequence_t *seq) {
+    if ((0 != seq->row_count) && (seq->prev.line == seq->curr.line)) {
         return;
     }
 
-    // TODO 第一行不用输出，直接记录在了 sequence header 中
-    //      我们只需输出两行之间的 delta
-    log("  > addr 0x%016lx --> %d:%d\n", state->regs.addr, state->regs.file, state->regs.line);
-
-    state->seq.prev_line = state->regs.line;
-
-    // 如果这是第一行，则这一行的取值就是当前 sequence 的取值
-    if (0 == state->seq.row_count) {
-        state->seq.start_addr = state->regs.addr;
-        state->seq.start_line = state->regs.line;
-        state->seq.file = state->unit.filenames[state->regs.file];
+    if (0 == seq->row_count) {
+        seq->start_addr = seq->curr.addr;
+        seq->start_line = seq->curr.line;
+        log("  > sequence start at addr 0x%lx, line %d\n", seq->start_addr, seq->start_line);
+    } else {
+        uint64_t addr_inc = seq->curr.addr - seq->prev.addr;
+        int      line_inc = seq->curr.line - seq->prev.line; // 可能为负
+        seq->bytes_in_leb128 += encode_uleb128(addr_inc, NULL);
+        seq->bytes_in_leb128 += encode_sleb128(line_inc, NULL);
+        log("  > addr += 0x%lx, line += %d\n", addr_inc, line_inc);
     }
-    // else {
-    //     int line_delta = state->regs.line - state->seq.prev_line;
-    //     int addr_delta = state->regs.addr - state->seq.prev_addr;
-    // }
-    ++state->seq.row_count;
-    // state->seq.prev_line = state->regs.line;
-    // state->seq.prev_addr = state->regs.addr;
+
+    memcpy(&seq->prev, &seq->curr, sizeof(sequence_row_t));
+    ++seq->row_count;
 }
 
 
 
 // 解析到 end-sequence 截至，创建一个新的 sequence 对象
 // 可以传入不同的 writer，对同一段 opcodes 解析两次，第一次分析需要的内存大小，第二次才生成自己格式的编码
-static void parse_opcodes(line_number_state_t *state, const uint8_t *unit_end) {
-    // 解析执行指令，更新状态机
-    state->seq.row_count = 0;
+static void parse_opcodes(sequence_t *seq, line_number_state_t *state, const uint8_t *unit_end) {
+    seq->row_count = 0;
+    seq->curr.addr = 0;
+    seq->curr.line = 1;
+    seq->file = state->unit.filenames[1];
+
     while (state->ptr < unit_end) {
         int op = *state->ptr++;
 
         // 特殊指令，没有参数
         if (op >= state->unit.opcode_base) {
             op -= state->unit.opcode_base;
-            state->regs.line += op % state->unit.line_range + state->unit.line_base;
-            advance_pc(state, op / state->unit.line_range);
-            add_row(state);
+            seq->curr.line += op % state->unit.line_range + state->unit.line_base;
+            // state->regs.line += op % state->unit.line_range + state->unit.line_base;
+            advance_pc(seq, state, op / state->unit.line_range);
+            add_row(seq);
             continue;
         }
 
@@ -102,19 +66,21 @@ static void parse_opcodes(line_number_state_t *state, const uint8_t *unit_end) {
             switch (eop[0]) {
             case DW_LNE_end_sequence:
                 ASSERT(1 == nbytes);
-                state->seq.end_addr = state->regs.addr;
-                log("  + sequence 0x%lx-0x%lx, %s\n",
-                    state->seq.start_addr, state->regs.addr, state->seq.file);
-                regs_init(&state->regs);
-                state->seq.row_count = 0;
-                // 准备创建新的 sequence
+                seq->end_addr = seq->curr.addr;
+                // log("  + sequence 0x%lx-0x%lx, %s\n",
+                //     seq->start_addr, state->regs.addr, seq->file);
+                log("  + end-of-sequence, %d rows\n", seq->row_count);
+                add_row(seq);
+                return;
+                // regs_init(&state->regs);
+                // seq->row_count = 0;
+                // // 准备创建新的 sequence
                 break;
             case DW_LNE_set_address:
                 ASSERT(state->unit.address_size + 1 == nbytes);
-                ASSERT(0 == state->seq.row_count);   // 此命令不能出现在 sequence 中间
-                state->regs.addr = 0;
-                memcpy(&state->regs.addr, eop + 1, nbytes - 1);
-                // log("  ~ extended set address to 0x%lx\n", state->regs.addr);
+                ASSERT(0 == seq->row_count); // 此命令不能出现在 sequence 中间
+                seq->curr.addr = 0;
+                memcpy(&seq->curr.addr, eop + 1, nbytes - 1);
                 break;
             default:
                 // log("  ~ extended %s\n", show_ext_opcode(eop[0]));
@@ -126,37 +92,37 @@ static void parse_opcodes(line_number_state_t *state, const uint8_t *unit_end) {
         // 标准指令
         switch (op) {
         case DW_LNS_copy:
-            add_row(state);
+            add_row(seq);
             break;
         case DW_LNS_advance_pc:
             ASSERT(1 == state->unit.nargs[op - 1]);
-            advance_pc(state, decode_uleb128(state));
+            advance_pc(seq, state, decode_uleb128(state));
             break;
         case DW_LNS_advance_line: {
             ASSERT(1 == state->unit.nargs[op - 1]);
             int64_t adv = decode_sleb128(state);
-            if ((int64_t)state->regs.line + adv < 0) {
-                state->regs.line = 0;
+            if ((int64_t)seq->curr.line + adv < 0) {
+                seq->curr.line = 0;
             } else {
-                state->regs.line += adv;
+                seq->curr.line += adv;
             }
             break;
         }
         case DW_LNS_set_file:
             ASSERT(1 == state->unit.nargs[op - 1]);
-            ASSERT(0 == state->seq.row_count);   // 此命令不能出现在 sequence 中间
-            state->regs.file = decode_uleb128(state);
-            log("set file to %s\n", state->unit.filenames[state->regs.file]);
+            ASSERT(0 == seq->row_count);   // 此命令不能出现在 sequence 中间
+            seq->file = state->unit.filenames[decode_uleb128(state)];
+            log("set file to %s\n", seq->file);
             break;
         case DW_LNS_const_add_pc:
             // 相当于 special opcode 255，但是不更新 line，而且不新增行
             ASSERT(0 == state->unit.nargs[op - 1]);
-            advance_pc(state, (255 - state->unit.opcode_base) / state->unit.line_range);
+            advance_pc(seq, state, (255 - state->unit.opcode_base) / state->unit.line_range);
             break;
         case DW_LNS_fixed_advance_pc:
             // 这个指令参数不是 LEB128，而是 uhalf
-            state->regs.addr += decode_uhalf(state);
-            state->regs.opix = 0;
+            seq->curr.addr += decode_uhalf(state);
+            seq->curr.opix = 0;
             break;
         default:
             // log("standard %s\n", show_std_opcode(op));
@@ -239,11 +205,16 @@ static const uint8_t *parse_debug_line_unit(line_number_state_t *state) {
 
     // 执行 opcodes
     // TODO 每次调用创建一个 sequence，多次调用，直到当前 unit 解析结束
-    regs_init(&state->regs);
+    // regs_init(&state->regs);
+    sequence_t seq;
+    memset(&seq, 0, sizeof(sequence_t));
+
     while (state->ptr < unit_end) {
-        const uint8_t *seq = state->ptr;
-        parse_opcodes(state, unit_end);
-        // state->ptr = seq;
+        const uint8_t *seq_start = state->ptr;
+        // regs_init(&state->regs);
+        // seq->row_count = 0;
+        parse_opcodes(&seq, state, unit_end);
+        // state->ptr = seq_start;
         // parse_opcodes(state, unit_end);
     }
 
@@ -260,7 +231,8 @@ void parse_debug_line(dwarf_line_t *line) {
 
     // const char *hr = "====================";
 
-    for (int i = 0; state.ptr < line->line_end; ++i) {
+    // for (int i = 0; state.ptr < line->line_end; ++i) {
+    while (state.ptr < line->line_end) {
         // log("%s%s%s%s\n", hr, hr, hr, hr);
         // log("Debug Line Unit #%d:\n", i);
         state.ptr = parse_debug_line_unit(&state);
