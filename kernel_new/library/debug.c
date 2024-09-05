@@ -40,7 +40,7 @@ void print_frames(const size_t *frames, int num) {
         size_t rela;
         const char *name = sym_resolve(frames[i], &rela);
         log(" -> frame %2d: %s + 0x%zx    ", i, name, rela);
-        addr_lookup(frames[i]);
+        addr_lookup(frames[i] - 1); // frames 里面的是返回地址，我们要查询调用的地址
         log("\n");
     }
 }
