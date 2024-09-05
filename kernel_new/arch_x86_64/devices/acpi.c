@@ -195,6 +195,8 @@ void acpi_show_tables() {
         }
     }
     log("\n");
+
+    log_stacktrace();
 }
 
 // 根据签名寻找 ACPI 表

@@ -33,11 +33,15 @@ void log(const char *fmt, ...) {
 // 输出调用栈
 //------------------------------------------------------------------------------
 
+void addr_lookup(size_t target); // dwarf.c
+
 void print_frames(const size_t *frames, int num) {
     for (int i = 0; i < num; ++i) {
         size_t rela;
         const char *name = sym_resolve(frames[i], &rela);
-        log(" -> frame %2d: %s + 0x%zx\n", i, name, rela);
+        log(" -> frame %2d: %s + 0x%zx    ", i, name, rela);
+        addr_lookup(frames[i]);
+        log("\n");
     }
 }
 

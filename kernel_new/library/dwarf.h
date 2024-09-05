@@ -141,6 +141,8 @@ typedef struct sequence {
     // 尝试多种数据压缩存储方式，计算每一种存储方式占用的内存
     // 第二次解析 opcodes 时，选择最节省空间的方式存储
     int         bytes_in_leb128;
+
+    uint8_t    *dst;
 } sequence_t;
 
 // line number information state machine registers
