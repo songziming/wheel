@@ -1,103 +1,6 @@
 #include "dwarf.h"
 #include "string.h"
-
-// DWARF 文件里，整型字段使用 LEB128 变长编码
-// 每个字节只有 7-bit 有效数字，最高位表示该字节是否为最后一个字节
-
-uint64_t decode_uleb128(line_number_state_t *state) {
-    uint64_t value = 0;
-    int shift = 0;
-
-    while (state->ptr < state->line->line_end) {
-        uint8_t byte = *state->ptr++;
-        value |= (uint64_t)(byte & 0x7f) << shift;
-        shift += 7;
-        if (0 == (byte & 0x80)) {
-            return value;
-        }
-    }
-
-    return 0;
-}
-
-uint64_t raw_decode_uleb128(const uint8_t *src, const uint8_t *end, const uint8_t **after) {
-    uint64_t value = 0;
-    int shift = 0;
-
-    while (src < end) {
-        uint8_t byte = *src++;
-        value |= (uint64_t)(byte & 0x7f) << shift;
-        shift += 7;
-        if (0 == (byte & 0x80)) {
-            goto out;
-        }
-    }
-    value = 0;
-out:
-    if (NULL != after) {
-        *after = src;
-    }
-    return value;
-}
-
-int encode_uleb128(uint64_t value, uint8_t *dst) {
-    int n = 0;
-    do {
-        uint8_t byte = value & 0x7f;
-        value >>= 7;
-        if (0 != value) {
-            byte |= 0x80;
-        }
-        if (NULL != dst) {
-            dst[n] = byte;
-        }
-        ++n;
-    } while (0 != value);
-    return n;
-}
-
-int64_t decode_sleb128(line_number_state_t *state) {
-    int64_t value = 0;
-    int shift = 0;
-
-    while (state->ptr < state->line->line_end) {
-        uint8_t byte = *state->ptr++;
-        value |= (int64_t)(byte & 0x7f) << shift;
-        shift += 7;
-        if (0 == (byte & 0x80)) {
-            if (byte & 0x40) {
-                value |= -(1L << shift); // 如果是有符号数，需要符号扩展
-            }
-            return value;
-        }
-    }
-
-    return 0;
-}
-
-int encode_sleb128(int64_t value, uint8_t *dst) {
-    int n = 0;
-    int more = 1;
-    char negative = (value < 0) ? 1 : 0;
-    while (more) {
-        uint8_t byte = value & 0x7f;
-        value >>= 7;
-        if (negative) {
-            value |= -(1 << (sizeof(size_t) - 1));
-        }
-        if (((0 == value) && !(byte & 0x40)) ||
-            ((-1 == value) && (byte & 0x40))) {
-            more = 0;
-        } else {
-            byte |= 0x80;
-        }
-        if (NULL != dst) {
-            dst[n] = byte;
-        }
-        ++n;
-    }
-    return n;
-}
+#include "leb128.h"
 
 size_t decode_size(line_number_state_t *state) {
     size_t addr = 0;
@@ -158,7 +61,7 @@ const char *parse_field_str(line_number_state_t *state, dwarf_form_t form) {
         decode_uhalf(state);
         break;
     case DW_FORM_udata:
-        decode_uleb128(state);
+        decode_uleb128(state->ptr, state->line->line_end, &state->ptr);
         break;
     case DW_FORM_data16:
         state->ptr += 16;

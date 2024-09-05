@@ -4,6 +4,7 @@
 
 // #include "dwarf_show.h"
 #include "dwarf_decode.h"
+#include "leb128.h"
 
 
 static void advance_pc(sequence_t *seq, line_number_state_t *state, int op_advance) {
@@ -61,14 +62,13 @@ static void parse_opcodes(sequence_t *seq, line_number_state_t *state, const uin
 
         // 扩展指令
         if (0 == op) {
-            uint64_t nbytes = decode_uleb128(state);
+            uint64_t nbytes = decode_uleb128(state->ptr, state->line->line_end, &state->ptr);
             const uint8_t *eop = state->ptr;
             state->ptr += nbytes;
             switch (eop[0]) {
             case DW_LNE_end_sequence:
                 ASSERT(1 == nbytes);
                 seq->end_addr = seq->curr.addr; // 此地址是 sequence 范围之外的
-                // add_row(seq);
                 return;
             case DW_LNE_set_address:
                 ASSERT(state->unit.address_size + 1 == nbytes);
@@ -77,7 +77,6 @@ static void parse_opcodes(sequence_t *seq, line_number_state_t *state, const uin
                 memcpy(&seq->curr.addr, eop + 1, nbytes - 1);
                 break;
             default:
-                // log("  ~ extended %s\n", show_ext_opcode(eop[0]));
                 break;
             }
             continue;
@@ -90,23 +89,20 @@ static void parse_opcodes(sequence_t *seq, line_number_state_t *state, const uin
             break;
         case DW_LNS_advance_pc:
             ASSERT(1 == state->unit.nargs[op - 1]);
-            advance_pc(seq, state, decode_uleb128(state));
+            advance_pc(seq, state, decode_uleb128(state->ptr, state->line->line_end, &state->ptr));
             break;
-        case DW_LNS_advance_line: {
+        case DW_LNS_advance_line:
             ASSERT(1 == state->unit.nargs[op - 1]);
-            int64_t adv = decode_sleb128(state);
-            if ((int64_t)seq->curr.line + adv < 0) {
+            seq->curr.line += decode_sleb128(state->ptr, state->line->line_end, &state->ptr);
+            if (seq->curr.line < 0) {
                 seq->curr.line = 0;
-            } else {
-                seq->curr.line += adv;
             }
             break;
-        }
         case DW_LNS_set_file:
             ASSERT(1 == state->unit.nargs[op - 1]);
-            ASSERT(0 == seq->row_count);   // 此命令不能出现在 sequence 中间
-            seq->file = state->unit.filenames[decode_uleb128(state)];
-            log("set file to %s\n", seq->file);
+            ASSERT(0 == seq->row_count); // 此命令不能出现在 sequence 中间
+            seq->file = state->unit.filenames[decode_uleb128(state->ptr, state->line->line_end, &state->ptr)];
+            // log("set file to %s\n", seq->file);
             break;
         case DW_LNS_const_add_pc:
             // 相当于 special opcode 255，但是不更新 line，而且不新增行
@@ -121,7 +117,7 @@ static void parse_opcodes(sequence_t *seq, line_number_state_t *state, const uin
         default:
             // log("standard %s\n", show_std_opcode(op));
             for (int i = 0; i < state->unit.nargs[op - 1]; ++i) {
-                decode_uleb128(state);
+                decode_uleb128(state->ptr, state->line->line_end, &state->ptr);
             }
             break;
         }
@@ -171,10 +167,10 @@ static const uint8_t *parse_debug_line_unit(line_number_state_t *state) {
     uint8_t dir_format_len = *state->ptr++;
     uint64_t dir_formats[dir_format_len * 2];
     for (int i = 0; i < dir_format_len * 2; ++i) {
-        dir_formats[i] = decode_uleb128(state);
+        dir_formats[i] = decode_uleb128(state->ptr, state->line->line_end, &state->ptr);
     }
 
-    uint64_t dir_count = decode_uleb128(state);
+    uint64_t dir_count = decode_uleb128(state->ptr, state->line->line_end, &state->ptr);
     for (unsigned i = 0; i < dir_count; ++i) {
         parse_entry_path(state, dir_formats, dir_format_len);
     }
@@ -182,10 +178,10 @@ static const uint8_t *parse_debug_line_unit(line_number_state_t *state) {
     uint8_t file_format_len = *state->ptr++;
     uint64_t file_formats[file_format_len * 2];
     for (int i = 0; i < file_format_len * 2; ++i) {
-        file_formats[i] = decode_uleb128(state);
+        file_formats[i] = decode_uleb128(state->ptr, state->line->line_end, &state->ptr);
     }
 
-    uint64_t filename_count = decode_uleb128(state);
+    uint64_t filename_count = decode_uleb128(state->ptr, state->line->line_end, &state->ptr);
     const char *filenames[filename_count];
     state->unit.filenames = filenames; // TODO 可以换成 alloca
     for (unsigned i = 0; i < filename_count; ++i) {

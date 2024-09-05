@@ -141,16 +141,14 @@ typedef struct sequence {
     // 尝试多种数据压缩存储方式，计算每一种存储方式占用的内存
     // 第二次解析 opcodes 时，选择最节省空间的方式存储
     int         bytes_in_leb128;
-
-    // unsigned    prev_line;  // addr2line 矩阵前一行的代码行号
-    // uint64_t    prev_addr;
 } sequence_t;
 
 // line number information state machine registers
 typedef struct line_number_state {
     const dwarf_line_t  *line;
-    const uint8_t       *ptr; // 目前读取到了哪个字节
 
+    const uint8_t       *ptr; // 目前读取到了哪个字节
+    const uint8_t       *unit_end;
     line_number_unit_t   unit;
 
 } line_number_state_t;
