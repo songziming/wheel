@@ -44,3 +44,13 @@ vmrange_t *vm_locate(vmspace_t *space, size_t addr) {
 
     return NULL;
 }
+
+void vm_show(vmspace_t *space) {
+    ASSERT(NULL != space);
+
+    log("vmspace:\n");
+    for (dlnode_t *i = space->head.next; &space->head != i; i = i->next) {
+        vmrange_t *rng = containerof(i, vmrange_t, dl);
+        log("  - vm 0x%016zx~0x%016zx %s\n", rng->addr, rng->end, rng->desc);
+    }
+}

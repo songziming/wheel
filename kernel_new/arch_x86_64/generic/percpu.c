@@ -3,6 +3,7 @@
 #include <arch_impl.h>
 #include "rw.h"
 #include "cpufeatures.h"
+#include <memory/vm_space.h>
 #include <library/debug.h>
 #include <library/string.h>
 
@@ -44,7 +45,9 @@ inline void *pcpu_ptr(int idx, void *ptr) {
 }
 
 
-// TODO 记录 per-cpu map，类似于 vmmap，只是每个 per-cpu 可以共享同一个 map
+// TODO 记录 per-cpu map，类似于 vmmap，所有 percpu 共享同一个 map
+static vmspace_t g_percpu_map;
+static vmrange_t g_percpu_data; // percpu-data、percpu-rodata
 
 
 // percpu 初始化流程：
@@ -59,7 +62,13 @@ INIT_TEXT size_t percpu_reserve(size_t size, size_t align) {
 
     if (0 == g_pcpu_skip) {
         g_pcpu_skip = (size_t)(&_pcpu_bss_end  - &_pcpu_addr);
+        vm_init(&g_percpu_map);
+        g_percpu_data.addr = 0;
+        g_percpu_data.end = g_pcpu_skip;
+        g_percpu_data.desc = "data";
+        vm_insert(&g_percpu_map, &g_percpu_data);
     }
+
     if (0 != align) {
         ASSERT(0 == (align & (align - 1)));
         g_pcpu_skip += align - 1;

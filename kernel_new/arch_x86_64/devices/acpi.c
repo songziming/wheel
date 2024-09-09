@@ -204,11 +204,10 @@ void acpi_tables_show() {
     ASSERT(0 != g_table_num);
     ASSERT(NULL != g_tables);
 
-    log("ACPI tables:");
+    log("ACPI tables:\n");
     for (int i = 0; i < g_table_num; ++i) {
         if (NULL != g_tables[i]) {
-            log(" %.4s", g_tables[i]->signature);
+            log("  - acpi %.4s\n", g_tables[i]->signature);
         }
     }
-    log("\n");
 }

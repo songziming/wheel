@@ -226,6 +226,10 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     idt_init();
     idt_load();
 
+    // 内存管理初始化
+    // 禁用临时内存管理，之后使用 page_alloc
+    mem_init();
+
     // TODO 划分内存布局，启用物理页面管理
     // gsbase_init(0);
 

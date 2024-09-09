@@ -33,6 +33,9 @@ static INIT_TEXT void mark_kernel_range(vmrange_t *rng, void *addr, void *end, c
     vm_insert(&g_kernel_space, rng);
 
     // TODO 还要标记页描述符数组
+    pfn_t page_start = ((size_t)addr - KERNEL_TEXT_ADDR) >> PAGE_SHIFT;
+    pfn_t page_end   = ((size_t)end - KERNEL_TEXT_ADDR) >> PAGE_SHIFT;
+    page_set_type(page_start, page_end, PT_KERNEL);
 }
 
 
@@ -53,14 +56,24 @@ INIT_TEXT void mem_init() {
 
     // 获取内核各 section 结束位置
     char *init_addr = (char *)KERNEL_TEXT_ADDR + KERNEL_LOAD_ADDR;
-    char *rodata_end = early_alloc_ro(0);
-    char *kernel_end = early_alloc_rw(0);
+    char *ro_end = early_alloc_ro(0);
+    size_t rw_end = (size_t)early_alloc_rw(0);
 
     // 把内核地址空间布局记录下来
     // TODO 代码段、数据段的布局是固定的
     vm_init(&g_kernel_space);
     mark_kernel_range(&g_kernel_init, init_addr, &_init_end, "init");
     mark_kernel_range(&g_kernel_text, &_text_addr, &_text_end, "text");
-    mark_kernel_range(&g_kernel_rodata, &_rodata_addr, rodata_end, "rodata"); // 含 early_ro
-    mark_kernel_range(&g_kernel_data, &_data_addr, kernel_end, "data"); // 含 BSS、early_rw
+    mark_kernel_range(&g_kernel_rodata, &_rodata_addr, ro_end, "rodata"); // 含 early_ro
+    mark_kernel_range(&g_kernel_data, &_data_addr, (void *)rw_end, "data"); // 含 BSS、early_rw
+
+    // 可用部分按页对齐，留出一个 guard page
+    rw_end += 2 * PAGE_SIZE - 1;
+    rw_end &= ~(PAGE_SIZE - 1);
+    // TODO 可以在这里创建 kernel heap
+
+    // 划分 percpu area
+
+
+    vm_show(&g_kernel_space); // 打印内核地址空间
 }
