@@ -19,10 +19,6 @@
 #define CPU_FEATURE_VMX         0x2000  // Intel VMX 虚拟化扩展
 #define CPU_FEATURE_SVM         0x4000  // AMD SVM 虚拟化扩展
 
-INIT_TEXT void parse_cpuinfo();
-
-
-
 typedef struct cache_info {
     size_t line_size;
     size_t sets;        // 有多少个 set
@@ -34,5 +30,12 @@ extern CONST cache_info_t g_l1d_info;
 extern CONST cache_info_t g_l1i_info;
 extern CONST cache_info_t g_l2_info;
 extern CONST cache_info_t g_l3_info;
+
+extern CONST uint32_t g_cpu_features;
+
+INIT_TEXT void cpu_features_detect();
+INIT_TEXT void cpu_features_enable();
+
+void cpu_features_show();
 
 #endif // CPUINFO_H

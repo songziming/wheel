@@ -2,7 +2,7 @@
 #include <arch_intf.h>
 #include <arch_impl.h>
 #include "rw.h"
-#include "cpuinfo.h"
+#include "cpufeatures.h"
 #include <library/debug.h>
 #include <library/string.h>
 

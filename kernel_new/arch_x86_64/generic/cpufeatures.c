@@ -1,13 +1,11 @@
-#include "cpuinfo.h"
+#include "cpufeatures.h"
 #include "rw.h"
+#include <arch_impl.h>
 #include <library/string.h>
 #include <library/debug.h>
 
 
-// Linux kernel 代码中，cpuid 是一个设备文件，因此 cpuid.c 只能看到向系统注册设备，将文件读写转换为 cpuid 指令的逻辑
-// 真正执行 cpuid 的代码位于 cpuflags.c，相关代码还有 cpucheck.c
-
-// TODO 此模块适合改名为 cpufeatures.c
+// 解析 cpuid，提取硬件信息，打开相关硬件开关
 
 
 #define VENDOR_INTEL "GenuineIntel"
@@ -394,7 +392,6 @@ static const char *DOMAIN_TYPE_NAMES[] = {
     "package",              // implied
 };
 
-
 static INIT_TEXT void intel_get_topology() {
     uint32_t a, b, c, d;
 
@@ -425,6 +422,8 @@ static INIT_TEXT void amd_detect_svm() {
 
     __asm__ volatile("cpuid" : "=c"(c) : "a"(0x80000001) : "ebx", "edx");
     g_cpu_features |= (c & (1U << 2)) ? CPU_FEATURE_SVM : 0;
+
+    // TBD
 }
 
 
@@ -437,6 +436,8 @@ static INIT_TEXT void intel_detect_vmx() {
 
     __asm__ volatile("cpuid" : "=c"(c) : "a"(1) : "ebx", "edx");
     g_cpu_features |= (c & (1U << 5)) ? CPU_FEATURE_VMX : 0;
+
+    // TBD
 }
 
 
@@ -445,7 +446,7 @@ static INIT_TEXT void intel_detect_vmx() {
 //------------------------------------------------------------------------------
 
 // 参考 linux/arch/x86/boot/cpuflags.c, 函数 get_cpuflags(void)
-INIT_TEXT void parse_cpuinfo() {
+INIT_TEXT void cpu_features_detect() {
     uint32_t a, c, d;
 
     __asm__ volatile("cpuid" : "=a"(g_max_eax), "=b"(g_cpu_vendor[0]), "=c"(g_cpu_vendor[2]), "=d"(g_cpu_vendor[1]) : "a"(0));
@@ -497,6 +498,101 @@ INIT_TEXT void parse_cpuinfo() {
     }
 }
 
-INIT_TEXT void detect_cpu_features() {}
 
-INIT_TEXT void enable_cpu_features() {}
+//------------------------------------------------------------------------------
+// 开启 CPU 功能开关
+//------------------------------------------------------------------------------
+
+void syscall_entry(); // arch_entries.S
+
+INIT_TEXT void cpu_features_enable() {
+    // 设置 cr0
+    uint64_t cr0 = read_cr0();
+    cr0 |=  (1UL << 16); // WP 分页写保护
+    write_cr0(cr0);
+
+    // 设置 cr4
+    uint64_t cr4 = read_cr4();
+    cr4 |= 1UL << 2; // time stamp counter
+    cr4 |= 1UL << 5; // PAE（应该已经开启了）
+    cr4 |= 1UL << 7; // PGE 全局页（标记为 global 的页表项不会从 TLB 中清除）
+    if (CPU_FEATURE_FSGSBASE & g_cpu_features) {
+        cr4 |= 1UL << 16; // FSGSBASE 启用读写 fs.base、gs.base 的指令
+    }
+    if (CPU_FEATURE_PCID & g_cpu_features) {
+        cr4 |= 1UL << 17; // PCIDE 上下文标识符
+    }
+    if (CPU_FEATURE_SMEP & g_cpu_features) {
+        cr4 |= 1UL << 20; // SMEP
+    }
+    if (CPU_FEATURE_SMAP & g_cpu_features) {
+        cr4 |= 1UL << 21; // SMAP
+    }
+    write_cr4(cr4);
+
+    // 设置 efer
+    uint64_t efer = read_msr(MSR_EFER);
+    if (CPU_FEATURE_NX & g_cpu_features) {
+        efer |= 1UL << 11;  // NXE
+    }
+    if (0 == memcmp(g_cpu_vendor, VENDOR_INTEL, 12)) {
+        efer |= (1UL <<  0); // SCE，启用快速系统调用指令 syscall/sysret
+    }
+    write_msr(MSR_EFER, efer);
+
+    // 设置系统调用相关 MSR（只允许 64-bit 模式下的系统调用入口）
+    write_msr(MSR_STAR, 0x001b0008UL << 32);    // STAR
+    write_msr(MSR_LSTAR, (uint64_t)syscall_entry); // LSTAR
+    write_msr(MSR_SFMASK, 0UL);                     // SFMASK
+}
+
+
+//------------------------------------------------------------------------------
+// 打印
+//------------------------------------------------------------------------------
+
+void cpu_features_show() {
+    log("cpu %.12s info:\n", g_cpu_vendor);
+    log("  - L1I line=%zu, nsets=%zu, nways=%zu\n", g_l1i_info.line_size, g_l1i_info.sets, g_l1i_info.ways);
+    log("  - L1D line=%zu, nsets=%zu, nways=%zu\n", g_l1d_info.line_size, g_l1d_info.sets, g_l1d_info.ways);
+
+    ASSERT(g_l1d_info.line_size * g_l1d_info.sets * g_l1d_info.ways == g_l1d_info.total_size);
+    ASSERT(g_l2_info.line_size * g_l2_info.sets * g_l2_info.ways == g_l2_info.total_size);
+    ASSERT(g_l3_info.line_size * g_l3_info.sets * g_l3_info.ways == g_l3_info.total_size);
+
+    log("  - L1 cache #color %zu\n", g_l1d_info.line_size * g_l1d_info.sets >> PAGE_SHIFT);
+    log("  - L2 cache #color %zu\n", g_l2_info.line_size * g_l2_info.sets >> PAGE_SHIFT);
+    log("  - L3 cache #color %zu\n", g_l3_info.line_size * g_l3_info.sets >> PAGE_SHIFT);
+
+    // log("  - core crystal freq %u, TSC ratio %u/%u\n", g_core_freq, g_tsc_ratio[0], g_tsc_ratio[1]);
+    // log("  - %d logical processors in physical package\n", g_num_ids);
+
+    static const struct {
+        const char *name;
+        uint32_t mask;
+    } FEATS[] = {
+        { "pcid",     CPU_FEATURE_PCID      },
+        { "x2apic",   CPU_FEATURE_X2APIC    },
+        { "tsc",      CPU_FEATURE_TSC       },
+        { "ht",       CPU_FEATURE_HT        },
+        { "nx",       CPU_FEATURE_NX        },
+        { "pdpe1gb",  CPU_FEATURE_1G        },
+        { "arat",     CPU_FEATURE_ARAT      },
+        { "incpcid",  CPU_FEATURE_INVPCID   },
+        { "smep",     CPU_FEATURE_SMEP      },
+        { "smap",     CPU_FEATURE_SMAP      },
+        { "fsgsbase", CPU_FEATURE_FSGSBASE  },
+        { "feedback", CPU_FEATURE_FEEDBACK  },
+        { "vmx",      CPU_FEATURE_VMX       },
+        { "svm",      CPU_FEATURE_SVM       },
+    };
+    size_t nfeats = sizeof(FEATS) / sizeof(FEATS[0]);
+
+    log("  - features:");
+    for (size_t i = 0; i < nfeats; ++i) {
+        if (g_cpu_features & FEATS[i].mask) {
+            log(" %s", FEATS[i].name);
+        }
+    }
+    log("\n");
+}

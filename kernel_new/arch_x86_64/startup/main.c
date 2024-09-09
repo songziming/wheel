@@ -14,7 +14,7 @@
 #include <devices/acpi.h>
 #include <devices/acpi_madt.h>
 
-#include <generic/cpuinfo.h>
+#include <generic/cpufeatures.h>
 #include <generic/smp.h>
 #include <generic/gdt_idt_tss.h>
 #include <generic/mem.h>
@@ -173,8 +173,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     serial_init();
     set_log_func(serial_puts);
 
-    parse_cpuinfo();
-    // TODO 开启相关CPU功能
+    cpu_features_detect();
+    cpu_features_enable();
 
     // 解析 multiboot 信息
     switch (eax) {
@@ -204,7 +204,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     }
     acpi_parse_rsdp(g_rsdp);
 
-    madt_t *madt = (madt_t *)acpi_find_table("APIC");
+    madt_t *madt = (madt_t *)acpi_table_find("APIC");
     if (NULL == madt) {
         log("fatal: MADT not found!\n");
         goto end;
@@ -213,8 +213,6 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // TODO 检查 Acpi::DMAR，判断是否需要 interrupt remapping
     // TODO 检查 Acpi::SRAT，获取 numa 信息（个人电脑一般不需要）
-
-    mem_block_show();
 
     // 关键数据已经备份，可以放开 early-alloc 长度限制
     early_rw_unlock();
@@ -231,8 +229,13 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // TODO 划分内存布局，启用物理页面管理
     // gsbase_init(0);
 
-    // dump_symbols();
-    acpi_show_tables();
+
+
+
+
+    mem_block_show(); // 打印物理内存布局
+    acpi_tables_show(); // 打印 acpi 表
+    cpu_features_show(); // 打印 cpuinfo
 
 end:
     while (1) {}

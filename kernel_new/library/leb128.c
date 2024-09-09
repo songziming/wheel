@@ -5,7 +5,7 @@
 // 每个字节只有 7-bit 有效数字，最高位表示该字节是否为最后一个字节
 
 
-int encode_uleb128(unsigned value, uint8_t *dst) {
+int encode_uleb128(uint64_t value, uint8_t *dst) {
     int len = 0;
 
     do {
@@ -23,7 +23,7 @@ int encode_uleb128(unsigned value, uint8_t *dst) {
     return len;
 }
 
-int encode_sleb128(int value, uint8_t *dst) {
+int encode_sleb128(int64_t value, uint8_t *dst) {
     int len = 0;
     int more = 1;
 
@@ -45,13 +45,13 @@ int encode_sleb128(int value, uint8_t *dst) {
     return len;
 }
 
-unsigned decode_uleb128(const uint8_t *src, const uint8_t *end, const uint8_t **after) {
-    unsigned value = 0;
+uint64_t decode_uleb128(const uint8_t *src, const uint8_t *end, const uint8_t **after) {
+    uint64_t value = 0;
     int shift = 0;
 
     while (src < end) {
         uint8_t byte = *src++;
-        value |= (unsigned)(byte & 0x7f) << shift;
+        value |= (uint64_t)(byte & 0x7f) << shift;
         shift += 7;
         if (0 == (byte & 0x80)) {
             goto out;
@@ -65,13 +65,13 @@ out:
     return value;
 }
 
-int decode_sleb128(const uint8_t *src, const uint8_t *end, const uint8_t **after) {
-    int value = 0;
-    int shift = 0;
+int64_t decode_sleb128(const uint8_t *src, const uint8_t *end, const uint8_t **after) {
+    int64_t value = 0;
+    size_t shift = 0;
 
     while (src < end) {
         uint8_t byte = *src++;
-        value |= (int)(byte & 0x7f) << shift;
+        value |= (int64_t)(byte & 0x7f) << shift;
         shift += 7;
         if (0 == (byte & 0x80)) {
             if ((shift < sizeof(value) * 8) && (byte & 0x40)) {

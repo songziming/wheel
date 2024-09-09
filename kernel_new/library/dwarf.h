@@ -88,73 +88,18 @@ typedef enum ext_opcode {
     DW_LNE_hi_user           = 0xff,
 } ext_opcode_t;
 
-
 // dwarf 调试信息，来自 elf sections
 typedef struct dwarf_line {
-    // const uint8_t *ptr;
-    // const uint8_t *end;
     const uint8_t *line;        // .debug_line
     const uint8_t *line_end;
     const char    *str;         // .debug_str
     size_t         str_size;
     const char    *line_str;    // .debug_line_str
     size_t         line_str_size;
-    // size_t         wordsize; // 表示当前 unit 是 32-bit 还是 64-bit
 } dwarf_line_t;
 
+int addr_to_line(size_t target, const char **file);
 
-// dwarf_line 分为多个 unit，每个 unit 开头都是 program header
-// 从 program header 解析出来如下信息
-typedef struct line_number_unit {
-    size_t  wordsize;   // 当前 unit 使用 32-bit 还是 64-bit
-    uint8_t address_size;
-
-    int8_t  line_base;
-    uint8_t line_range;
-    uint8_t opcode_base;
-    uint8_t min_ins_len; // 指令长度（最大公约数）
-    uint8_t ops_per_ins; // 指令包含的 operation 数量
-
-    const uint8_t *nargs; // 长度 opcode_base - 1
-    const char **filenames;
-} line_number_unit_t;
-
-
-// addr2line 矩阵中的一行
-typedef struct sequence_row {
-    uint64_t    addr;
-    unsigned    opix;
-    int         line;
-} sequence_row_t;
-
-// 代表一段连续指令，映射相同的文件
-typedef struct sequence {
-    uint64_t    start_addr;
-    uint64_t    end_addr; // sequence 有效范围之后的第一个字节
-    const char *file;
-    int         start_line;
-
-    sequence_row_t prev;
-    sequence_row_t curr;
-    int         row_count;  // addr2line 矩阵已经有了多少行
-
-    // 尝试多种数据压缩存储方式，计算每一种存储方式占用的内存
-    // 第二次解析 opcodes 时，选择最节省空间的方式存储
-    int         bytes_in_leb128;
-
-    uint8_t    *dst;
-} sequence_t;
-
-// line number information state machine registers
-typedef struct line_number_state {
-    const dwarf_line_t  *line;
-
-    const uint8_t       *ptr; // 目前读取到了哪个字节
-    const uint8_t       *unit_end;
-    line_number_unit_t   unit;
-
-} line_number_state_t;
-
-void parse_debug_line(dwarf_line_t *line);
+INIT_TEXT void parse_debug_line(dwarf_line_t *line);
 
 #endif // DWARF_H

@@ -1,6 +1,7 @@
 // 中断异常入口、系统调用入口、任务切换入口
 
 .global isr_entries
+.global syscall_entry
 
 // arch_int.c
 .extern g_handlers
@@ -243,3 +244,11 @@ int_nested_return:
     swapgs                  // 返回到用户态，需要交换 gsbase
 int_to_kernel:
     iretq
+
+
+//------------------------------------------------------------------------------
+// 系统调用入口，来自用户态
+//------------------------------------------------------------------------------
+
+syscall_entry:
+    ret

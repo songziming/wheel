@@ -90,7 +90,7 @@ INIT_TEXT mem_type_t mem_block_type(size_t addr) {
 void mem_block_show() {
     for (int i = 0; i < g_block_num; ++i) {
         mem_block_t *rng = &g_blocks[i];
-        log("start=0x%08lx, end=0x%08lx, type=%d\n",
+        log("start=0x%016lx, end=0x%016lx, type=%d\n",
             rng->start, rng->end, rng->type);
     }
 }
