@@ -1,29 +1,43 @@
 #include "mem.h"
+#include "percpu.h"
+#include <arch_intf.h>
 #include <arch_impl.h>
 #include <memory/mem_block.h>
 #include <memory/page.h>
 #include <memory/early_alloc.h>
 #include <memory/vm_space.h>
+#include <library/string.h>
 
 
 // 管理内存布局
 
 
-
 // layout.ld
+extern char _pcpu_addr;
+extern char _pcpu_data_end;
+extern char _pcpu_bss_end;
 extern char _init_end;
-extern char _text_addr, _text_end;
+extern char _text_addr;
+extern char _text_end;
 extern char _rodata_addr;
 extern char _data_addr;
 
 // 记录内核的虚拟地址空间布局
 static vmspace_t g_kernel_space;
-
-// 记录内核地址空间里的不同区域
 static vmrange_t g_kernel_init;
 static vmrange_t g_kernel_text;
 static vmrange_t g_kernel_rodata;
 static vmrange_t g_kernel_data;
+static vmrange_t g_kernel_percpu;   // 对应 N 个 percpu、和中间 N-1 个间隔
+
+// 记录 percpu 部分的次级结构，重复 N 份，包含在 kernel-space 里的一个 range
+static vmspace_t g_percpu_space;
+static PCPU_BSS vmrange_t g_percpu_vars; // data + bss
+static PCPU_BSS vmrange_t g_percpu_nmi;  // NMI IST
+static PCPU_BSS vmrange_t g_percpu_df;   // #DF IST
+static PCPU_BSS vmrange_t g_percpu_pf;   // #PF IST
+static PCPU_BSS vmrange_t g_percpu_mc;   // #MC IST
+static PCPU_BSS vmrange_t g_percpu_int;  // int stack
 
 
 static INIT_TEXT void mark_kernel_range(vmrange_t *rng, void *addr, void *end, const char *desc) {
@@ -38,7 +52,23 @@ static INIT_TEXT void mark_kernel_range(vmrange_t *rng, void *addr, void *end, c
     page_set_type(page_start, page_end, PT_KERNEL);
 }
 
+static INIT_TEXT void mark_percpu_range(vmrange_t *rng, size_t size, size_t align, const char *desc) {
+    rng->addr = percpu_reserve(size, align);
+    rng->end  = rng->addr + size;
+    rng->desc = desc;
+    vm_insert(&g_percpu_space, rng);
+}
 
+static INIT_TEXT void reserve_percpu_data() {
+    percpu_reserve(0, 0);
+}
+
+// static INIT_TEXT void reserve_percpu_range(vmrange_t *rng, size_t size, size_t align, const char *desc) {
+//     rng->addr = percpu_reserve(size, align);
+//     rng->end  = rng->addr + size;
+//     rng->desc = desc;
+//     vm_insert(&g_percpu_space, rng);
+// }
 
 // 划分内存布局，启用动态内存分配
 INIT_TEXT void mem_init() {
@@ -73,6 +103,26 @@ INIT_TEXT void mem_init() {
     // TODO 可以在这里创建 kernel heap
 
     // 划分 percpu area
+    intptr_t copy_size = &_pcpu_data_end - &_pcpu_addr;
+    intptr_t zero_size = &_pcpu_bss_end  - &_pcpu_data_end;
+    // size_t vars_size = (size_t)(&_pcpu_bss_end  - &_pcpu_data_end)
+
+    // 计算 percpu 各段起始偏移
+    size_t offset_vars = percpu_reserve(copy_size + zero_size, 0);
+    size_t offset_nmi  = percpu_reserve(INT_STACK_SIZE, PAGE_SIZE);
+    size_t offset_df   = percpu_reserve(INT_STACK_SIZE, PAGE_SIZE);
+    size_t offset_pf   = percpu_reserve(INT_STACK_SIZE, PAGE_SIZE);
+    size_t offset_mc   = percpu_reserve(INT_STACK_SIZE, PAGE_SIZE);
+    size_t offset_int  = percpu_reserve(INT_STACK_SIZE, PAGE_SIZE);
+
+    size_t skip = percpu_align_to_l1(); // 相邻两个 percpu 的距离
+
+    // 建立每个 percpu 的内容
+    for (int i = 0; i < cpu_count(); ++i) {
+        memcpy((char *)rw_end, &_pcpu_addr, copy_size);
+        memset((char *)rw_end + copy_size, 0, zero_size);
+        // mark_kernel_range()
+    }
 
 
     vm_show(&g_kernel_space); // 打印内核地址空间
