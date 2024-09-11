@@ -289,9 +289,8 @@ static INIT_TEXT void parse_opcodes(sequence_t *seq, line_number_state_t *state)
             switch (eop[0]) {
             case DW_LNE_end_sequence:
                 ASSERT(1 == nbytes);
-                ASSERT(0 != seq->row_count);
-                ASSERT(0 != seq->start_addr);
                 ASSERT(seq->start_addr < seq->curr.addr);
+                ASSERT(0 != seq->row_count);
                 seq->addr_size = seq->curr.addr - seq->start_addr; // 此地址是 sequence 范围之外的
                 seq->bytes_in_leb128 += encode_uleb128(seq->addr_size, NULL);
                 return;
@@ -418,9 +417,11 @@ static INIT_TEXT const uint8_t *parse_debug_line_unit(line_number_state_t *state
         sequence_t seq;
         memset(&seq, 0, sizeof(sequence_t));
         parse_opcodes(&seq, state);
-        // log("sequence 0x%016lx-0x%016lx mapped to %s, %d bytes\n",
-        //     seq.start_addr, seq.start_addr + seq.addr_size,
-        //     seq.file, seq.bytes_in_leb128);
+
+        // 映射到地址 0，说明这段代码被 gc-sections 回收，无需保存
+        if (0 == seq.start_addr) {
+            continue;
+        }
 
         // 创建 linemap，为其申请空间
         size_t map_size = sizeof(linemap_t) + seq.bytes_in_leb128;

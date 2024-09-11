@@ -9,22 +9,40 @@
 
 
 // per-CPU area 不仅是变量，还包括中断栈、异常栈
+// 在内核地址空间看来，percpu 是一整段连续范围，但 perpcu 内部还有精细结构
+// 本模块就负责维护 percpu 内部精细结构
 
+// percpu 包括 N 个处理器的数据、和 N-1 个空洞
+// +----------+------+----------+------+----------+-----
+// | percpu 0 | hole | percpu 1 | hole | percpu 2 | ...
+// +----------+------+----------+------+----------+-----
+// 添加 hole 是为了页面着色，让每个 percpu 映射到相同的 L1 cache line
 
 // 每个处理器对应的 PCPU 区域内部结构如下：
 // +-------+-----------+-------+--------+-------+--------+-----
-// | guard | PCPU vars | guard | stack1 | guard | stack2 | ...
+// | guard | PCPU VARS | guard | STACK1 | guard | STACK2 | ...
 // +-------+-----------+-------+--------+-------+--------+-----
 // 其中 PCPU vars 是静态声明的变量，只有这部分变量可以用 pcpu_ptr、this_ptr 访问
 
 
-// defined in layout.ld
+// layout.ld
 extern char _pcpu_addr;
 extern char _pcpu_data_end;
 extern char _pcpu_bss_end;
 
-static CONST size_t g_pcpu_offset = 0; // 首个 pcpu 区域的偏移量，跳过 guard
+static CONST size_t g_pcpu_addr = 0;
+static CONST size_t g_pcpu_size = 0;
 static CONST size_t g_pcpu_skip = 0; // 相邻两个 pcpu 的间距
+static CONST size_t g_pcpu_offset = 0; // 首个 pcpu 区域的偏移量，跳过 guard
+
+// 用来描述一个 percpu 的内部结构
+static vmspace_t g_percpu_space;
+static PCPU_BSS vmrange_t g_percpu_vars; // data + bss
+static PCPU_BSS vmrange_t g_percpu_nmi;  // NMI IST
+static PCPU_BSS vmrange_t g_percpu_df;   // #DF IST
+static PCPU_BSS vmrange_t g_percpu_pf;   // #PF IST
+static PCPU_BSS vmrange_t g_percpu_mc;   // #MC IST
+static PCPU_BSS vmrange_t g_percpu_int;  // int stack
 
 // #ifdef DEBUG
 // static char g_gsbase_set = 0; // 标记 gsbase 是否已经初始化
@@ -93,6 +111,29 @@ INIT_TEXT size_t percpu_align_to_l1() {
 
     return g_pcpu_skip;
 }
+
+
+// 输入 percpu 的起始虚拟地址
+// 返回所有 percpu 占据的空间，包括了 N-1 个中间补齐
+INIT_TEXT size_t percpu_allocate(size_t va) {
+    ASSERT(va > KERNEL_TEXT_ADDR);
+    ASSERT(cpu_count() > 0);
+
+    g_pcpu_offset = va - (size_t)&_pcpu_addr;
+
+    size_t percpu_size = g_pcpu_skip;
+
+    // 按 L1 大小对齐
+    size_t l1size = g_l1d_info.line_size * g_l1d_info.sets;
+    if (0 != l1size) {
+        ASSERT(0 == (l1size & (l1size - 1)));
+        g_pcpu_skip += l1size - 1;
+        g_pcpu_skip &= ~(l1size - 1);
+    }
+
+    return g_pcpu_skip * (cpu_count() - 1) + percpu_size;
+}
+
 
 // 划分 per-cpu 存储空间，从指定地址开始，开头留出一个 guard page
 // 传入的是虚拟地址
