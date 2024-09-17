@@ -16,4 +16,6 @@ typedef enum page_type {
 INIT_TEXT void page_init(size_t end);
 INIT_TEXT void page_set_type(pfn_t start, pfn_t end, uint8_t type);
 
+void pages_free(size_t start, size_t end);
+
 #endif // PAGE_H

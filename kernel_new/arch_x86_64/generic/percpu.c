@@ -4,6 +4,7 @@
 #include "rw.h"
 #include "cpufeatures.h"
 #include <memory/vm_space.h>
+#include <memory/page.h>
 #include <library/debug.h>
 #include <library/string.h>
 
@@ -31,18 +32,19 @@ extern char _pcpu_data_end;
 extern char _pcpu_bss_end;
 
 static CONST size_t g_pcpu_addr = 0;
+static CONST size_t g_pcpu_vars_size = 0; // 页对齐
 static CONST size_t g_pcpu_size = 0;
 static CONST size_t g_pcpu_skip = 0; // 相邻两个 pcpu 的间距
 static CONST size_t g_pcpu_offset = 0; // 首个 pcpu 区域的偏移量，跳过 guard
 
-// 用来描述一个 percpu 的内部结构
-static vmspace_t g_percpu_space;
-static PCPU_BSS vmrange_t g_percpu_vars; // data + bss
-static PCPU_BSS vmrange_t g_percpu_nmi;  // NMI IST
-static PCPU_BSS vmrange_t g_percpu_df;   // #DF IST
-static PCPU_BSS vmrange_t g_percpu_pf;   // #PF IST
-static PCPU_BSS vmrange_t g_percpu_mc;   // #MC IST
-static PCPU_BSS vmrange_t g_percpu_int;  // int stack
+// // 用来描述一个 percpu 的内部结构
+// static vmspace_t g_percpu_space;
+// static PCPU_BSS vmrange_t g_percpu_vars; // data + bss
+// static PCPU_BSS vmrange_t g_percpu_nmi;  // NMI IST
+// static PCPU_BSS vmrange_t g_percpu_df;   // #DF IST
+// static PCPU_BSS vmrange_t g_percpu_pf;   // #PF IST
+// static PCPU_BSS vmrange_t g_percpu_mc;   // #MC IST
+// static PCPU_BSS vmrange_t g_percpu_int;  // int stack
 
 // #ifdef DEBUG
 // static char g_gsbase_set = 0; // 标记 gsbase 是否已经初始化
@@ -113,6 +115,14 @@ INIT_TEXT size_t percpu_align_to_l1() {
 }
 
 
+
+// 一步到位，划分完整的 percpu 区域
+INIT_TEXT void percpu_setup(size_t va) {
+    ASSERT(va > KERNEL_TEXT_ADDR);
+    ASSERT(cpu_count() > 0);
+}
+
+
 // 输入 percpu 的起始虚拟地址
 // 返回所有 percpu 占据的空间，包括了 N-1 个中间补齐
 INIT_TEXT size_t percpu_allocate(size_t va) {
@@ -136,15 +146,29 @@ INIT_TEXT size_t percpu_allocate(size_t va) {
 
 
 // 划分 per-cpu 存储空间，从指定地址开始，开头留出一个 guard page
-// 传入的是虚拟地址
-INIT_TEXT void percpu_init(size_t addr) {
+// 传入的是虚拟地址，返回分配了所有的 percpu 之后的结束地址
+// 开头没有 guard page，这样输入和输出正好是 percpu 范围的起止
+INIT_TEXT size_t percpu_init(size_t va) {
+    ASSERT(0 == g_pcpu_size);
+    ASSERT(0 == g_pcpu_skip);
     ASSERT(0 == g_pcpu_offset);
-    ASSERT(0 != g_pcpu_skip);
-    ASSERT(addr > KERNEL_TEXT_ADDR);
-    ASSERT(cpu_count() > 0);
+    ASSERT(va > KERNEL_TEXT_ADDR);
 
     size_t copy_size = (size_t)(&_pcpu_data_end - &_pcpu_addr);
     size_t zero_size = (size_t)(&_pcpu_bss_end  - &_pcpu_data_end);
+
+    g_pcpu_vars_size = copy_size + zero_size;
+    g_pcpu_vars_size += PAGE_SIZE - 1;
+    g_pcpu_vars_size &= ~(PAGE_SIZE - 1);
+
+    g_pcpu_size  = g_pcpu_vars_size;
+    g_pcpu_size += PAGE_SIZE + INT_STACK_SIZE; // NMI 异常栈
+    g_pcpu_size += PAGE_SIZE + INT_STACK_SIZE; // #PF 异常栈
+    g_pcpu_size += PAGE_SIZE + INT_STACK_SIZE; // #DF 异常栈
+    g_pcpu_size += PAGE_SIZE + INT_STACK_SIZE; // #MC 异常栈
+    g_pcpu_size += PAGE_SIZE + INT_STACK_SIZE; // 中断栈
+
+    g_pcpu_skip  = g_pcpu_size + PAGE_SIZE; // 相邻两个 percpu 之间要留有 guard page
 
     // 按 L1 大小对齐
     size_t l1size = g_l1d_info.line_size * g_l1d_info.sets;
@@ -154,19 +178,92 @@ INIT_TEXT void percpu_init(size_t addr) {
         g_pcpu_skip &= ~(l1size - 1);
     }
 
-    // per-cpu 起始地址按页对齐，并在开头留出一个 guard page
-    addr += 2 * PAGE_SIZE - 1;
-    addr &= ~(PAGE_SIZE - 1);
-    g_pcpu_offset = addr - (size_t)&_pcpu_addr;
+    int ncpu = cpu_count();
+    ASSERT(ncpu > 0);
 
-    for (int i = 0; i < cpu_count(); ++i) {
-        char *ptr = (char *)addr; // per-cpu 映射到 kernel text
-        addr += g_pcpu_skip;
+    // per-cpu 起始地址按页对齐，并算出结束位置
+    va += PAGE_SIZE - 1;
+    va &= ~(PAGE_SIZE - 1);
+    g_pcpu_offset = va - (size_t)&_pcpu_addr;
+    size_t end = va + g_pcpu_skip * (ncpu - 1) + g_pcpu_size;
 
-        // memcpy(ptr, &_pcpu_addr, copy_size); // 复制 per-cpu data
-        // memset(ptr + copy_size, 0, zero_size); // per-cpu bss 清零
+    for (int i = 0; i < ncpu; ++i) {
+        char *ptr = (char *)va;
+        va += g_pcpu_skip;
+
+        memcpy(ptr, &_pcpu_addr, copy_size); // 复制 per-cpu data
+        memset(ptr + copy_size, 0, zero_size); // per-cpu bss 清零
+    }
+
+    return end;
+}
+
+INIT_TEXT size_t get_nmi_stack(int cpu) {
+    ASSERT(cpu >= 0);
+    ASSERT(cpu < cpu_count());
+    return g_pcpu_addr + g_pcpu_skip * cpu
+        + g_pcpu_vars_size + PAGE_SIZE;
+}
+
+INIT_TEXT size_t get_pf_stack(int cpu) {
+    ASSERT(cpu >= 0);
+    ASSERT(cpu < cpu_count());
+    return g_pcpu_addr + g_pcpu_skip * cpu
+        + g_pcpu_vars_size + PAGE_SIZE
+        + INT_STACK_SIZE + PAGE_SIZE;
+}
+
+INIT_TEXT size_t get_df_stack(int cpu) {
+    ASSERT(cpu >= 0);
+    ASSERT(cpu < cpu_count());
+    return g_pcpu_addr + g_pcpu_skip * cpu
+        + g_pcpu_vars_size + PAGE_SIZE
+        + (INT_STACK_SIZE + PAGE_SIZE) * 2;
+}
+
+INIT_TEXT size_t get_mc_stack(int cpu) {
+    ASSERT(cpu >= 0);
+    ASSERT(cpu < cpu_count());
+    return g_pcpu_addr + g_pcpu_skip * cpu
+        + g_pcpu_vars_size + PAGE_SIZE
+        + (INT_STACK_SIZE + PAGE_SIZE) * 3;
+}
+
+INIT_TEXT size_t get_int_stack(int cpu) {
+    ASSERT(cpu >= 0);
+    ASSERT(cpu < cpu_count());
+    return g_pcpu_addr + g_pcpu_skip * cpu
+        + g_pcpu_vars_size + PAGE_SIZE
+        + (INT_STACK_SIZE + PAGE_SIZE) * 4;
+}
+
+
+// 回收 perpcu 里面用来对齐的部分
+INIT_TEXT void percpu_reclaim_guard() {
+    size_t addr = g_pcpu_addr;
+    size_t next = g_pcpu_addr;
+
+    int ncpu = cpu_count();
+    for (int i = 0; i < ncpu; ++i) {
+        pages_free(addr, next); // 和前一个 percpu 的间隔
+        next = addr += g_pcpu_skip;
+
+        addr += g_pcpu_vars_size; // percpu var
+        pages_free(addr, addr + PAGE_SIZE);
+        addr += INT_STACK_SIZE; // NMI
+        pages_free(addr, addr + PAGE_SIZE);
+        addr += INT_STACK_SIZE; // #PF
+        pages_free(addr, addr + PAGE_SIZE);
+        addr += INT_STACK_SIZE; // #DF
+        pages_free(addr, addr + PAGE_SIZE);
+        addr += INT_STACK_SIZE; // #MC
+        pages_free(addr, addr + PAGE_SIZE);
+        addr += INT_STACK_SIZE; // Int stack
     }
 }
+
+
+
 
 
 // 设置 this-cpu 指针，并且设置 CPU 编号

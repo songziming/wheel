@@ -31,15 +31,6 @@ static vmrange_t g_kernel_rodata;
 static vmrange_t g_kernel_data;
 static vmrange_t g_kernel_percpu;   // 对应 N 个 percpu、和中间 N-1 个间隔
 
-// 记录 percpu 部分的次级结构，重复 N 份，包含在 kernel-space 里的一个 range
-static vmspace_t g_percpu_space;
-static PCPU_BSS vmrange_t g_percpu_vars; // data + bss
-static PCPU_BSS vmrange_t g_percpu_nmi;  // NMI IST
-static PCPU_BSS vmrange_t g_percpu_df;   // #DF IST
-static PCPU_BSS vmrange_t g_percpu_pf;   // #PF IST
-static PCPU_BSS vmrange_t g_percpu_mc;   // #MC IST
-static PCPU_BSS vmrange_t g_percpu_int;  // int stack
-
 
 static INIT_TEXT void mark_kernel_range(vmrange_t *rng, void *addr, void *end, const char *desc) {
     rng->addr = (size_t)addr;
@@ -53,12 +44,12 @@ static INIT_TEXT void mark_kernel_range(vmrange_t *rng, void *addr, void *end, c
     page_set_type(page_start, page_end, PT_KERNEL);
 }
 
-static INIT_TEXT void mark_percpu_range(vmrange_t *rng, size_t size, size_t align, const char *desc) {
-    rng->addr = percpu_reserve(size, align);
-    rng->end  = rng->addr + size;
-    rng->desc = desc;
-    vm_insert(&g_percpu_space, rng);
-}
+// static INIT_TEXT void mark_percpu_range(vmrange_t *rng, size_t size, size_t align, const char *desc) {
+//     rng->addr = percpu_reserve(size, align);
+//     rng->end  = rng->addr + size;
+//     rng->desc = desc;
+//     vm_insert(&g_percpu_space, rng);
+// }
 
 // static INIT_TEXT void reserve_percpu_data() {
 //     percpu_reserve(0, 0);
@@ -100,51 +91,18 @@ INIT_TEXT void mem_init() {
     // 可用部分按页对齐
     // TODO 可以在这里创建 kernel heap
 
-    // 划分 percpu area
-    intptr_t copy_size = &_pcpu_data_end - &_pcpu_addr;
-    intptr_t zero_size = &_pcpu_bss_end  - &_pcpu_data_end;
-    // size_t vars_size = (size_t)(&_pcpu_bss_end  - &_pcpu_data_end)
-
-    // 计算 percpu 各段起始偏移
-    // size_t offset_vars = percpu_reserve(copy_size + zero_size, 0);
-    // size_t offset_nmi  = percpu_reserve(INT_STACK_SIZE, PAGE_SIZE);
-    // size_t offset_df   = percpu_reserve(INT_STACK_SIZE, PAGE_SIZE);
-    // size_t offset_pf   = percpu_reserve(INT_STACK_SIZE, PAGE_SIZE);
-    // size_t offset_mc   = percpu_reserve(INT_STACK_SIZE, PAGE_SIZE);
-    // size_t offset_int  = percpu_reserve(INT_STACK_SIZE, PAGE_SIZE);
-    vm_init(&g_percpu_space);
-    mark_percpu_range(&g_percpu_vars, copy_size + zero_size, 0, "vars");
-    mark_percpu_range(&g_percpu_nmi, INT_STACK_SIZE, PAGE_SIZE, "nmi stack");
-    mark_percpu_range(&g_percpu_df,  INT_STACK_SIZE, PAGE_SIZE, "#df stack");
-    mark_percpu_range(&g_percpu_pf,  INT_STACK_SIZE, PAGE_SIZE, "#pf stack");
-    mark_percpu_range(&g_percpu_mc,  INT_STACK_SIZE, PAGE_SIZE, "#mc stack");
-    mark_percpu_range(&g_percpu_int, INT_STACK_SIZE, PAGE_SIZE, "int stack");
-
-    size_t dist = percpu_align_to_l1(); // 相邻两个 percpu 的距离
-
     // 给 percpu 分配空间，留出一个 guard page
     rw_end += 2 * PAGE_SIZE - 1;
     rw_end &= ~(PAGE_SIZE - 1);
-    // vmrange_t *last = containerof(g_percpu_space.head.prev, vmrange_t, dl);
-    // size_t pcpu_size = dist * (cpu_count() - 1) + last->end;
 
-    // percpu_allocate(rw_end);
-    g_kernel_percpu.addr = rw_end;
-    g_kernel_percpu.end = rw_end + percpu_allocate(rw_end);
-    g_kernel_percpu.desc = "percpu";
-    vm_insert(&g_kernel_space, &g_kernel_percpu);
+    // g_kernel_percpu.addr = rw_end;
+    // g_kernel_percpu.end = percpu_init(rw_end);
+    // g_kernel_percpu.desc = "percpu";
+    // vm_insert(&g_kernel_space, &g_kernel_percpu);
+    mark_kernel_range(&g_kernel_percpu, (void *)rw_end, (void *)percpu_init(rw_end), "percpu");
 
-    // 建立每个 percpu 的内容，可以使用
-    for (int i = 0; i < cpu_count(); ++i) {
-        memcpy((char *)rw_end, &_pcpu_addr, copy_size);
-        memset((char *)rw_end + copy_size, 0, zero_size);
-        // mark_kernel_range()
-        rw_end += dist;
-    }
 
 
     log("kernel ");
     vm_show(&g_kernel_space); // 打印内核地址空间
-    log("percpu ");
-    vm_show(&g_percpu_space);
 }

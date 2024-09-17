@@ -59,3 +59,20 @@ INIT_TEXT void page_set_type(pfn_t start, pfn_t end, uint8_t type) {
         g_pages[i].type = type;
     }
 }
+
+// 回收若干连续物理页
+static void page_range_free(pfn_t start, int n) {
+    ASSERT(start + n <= g_page_num);
+    ASSERT(NULL != g_pages);
+
+    for (int i = 0; i < n; ++i) {
+        g_pages[start + i].type = PT_FREE;
+    }
+}
+
+void pages_free(size_t start, size_t end) {
+    start >>= PAGE_SHIFT;
+    end += PAGE_SIZE - 1;
+    end >>= PAGE_SHIFT;
+    page_range_free(start, end - start);
+}
