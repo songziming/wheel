@@ -13,8 +13,8 @@ typedef enum page_type {
     PT_CACHE,           // 块设备缓存
 } page_type_t;
 
-INIT_TEXT void page_init(size_t end);
-INIT_TEXT void page_set_type(pfn_t start, pfn_t end, uint8_t type);
+INIT_TEXT void page_desc_init(size_t end);
+INIT_TEXT void page_set_type(size_t start, size_t end, uint8_t type);
 
 void pages_free(size_t start, size_t end);
 

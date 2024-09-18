@@ -1,0 +1,10 @@
+#ifndef KSPACE_H
+#define KSPACE_H
+
+#include <common.h>
+#include <memory/vmspace.h>
+
+INIT_TEXT void kspace_init();
+INIT_TEXT size_t kspace_add(vmrange_t *rng, size_t addr, size_t end, const char *desc);
+
+#endif // KSPACE_H

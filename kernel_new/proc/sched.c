@@ -71,7 +71,7 @@ static void priority_q_remove(priority_q_t *q, task_t *tid) {
 // 遍历每个 CPU 的就绪队列，找出优先级最低的 CPU
 static int lowest_cpu() {
     for (int i = 0; i < cpu_count(); ++i) {
-        priority_q_t *q = pcpu_ptr(i, &g_ready_q);
+        priority_q_t *q = percpu_ptr(i, &g_ready_q);
     }
     return 0;
 }

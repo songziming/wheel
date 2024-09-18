@@ -24,8 +24,8 @@ int cpu_count();
 int cpu_index();
 
 int is_pcpu_var(void *ptr);
-void *pcpu_ptr(int idx, void *ptr);
-void *this_ptr(void *ptr);
+void *percpu_ptr(int idx, void *ptr);
+void *thiscpu_ptr(void *ptr);
 
 
 // //------------------------------------------------------------------------------

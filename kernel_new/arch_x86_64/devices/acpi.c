@@ -1,6 +1,6 @@
 #include "acpi.h"
 #include <arch_impl.h>
-#include <memory/mem_block.h>
+#include <memory/pmlayout.h>
 #include <library/debug.h>
 #include <memory/early_alloc.h>
 #include <library/string.h>
@@ -95,7 +95,8 @@ static INIT_TEXT acpi_tbl_t *check_table(uint64_t addr) {
         return NULL;
     }
 
-    if (mem_block_type(addr) == MEM_RESERVED) {
+    pmrange_t *pmr = pmrange_at_addr(addr);
+    if (!pmr || pmr->type == PM_RESERVED) {
         return tbl;
     }
 

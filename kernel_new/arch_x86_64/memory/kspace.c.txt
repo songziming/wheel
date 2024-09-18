@@ -1,0 +1,40 @@
+#include "kspace.h"
+#include <memory/page.h>
+#include <arch_impl.h>
+#include <library/debug.h>
+
+
+// 记录内核的虚拟地址空间布局
+static vmspace_t g_kernel_space;
+
+static vmrange_t g_kernel_init;
+static vmrange_t g_kernel_text;
+static vmrange_t g_kernel_rodata;
+static vmrange_t g_kernel_data;
+static vmrange_t g_kernel_percpu;   // 对应 N 个 percpu、和中间 N-1 个间隔
+
+
+
+INIT_TEXT void kspace_init() {
+    vmspace_init(&g_kernel_space);
+}
+
+// 返回对齐后的结束地址
+INIT_TEXT size_t kspace_add(vmrange_t *rng, size_t addr, size_t end, const char *desc) {
+    ASSERT(addr >= KERNEL_TEXT_ADDR);
+    ASSERT(addr < end);
+
+    // 记录虚拟地址
+    rng->addr = addr;
+    rng->end  = end;
+    rng->desc = desc;
+    vmspace_insert(&g_kernel_space, rng);
+
+    // 标记页描述符数组
+    page_set_type(addr - KERNEL_TEXT_ADDR, end - KERNEL_TEXT_ADDR, PT_KERNEL);
+
+    // 返回对齐后的结束地址
+    end += PAGE_SIZE - 1;
+    end &= ~(PAGE_SIZE - 1);
+    return end;
+}

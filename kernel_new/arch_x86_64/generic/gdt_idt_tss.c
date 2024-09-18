@@ -113,7 +113,7 @@ INIT_TEXT void idt_set_ist(int vec, int idx) {
 INIT_TEXT void tss_init_load() {
     ASSERT(NULL != g_gdt);
 
-    uint64_t addr = (uint64_t)this_ptr(&g_tss);
+    uint64_t addr = (uint64_t)thiscpu_ptr(&g_tss);
     uint64_t size = sizeof(tss_t);
 
     uint64_t lower = 0UL;
@@ -135,7 +135,7 @@ INIT_TEXT void tss_set_rsp(int cpu, int idx, uint64_t addr) {
     ASSERT(idx >= 0);
     ASSERT(idx < 3);
 
-    tss_t *tss = pcpu_ptr(cpu, &g_tss);
+    tss_t *tss = percpu_ptr(cpu, &g_tss);
     tss->rsp[idx].lower = addr & 0xffffffff;
     tss->rsp[idx].upper = (addr >> 32) & 0xffffffff;
 }
@@ -144,7 +144,7 @@ INIT_TEXT void tss_set_ist(int cpu, int idx, uint64_t addr) {
     ASSERT(idx > 0);
     ASSERT(idx < 8);
 
-    tss_t *tss = pcpu_ptr(cpu, &g_tss);
+    tss_t *tss = percpu_ptr(cpu, &g_tss);
     tss->ist[idx].lower = addr & 0xffffffff;
     tss->ist[idx].upper = (addr >> 32) & 0xffffffff;
 }

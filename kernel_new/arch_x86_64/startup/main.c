@@ -1,7 +1,7 @@
 #include <wheel.h>
 #include <library/debug.h>
 #include <library/symbols.h>
-#include <memory/mem_block.h>
+#include <memory/pmlayout.h>
 #include <memory/early_alloc.h>
 
 #include "multiboot1.h"
@@ -17,7 +17,8 @@
 #include <generic/cpufeatures.h>
 #include <generic/smp.h>
 #include <generic/gdt_idt_tss.h>
-#include <generic/mem.h>
+
+#include <memory/mem_init.h>
 
 
 static INIT_DATA size_t g_rsdp = 0;
@@ -36,16 +37,16 @@ static INIT_TEXT void mb1_parse_mmap(uint32_t mmap, uint32_t len) {
         ++range_num;
     }
 
-    mem_block_reserve(range_num);
+    pmranges_alloc(range_num);
 
     for (uint32_t off = 0; off < len;) {
         mb1_mmap_entry_t *ent = (mb1_mmap_entry_t *)(size_t)(mmap +off);
         off += ent->size + sizeof(ent->size);
 
-        mem_type_t type = (MB1_MEMORY_AVAILABLE == ent->type)
-            ? MEM_AVAILABLE : MEM_RESERVED;
+        pmtype_t type = (MB1_MEMORY_AVAILABLE == ent->type)
+            ? PM_AVAILABLE : PM_RESERVED;
 
-        mem_block_add(ent->addr, ent->addr + ent->len, type);
+        pmrange_add(ent->addr, ent->addr + ent->len, type);
     }
 }
 
@@ -54,19 +55,19 @@ static INIT_TEXT void mb2_parse_mmap(void *tag) {
     uint32_t mmap_len = mmap->tag.size - sizeof(mb2_tag_mmap_t);
     int range_num = (int)(mmap_len / mmap->entry_size);
 
-    mem_block_reserve(range_num);
+    pmranges_alloc(range_num);
 
     for (int i = 0; i < range_num; ++i) {
         mb2_mmap_entry_t *ent = &mmap->entries[i];
 
-        mem_type_t type;
+        pmtype_t type;
         switch (ent->type) {
-        case MB2_MEMORY_AVAILABLE:        type = MEM_AVAILABLE;   break;
-        case MB2_MEMORY_ACPI_RECLAIMABLE: type = MEM_RECLAIMABLE; break;
-        default:                          type = MEM_RESERVED;    break;
+        case MB2_MEMORY_AVAILABLE:        type = PM_AVAILABLE;   break;
+        case MB2_MEMORY_ACPI_RECLAIMABLE: type = PM_RECLAIMABLE; break;
+        default:                          type = PM_RESERVED;    break;
         }
 
-        mem_block_add(ent->addr, ent->addr + ent->len, type);
+        pmrange_add(ent->addr, ent->addr + ent->len, type);
     }
 }
 
@@ -237,7 +238,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
 
 
-    mem_block_show(); // 打印物理内存布局
+    pmlayout_show(); // 打印物理内存布局
     acpi_tables_show(); // 打印 acpi 表
     cpu_features_show(); // 打印 cpuinfo
 

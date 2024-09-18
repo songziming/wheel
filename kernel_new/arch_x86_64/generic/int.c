@@ -10,7 +10,7 @@ PCPU_DATA void *g_int_stack = NULL;
 
 INIT_TEXT void int_init() {
     for (int i = 0; i < cpu_count(); ++i) {
-        int *pdepth = pcpu_ptr(i, &g_int_depth);
+        int *pdepth = percpu_ptr(i, &g_int_depth);
         *pdepth = 0;
     }
     // g_int_depth
