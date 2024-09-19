@@ -75,7 +75,7 @@ int64_t decode_sleb128(const uint8_t *src, const uint8_t *end, const uint8_t **a
         shift += 7;
         if (0 == (byte & 0x80)) {
             if ((shift < sizeof(value) * 8) && (byte & 0x40)) {
-                value |= -(1 << shift); // 如果是有符号数，需要符号扩展
+                value |= -(1L << shift); // 如果是有符号数，需要符号扩展
             }
             goto out;
         }

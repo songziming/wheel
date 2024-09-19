@@ -28,7 +28,7 @@ static vmrange_t g_kernel_init;
 static vmrange_t g_kernel_text;
 static vmrange_t g_kernel_rodata;
 static vmrange_t g_kernel_data;
-// static vmrange_t g_kernel_percpu; // 对应 N 个 percpu、和中间 N-1 个间隔
+static vmrange_t g_idmap;
 
 
 INIT_TEXT void add_kernel_range(vmrange_t *rng, size_t addr, size_t end, const char *desc) {
@@ -44,7 +44,7 @@ INIT_TEXT void add_kernel_range(vmrange_t *rng, size_t addr, size_t end, const c
     // 标记页描述符数组
     addr -= KERNEL_TEXT_ADDR;
     end  -= KERNEL_TEXT_ADDR;
-    page_set_type(addr, end, PT_KERNEL);
+    page_add_range(addr, end, PT_KERNEL);
 }
 
 
@@ -86,6 +86,9 @@ INIT_TEXT void mem_init() {
     rw_end &= ~(PAGE_SIZE - 1);
     rw_end = percpu_init(rw_end);
 
+    // 内核结束位置的物理地址
+    size_t pa_end = rw_end - KERNEL_TEXT_ADDR;
+
     // 遍历 mem_block，将可用物理内存范围逐一添加（包括可回收部分）
     for (int i = 0, N = pmrange_count(); i < N; ++i) {
         pmrange_t *pmr = pmrange_at_index(i);
@@ -104,11 +107,11 @@ INIT_TEXT void mem_init() {
         }
 
         // 内核必然完整包含于一段 pmrange
-        if (start <= KERNEL_LOAD_ADDR && (rw_end <= end)) {
-            pages_free(start, KERNEL_LOAD_ADDR);
-            pages_free(rw_end, end);
+        if ((start <= KERNEL_LOAD_ADDR) && (pa_end <= end)) {
+            page_add_range(start, KERNEL_LOAD_ADDR, PT_FREE);
+            page_add_range(rw_end, end, PT_FREE);
         } else {
-            pages_free(start, end);
+            page_add_range(start, end, PT_FREE);
         }
     }
 
@@ -116,9 +119,15 @@ INIT_TEXT void mem_init() {
     for (dlnode_t *i = g_kernel_space.head.next; i != &g_kernel_space.head; i = i->next) {
         vmrange_t *prev = containerof(i->prev, vmrange_t, dl);
         vmrange_t *curr = containerof(i, vmrange_t, dl);
-        pages_free(prev->end - KERNEL_TEXT_ADDR, curr->addr - KERNEL_TEXT_ADDR);
+        size_t gap_addr = prev->end - KERNEL_TEXT_ADDR;
+        size_t gap_end = curr->addr - KERNEL_TEXT_ADDR;
+        page_add_range(gap_addr, gap_end, PT_FREE);
     }
 
     // TODO 还要把全部物理内存映射到 canonical hole 之后
     // MMIO 范围可能在可用内存范围之外，也要映射
+    g_idmap.addr = DIRECT_MAP_ADDR;
+    g_idmap.end = DIRECT_MAP_ADDR + (1UL << 32);
+    g_idmap.desc = "idmap";
+    vmspace_insert(&g_kernel_space, &g_idmap);
 }

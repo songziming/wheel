@@ -5,6 +5,7 @@
 #include <library/debug.h>
 
 
+// 代表一个线程
 typedef struct task {
     int         priority;   // 最大取值 31，可以换成 bitfield
     dlnode_t    q_node; // 就绪队列/阻塞队列节点

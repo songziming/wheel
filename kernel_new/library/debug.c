@@ -63,6 +63,7 @@ void log_stacktrace() {
 
 void assertion_fail(const char *file, int line, const char *func) {
     log("Assertion fail: %s:%d func:%s\n", file, line, func);
+    log_stacktrace();
 }
 
 

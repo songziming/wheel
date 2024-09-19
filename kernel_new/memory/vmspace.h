@@ -8,6 +8,8 @@ typedef struct vmrange {
     size_t  addr;
     size_t  end;
     const char *desc;
+
+    // TODO 还应记录映射的物理地址、映射属性
 } vmrange_t;
 
 typedef struct vmspace {

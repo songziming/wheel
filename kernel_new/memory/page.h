@@ -13,9 +13,27 @@ typedef enum page_type {
     PT_CACHE,           // 块设备缓存
 } page_type_t;
 
-INIT_TEXT void page_desc_init(size_t end);
-INIT_TEXT void page_set_type(size_t start, size_t end, uint8_t type);
 
-void pages_free(size_t start, size_t end);
+// 相同类型的块可以组成链表（双向不循环）
+typedef struct pglist {
+    pfn_t head;
+    pfn_t tail;
+} pglist_t;
+
+
+int pglist_contains(pglist_t *pl, pfn_t blk);
+void pglist_push_head(pglist_t *pl, pfn_t blk);
+void pglist_push_tail(pglist_t *pl, pfn_t blk);
+pfn_t pglist_pop_head(pglist_t *pl);
+pfn_t pglist_pop_tail(pglist_t *pl);
+void pglist_remove(pglist_t *pl, pfn_t blk);
+
+size_t page_block_alloc(int rank, page_type_t type);
+void page_block_free(size_t pa);
+
+INIT_TEXT void page_desc_init(size_t end);
+INIT_TEXT void page_add_range(size_t start, size_t end, page_type_t type);
+
+// void pages_free(size_t start, size_t end);
 
 #endif // PAGE_H
