@@ -25,12 +25,20 @@ PCPU_BSS task_t *g_tid_prev;
 PCPU_BSS task_t *g_tid_next;
 
 
+//------------------------------------------------------------------------------
+// 任务队列
+//------------------------------------------------------------------------------
+
+// 可用于就绪队列、阻塞队列
+
 static void priority_q_init(priority_q_t *q) {
     q->priorities = 0;
     memset(q->heads, 0, sizeof(q->heads));
 }
 
 static void priority_q_push(priority_q_t *q, task_t *tid) {
+    ASSERT(NULL != q);
+    ASSERT(NULL != tid);
     int pri = tid->priority;
     if ((1U << pri) & q->priorities) {
         dl_insert_before(&tid->q_node, q->heads[pri]);
@@ -41,7 +49,18 @@ static void priority_q_push(priority_q_t *q, task_t *tid) {
     }
 }
 
+static int priority_q_contains(priority_q_t *q, task_t *tid) {
+    ASSERT(NULL != q);
+    ASSERT(NULL != tid);
+    int pri = tid->priority;
+    if ((1U << pri) & q->priorities) {
+        return dl_contains(q->heads[pri], &tid->q_node);
+    }
+    return 0;
+}
+
 static task_t *priority_q_head(priority_q_t *q) {
+    ASSERT(NULL != q);
     if (0 == q->priorities) {
         return NULL;
     }
@@ -51,8 +70,10 @@ static task_t *priority_q_head(priority_q_t *q) {
 }
 
 static void priority_q_remove(priority_q_t *q, task_t *tid) {
-    int pri = tid->priority;
+    ASSERT(NULL != q);
+    ASSERT(NULL != tid);
 
+    int pri = tid->priority;
     ASSERT((1U << pri) & q->priorities);
     ASSERT(dl_contains(q->heads[pri], &tid->q_node));
 

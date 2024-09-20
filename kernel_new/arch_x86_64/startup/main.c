@@ -14,11 +14,13 @@
 #include <devices/acpi.h>
 #include <devices/acpi_madt.h>
 
+#include <arch_int/int_init.h>
 #include <generic/cpufeatures.h>
 #include <generic/smp.h>
 #include <generic/gdt_idt_tss.h>
 
 #include <memory/mem_init.h>
+#include <memory/percpu.h>
 
 
 static INIT_DATA size_t g_rsdp = 0;
@@ -228,19 +230,21 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     idt_load();
 
     // 内存管理初始化
-    // 禁用临时内存管理，之后使用 page_alloc
     mem_init();
+    thiscpu_init(0);
 
-    // TODO 划分内存布局，启用物理页面管理
-    // gsbase_init(0);
+    // TSS 依赖 thiscpu
+    tss_init_load();
 
+    // 中断异常处理
+    int_init();
 
+    __asm__ volatile("sti");
+    __asm__ volatile("int $0x80");
 
-
-
-    pmlayout_show(); // 打印物理内存布局
-    acpi_tables_show(); // 打印 acpi 表
-    cpu_features_show(); // 打印 cpuinfo
+    // pmlayout_show(); // 打印物理内存布局
+    // acpi_tables_show(); // 打印 acpi 表
+    // cpu_features_show(); // 打印 cpuinfo
 
 end:
     while (1) {}

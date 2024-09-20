@@ -45,6 +45,7 @@ static PCPU_BSS vmrange_t g_percpu_int;  // int stack
 // mem_init.c
 INIT_TEXT void add_kernel_range(vmrange_t *rng, size_t addr, size_t end, const char *desc);
 
+
 // 返回对齐后的结束地址，包括 guard page
 static INIT_TEXT size_t add_percpu_range(int cpu, vmrange_t *rng, size_t addr, size_t size, const char *desc) {
     size_t end = addr + size;
@@ -56,6 +57,30 @@ static INIT_TEXT size_t add_percpu_range(int cpu, vmrange_t *rng, size_t addr, s
     return end;
 }
 
+INIT_TEXT size_t percpu_nmi_stack_top(int cpu) {
+    vmrange_t *rng = percpu_ptr(cpu, &g_percpu_nmi);
+    return rng->end;
+}
+
+INIT_TEXT size_t percpu_df_stack_top(int cpu) {
+    vmrange_t *rng = percpu_ptr(cpu, &g_percpu_df);
+    return rng->end;
+}
+
+INIT_TEXT size_t percpu_pf_stack_top(int cpu) {
+    vmrange_t *rng = percpu_ptr(cpu, &g_percpu_pf);
+    return rng->end;
+}
+
+INIT_TEXT size_t percpu_mc_stack_top(int cpu) {
+    vmrange_t *rng = percpu_ptr(cpu, &g_percpu_mc);
+    return rng->end;
+}
+
+INIT_TEXT size_t percpu_int_stack_top(int cpu) {
+    vmrange_t *rng = percpu_ptr(cpu, &g_percpu_int);
+    return rng->end;
+}
 
 // 划分 per-cpu 存储空间，从指定地址开始，开头留出一个 guard page
 // 传入的是虚拟地址，返回分配了所有的 percpu 之后的结束地址
@@ -117,7 +142,7 @@ INIT_TEXT size_t percpu_init(size_t va) {
 }
 
 // 设置 this-cpu 指针，并且设置 CPU 编号
-INIT_TEXT void gsbase_init(int idx) {
+INIT_TEXT void thiscpu_init(int idx) {
     ASSERT(0 != g_pcpu_base);
     ASSERT(0 != g_pcpu_skip);
     ASSERT(idx >= 0);

@@ -3,7 +3,7 @@
 .global isr_entries
 .global syscall_entry
 
-// arch_int.c
+// int_init.c
 .extern g_handlers
 .extern g_int_depth
 .extern g_int_stack

@@ -1,7 +1,9 @@
 #ifndef RW_H
 #define RW_H
 
+
 #include <common.h>
+
 
 //------------------------------------------------------------------------------
 // 端口 IO
@@ -40,7 +42,6 @@ static inline void out32(uint16_t port, uint32_t data) {
 static inline void io_wait() {
     __asm__ volatile("outb %%al, $0x80" :: "a"(0));
 }
-
 
 
 //------------------------------------------------------------------------------

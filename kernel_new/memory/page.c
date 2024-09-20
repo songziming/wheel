@@ -1,6 +1,7 @@
 #include "page.h"
 #include <arch_impl.h>
 #include "early_alloc.h"
+#include <library/spin.h>
 #include <library/debug.h>
 
 
@@ -28,10 +29,12 @@ typedef struct page {
 static CONST pfn_t g_page_num = 0;
 static page_t *g_pages = NULL;
 
-
 // 未分配的物理页块按不同大小组成链表（伙伴算法）
 #define RANK_NUM 16
 static pglist_t g_blocks[RANK_NUM];
+
+// 自旋锁
+static spin_t g_pages_lock;
 
 
 //------------------------------------------------------------------------------
@@ -216,7 +219,7 @@ void pglist_remove(pglist_t *pl, pfn_t blk) {
 //------------------------------------------------------------------------------
 
 // 回收一个页块
-static void block_free(pfn_t blk) {
+static void block_free_nolock(pfn_t blk) {
     ASSERT(blk < g_page_num);
     ASSERT(g_pages[blk].head);
 
@@ -251,7 +254,7 @@ static void block_free(pfn_t blk) {
 
 // 申请一个页块，起始页号必须是 N*period+phase
 // 限制起始页号可以实现页面着色，优化缓存性能
-static pfn_t block_alloc(uint8_t rank, pfn_t period, pfn_t phase, page_type_t type) {
+static pfn_t block_alloc_nolock(uint8_t rank, pfn_t period, pfn_t phase, page_type_t type) {
     ASSERT(rank < RANK_NUM);
     ASSERT(0 == (period & (period - 1)));
     ASSERT(phase < period);
@@ -286,10 +289,10 @@ static pfn_t block_alloc(uint8_t rank, pfn_t period, pfn_t phase, page_type_t ty
             pfn_t sib = block_split(blk);
 
             if ((blk ^ sib) & phase) {
-                block_free(blk); // 回收前一半，保留后一半
+                block_free_nolock(blk); // 回收前一半，保留后一半
                 blk = sib;
             } else {
-                block_free(sib); // 回收后一半，保留前一半
+                block_free_nolock(sib); // 回收后一半，保留前一半
             }
         }
 
@@ -311,9 +314,9 @@ size_t page_block_alloc(int rank, page_type_t type) {
     ASSERT(PT_INVALID != type);
     ASSERT(PT_FREE != type);
 
-    // int key = irq_spin_take(&g_pages_lock);
-    pfn_t pg = block_alloc(rank, 1, 0, type);
-    // irq_spin_give(&g_pages_lock, key);
+    int key = irq_spin_take(&g_pages_lock);
+    pfn_t pg = block_alloc_nolock(rank, 1, 0, type);
+    irq_spin_give(&g_pages_lock, key);
 
     if (INVALID_PFN == pg) {
         return 0; // 0 地址不可用
@@ -330,9 +333,9 @@ void page_block_free(size_t pa) {
     ASSERT(g_pages[pa].head);
     ASSERT(PT_FREE != g_pages[pa].type);
 
-    // int key = irq_spin_take(&g_pages_lock);
-    block_free((pfn_t)pa);
-    // irq_spin_give(&g_pages_lock, key);
+    int key = irq_spin_take(&g_pages_lock);
+    block_free_nolock((pfn_t)pa);
+    irq_spin_give(&g_pages_lock, key);
 }
 
 
@@ -361,6 +364,8 @@ INIT_TEXT void page_desc_init(size_t end) {
         g_pages[i].head = 1;
         g_pages[i].rank = 0;
     }
+
+    spin_init(&g_pages_lock);
 }
 
 // 添加一段连续物理内存，并标记为特定类型
@@ -379,6 +384,11 @@ INIT_TEXT void page_add_range(size_t start, size_t end, page_type_t type) {
     if (start >= end) {
         return;
     }
+
+    // if (PT_FREE == type) {
+    //     log("  + physical memory 0x%08zx..0x%08zx\n",
+    //         start << PAGE_SHIFT, end << PAGE_SHIFT);
+    // }
 
     for (size_t i = start; i < end; ++i) {
         ASSERT(1 == g_pages[i].head);
@@ -402,43 +412,8 @@ INIT_TEXT void page_add_range(size_t start, size_t end, page_type_t type) {
         g_pages[start].rank = rank;
         g_pages[start].type = type;
         if (PT_FREE == type) {
-            block_free(start);
+            block_free_nolock(start);
         }
         start += (1UL << rank);
     }
 }
-
-// INIT_TEXT void page_set_type(size_t start, size_t end, uint8_t type) {
-//     ASSERT(0 != g_page_num);
-//     ASSERT(NULL != g_pages);
-
-//     start >>= PAGE_SHIFT;
-//     end += PAGE_SIZE - 1;
-//     end >>= PAGE_SHIFT;
-
-//     if (end > g_page_num) {
-//         end = g_page_num;
-//     }
-
-//     // TODO 应该把连续相同类型的 page 合并为尽可能大的 block
-//     for (pfn_t i = start; i < end; ++i) {
-//         g_pages[i].type = type;
-//     }
-// }
-
-// // 回收若干连续物理页
-// static void page_range_free(pfn_t start, int n) {
-//     ASSERT(start + n <= g_page_num);
-//     ASSERT(NULL != g_pages);
-
-//     for (int i = 0; i < n; ++i) {
-//         g_pages[start + i].type = PT_FREE;
-//     }
-// }
-
-// void pages_free(size_t start, size_t end) {
-//     start >>= PAGE_SHIFT;
-//     end += PAGE_SIZE - 1;
-//     end >>= PAGE_SHIFT;
-//     page_range_free(start, end - start);
-// }

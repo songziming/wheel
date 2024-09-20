@@ -109,7 +109,7 @@ INIT_TEXT void mem_init() {
         // 内核必然完整包含于一段 pmrange
         if ((start <= KERNEL_LOAD_ADDR) && (pa_end <= end)) {
             page_add_range(start, KERNEL_LOAD_ADDR, PT_FREE);
-            page_add_range(rw_end, end, PT_FREE);
+            page_add_range(pa_end, end, PT_FREE);
         } else {
             page_add_range(start, end, PT_FREE);
         }
@@ -124,10 +124,15 @@ INIT_TEXT void mem_init() {
         page_add_range(gap_addr, gap_end, PT_FREE);
     }
 
-    // TODO 还要把全部物理内存映射到 canonical hole 之后
+    // 把全部物理内存映射到 canonical hole 之后
     // MMIO 范围可能在可用内存范围之外，也要映射
+    if (pa_end < (1UL << 32)) {
+        pa_end = 1UL << 32;
+    }
     g_idmap.addr = DIRECT_MAP_ADDR;
-    g_idmap.end = DIRECT_MAP_ADDR + (1UL << 32);
+    g_idmap.end = DIRECT_MAP_ADDR + pa_end;
     g_idmap.desc = "idmap";
     vmspace_insert(&g_kernel_space, &g_idmap);
+
+    // vmspace_show(&g_kernel_space);
 }
