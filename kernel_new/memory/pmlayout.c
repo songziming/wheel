@@ -7,9 +7,9 @@
 // 类似 linux/mm/memblock.c
 
 
-static INIT_DATA int        g_range_max = 0;
-static CONST     int        g_range_num = 0;
-static CONST     pmrange_t *g_ranges    = NULL;
+static INIT_BSS int        g_range_max;
+static CONST    int        g_range_num;
+static CONST    pmrange_t *g_ranges    = NULL;
 
 
 int pmrange_count() {
@@ -36,9 +36,7 @@ pmrange_t *pmrange_at_addr(size_t pa) {
 
 // 为 mem_block 预留空间
 INIT_TEXT void pmranges_alloc(int n) {
-    if (NULL != g_ranges) {
-        log("warning: reallocating mem ranges array\n");
-    }
+    ASSERT(NULL != g_ranges);
 
     g_range_max = n;
     g_range_num = 0;

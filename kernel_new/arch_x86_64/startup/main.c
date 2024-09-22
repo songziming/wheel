@@ -14,7 +14,6 @@
 #include <devices/acpi.h>
 #include <devices/acpi_madt.h>
 
-#include <arch_int/int_init.h>
 #include <generic/cpufeatures.h>
 #include <generic/smp.h>
 #include <generic/rw.h>
@@ -24,7 +23,10 @@
 #include <memory/percpu.h>
 #include <memory/mmu.h>
 
-#include <memory/page.h>
+#include <arch_int/int_init.h>
+#include <arch_int/i8259.h>
+
+// #include <memory/page.h>
 
 
 static INIT_DATA size_t g_rsdp = 0;
@@ -240,9 +242,11 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // TSS 依赖 thiscpu
     tss_init_load();
 
-    // 中断异常处理
+    // 中断异常处理机制
     int_init();
 
+    // 中断控制器
+    i8259_disable();
 
     // validate_pages();
     // size_t p1 = page_block_alloc(2, PT_KERNEL_STACK);
@@ -267,6 +271,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // pmlayout_show(); // 打印物理内存布局
     // acpi_tables_show(); // 打印 acpi 表
     // cpu_features_show(); // 打印 cpuinfo
+
+    log("initialization done\n");
 
 end:
     while (1) {}
