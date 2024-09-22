@@ -43,13 +43,13 @@ static PCPU_BSS vmrange_t g_percpu_mc;   // #MC IST
 static PCPU_BSS vmrange_t g_percpu_int;  // int stack
 
 // mem_init.c
-INIT_TEXT void add_kernel_range(vmrange_t *rng, size_t addr, size_t end, const char *desc);
+INIT_TEXT void add_kernel_range(vmrange_t *rng, size_t addr, size_t end, mmu_attr_t attrs, const char *desc);
 
 
 // 返回对齐后的结束地址，包括 guard page
 static INIT_TEXT size_t add_percpu_range(int cpu, vmrange_t *rng, size_t addr, size_t size, const char *desc) {
     size_t end = addr + size;
-    add_kernel_range(percpu_ptr(cpu, rng), addr, end, desc);
+    add_kernel_range(percpu_ptr(cpu, rng), addr, end, MMU_WRITE, desc);
 
     end += PAGE_SIZE;
     end += PAGE_SIZE - 1;

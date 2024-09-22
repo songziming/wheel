@@ -6,13 +6,6 @@
 
 
 
-// 每个物理页都有这个结构体，记录相关信息
-typedef union page_info {
-    struct {
-        uint16_t ent_num;    // 有效页表条目数量
-    };
-} page_info_t;
-
 typedef struct page {
     pfn_t prev;
     pfn_t next;
@@ -365,6 +358,11 @@ INIT_TEXT void page_desc_init(size_t end) {
         g_pages[i].rank = 0;
     }
 
+    for (int i = 0; i < RANK_NUM; ++i) {
+        g_blocks[i].head = INVALID_PFN;
+        g_blocks[i].tail = INVALID_PFN;
+    }
+
     spin_init(&g_pages_lock);
 }
 
@@ -417,3 +415,25 @@ INIT_TEXT void page_add_range(size_t start, size_t end, page_type_t type) {
         start += (1UL << rank);
     }
 }
+
+
+//------------------------------------------------------------------------------
+// 测试函数
+//------------------------------------------------------------------------------
+
+#ifdef DEBUG
+
+// 检查块结构是否正常
+void validate_pages() {
+    pfn_t blk = 0;
+    while (blk < g_page_num) {
+        pfn_t size = page_block_size(blk);
+        for (pfn_t i = 1; i < size; ++i) {
+            ASSERT(0 == g_pages[blk + i].head);
+        }
+        blk += size;
+    }
+    ASSERT(blk == g_page_num);
+}
+
+#endif // DEBUG

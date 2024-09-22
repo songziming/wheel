@@ -1,5 +1,6 @@
 #include "vmspace.h"
 #include <library/debug.h>
+#include <arch_impl.h>
 
 
 // 管理一套地址空间（有序链表）
@@ -17,6 +18,8 @@ void vmspace_insert(vmspace_t *space, vmrange_t *rng) {
     ASSERT(NULL != space);
     ASSERT(NULL != rng);
     ASSERT(rng->addr < rng->end);
+    ASSERT(0 == (rng->addr & (PAGE_SIZE - 1)));
+    ASSERT(0 == (rng->pa & (PAGE_SIZE - 1)));
 
     dlnode_t *node = space->head.next;
     for (; &space->head != node; node = node->next) {

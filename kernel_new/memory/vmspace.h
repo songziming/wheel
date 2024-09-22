@@ -2,14 +2,15 @@
 #define VMSPACE_H
 
 #include <library/dllist.h>
+#include <arch_intf.h>
 
 typedef struct vmrange {
-    dlnode_t dl;
-    size_t  addr;
-    size_t  end;
+    dlnode_t    dl;
+    size_t      addr;   // 虚拟地址开始（页对齐）
+    size_t      end;    // 虚拟地址结束
+    size_t      pa;     // 映射的物理地址（页对齐）
+    mmu_attr_t  attrs;  // 映射属性
     const char *desc;
-
-    // TODO 还应记录映射的物理地址、映射属性
 } vmrange_t;
 
 typedef struct vmspace {

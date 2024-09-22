@@ -17,10 +17,14 @@
 #include <arch_int/int_init.h>
 #include <generic/cpufeatures.h>
 #include <generic/smp.h>
+#include <generic/rw.h>
 #include <generic/gdt_idt_tss.h>
 
 #include <memory/mem_init.h>
 #include <memory/percpu.h>
+#include <memory/mmu.h>
+
+#include <memory/page.h>
 
 
 static INIT_DATA size_t g_rsdp = 0;
@@ -239,9 +243,27 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // 中断异常处理
     int_init();
 
-    __asm__ volatile("sti");
-    __asm__ volatile("int $0x80");
 
+    // validate_pages();
+    // size_t p1 = page_block_alloc(2, PT_KERNEL_STACK);
+    // size_t p2 = page_block_alloc(1, PT_KERNEL_STACK);
+    // size_t p3 = page_block_alloc(0, PT_KERNEL_STACK);
+    // log("got two blocks %zx, %zx, %zx\n", p1, p2, p3);
+    // validate_pages();
+    // page_block_free(p1);
+    // page_block_free(p2);
+    // page_block_free(p3);
+    // validate_pages();
+
+
+    // __asm__ volatile("sti");
+    // __asm__ volatile("int $0x80");
+
+    // 使用新的内核页表，可以捕获内存访问错误
+    write_cr3(mmu_kernel_table());
+
+
+    mmu_walk(mmu_kernel_table()); // 打印页表
     // pmlayout_show(); // 打印物理内存布局
     // acpi_tables_show(); // 打印 acpi 表
     // cpu_features_show(); // 打印 cpuinfo

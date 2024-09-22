@@ -13,6 +13,12 @@ typedef enum page_type {
     PT_CACHE,           // 块设备缓存
 } page_type_t;
 
+// 每个物理页都有这个结构体，记录相关信息
+typedef union page_info {
+    struct {
+        uint16_t ent_num;    // 有效页表条目数量
+    };
+} page_info_t;
 
 // 相同类型的块可以组成链表（双向不循环）
 typedef struct pglist {
@@ -20,6 +26,7 @@ typedef struct pglist {
     pfn_t tail;
 } pglist_t;
 
+page_info_t *page_block_info(size_t pa);
 
 int pglist_contains(pglist_t *pl, pfn_t blk);
 void pglist_push_head(pglist_t *pl, pfn_t blk);
@@ -34,6 +41,8 @@ void page_block_free(size_t pa);
 INIT_TEXT void page_desc_init(size_t end);
 INIT_TEXT void page_add_range(size_t start, size_t end, page_type_t type);
 
-// void pages_free(size_t start, size_t end);
+#ifdef DEBUG
+void validate_pages();
+#endif // DEBUG
 
 #endif // PAGE_H

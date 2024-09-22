@@ -1,5 +1,6 @@
 #include "mem_init.h"
 #include "percpu.h"
+#include "mmu.h"
 #include <arch_intf.h>
 #include <arch_impl.h>
 #include <memory/pmlayout.h>
@@ -31,13 +32,15 @@ static vmrange_t g_kernel_data;
 static vmrange_t g_idmap;
 
 
-INIT_TEXT void add_kernel_range(vmrange_t *rng, size_t addr, size_t end, const char *desc) {
+INIT_TEXT void add_kernel_range(vmrange_t *rng, size_t addr, size_t end, mmu_attr_t attrs, const char *desc) {
     ASSERT(addr >= KERNEL_TEXT_ADDR);
     ASSERT(addr < end);
 
     // 记录虚拟地址
     rng->addr = addr;
     rng->end  = end;
+    rng->pa = addr - KERNEL_TEXT_ADDR;
+    rng->attrs = attrs;
     rng->desc = desc;
     vmspace_insert(&g_kernel_space, rng);
 
@@ -73,10 +76,10 @@ INIT_TEXT void mem_init() {
 
     // 把内核地址空间布局记录下来
     vmspace_init(&g_kernel_space);
-    add_kernel_range(&g_kernel_init, init_addr, (size_t)&_init_end, "init");
-    add_kernel_range(&g_kernel_text, (size_t)&_text_addr, (size_t)&_text_end, "text");
-    add_kernel_range(&g_kernel_rodata, (size_t)&_rodata_addr, ro_end, "rodata"); // 含 early_ro
-    add_kernel_range(&g_kernel_data, (size_t)&_data_addr, rw_end, "data"); // 含 bss、early_rw
+    add_kernel_range(&g_kernel_init, init_addr, (size_t)&_init_end, MMU_WRITE|MMU_EXEC, "init");
+    add_kernel_range(&g_kernel_text, (size_t)&_text_addr, (size_t)&_text_end, MMU_EXEC, "text");
+    add_kernel_range(&g_kernel_rodata, (size_t)&_rodata_addr, ro_end, MMU_NONE, "rodata"); // 含 early_ro
+    add_kernel_range(&g_kernel_data, (size_t)&_data_addr, rw_end, MMU_WRITE, "data"); // 含 bss、early_rw
 
     // 可用部分按页对齐
     // TODO 可以在这里创建 kernel heap
@@ -131,8 +134,19 @@ INIT_TEXT void mem_init() {
     }
     g_idmap.addr = DIRECT_MAP_ADDR;
     g_idmap.end = DIRECT_MAP_ADDR + pa_end;
+    g_idmap.pa = 0;
+    g_idmap.attrs = MMU_WRITE;
     g_idmap.desc = "idmap";
     vmspace_insert(&g_kernel_space, &g_idmap);
+
+    // 创建内核页表，根据 vmspace 添加映射
+    mmu_init();
+    uint64_t tbl = mmu_kernel_table();
+    for (dlnode_t *i = g_kernel_space.head.next; i != &g_kernel_space.head; i = i->next) {
+        vmrange_t *rng = containerof(i, vmrange_t, dl);
+        size_t va_end = (rng->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+        mmu_map(tbl, rng->addr, va_end, rng->pa, rng->attrs);
+    }
 
     // vmspace_show(&g_kernel_space);
 }
