@@ -36,7 +36,7 @@ pmrange_t *pmrange_at_addr(size_t pa) {
 
 // 为 mem_block 预留空间
 INIT_TEXT void pmranges_alloc(int n) {
-    ASSERT(NULL != g_ranges);
+    ASSERT(NULL == g_ranges);
 
     g_range_max = n;
     g_range_num = 0;

@@ -15,7 +15,6 @@
 #include <devices/acpi_madt.h>
 
 #include <generic/cpufeatures.h>
-#include <generic/smp.h>
 #include <generic/rw.h>
 #include <generic/gdt_idt_tss.h>
 
@@ -25,6 +24,7 @@
 
 #include <arch_int/int_init.h>
 #include <arch_int/i8259.h>
+#include <arch_int/smp.h>
 
 // #include <memory/page.h>
 

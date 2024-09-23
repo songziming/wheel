@@ -28,7 +28,10 @@ typedef struct linemap {
 } linemap_t;
 
 // 指令行号查找表，按地址范围组成链表
-static dlnode_t g_map_head;
+static dlnode_t g_map_head = {
+    .prev = &g_map_head,
+    .next = &g_map_head
+};
 
 
 static INIT_TEXT linemap_t *linemap_by_name(const char *name) {

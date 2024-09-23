@@ -59,13 +59,67 @@
 
 
 
-static INIT_BSS int       g_ioapic_max;
-static CONST    int       g_ioapic_num;
-static CONST    ioapic_t *g_ioapics    = NULL;
+
+static CONST int       g_ioapic_num = 0;
+static CONST ioapic_t *g_ioapics = NULL;
+
+static CONST uint8_t   g_irq_max = 0;
+static CONST uint32_t  g_gsi_max = 0;
+
+static CONST uint32_t *g_irq_to_gsi = NULL;
+static CONST uint8_t  *g_gsi_to_irq = NULL;
+static CONST uint16_t *g_gsi_flags  = NULL;
 
 
 
+//------------------------------------------------------------------------------
+// 初始化，解析 madt
+//------------------------------------------------------------------------------
+
+INIT_TEXT void ioapic_alloc(int n, uint8_t irq_max, uint32_t gsi_max) {
+    g_ioapic_num = n;
+    g_irq_max = irq_max;
+    g_gsi_max = gsi_max;
+
+    g_ioapics = early_alloc_ro(n * sizeof(ioapic_t));
+    g_irq_to_gsi = early_alloc_ro((irq_max + 1) * sizeof(uint32_t));
+    g_gsi_to_irq = early_alloc_ro((gsi_max + 1) * sizeof(uint8_t));
+    g_gsi_flags  = early_alloc_ro((gsi_max + 1) * sizeof(uint16_t));
+
+    // 默认情况下，8259 IRQ 0~15 与 GSI 0~15 对应，边沿触发
+    for (uint8_t i = 0; i < irq_max; ++i) {
+        g_irq_to_gsi[i] = i;
+    }
+    for (uint32_t i = 0; i < gsi_max; ++i) {
+        g_gsi_to_irq[i] = i;
+        g_gsi_flags[i] = TRIGMODE_EDGE;
+    }
+}
+
+INIT_TEXT void ioapic_parse(int i, madt_ioapic_t *tbl) {
+    ASSERT(g_ioapic_num > 0);
+    ASSERT(i >= 0);
+    ASSERT(i < g_ioapic_num);
+
+    g_ioapics[i].apic_id  = tbl->id;
+    g_ioapics[i].gsi_base = tbl->gsi_base;
+    g_ioapics[i].address  = tbl->address;
+}
+
+INIT_TEXT void override_int(madt_int_override_t *tbl) {
+    ASSERT(g_irq_max > 0);
+    ASSERT(g_gsi_max > 0);
+
+    g_irq_to_gsi[tbl->source] = tbl->gsi;
+    g_gsi_to_irq[tbl->gsi] = tbl->source;
+    g_gsi_flags[tbl->gsi] = tbl->inti_flags;
+}
+
+
+
+//------------------------------------------------------------------------------
 // 寄存器读写，base 是物理地址
+//------------------------------------------------------------------------------
 
 static uint32_t io_apic_read(size_t base, uint32_t reg) {
     *(volatile uint32_t *)(base + DIRECT_MAP_ADDR + IO_REG_SEL) = reg;
@@ -135,18 +189,18 @@ void io_apic_unmask_gsi(uint32_t gsi) {
 }
 
 
-//------------------------------------------------------------------------------
-// 初始化函数，由 arch_smp 调用
-//------------------------------------------------------------------------------
+// //------------------------------------------------------------------------------
+// // 初始化函数，由 arch_smp 调用
+// //------------------------------------------------------------------------------
 
-INIT_TEXT void ioapics_alloc(int n) {
-    ASSERT(NULL == g_ioapics);
+// INIT_TEXT void ioapics_alloc(int n) {
+//     ASSERT(NULL == g_ioapics);
 
-    g_ioapic_max = n;
-    g_ioapic_num = 0;
-    g_ioapics = early_alloc_ro(n * sizeof(ioapic_t));
-}
+//     g_ioapic_max = n;
+//     g_ioapic_num = 0;
+//     g_ioapics = early_alloc_ro(n * sizeof(ioapic_t));
+// }
 
-INIT_TEXT void ioapic_add_madt() {
-    // TODO 传入 madt::io_apic 条目，解析内容
-}
+// INIT_TEXT void ioapic_add_madt() {
+//     // TODO 传入 madt::io_apic 条目，解析内容
+// }
