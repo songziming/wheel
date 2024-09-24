@@ -1,16 +1,11 @@
-#include <common.h>
+// #include <common.h>
+#include "sched.h"
 #include <arch_intf.h>
 #include <library/dllist.h>
 #include <library/string.h>
 #include <library/debug.h>
 
 
-// 代表一个线程
-typedef struct task {
-    int         priority;   // 最大取值 31，可以换成 bitfield
-    dlnode_t    q_node; // 就绪队列/阻塞队列节点
-    const char *name;
-} task_t;
 
 // 按优先级排序的有序队列，可用于就绪队列和阻塞队列
 typedef struct priority_q {

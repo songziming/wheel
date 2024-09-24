@@ -1,7 +1,6 @@
 #ifndef IOAPIC_H
 #define IOAPIC_H
 
-#include <common.h>
 #include <devices/acpi_madt.h>
 
 typedef struct ioapic {
@@ -15,6 +14,7 @@ typedef struct ioapic {
 
 void ioapic_mask_gsi(uint32_t gsi);
 void ioapic_unmask_gsi(uint32_t gsi);
+void ioapic_send_eoi(int vec);
 
 INIT_TEXT void ioapic_alloc(int n, uint8_t irq_max, uint32_t gsi_max);
 INIT_TEXT void ioapic_parse(int i, madt_ioapic_t *tbl);

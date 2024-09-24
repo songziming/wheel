@@ -1,6 +1,7 @@
 #include "loapic.h"
 #include <arch_intf.h>
 #include <arch_impl.h>
+#include <arch_int.h>
 #include <generic/rw.h>
 #include <generic/cpufeatures.h>
 #include <memory/early_alloc.h>
@@ -19,19 +20,15 @@ static CONST uint32_t (*g_read)     (uint8_t reg)               = NULL;
 static CONST void     (*g_write)    (uint8_t reg, uint32_t val) = NULL;
 static CONST void     (*g_write_icr)(uint32_t id, uint32_t lo)  = NULL;
 
-
 static CONST size_t    g_loapic_addr;   // 虚拟地址
 static CONST int       g_loapic_num = 0;
 static CONST loapic_t *g_loapics = NULL;
 
 static CONST uint32_t  g_max_apicid = 0;
+// static CONST uint16_t  g_max_cluster = 0;
+// static CONST uint16_t  g_max_logical = 0;
 
-
-// 实现 arch 接口函数
-inline int cpu_count() {
-    ASSERT(0 != g_loapic_num);
-    return g_loapic_num;
-}
+static CONST uint32_t g_timer_freq = 0; // 一秒对应多少周期
 
 
 //------------------------------------------------------------------------------
@@ -46,7 +43,7 @@ inline int cpu_count() {
 // REG_DFR 不能在 x2APIC 模式下使用
 // REG_SELF_IPI 只能在 x2APIC 模式下使用
 
-enum reg {
+enum loapic_reg {
     REG_ID          = 0x02, // local APIC id
     REG_VER         = 0x03, // local APIC version
     REG_TPR         = 0x08, // task priority
@@ -163,6 +160,24 @@ static void x2_write_icr(uint32_t id, uint32_t lo) {
 
 
 //------------------------------------------------------------------------------
+// 中断响应函数
+//------------------------------------------------------------------------------
+
+static void on_spurious(int vec UNUSED, regs_t *f UNUSED) {
+}
+
+static void on_timer(int vec UNUSED, regs_t *f UNUSED) {
+    g_write(REG_EOI, 0);
+    log("*");
+    // tick_advance();
+}
+
+static void on_error(int vec UNUSED, regs_t *f UNUSED) {
+    log("APIC error\n");
+}
+
+
+//------------------------------------------------------------------------------
 // 初始化
 //------------------------------------------------------------------------------
 
@@ -203,7 +218,7 @@ INIT_TEXT void loapic_parse_x2(int i, madt_lox2apic_t *tbl) {
 }
 
 // 检查 Local APIC ID，判断 IO APIC 仅使用 8-bit LDR 是否表示所有的 CPU
-INIT_TEXT int needs_int_remap() {
+INIT_TEXT int need_int_remap() {
     if (0 == (CPU_FEATURE_X2APIC & g_cpu_features)) {
         return 0; // xAPIC 没有任何问题
     }
@@ -239,9 +254,9 @@ INIT_TEXT void loapic_init() {
             g_write_icr = x_write_icr;
         }
 
-        // set_int_handler(VEC_LOAPIC_TIMER, handle_timer);
-        // set_int_handler(VEC_LOAPIC_ERROR, handle_error);
-        // set_int_handler(VEC_LOAPIC_SPURIOUS, handle_spurious);
+        set_int_handler(VEC_LOAPIC_TIMER, on_timer);
+        set_int_handler(VEC_LOAPIC_ERROR, on_error);
+        set_int_handler(VEC_LOAPIC_SPURIOUS, on_spurious);
     }
 
     // 开启 local APIC，进入 xAPIC 模式
@@ -258,10 +273,79 @@ INIT_TEXT void loapic_init() {
     write_msr(IA32_APIC_BASE, msr_base);
 
     // 如果支持，则启用 x2APIC
-    // bochs bug，启用 x2APIC 后再次写入 base，LDR 才能生效
+    // bochs bug，两次写入 base 寄存器，LDR 才能生效
     if (CPU_FEATURE_X2APIC & g_cpu_features) {
         msr_base |= LOAPIC_MSR_EXTD;
         write_msr(IA32_APIC_BASE, msr_base);
         write_msr(IA32_APIC_BASE, msr_base);
     }
+
+    // 设置 DFR、LDR，根据 CPU 个数分类讨论
+    if (CPU_FEATURE_X2APIC & g_cpu_features) {
+        cpu_rwfence();
+        uint32_t ldr = g_read(REG_LDR);
+        lo->cluster_id = ldr >> 16;
+        lo->logical_id = ldr & 0xffff;
+
+        ASSERT(lo->cluster_id == (lo->apic_id >> 4));
+        ASSERT(lo->logical_id == (1 << (lo->apic_id & 15)));
+    } else if (g_loapic_num <= 8) {
+        // 正好每个 CPU 对应一个比特
+        lo->cluster_id = 0;
+        lo->logical_id = 1 << cpu_index();
+        g_write(REG_DFR, 0xffffffff); // flat model
+        g_write(REG_LDR, lo->logical_id << 24);
+    } else if (g_loapic_num <= 60) {
+        // 必须分组，每个组最多 4 个 CPU
+        lo->cluster_id = idx / 4;
+        lo->logical_id = idx % 4;
+        uint32_t ldr = (lo->cluster_id << 4) | lo->logical_id;
+        g_write(REG_DFR, 0x0fffffff); // cluster model
+        g_write(REG_LDR, ldr << 24);
+    } else {
+        // 还不够，只能让多个 CPU 使用相同的 Logical ID
+        log("fatal: too much processors!\n");
+        // emu_exit(1);
+    }
+
+    // 屏蔽中断号 0~31
+    g_write(REG_TPR, 16);
+
+    // 设置 LINT0、LINT1，参考 Intel MultiProcessor Spec 第 5.1 节
+    // LINT0 连接到 8259A，但连接到 8259A 的设备也连接到 IO APIC，可以不设置
+    // LINT1 连接到 NMI，我们只需要 BSP 能够处理 NMI
+
+    if (0 == idx) {
+        g_write(REG_LVT_LINT1, LOAPIC_LEVEL | LOAPIC_DM_NMI);
+    }
+    g_write(REG_LVT_ERROR, VEC_LOAPIC_ERROR);
+
+    // 设置 spurious interrupt，开启这个 Local APIC
+    g_write(REG_SVR, LOAPIC_SVR_ENABLE | VEC_LOAPIC_SPURIOUS);
+
+    // 将已有中断丢弃
+    g_write(REG_EOI, 0);
+}
+
+
+//------------------------------------------------------------------------------
+// 公开函数
+//------------------------------------------------------------------------------
+
+// 实现 arch 接口函数
+inline int cpu_count() {
+    ASSERT(0 != g_loapic_num);
+    return g_loapic_num;
+}
+
+void loapic_timer_set_oneshot(int n) {
+    g_write(REG_LVT_TIMER, LOAPIC_DM_FIXED | VEC_LOAPIC_TIMER | LOAPIC_ONESHOT);
+    g_write(REG_TIMER_DIV, 0x0b); // divide by 1
+    g_write(REG_TIMER_ICR, n);
+}
+
+void loapic_timer_set_periodic(int n) {
+    g_write(REG_LVT_TIMER, LOAPIC_DM_FIXED | VEC_LOAPIC_TIMER | LOAPIC_PERIODIC);
+    g_write(REG_TIMER_DIV, 0x0b); // divide by 1
+    g_write(REG_TIMER_ICR, n);
 }

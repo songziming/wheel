@@ -1,7 +1,6 @@
 #ifndef LOAPIC_H
 #define LOAPIC_H
 
-#include <common.h>
 #include <devices/acpi_madt.h>
 
 typedef struct loapic {
@@ -17,6 +16,10 @@ typedef struct loapic {
 INIT_TEXT void loapic_alloc(size_t base, int n);
 INIT_TEXT void loapic_parse(int i, madt_loapic_t *tbl);
 INIT_TEXT void loapic_parse_x2(int i, madt_lox2apic_t *tbl);
-INIT_TEXT int needs_int_remap();
+INIT_TEXT int need_int_remap();
+INIT_TEXT void loapic_init();
+
+void loapic_timer_set_oneshot(int n);
+void loapic_timer_set_periodic(int n);
 
 #endif // LOAPIC_H

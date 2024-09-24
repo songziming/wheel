@@ -93,8 +93,12 @@ static void ioapic_write(size_t base, uint32_t reg, uint32_t data) {
 //     }
 // }
 
+//------------------------------------------------------------------------------
+// 公开函数
+//------------------------------------------------------------------------------
+
 // 寻找 GSI 所对应的 IO APIC
-ioapic_t *ioapic_for_gsi(uint32_t gsi) {
+static ioapic_t *ioapic_for_gsi(uint32_t gsi) {
     for (int i = 0; i < g_ioapic_num; ++i) {
         ioapic_t *io = &g_ioapics[i];
         if ((io->gsi_base <= gsi) && (gsi < io->gsi_base + io->red_num)) {
@@ -104,16 +108,16 @@ ioapic_t *ioapic_for_gsi(uint32_t gsi) {
     return NULL;
 }
 
-void ioapic_set_red(uint32_t gsi, uint32_t hi, uint32_t lo) {
-    ioapic_t *io = ioapic_for_gsi(gsi);
-    if (NULL == io) {
-        return;
-    }
+// void ioapic_set_red(uint32_t gsi, uint32_t hi, uint32_t lo) {
+//     ioapic_t *io = ioapic_for_gsi(gsi);
+//     if (NULL == io) {
+//         return;
+//     }
 
-    gsi -= io->gsi_base;
-    ioapic_write(io->address, IOAPIC_RED_H(gsi), hi);
-    ioapic_write(io->address, IOAPIC_RED_L(gsi), lo);
-}
+//     gsi -= io->gsi_base;
+//     ioapic_write(io->address, IOAPIC_RED_H(gsi), hi);
+//     ioapic_write(io->address, IOAPIC_RED_L(gsi), lo);
+// }
 
 void ioapic_mask_gsi(uint32_t gsi) {
     ioapic_t *io = ioapic_for_gsi(gsi);

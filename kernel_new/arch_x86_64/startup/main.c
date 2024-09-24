@@ -3,6 +3,7 @@
 #include <library/symbols.h>
 #include <memory/pmlayout.h>
 #include <memory/early_alloc.h>
+#include <proc/sched.h>
 
 #include "multiboot1.h"
 #include "multiboot2.h"
@@ -10,7 +11,6 @@
 #include <devices/serial.h>
 #include <devices/console.h>
 #include <devices/framebuf.h>
-// #include <devices/acpi.h>
 #include <devices/acpi_madt.h>
 
 #include <generic/rw.h>
@@ -21,10 +21,11 @@
 #include <memory/percpu.h>
 #include <memory/mmu.h>
 
-#include <arch_int/int_init.h>
-#include <arch_int/i8259.h>
-#include <arch_int/ioapic.h>
-#include <arch_int/loapic.h>
+#include <apic/apic_init.h>
+#include <apic/i8259.h>
+#include <apic/ioapic.h>
+#include <apic/loapic.h>
+#include <arch_int.h>
 
 
 static INIT_DATA size_t g_rsdp = 0;
@@ -219,7 +220,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // TODO 检查 Acpi::DMAR，判断是否需要 interrupt remapping
     // TODO 检查 Acpi::SRAT，获取 numa 信息（个人电脑一般不需要）
 
-    if (needs_int_remap()) {
+    if (need_int_remap()) {
         log("APIC ID not representable using 8-bit LDR, needs remapping\n");
     }
 
@@ -248,21 +249,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // 中断控制器初始化
     i8259_disable();
     ioapic_init_all();
+    loapic_init();
 
-    // validate_pages();
-    // size_t p1 = page_block_alloc(2, PT_KERNEL_STACK);
-    // size_t p2 = page_block_alloc(1, PT_KERNEL_STACK);
-    // size_t p3 = page_block_alloc(0, PT_KERNEL_STACK);
-    // log("got two blocks %zx, %zx, %zx\n", p1, p2, p3);
-    // validate_pages();
-    // page_block_free(p1);
-    // page_block_free(p2);
-    // page_block_free(p3);
-    // validate_pages();
-
-
-    // __asm__ volatile("sti");
-    // __asm__ volatile("int $0x80");
 
     // 使用新的内核页表，可以捕获内存访问错误
     write_cr3(mmu_kernel_table());
@@ -274,6 +262,16 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // cpu_features_show(); // 打印 cpuinfo
 
     log("initialization done\n");
+
+
+    // 配置时钟
+    loapic_timer_set_periodic(0x2000000);
+
+    // 开启中断，需要准备 TCB，ISR 需要保存上下文
+    static task_t dummy;
+    THISCPU_SET(g_tid_prev, &dummy);
+    THISCPU_SET(g_tid_next, &dummy);
+    __asm__ volatile("sti");
 
 end:
     while (1) {}
