@@ -19,6 +19,21 @@
 // 但是 LDR 到底是多少 bit？如果是 8-bit，则取值可能冲突；如果 32-bit，怎么与 RED 比较？
 
 
+static CONST int       g_ioapic_num = 0;
+static CONST ioapic_t *g_ioapics = NULL;
+
+static CONST uint8_t   g_irq_max = 0;
+static CONST uint32_t  g_gsi_max = 0;
+
+static CONST uint32_t *g_irq_to_gsi = NULL;
+static CONST uint8_t  *g_gsi_to_irq = NULL;
+static CONST uint16_t *g_gsi_flags  = NULL;
+
+
+//------------------------------------------------------------------------------
+// 寄存器定义
+//------------------------------------------------------------------------------
+
 // IO APIC 内存映射寄存器
 #define IO_REG_SEL      0x00
 #define IO_REG_WIN      0x10
@@ -58,22 +73,85 @@
 #define IOAPIC_VEC_MASK 0x000000ff
 
 
+//------------------------------------------------------------------------------
+// 寄存器读写，base 是物理地址
+//------------------------------------------------------------------------------
 
+static uint32_t ioapic_read(size_t base, uint32_t reg) {
+    *(volatile uint32_t *)(base + DIRECT_MAP_ADDR + IO_REG_SEL) = reg;
+    return *(volatile uint32_t *)(base + DIRECT_MAP_ADDR + IO_REG_WIN);
+}
 
-static CONST int       g_ioapic_num = 0;
-static CONST ioapic_t *g_ioapics = NULL;
+static void ioapic_write(size_t base, uint32_t reg, uint32_t data) {
+    *(volatile uint32_t *)(base + DIRECT_MAP_ADDR + IO_REG_SEL) = reg;
+    *(volatile uint32_t *)(base + DIRECT_MAP_ADDR + IO_REG_WIN) = data;
+}
 
-static CONST uint8_t   g_irq_max = 0;
-static CONST uint32_t  g_gsi_max = 0;
+// void ioapic_send_eoi(ioapic_t *io, uint8_t vec) {
+//     if (io->ver >= 0x20) {
+//         *(volatile uint32_t *)(io->address + DIRECT_MAP_ADDR + IO_REG_EOI) = vec;
+//     }
+// }
 
-static CONST uint32_t *g_irq_to_gsi = NULL;
-static CONST uint8_t  *g_gsi_to_irq = NULL;
-static CONST uint16_t *g_gsi_flags  = NULL;
+// 寻找 GSI 所对应的 IO APIC
+ioapic_t *ioapic_for_gsi(uint32_t gsi) {
+    for (int i = 0; i < g_ioapic_num; ++i) {
+        ioapic_t *io = &g_ioapics[i];
+        if ((io->gsi_base <= gsi) && (gsi < io->gsi_base + io->red_num)) {
+            return io;
+        }
+    }
+    return NULL;
+}
 
+void ioapic_set_red(uint32_t gsi, uint32_t hi, uint32_t lo) {
+    ioapic_t *io = ioapic_for_gsi(gsi);
+    if (NULL == io) {
+        return;
+    }
+
+    gsi -= io->gsi_base;
+    ioapic_write(io->address, IOAPIC_RED_H(gsi), hi);
+    ioapic_write(io->address, IOAPIC_RED_L(gsi), lo);
+}
+
+void ioapic_mask_gsi(uint32_t gsi) {
+    ioapic_t *io = ioapic_for_gsi(gsi);
+    if (NULL == io) {
+        return;
+    }
+
+    gsi -= io->gsi_base;
+    uint32_t red_lo = ioapic_read(io->address, IOAPIC_RED_L(gsi));
+    red_lo |= IOAPIC_INT_MASK;
+    ioapic_write(io->address, IOAPIC_RED_L(gsi), red_lo);
+}
+
+void ioapic_unmask_gsi(uint32_t gsi) {
+    ioapic_t *io = ioapic_for_gsi(gsi);
+    if (NULL == io) {
+        return;
+    }
+
+    gsi -= io->gsi_base;
+    uint32_t red_lo = ioapic_read(io->address, IOAPIC_RED_L(gsi));
+    red_lo &= ~IOAPIC_INT_MASK;
+    ioapic_write(io->address, IOAPIC_RED_L(gsi), red_lo);
+}
+
+// EOI 用来清除 Remote_IRR，使用重定位条目中的向量号进行匹配
+void ioapic_send_eoi(int vec) {
+    ASSERT(vec >= VEC_GSI_BASE);
+
+    ioapic_t *io = ioapic_for_gsi(vec - VEC_GSI_BASE);
+    if (io && (io->ver >= 0x20)) {
+        *(volatile uint32_t *)(io->address + DIRECT_MAP_ADDR + IO_REG_EOI) = vec;
+    }
+}
 
 
 //------------------------------------------------------------------------------
-// 初始化，解析 madt
+// 初始化
 //------------------------------------------------------------------------------
 
 INIT_TEXT void ioapic_alloc(int n, uint8_t irq_max, uint32_t gsi_max) {
@@ -115,92 +193,78 @@ INIT_TEXT void override_int(madt_int_override_t *tbl) {
     g_gsi_flags[tbl->gsi] = tbl->inti_flags;
 }
 
-
-
-//------------------------------------------------------------------------------
-// 寄存器读写，base 是物理地址
-//------------------------------------------------------------------------------
-
-static uint32_t io_apic_read(size_t base, uint32_t reg) {
-    *(volatile uint32_t *)(base + DIRECT_MAP_ADDR + IO_REG_SEL) = reg;
-    return *(volatile uint32_t *)(base + DIRECT_MAP_ADDR + IO_REG_WIN);
+INIT_TEXT int irq_to_gsi(int irq) {
+    if (irq < g_irq_max) {
+        return g_irq_to_gsi[irq];
+    }
+    return irq;
 }
 
-static void io_apic_write(size_t base, uint32_t reg, uint32_t data) {
-    *(volatile uint32_t *)(base + DIRECT_MAP_ADDR + IO_REG_SEL) = reg;
-    *(volatile uint32_t *)(base + DIRECT_MAP_ADDR + IO_REG_WIN) = data;
+// 获取触发模式，0 = level-trigger，1 = edge-trigger
+INIT_TEXT int gsi_trigmode(int gsi) {
+    if ((uint32_t)gsi <= g_gsi_max) {
+        switch (TRIGMODE_MASK & g_gsi_flags[gsi]) {
+        case TRIGMODE_EDGE:  return 1;  // edge
+        case TRIGMODE_LEVEL: return 0;  // level
+        default:             return 1;  // ISA 默认，edge
+        }
+    }
+    return 0; // TODO 默认触发模式如何确定？
 }
 
+INIT_TEXT int gsi_polarity(int gsi) {
+    if ((uint32_t)gsi < g_gsi_max) {
+        switch (POLARITY_MASK & g_gsi_flags[gsi]) {
+        case POLARITY_HIGH: return 1;   // high
+        case POLARITY_LOW:  return 0;   // low
+        default:            return 1;   // ISA 默认，high
+        }
+    }
+    return 0; // TODO 默认极性如何确定？
+}
 
+static INIT_TEXT void ioapic_init(ioapic_t *io) {
+    uint32_t id = ioapic_read(io->address, IOAPIC_ID);
+    uint32_t ver = ioapic_read(io->address, IOAPIC_VER);
 
+    if (((id >> 24) & 0x0f) != io->apic_id) {
+        log("warning: IO APIC id %u different from MADT (%u)\n", id, io->apic_id);
+    }
 
-void io_apic_send_eoi(ioapic_t *io, uint8_t vec) {
-    if (io->ver >= 0x20) {
-        *(volatile uint32_t *)(io->address + DIRECT_MAP_ADDR + IO_REG_EOI) = vec;
+    io->ver = ver & 0xff;
+    io->red_num = ((ver >> 16) & 0xff) + 1;
+    if (ver & (1 << 15)) {
+        log("no Pin Assertion Register\n");
     }
 }
 
-
-// 寻找 GSI 所对应的 IO APIC
-ioapic_t *io_apic_for_gsi(uint32_t gsi) {
+// 初始化所有的 IO APIC，默认禁用所有硬件中断，按需开启
+INIT_TEXT void ioapic_init_all() {
     for (int i = 0; i < g_ioapic_num; ++i) {
         ioapic_t *io = &g_ioapics[i];
-        if ((io->gsi_base <= gsi) && (gsi < io->gsi_base + io->red_num)) {
-            return io;
+        ioapic_init(io);
+
+        // 前面 16 个中断来自 ISA，以 logical 模式广播发送给所有 CPU
+        int ent = 0;
+        for (; (io->gsi_base + ent < 16) && (ent < io->red_num); ++ent) {
+            uint32_t lo = IOAPIC_DM_LOWEST | IOAPIC_LOGICAL;
+            lo |= gsi_trigmode(ent) ? IOAPIC_EDGE : IOAPIC_LEVEL;
+            lo |= gsi_polarity(ent) ? IOAPIC_HIGH : IOAPIC_LOW;
+            lo |= (ent + VEC_GSI_BASE) & IOAPIC_VEC_MASK;
+            lo |= IOAPIC_INT_MASK;
+            // ioapic_write(io->address, IOAPIC_RED_H(ent), 0x01000000); // 固定发送给 CPU0
+            // ioapic_write(io->address, IOAPIC_RED_H(ent), 0xfe000000); // 发送给 CPU0 之外的任意 CPU
+            ioapic_write(io->address, IOAPIC_RED_H(ent), 0xff000000); // 发送给所有 CPU
+            ioapic_write(io->address, IOAPIC_RED_L(ent), lo);
         }
-        // gsi -= io->red_num;
+
+        // IRQ 之后的硬件中断，level-triggered，active low
+        for (; ent < io->red_num; ++ent) {
+            uint32_t lo = IOAPIC_DM_LOWEST | IOAPIC_LOGICAL | IOAPIC_LEVEL | IOAPIC_LOW;
+            lo |= (io->gsi_base + ent + VEC_GSI_BASE) & IOAPIC_VEC_MASK;
+            lo |= IOAPIC_INT_MASK;
+            ioapic_write(io->address, IOAPIC_RED_H(ent), 0xff000000);
+            ioapic_write(io->address, IOAPIC_RED_L(ent), lo);
+        }
     }
-    return NULL;
 }
-
-void io_apic_set_red(uint32_t gsi, uint32_t hi, uint32_t lo) {
-    ioapic_t *io = io_apic_for_gsi(gsi);
-    if (NULL == io) {
-        return;
-    }
-
-    gsi -= io->gsi_base;
-    io_apic_write(io->address, IOAPIC_RED_H(gsi), hi);
-    io_apic_write(io->address, IOAPIC_RED_L(gsi), lo);
-}
-
-void io_apic_mask_gsi(uint32_t gsi) {
-    ioapic_t *io = io_apic_for_gsi(gsi);
-    if (NULL == io) {
-        return;
-    }
-
-    gsi -= io->gsi_base;
-    uint32_t red_lo = io_apic_read(io->address, IOAPIC_RED_L(gsi));
-    red_lo |= IOAPIC_INT_MASK;
-    io_apic_write(io->address, IOAPIC_RED_L(gsi), red_lo);
-}
-
-void io_apic_unmask_gsi(uint32_t gsi) {
-    ioapic_t *io = io_apic_for_gsi(gsi);
-    if (NULL == io) {
-        return;
-    }
-
-    gsi -= io->gsi_base;
-    uint32_t red_lo = io_apic_read(io->address, IOAPIC_RED_L(gsi));
-    red_lo &= ~IOAPIC_INT_MASK;
-    io_apic_write(io->address, IOAPIC_RED_L(gsi), red_lo);
-}
-
-
-// //------------------------------------------------------------------------------
-// // 初始化函数，由 arch_smp 调用
-// //------------------------------------------------------------------------------
-
-// INIT_TEXT void ioapics_alloc(int n) {
-//     ASSERT(NULL == g_ioapics);
-
-//     g_ioapic_max = n;
-//     g_ioapic_num = 0;
-//     g_ioapics = early_alloc_ro(n * sizeof(ioapic_t));
-// }
-
-// INIT_TEXT void ioapic_add_madt() {
-//     // TODO 传入 madt::io_apic 条目，解析内容
-// }

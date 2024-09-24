@@ -17,6 +17,6 @@ typedef struct loapic {
 INIT_TEXT void loapic_alloc(size_t base, int n);
 INIT_TEXT void loapic_parse(int i, madt_loapic_t *tbl);
 INIT_TEXT void loapic_parse_x2(int i, madt_lox2apic_t *tbl);
-
+INIT_TEXT int needs_int_remap();
 
 #endif // LOAPIC_H

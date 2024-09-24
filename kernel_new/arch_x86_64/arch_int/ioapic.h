@@ -13,8 +13,12 @@ typedef struct ioapic {
     int      red_num;   // 重定位条目数量
 } ioapic_t;
 
+void ioapic_mask_gsi(uint32_t gsi);
+void ioapic_unmask_gsi(uint32_t gsi);
+
 INIT_TEXT void ioapic_alloc(int n, uint8_t irq_max, uint32_t gsi_max);
 INIT_TEXT void ioapic_parse(int i, madt_ioapic_t *tbl);
 INIT_TEXT void override_int(madt_int_override_t *tbl);
+INIT_TEXT void ioapic_init_all();
 
 #endif // IOAPIC_H

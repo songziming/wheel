@@ -10,12 +10,11 @@
 #include <devices/serial.h>
 #include <devices/console.h>
 #include <devices/framebuf.h>
-
-#include <devices/acpi.h>
+// #include <devices/acpi.h>
 #include <devices/acpi_madt.h>
 
-#include <generic/cpufeatures.h>
 #include <generic/rw.h>
+#include <generic/cpufeatures.h>
 #include <generic/gdt_idt_tss.h>
 
 #include <memory/mem_init.h>
@@ -24,9 +23,8 @@
 
 #include <arch_int/int_init.h>
 #include <arch_int/i8259.h>
-#include <arch_int/smp.h>
-
-// #include <memory/page.h>
+#include <arch_int/ioapic.h>
+#include <arch_int/loapic.h>
 
 
 static INIT_DATA size_t g_rsdp = 0;
@@ -84,7 +82,7 @@ static INIT_TEXT void mb2_parse_mmap(void *tag) {
 // 解析引导器信息
 //------------------------------------------------------------------------------
 
-static INIT_TEXT void mb1_init(uint32_t ebx UNUSED) {
+static INIT_TEXT void mb1_init(uint32_t ebx) {
     mb1_info_t *info = (mb1_info_t *)(size_t)ebx;
 
     if (MB1_INFO_MEM_MAP & info->flags) {
@@ -92,11 +90,9 @@ static INIT_TEXT void mb1_init(uint32_t ebx UNUSED) {
     }
 
     if (MB1_INFO_ELF_SHDR & info->flags) {
-        // log("MB1 elf symbols\n");
-        // parse_kernel_symtab(
-        // (void *)(size_t)info->elf.addr, info->elf.size, info->elf.num);
         mb1_elf_sec_tbl_t *elf = &info->elf;
-        parse_kernel_symtab((void *)(size_t)elf->addr, elf->size, elf->num, elf->shndx);
+        void *tab = (void *)(size_t)elf->addr;
+        parse_kernel_symtab(tab, elf->size, elf->num, elf->shndx);
     }
 
     if (MB1_INFO_FRAMEBUFFER_INFO & info->flags) {
@@ -113,7 +109,7 @@ static INIT_TEXT void mb1_init(uint32_t ebx UNUSED) {
     }
 }
 
-static INIT_TEXT void mb2_init(uint32_t ebx UNUSED) {
+static INIT_TEXT void mb2_init(uint32_t ebx) {
     size_t info = (size_t)ebx;
     uint32_t total_size = *(uint32_t *)info;
 
@@ -123,8 +119,8 @@ static INIT_TEXT void mb2_init(uint32_t ebx UNUSED) {
         offset += (tag->size + 7) & ~7;
 
         switch (tag->type) {
-        // case MB2_TAG_TYPE_END:
-        //     return;
+        case MB2_TAG_TYPE_END:
+            return;
         // case MB2_TAG_TYPE_CMDLINE:
         // case MB2_TAG_TYPE_BOOT_LOADER_NAME:
         //     continue;
@@ -223,6 +219,10 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // TODO 检查 Acpi::DMAR，判断是否需要 interrupt remapping
     // TODO 检查 Acpi::SRAT，获取 numa 信息（个人电脑一般不需要）
 
+    if (needs_int_remap()) {
+        log("APIC ID not representable using 8-bit LDR, needs remapping\n");
+    }
+
     // 关键数据已经备份，可以放开 early-alloc 长度限制
     early_rw_unlock();
 
@@ -242,11 +242,12 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // TSS 依赖 thiscpu
     tss_init_load();
 
-    // 中断异常处理机制
+    // 中断异常处理机制初始化
     int_init();
 
-    // 中断控制器
+    // 中断控制器初始化
     i8259_disable();
+    ioapic_init_all();
 
     // validate_pages();
     // size_t p1 = page_block_alloc(2, PT_KERNEL_STACK);
