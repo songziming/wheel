@@ -6,6 +6,7 @@
 #include <generic/cpufeatures.h>
 #include <memory/early_alloc.h>
 #include <library/debug.h>
+#include <proc/tick.h>
 
 
 // APIC 的作用不仅是中断处理，还可以描述 CPU 拓扑（调度）、定时、多核
@@ -25,10 +26,9 @@ static CONST int       g_loapic_num = 0;
 static CONST loapic_t *g_loapics = NULL;
 
 static CONST uint32_t  g_max_apicid = 0;
-// static CONST uint16_t  g_max_cluster = 0;
-// static CONST uint16_t  g_max_logical = 0;
 
-static CONST uint32_t g_timer_freq = 0; // 一秒对应多少周期
+static CONST uint64_t g_timer_freq = 0; // 一秒对应多少周期
+static CONST uint64_t g_tsc_freq = 0;   // time stamp counter 频率
 
 
 //------------------------------------------------------------------------------
@@ -169,7 +169,7 @@ static void on_spurious(int vec UNUSED, regs_t *f UNUSED) {
 static void on_timer(int vec UNUSED, regs_t *f UNUSED) {
     g_write(REG_EOI, 0);
     log("*");
-    // tick_advance();
+    tick_advance();
 }
 
 static void on_error(int vec UNUSED, regs_t *f UNUSED) {
@@ -338,6 +338,26 @@ inline int cpu_count() {
     return g_loapic_num;
 }
 
+// 向目标处理器发送 INIT-IPI
+INIT_TEXT void local_apic_send_init(int cpu) {
+    ASSERT(cpu >= 0);
+    ASSERT(cpu < cpu_count());
+
+    uint32_t lo = LOAPIC_DM_INIT | LOAPIC_EDGE | LOAPIC_ASSERT;
+    g_write_icr(g_loapics[cpu].apic_id, lo);
+}
+
+// 向目标处理器发送 startup-IPI
+INIT_TEXT void local_apic_send_sipi(int cpu, int vec) {
+    ASSERT(cpu >= 0);
+    ASSERT(cpu < cpu_count());
+    ASSERT((vec >= 0) && (vec < 256));
+    ASSERT((vec < 0xa0) || (vec > 0xbf)); // 向量号 a0~bf 非法
+
+    uint32_t lo = (vec & 0xff) | LOAPIC_DM_STARTUP | LOAPIC_EDGE | LOAPIC_ASSERT;
+    g_write_icr(g_loapics[cpu].apic_id, lo);
+}
+
 void loapic_timer_set_oneshot(int n) {
     g_write(REG_LVT_TIMER, LOAPIC_DM_FIXED | VEC_LOAPIC_TIMER | LOAPIC_ONESHOT);
     g_write(REG_TIMER_DIV, 0x0b); // divide by 1
@@ -348,4 +368,108 @@ void loapic_timer_set_periodic(int n) {
     g_write(REG_LVT_TIMER, LOAPIC_DM_FIXED | VEC_LOAPIC_TIMER | LOAPIC_PERIODIC);
     g_write(REG_TIMER_DIV, 0x0b); // divide by 1
     g_write(REG_TIMER_ICR, n);
+}
+
+void loapic_timer_busywait(int us) {
+    ASSERT(0 != g_timer_freq);
+
+    uint32_t start  = g_read(REG_TIMER_CCR);
+    uint32_t period = g_read(REG_TIMER_ICR);
+    uint64_t delay  = (g_timer_freq * us + 500000) / 1000000;
+
+    // 如果等待时间大于一个完整周期
+    while (delay > period) {
+        while (g_read(REG_TIMER_CCR) <= start) {
+            cpu_pause();
+        }
+        while (g_read(REG_TIMER_CCR) >= start) {
+            cpu_pause();
+        }
+        delay -= period;
+    }
+
+    uint64_t end = start - delay;
+    if (delay > start) {
+        while (g_read(REG_TIMER_CCR) <= start) {
+            cpu_pause();
+        }
+        end = start + period - delay;
+    }
+
+    while (g_read(REG_TIMER_CCR) >= end) {
+        cpu_pause();
+    }
+}
+
+
+//------------------------------------------------------------------------------
+// 使用 8254 mode 3 校准 local apic timer
+//------------------------------------------------------------------------------
+
+// 8254 标准主频为 105/88 MHz，使用 8254 计时 50ms
+// 统计这段时间前后 apic timer 计数器的取值，计算 timer 频率
+// 同时还计算了 tsc 速度（tsc 可能睿频，导致速度不准）
+
+// channel 2 可以通过软件设置输入，可以通过软件读取输出
+// 写端口 0x61 bit[0] 控制输入，读端口 0x61 bit[5] 获取输出
+#define PIT_CH2 0x42
+#define PIT_CMD 0x43
+
+INIT_TEXT void calibrate_timer() {
+    uint64_t start_ctr = 0;
+    uint64_t end_ctr   = 0;
+
+    uint64_t start_tsc = 0;
+    uint64_t end_tsc = 0;
+
+    // 首先确保 channel 2 处于禁用状态，输入低电平
+    out8(0x61, in8(0x61) & ~1);
+
+    // 将 apic timer 计数器设为最大值，divider=1
+    g_write(REG_TIMER_DIV, 0x0b);
+    g_write(REG_TIMER_ICR, 0xffffffff);
+
+    // 使用 channel 2 mode 3，reload value 设为 65534
+    // mode 3 表示输出方波，每个下降沿计数器减二（所以 reload value 为偶数）
+    out8(PIT_CMD, 0xb6); // 10_11_011_0
+    out8(PIT_CH2, 0xfe);
+    out8(PIT_CH2, 0xff);
+
+    // channel 2 输入信号设为高电平，从 65534 开始计数
+    // 读取 apic timer 计数器，作为开始值
+    out8(0x61, in8(0x61) | 1);
+    start_ctr = g_read(REG_TIMER_CCR);
+    start_tsc = read_tsc();
+
+    // 不断读取输出（使用 read-back 模式锁住 status，最高比特表示输出）
+    // 一旦输出变为 0 则退出循环，表示已经过了 32767 个周期（不足 50ms）
+    while (1) {
+        out8(PIT_CMD, 0xe8); // 11_10_100_0
+        if ((in8(PIT_CH2) & 0x80) != 0x80) {
+            break;
+        }
+    }
+
+    // 不断读取 channel 2 计数器，以及 apic timer 计数器，足够 50ms 则退出循环
+    // 50ms 即 1/20 秒，mode 3 每周期计数器减二，则 50ms 计数器减少 119318
+    while (1) {
+        out8(PIT_CMD, 0x80); // latch channel 2 count
+        end_ctr = g_read(REG_TIMER_CCR);
+        end_tsc = read_tsc();
+        uint8_t lo = in8(PIT_CH2);
+        uint8_t hi = in8(PIT_CH2);
+        int pit = ((int)hi << 8) | lo;
+        if (pit <= 2 * 65534 - 119318) {
+            break;
+        }
+    }
+
+    // 禁用 PIT channel 2
+    out8(0x61, in8(0x61) & ~1);
+
+    // TSC 频率可以保存下来，也许有用
+    g_timer_freq = (start_ctr - end_ctr) * 20;
+    g_tsc_freq = (end_tsc - start_tsc) * 20;
+    log("loapic timer freq %zd\n", g_timer_freq);
+    log("TSC freq %zd\n", g_tsc_freq);
 }

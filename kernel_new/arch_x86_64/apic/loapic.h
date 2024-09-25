@@ -19,7 +19,13 @@ INIT_TEXT void loapic_parse_x2(int i, madt_lox2apic_t *tbl);
 INIT_TEXT int need_int_remap();
 INIT_TEXT void loapic_init();
 
+INIT_TEXT void local_apic_send_init(int cpu);
+INIT_TEXT void local_apic_send_sipi(int cpu, int vec);
+
 void loapic_timer_set_oneshot(int n);
 void loapic_timer_set_periodic(int n);
+void loapic_timer_busywait(int us);
+
+INIT_TEXT void calibrate_timer();
 
 #endif // LOAPIC_H

@@ -30,6 +30,7 @@ static void on_exception(int vec, regs_t *f) {
 
 static void on_interrupt(int vec, regs_t *f) {
     log("[CPU%d] interrupt %d\n", cpu_index(), vec);
+    log("  rip=%lx rsp=%lx\n", f->rip, f->rsp);
     // cpu_halt();
 }
 

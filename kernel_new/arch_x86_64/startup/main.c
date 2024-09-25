@@ -4,6 +4,8 @@
 #include <memory/pmlayout.h>
 #include <memory/early_alloc.h>
 #include <proc/sched.h>
+#include <proc/tick.h>
+#include <proc/sched.h>
 
 #include "multiboot1.h"
 #include "multiboot2.h"
@@ -251,6 +253,12 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     ioapic_init_all();
     loapic_init();
 
+    // 系统时钟
+    calibrate_timer();
+    tick_init();
+
+    // 调度
+    sched_init();
 
     // 使用新的内核页表，可以捕获内存访问错误
     write_cr3(mmu_kernel_table());

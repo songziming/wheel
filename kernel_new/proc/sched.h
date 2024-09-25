@@ -15,4 +15,6 @@ typedef struct task {
 extern PCPU_BSS task_t *g_tid_prev;
 extern PCPU_BSS task_t *g_tid_next;
 
+INIT_TEXT void sched_init();
+
 #endif // SCHED_H

@@ -50,10 +50,9 @@
 
 #ifdef C_FILE
 
-// TODO 这些扩展不需要平台无关部分使用，完全可以用 void* 指代
-
 #include <stdint.h>
 
+// TODO 这些扩展不需要平台无关部分使用，完全可以用 void* 指代
 typedef struct regs {
     uint64_t r15;
     uint64_t r14;

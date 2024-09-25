@@ -1,9 +1,11 @@
 // #include <common.h>
 #include "sched.h"
 #include <arch_intf.h>
+#include <arch_impl.h>
 #include <library/dllist.h>
 #include <library/string.h>
 #include <library/debug.h>
+#include <library/spin.h>
 
 
 
@@ -11,6 +13,7 @@
 typedef struct priority_q {
     uint32_t    priorities; // 优先级mask
     dlnode_t   *heads[32];
+    spin_t      spin;
 } priority_q_t;
 
 
@@ -93,3 +96,26 @@ static int lowest_cpu() {
     return 0;
 }
 
+
+
+// 执行调度，在时钟中断里执行
+void sched_advance() {
+    ASSERT(cpu_int_depth());
+
+    priority_q_t *q = thiscpu_ptr(&g_ready_q);
+
+    // 锁住当前队列，防止 tid_next 改变
+}
+
+
+//------------------------------------------------------------------------------
+// 初始化
+//------------------------------------------------------------------------------
+
+INIT_TEXT void sched_init() {
+    for (int i = 0, N = cpu_count(); i < N; ++i) {
+        priority_q_t *q = percpu_ptr(i, &g_ready_q);
+        spin_init(&q->spin);
+        priority_q_init(q);
+    }
+}
