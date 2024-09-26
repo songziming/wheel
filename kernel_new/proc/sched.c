@@ -1,4 +1,3 @@
-// #include <common.h>
 #include "sched.h"
 #include <arch_intf.h>
 #include <arch_impl.h>
@@ -6,21 +5,22 @@
 #include <library/string.h>
 #include <library/debug.h>
 #include <library/spin.h>
+#include <memory/context.h>
 
 
 
 // 按优先级排序的有序队列，可用于就绪队列和阻塞队列
 typedef struct priority_q {
     uint32_t    priorities; // 优先级mask
-    dlnode_t   *heads[32];
+    dlnode_t   *heads[PRIORITY_NUM];
     spin_t      spin;
 } priority_q_t;
 
 
-PCPU_BSS priority_q_t g_ready_q;
+static PERCPU_BSS priority_q_t g_ready_q;
 
-PCPU_BSS task_t *g_tid_prev;
-PCPU_BSS task_t *g_tid_next;
+PERCPU_BSS task_t *g_tid_prev; // 正在运行的任务，只有中断可以更新这个字段
+PERCPU_BSS task_t *g_tid_next; // 即将运行的任务，中断返回时切换
 
 
 //------------------------------------------------------------------------------
@@ -88,15 +88,79 @@ static void priority_q_remove(priority_q_t *q, task_t *tid) {
     }
 }
 
-// 遍历每个 CPU 的就绪队列，找出优先级最低的 CPU
-static int lowest_cpu() {
-    for (int i = 0; i < cpu_count(); ++i) {
-        priority_q_t *q = percpu_ptr(i, &g_ready_q);
+// // 遍历每个 CPU 的就绪队列，找出优先级最低的 CPU
+// static int lowest_cpu() {
+//     for (int i = 0; i < cpu_count(); ++i) {
+//         priority_q_t *q = percpu_ptr(i, &g_ready_q);
+//     }
+//     return 0;
+// }
+
+
+
+//------------------------------------------------------------------------------
+// 任务管理
+//------------------------------------------------------------------------------
+
+void task_create(task_t *tid, uint8_t priority, int tick,
+        void *entry, void *arg1, void *arg2, void *arg3, void *arg4) {
+    ASSERT(NULL != tid);
+    ASSERT(priority < PRIORITY_NUM);
+
+    spin_init(&tid->spin);
+    tid->state = TASK_STOPPED; // 初始状态为暂停
+    tid->priority = priority;
+    tid->tick = tick;
+    tid->tick_reload = tick;
+
+    // 分配任务栈
+    void *stack = context_alloc(NULL, &tid->stack, TASK_STACK_RANK);
+    if (NULL == stack) {
+        log("failed to allocate stack space");
+        return;
     }
-    return 0;
+
+    arch_task_init(tid, (size_t)entry, arg1, arg2, arg3, arg4);
+}
+
+// 任务已经结束，在中断返回阶段执行此函数
+void task_post_delete(task_t *tid) {
+    //
 }
 
 
+
+// 停止当前正在运行的任务
+void sched_stop() {
+    priority_q_t *q = thiscpu_ptr(&g_ready_q);
+    task_t *tid = THISCPU_GET(g_tid_prev);
+
+    int key = irq_spin_take(&q->spin);
+
+    ASSERT(priority_q_contains(q, tid));
+
+    irq_spin_give(&q->spin, key);
+}
+
+
+// 将任务放进就绪队列，参与调度
+void sched_cont(task_t *tid) {
+    ASSERT(NULL != tid);
+
+    priority_q_t *q = thiscpu_ptr(&g_ready_q);
+    ASSERT(!priority_q_contains(q, tid));
+
+    int key = irq_spin_take(&q->spin);
+    priority_q_push(q, tid); // 放入队列
+    tid = priority_q_head(q); // 可能抢占
+    THISCPU_SET(g_tid_next, tid);
+    irq_spin_give(&q->spin, key);
+}
+
+
+//------------------------------------------------------------------------------
+// 核心调度逻辑
+//------------------------------------------------------------------------------
 
 // 执行调度，在时钟中断里执行
 void sched_advance() {
@@ -105,6 +169,16 @@ void sched_advance() {
     priority_q_t *q = thiscpu_ptr(&g_ready_q);
 
     // 锁住当前队列，防止 tid_next 改变
+    int key = irq_spin_take(&q->spin);
+
+    task_t *tid = THISCPU_GET(g_tid_next);
+    if (0 == --tid->tick) {
+        tid->tick = tid->tick_reload;
+        tid = containerof(tid->q_node.next, task_t, q_node);
+        THISCPU_SET(g_tid_next, tid);
+    }
+
+    irq_spin_give(&q->spin, key);
 }
 
 
@@ -112,10 +186,17 @@ void sched_advance() {
 // 初始化
 //------------------------------------------------------------------------------
 
+static INIT_BSS task_t g_dummy_task;
+
 INIT_TEXT void sched_init() {
+    g_dummy_task.priority = 31;
+
     for (int i = 0, N = cpu_count(); i < N; ++i) {
         priority_q_t *q = percpu_ptr(i, &g_ready_q);
         spin_init(&q->spin);
         priority_q_init(q);
+
+        *(task_t **)percpu_ptr(i, &g_tid_prev) = &g_dummy_task;
+        *(task_t **)percpu_ptr(i, &g_tid_next) = &g_dummy_task;
     }
 }

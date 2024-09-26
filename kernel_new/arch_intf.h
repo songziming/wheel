@@ -20,10 +20,13 @@ int cpu_int_depth();
 int cpu_int_lock();
 void cpu_int_unlock(int key);
 
+//------------------------------------------------------------------------------
+// 多核
+//------------------------------------------------------------------------------
+
 int cpu_count();
 int cpu_index();
 
-int is_pcpu_var(void *ptr);
 void *percpu_ptr(int idx, void *ptr);
 void *thiscpu_ptr(void *ptr);
 
@@ -44,5 +47,12 @@ void   mmu_delete_table(size_t tbl);
 size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs);
 void   mmu_map(size_t tbl, size_t va, size_t end, size_t pa, mmu_attr_t attrs);
 void   mmu_unmap(size_t tbl, size_t va, size_t end);
+
+//------------------------------------------------------------------------------
+
+typedef struct task task_t;
+
+void arch_task_init(task_t *tid, size_t entry, void *arg1, void *arg2, void *arg3, void *arg4);
+void arch_task_switch();
 
 #endif // ARCH_INTF_H

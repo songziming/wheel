@@ -35,7 +35,41 @@ void vmspace_insert(vmspace_t *space, vmrange_t *rng) {
     dl_insert_before(&rng->dl, node);
 }
 
-vmrange_t *vm_locate(vmspace_t *space, size_t addr) {
+// 在地址空间中寻找一段范围，页对齐，前后留出 guard page
+size_t vmspace_alloc(vmspace_t *space, vmrange_t *rng, size_t start, size_t end, size_t size) {
+    ASSERT(NULL != space);
+    ASSERT(NULL != rng);
+    ASSERT(!dl_contains(&space->head, &rng->dl));
+
+    rng->addr = (start + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    rng->end = rng->addr + size;
+    rng->pa = 0;    // 物理地址未分配
+
+    // 从前到后顺序遍历，遇到第一个满足大小要求的空间就跳出
+    for (dlnode_t *i = space->head.next; &space->head != i; i = i->next) {
+        vmrange_t *ref = containerof(i, vmrange_t, dl);
+        size_t rng_start = ref->addr & ~(PAGE_SIZE - 1);
+        size_t rng_end = (ref->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+        rng_start -= PAGE_SIZE; // 开头留出 guard page
+        rng_end += PAGE_SIZE;   // 结尾留出 guard page
+
+        if (rng->end <= rng_start) {
+            break;
+        }
+
+        rng->addr = rng_end;
+        rng->end = rng_end + size;
+    }
+
+    if (rng->end <= end) {
+        vmspace_insert(space, rng);
+        return rng->addr;
+    }
+
+    return 0;
+}
+
+vmrange_t *vmspace_locate(vmspace_t *space, size_t addr) {
     ASSERT(NULL != space);
 
     for (dlnode_t *i = space->head.next; &space->head != i; i = i->next) {
@@ -46,6 +80,15 @@ vmrange_t *vm_locate(vmspace_t *space, size_t addr) {
     }
 
     return NULL;
+}
+
+void vmspace_remove(vmspace_t *space, vmrange_t *rng) {
+    ASSERT(NULL != space);
+    ASSERT(NULL != rng);
+    ASSERT(dl_contains(&space->head, &rng->dl));
+
+    (void)space;
+    dl_remove(&rng->dl);
 }
 
 void vmspace_show(vmspace_t *space) {

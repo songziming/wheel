@@ -7,6 +7,7 @@
 #include <memory/page.h>
 #include <memory/early_alloc.h>
 #include <memory/vmspace.h>
+#include <memory/context.h>
 #include <library/string.h>
 #include <library/debug.h>
 
@@ -21,8 +22,8 @@ extern char _text_end;
 extern char _rodata_addr;
 extern char _data_addr;
 
-// 记录内核的虚拟地址空间布局
-vmspace_t g_kernel_space;
+// // 记录内核的虚拟地址空间布局
+// vmspace_t g_kernel_space;
 
 // 内核段
 static vmrange_t g_kernel_init;
@@ -42,7 +43,7 @@ INIT_TEXT void add_kernel_range(vmrange_t *rng, size_t addr, size_t end, mmu_att
     rng->pa = addr - KERNEL_TEXT_ADDR;
     rng->attrs = attrs;
     rng->desc = desc;
-    vmspace_insert(&g_kernel_space, rng);
+    vmspace_insert(&kernel_context()->space, rng);
 
     // 标记页描述符数组
     addr -= KERNEL_TEXT_ADDR;
@@ -75,7 +76,9 @@ INIT_TEXT void mem_init() {
     size_t rw_end = (size_t)early_alloc_rw(0);
 
     // 把内核地址空间布局记录下来
-    vmspace_init(&g_kernel_space);
+    context_t *kctx = kernel_context();
+    // vmspace_t *kspace = &kernel_context()->space;
+    vmspace_init(&kctx->space);
     add_kernel_range(&g_kernel_init, init_addr, (size_t)&_init_end, MMU_WRITE|MMU_EXEC, "init");
     add_kernel_range(&g_kernel_text, (size_t)&_text_addr, (size_t)&_text_end, MMU_EXEC, "text");
     add_kernel_range(&g_kernel_rodata, (size_t)&_rodata_addr, ro_end, MMU_NONE, "rodata"); // 含 early_ro
@@ -119,7 +122,7 @@ INIT_TEXT void mem_init() {
     }
 
     // 内核占据的内存分为许多 section，之间还有 guard pages，可以回收
-    for (dlnode_t *i = g_kernel_space.head.next; i != &g_kernel_space.head; i = i->next) {
+    for (dlnode_t *i = kctx->space.head.next; i != &kctx->space.head; i = i->next) {
         vmrange_t *prev = containerof(i->prev, vmrange_t, dl);
         vmrange_t *curr = containerof(i, vmrange_t, dl);
         size_t gap_addr = prev->end - KERNEL_TEXT_ADDR;
@@ -137,16 +140,15 @@ INIT_TEXT void mem_init() {
     g_idmap.pa = 0;
     g_idmap.attrs = MMU_WRITE;
     g_idmap.desc = "idmap";
-    vmspace_insert(&g_kernel_space, &g_idmap);
+    vmspace_insert(&kctx->space, &g_idmap);
 
     // 创建内核页表，根据 vmspace 添加映射
-    mmu_init();
-    uint64_t tbl = mmu_kernel_table();
-    for (dlnode_t *i = g_kernel_space.head.next; i != &g_kernel_space.head; i = i->next) {
+    kctx->table = mmu_init();
+    for (dlnode_t *i = kctx->space.head.next; i != &kctx->space.head; i = i->next) {
         vmrange_t *rng = containerof(i, vmrange_t, dl);
         size_t va_end = (rng->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-        mmu_map(tbl, rng->addr, va_end, rng->pa, rng->attrs);
+        mmu_map(kctx->table, rng->addr, va_end, rng->pa, rng->attrs);
     }
 
-    // vmspace_show(&g_kernel_space);
+    // vmspace_show(kspace);
 }

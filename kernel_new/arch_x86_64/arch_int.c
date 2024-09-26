@@ -9,8 +9,8 @@
 
 void *g_handlers[256];
 
-PCPU_DATA int   g_int_depth = 0;
-PCPU_DATA void *g_int_stack = NULL;
+PERCPU_DATA int   g_int_depth = 0;
+PERCPU_DATA void *g_int_stack = NULL;
 
 //------------------------------------------------------------------------------
 // default handler

@@ -40,7 +40,7 @@ typedef struct tbl_ptr {
 
 static CONST     uint64_t *g_gdt = NULL;
 static CONST     idt_ent_t g_idt[256];
-static PCPU_DATA tss_t     g_tss = {0};
+static PERCPU_DATA tss_t     g_tss = {0};
 
 
 // arch_entries.S

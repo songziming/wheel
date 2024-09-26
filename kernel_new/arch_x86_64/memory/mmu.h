@@ -3,8 +3,7 @@
 
 #include <common.h>
 
-INIT_TEXT void mmu_init();
-size_t mmu_kernel_table();
+INIT_TEXT size_t mmu_init();
 void mmu_walk(uint64_t tbl);
 
 #endif // MMU_H

@@ -23,7 +23,7 @@ INIT_TEXT void local_apic_send_init(int cpu);
 INIT_TEXT void local_apic_send_sipi(int cpu, int vec);
 
 void loapic_timer_set_oneshot(int n);
-void loapic_timer_set_periodic(int n);
+void loapic_timer_set_periodic(int freq);
 void loapic_timer_busywait(int us);
 
 INIT_TEXT void calibrate_timer();

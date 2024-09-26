@@ -507,7 +507,7 @@ static uint64_t pml4_unmap(uint64_t pml4, uint64_t va, uint64_t end) {
 //------------------------------------------------------------------------------
 
 // 创建回内核页表
-INIT_TEXT void mmu_init() {
+INIT_TEXT size_t mmu_init() {
     ASSERT(0 == g_kernel_cr3);
 
     g_kernel_cr3 = alloc_table();
@@ -520,13 +520,15 @@ INIT_TEXT void mmu_init() {
         uint64_t pdp = alloc_table();
         pml4[i] = (pdp & MMU_ADDR) | MMU_G | MMU_P | MMU_US | MMU_RW;
     }
-}
 
-// 获取内核页表
-size_t mmu_kernel_table() {
-    ASSERT(0 != g_kernel_cr3);
     return g_kernel_cr3;
 }
+
+// // 获取内核页表
+// size_t mmu_kernel_table() {
+//     ASSERT(0 != g_kernel_cr3);
+//     return g_kernel_cr3;
+// }
 
 // 创建一套新的页表，供进程使用，内核部分继承
 size_t mmu_create_table() {

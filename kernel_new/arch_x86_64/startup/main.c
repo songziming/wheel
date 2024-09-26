@@ -3,6 +3,7 @@
 #include <library/symbols.h>
 #include <memory/pmlayout.h>
 #include <memory/early_alloc.h>
+#include <memory/context.h>
 #include <proc/sched.h>
 #include <proc/tick.h>
 #include <proc/sched.h>
@@ -177,6 +178,9 @@ static void gui_log(const char *s, size_t n) {
     framebuf_puts(s, n);
 }
 
+static task_t root_tcb;
+void root_proc();
+
 INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     serial_init();
     set_log_func(serial_puts);
@@ -261,26 +265,45 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     sched_init();
 
     // 使用新的内核页表，可以捕获内存访问错误
-    write_cr3(mmu_kernel_table());
+    write_cr3(kernel_context()->table);
 
 
-    mmu_walk(mmu_kernel_table()); // 打印页表
     // pmlayout_show(); // 打印物理内存布局
     // acpi_tables_show(); // 打印 acpi 表
     // cpu_features_show(); // 打印 cpuinfo
 
     log("initialization done\n");
 
-
     // 配置时钟
-    loapic_timer_set_periodic(0x2000000);
+    loapic_timer_set_periodic(10);
 
-    // 开启中断，需要准备 TCB，ISR 需要保存上下文
-    static task_t dummy;
-    THISCPU_SET(g_tid_prev, &dummy);
-    THISCPU_SET(g_tid_next, &dummy);
+    task_create(&root_tcb, 1, 100, root_proc, 0,0,0,0);
+    log("root task stack va 0x%zx~0x%zx\n", root_tcb.stack.addr, root_tcb.stack.end);
+    log("root task stack pa 0x%zx\n", root_tcb.stack.pa);
+
+
+    mmu_walk(kernel_context()->table); // 打印页表
+
+
+    sched_cont(&root_tcb);
+    arch_task_switch();
+
+    log("task not switched!\n");
+
+
+    // // 开启中断，需要准备 TCB，ISR 需要保存上下文
+    // static task_t dummy;
+    // THISCPU_SET(g_tid_prev, &dummy);
+    // THISCPU_SET(g_tid_next, &dummy);
     __asm__ volatile("sti");
 
 end:
+    while (1) {}
+}
+
+
+
+void root_proc() {
+    log("running in root task\n");
     while (1) {}
 }

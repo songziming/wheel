@@ -1,13 +1,15 @@
 // 中断异常入口、系统调用入口、任务切换入口
 
 .global isr_entries
+.global arch_task_switch
 .global syscall_entry
 
-// int_init.c
+// arch_int.c
 .extern g_handlers
 .extern g_int_depth
 .extern g_int_stack
 
+// sched.c
 .extern g_tid_prev
 .extern g_tid_next
 
@@ -244,6 +246,46 @@ int_nested_return:
     swapgs                  // 返回到用户态，需要交换 gsbase
 int_to_kernel:
     iretq
+
+
+//------------------------------------------------------------------------------
+// 主动任务切换
+//------------------------------------------------------------------------------
+
+// 返回值可以判断有没有真的发生切换
+arch_task_switch:
+    pushfq
+    cli
+    popq    %rax    // 获取 rflags
+
+    cmpq    $0, %gs:(g_int_depth)   // 如果已处于中断
+    jne     no_yield                // 则不必切换任务（中断退出时会自动切换）
+
+    movq    %gs:(g_tid_prev), %rsi
+    movq    %gs:(g_tid_next), %rdi
+    cmpq    %rdi, %rsi
+    je      no_yield    // 目标任务相同，不用切换
+
+    // 模拟发生了一次中断
+    // 但是不切换中断栈，寄存器保存在当前栈上
+    movq    %rsp, %r8       // 获取 rsp
+    andq    $-16, %rsp      // 栈帧按 16 字节对齐
+    pushq   $0x10           // ss
+    pushq   %r8             // rsp
+    pushq   %rax            // rflags
+    pushq   $0x08           // cs
+    pushq   $yield_resume   // rip
+    pushq   $0              // errcode
+    pushq   $0              // rax
+    save_int_regs
+    movq    %rsp, (%rsi)    // g_tid_prev->arch_regs = %rsp
+
+    jmp     load_tid_next
+no_yield:
+    pushq   %rax
+    popfq
+yield_resume:
+    ret
 
 
 //------------------------------------------------------------------------------

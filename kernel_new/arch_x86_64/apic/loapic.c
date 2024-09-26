@@ -364,10 +364,13 @@ void loapic_timer_set_oneshot(int n) {
     g_write(REG_TIMER_ICR, n);
 }
 
-void loapic_timer_set_periodic(int n) {
+void loapic_timer_set_periodic(int freq) {
+    uint64_t delay = g_timer_freq + (freq >> 1);
+    delay /= freq;
+
     g_write(REG_LVT_TIMER, LOAPIC_DM_FIXED | VEC_LOAPIC_TIMER | LOAPIC_PERIODIC);
     g_write(REG_TIMER_DIV, 0x0b); // divide by 1
-    g_write(REG_TIMER_ICR, n);
+    g_write(REG_TIMER_ICR, delay);
 }
 
 void loapic_timer_busywait(int us) {
@@ -470,6 +473,4 @@ INIT_TEXT void calibrate_timer() {
     // TSC 频率可以保存下来，也许有用
     g_timer_freq = (start_ctr - end_ctr) * 20;
     g_tsc_freq = (end_tsc - start_tsc) * 20;
-    log("loapic timer freq %zd\n", g_timer_freq);
-    log("TSC freq %zd\n", g_tsc_freq);
 }
