@@ -5,7 +5,7 @@
 #include <library/string.h>
 #include <library/debug.h>
 #include <library/spin.h>
-#include <memory/context.h>
+#include <memory/vmspace.h>
 
 
 
@@ -102,7 +102,7 @@ static void priority_q_remove(priority_q_t *q, task_t *tid) {
 // 任务管理
 //------------------------------------------------------------------------------
 
-void task_create(task_t *tid, uint8_t priority, int tick,
+void task_create(task_t *tid, const char *name, uint8_t priority, int tick,
         void *entry, void *arg1, void *arg2, void *arg3, void *arg4) {
     ASSERT(NULL != tid);
     ASSERT(priority < PRIORITY_NUM);
@@ -114,11 +114,12 @@ void task_create(task_t *tid, uint8_t priority, int tick,
     tid->tick_reload = tick;
 
     // 分配任务栈
-    void *stack = context_alloc(NULL, &tid->stack, TASK_STACK_RANK);
-    if (NULL == stack) {
+    if (0 == alloc_kernel_stack(&tid->stack, TASK_STACK_RANK)) {
         log("failed to allocate stack space");
         return;
     }
+
+    tid->stack.desc = name;
 
     arch_task_init(tid, (size_t)entry, arg1, arg2, arg3, arg4);
 }

@@ -507,7 +507,7 @@ static uint64_t pml4_unmap(uint64_t pml4, uint64_t va, uint64_t end) {
 //------------------------------------------------------------------------------
 
 // 创建回内核页表
-INIT_TEXT size_t mmu_init() {
+INIT_TEXT size_t mmu_create_kernel_table() {
     ASSERT(0 == g_kernel_cr3);
 
     g_kernel_cr3 = alloc_table();

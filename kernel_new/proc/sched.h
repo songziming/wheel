@@ -31,7 +31,7 @@ typedef struct task {
 extern PERCPU_BSS task_t *g_tid_prev;
 extern PERCPU_BSS task_t *g_tid_next;
 
-void task_create(task_t *tid, uint8_t priority, int tick,
+void task_create(task_t *tid, const char *name, uint8_t priority, int tick,
         void *entry, void *arg1, void *arg2, void *arg3, void *arg4);
 
 void sched_cont(task_t *tid);

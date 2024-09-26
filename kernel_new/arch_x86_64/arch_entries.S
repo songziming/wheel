@@ -190,10 +190,10 @@ exp_to_kernel:
 //------------------------------------------------------------------------------
 
 interrupt_stub:
-    testl   $3, 0x18(%rsp)  // 检查栈上 CS 最后选择子的特权级，判断是否来自 ring3
-    jz      int_from_kernel // 如果 CPL=0，说明来自 ring0
-    swapgs                  // 如果来自用户态，需要交换 gsbase
-int_from_kernel:
+    testl   $3, 0x18(%rsp)          // 检查特权级，判断是否来自 ring3
+    jz      int_enter_from_kernel   // 如果 CPL=0，说明来自 ring0
+    swapgs                          // 如果来自用户态，需要交换 gsbase
+int_enter_from_kernel:
     save_int_regs
 
     // 准备函数参数
@@ -202,14 +202,14 @@ int_from_kernel:
 
     incl    %gs:(g_int_depth)
     cmpl    $1, %gs:(g_int_depth)
-    jne     int_nested_enter
+    jne     int_enter_nested
 
     // 只有最外层中断才需要切换到中断栈
     movq    %gs:(g_tid_prev), %rax
     movq    %rsp, (%rax)            // g_tid_prev->arch.regs = %rsp
     movq    %gs:(g_int_stack), %rsp
 
-int_nested_enter:
+int_enter_nested:
     // 建立一套全新的调用栈
     pushq   0x80(%rsi)      // 返回地址
     pushq   %rbp            // old rbp，指向被中断的栈帧
@@ -224,7 +224,7 @@ int_nested_enter:
     // 判断是否退出最后一层中断，如果是，需要执行任务切换
     decl    %gs:(g_int_depth)
     cmpl    $0, %gs:(g_int_depth)
-    jne     int_nested_return
+    jne     int_return_nested
 
     // 执行异步函数
     subq    $16, %rsp
@@ -233,18 +233,18 @@ int_nested_enter:
 
     // 切换到新任务的栈顶
     movq    %gs:(g_tid_next), %rdi
-load_tid_next:
+int_return:
     movq    %rdi, %gs:(g_tid_prev)
     movq    (%rdi), %rsp
 
-int_nested_return:
+int_return_nested:
     load_int_regs
     addq    $8, %rsp        // 跳过错误码
 
-    testl   $3, 8(%rsp)     // 检查返回地址的 RPL，判断是否即将返回到 ring3
-    jz      int_to_kernel   // 返回到内核态
-    swapgs                  // 返回到用户态，需要交换 gsbase
-int_to_kernel:
+    testl   $3, 8(%rsp)             // 检查返回地址的 RPL，判断是否即将返回到 ring3
+    jz      int_return_to_kernel    // 返回到内核态
+    swapgs                          // 返回到用户态，需要交换 gsbase
+int_return_to_kernel:
     iretq
 
 
@@ -280,7 +280,9 @@ arch_task_switch:
     save_int_regs
     movq    %rsp, (%rsi)    // g_tid_prev->arch_regs = %rsp
 
-    jmp     load_tid_next
+    // 上下文已经保存，
+    jmp     int_return
+
 no_yield:
     pushq   %rax
     popfq

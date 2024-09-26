@@ -168,7 +168,6 @@ static void on_spurious(int vec UNUSED, regs_t *f UNUSED) {
 
 static void on_timer(int vec UNUSED, regs_t *f UNUSED) {
     g_write(REG_EOI, 0);
-    log("*");
     tick_advance();
 }
 

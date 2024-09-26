@@ -3,7 +3,7 @@
 #include <library/symbols.h>
 #include <memory/pmlayout.h>
 #include <memory/early_alloc.h>
-#include <memory/context.h>
+#include <memory/vmspace.h>
 #include <proc/sched.h>
 #include <proc/tick.h>
 #include <proc/sched.h>
@@ -180,6 +180,8 @@ static void gui_log(const char *s, size_t n) {
 
 static task_t root_tcb;
 void root_proc();
+static task_t root2_tcb;
+void root2_proc();
 
 INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     serial_init();
@@ -257,15 +259,16 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     ioapic_init_all();
     loapic_init();
 
-    // 系统时钟
+    // 系统时钟（主频 10Hz）
     calibrate_timer();
     tick_init();
+    loapic_timer_set_periodic(10);
 
     // 调度
     sched_init();
 
     // 使用新的内核页表，可以捕获内存访问错误
-    write_cr3(kernel_context()->table);
+    write_cr3(kernel_vmspace()->table);
 
 
     // pmlayout_show(); // 打印物理内存布局
@@ -274,18 +277,17 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     log("initialization done\n");
 
-    // 配置时钟
-    loapic_timer_set_periodic(10);
-
-    task_create(&root_tcb, 1, 100, root_proc, 0,0,0,0);
+    task_create(&root_tcb, "root", 1, 10, root_proc, 0,0,0,0);
+    task_create(&root2_tcb, "root2", 1, 10, root2_proc, 0,0,0,0);
     log("root task stack va 0x%zx~0x%zx\n", root_tcb.stack.addr, root_tcb.stack.end);
     log("root task stack pa 0x%zx\n", root_tcb.stack.pa);
 
 
-    mmu_walk(kernel_context()->table); // 打印页表
+    mmu_walk(kernel_vmspace()->table); // 打印页表
 
 
     sched_cont(&root_tcb);
+    sched_cont(&root2_tcb);
     arch_task_switch();
 
     log("task not switched!\n");
@@ -305,5 +307,16 @@ end:
 
 void root_proc() {
     log("running in root task\n");
-    while (1) {}
+    while (1) {
+        log("a");
+        loapic_timer_busywait(200000);
+    }
+}
+
+void root2_proc() {
+    log("running in root2 task\n");
+    while (1) {
+        log("B");
+        loapic_timer_busywait(300000);
+    }
 }

@@ -7,7 +7,7 @@
 #include <memory/page.h>
 #include <memory/early_alloc.h>
 #include <memory/vmspace.h>
-#include <memory/context.h>
+// #include <memory/context.h>
 #include <library/string.h>
 #include <library/debug.h>
 
@@ -43,7 +43,7 @@ INIT_TEXT void add_kernel_range(vmrange_t *rng, size_t addr, size_t end, mmu_att
     rng->pa = addr - KERNEL_TEXT_ADDR;
     rng->attrs = attrs;
     rng->desc = desc;
-    vmspace_insert(&kernel_context()->space, rng);
+    vmspace_insert(kernel_vmspace(), rng);
 
     // 标记页描述符数组
     addr -= KERNEL_TEXT_ADDR;
@@ -70,15 +70,16 @@ INIT_TEXT void mem_init() {
     page_desc_init(pm_end()); // 分配页描述符
     early_alloc_disable();    // 禁用临时内存分配
 
+    // 内核地址空间
+    kernel_vmspace_init();
+    vmspace_t *kspace = kernel_vmspace();
+
     // 获取内核各 section 结束位置
     size_t init_addr = KERNEL_TEXT_ADDR + KERNEL_LOAD_ADDR;
     size_t ro_end = (size_t)early_alloc_ro(0);
     size_t rw_end = (size_t)early_alloc_rw(0);
 
     // 把内核地址空间布局记录下来
-    context_t *kctx = kernel_context();
-    // vmspace_t *kspace = &kernel_context()->space;
-    vmspace_init(&kctx->space);
     add_kernel_range(&g_kernel_init, init_addr, (size_t)&_init_end, MMU_WRITE|MMU_EXEC, "init");
     add_kernel_range(&g_kernel_text, (size_t)&_text_addr, (size_t)&_text_end, MMU_EXEC, "text");
     add_kernel_range(&g_kernel_rodata, (size_t)&_rodata_addr, ro_end, MMU_NONE, "rodata"); // 含 early_ro
@@ -87,7 +88,7 @@ INIT_TEXT void mem_init() {
     // 可用部分按页对齐
     // TODO 可以在这里创建 kernel heap
 
-    // 给 percpu 分配空间，留出一个 guard page
+    // 给 percpu 分配空间，开头留出一个 guard page
     rw_end += 2 * PAGE_SIZE - 1;
     rw_end &= ~(PAGE_SIZE - 1);
     rw_end = percpu_init(rw_end);
@@ -121,8 +122,9 @@ INIT_TEXT void mem_init() {
         }
     }
 
+
     // 内核占据的内存分为许多 section，之间还有 guard pages，可以回收
-    for (dlnode_t *i = kctx->space.head.next; i != &kctx->space.head; i = i->next) {
+    for (dlnode_t *i = kspace->head.next; i != &kspace->head; i = i->next) {
         vmrange_t *prev = containerof(i->prev, vmrange_t, dl);
         vmrange_t *curr = containerof(i, vmrange_t, dl);
         size_t gap_addr = prev->end - KERNEL_TEXT_ADDR;
@@ -140,14 +142,14 @@ INIT_TEXT void mem_init() {
     g_idmap.pa = 0;
     g_idmap.attrs = MMU_WRITE;
     g_idmap.desc = "idmap";
-    vmspace_insert(&kctx->space, &g_idmap);
+    vmspace_insert(kspace, &g_idmap);
 
     // 创建内核页表，根据 vmspace 添加映射
-    kctx->table = mmu_init();
-    for (dlnode_t *i = kctx->space.head.next; i != &kctx->space.head; i = i->next) {
+    kspace->table = mmu_create_kernel_table();
+    for (dlnode_t *i = kspace->head.next; i != &kspace->head; i = i->next) {
         vmrange_t *rng = containerof(i, vmrange_t, dl);
         size_t va_end = (rng->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-        mmu_map(kctx->table, rng->addr, va_end, rng->pa, rng->attrs);
+        mmu_map(kspace->table, rng->addr, va_end, rng->pa, rng->attrs);
     }
 
     // vmspace_show(kspace);

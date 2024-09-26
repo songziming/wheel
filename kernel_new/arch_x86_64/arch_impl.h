@@ -20,8 +20,12 @@
 #define KERNEL_REAL_ADDR    0x8000  // 32K，实模式启动代码位置
 
 #define DIRECT_MAP_ADDR     0xffff800000000000UL // 物理内存映射地址（共 16TB）
-#define DYNAMIC_MAP_ADDR    0xffff900000000000UL // 动态映射范围（共 16TB）
-#define DYNAMIC_MAP_END     0xffffa00000000000UL
+
+#define KERNEL_STACK_ZONE_ADDR  0xffff900000000000UL    // 内核栈映射区域（16TB）
+#define KERNEL_STACK_ZONE_END   0xffffa00000000000UL
+
+#define DYNAMIC_MAP_ADDR    0xffffa00000000000UL // 动态映射范围（共 16TB）
+#define DYNAMIC_MAP_END     0xffffb00000000000UL
 
 //------------------------------------------------------------------------------
 // 预留缓冲区和栈大小
@@ -32,7 +36,7 @@
 #define EARLY_RO_SIZE   0x40000
 #define EARLY_RW_SIZE   0x800000
 
-#define INT_STACK_SIZE  0x1000
+#define INT_STACK_SIZE  PAGE_SIZE   // 必须对齐到页
 
 #define TASK_STACK_RANK 1   // 8K
 
@@ -45,9 +49,8 @@
 #define VEC_LOAPIC_ERROR    0xfe
 #define VEC_LOAPIC_SPURIOUS 0xff    // spurious 向量号最后 4-bit 必须是 f
 
-
 //------------------------------------------------------------------------------
-// 自定义结构体和宏
+// 工具宏
 //------------------------------------------------------------------------------
 
 #ifdef C_FILE
