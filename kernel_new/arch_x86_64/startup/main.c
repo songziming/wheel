@@ -180,8 +180,8 @@ static void gui_log(const char *s, size_t n) {
 
 static task_t root_tcb;
 void root_proc();
-static task_t root2_tcb;
-void root2_proc();
+// static task_t root2_tcb;
+// void root2_proc();
 
 INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     serial_init();
@@ -237,6 +237,9 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // TODO 检查 Acpi::MCFG，分析 PCIe 信息
     // TODO 遍历 PCI 总线，识别并注册 PCI 外设
+    if (acpi_table_find("MCFG")) {
+        log("has PCIe support!\n");
+    }
 
     // 切换到正式的 GDT，加载 IDT
     gdt_init();
@@ -264,10 +267,10 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     tick_init();
     loapic_timer_set_periodic(10);
 
-    // 使用新的内核页表，可以捕获内存访问错误
+    // 使用正式内核页表
     write_cr3(kernel_vmspace()->table);
 
-    // 调度初始化（需要使用新页表）
+    // 调度初始化
     sched_init();
 
 
@@ -275,49 +278,41 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // acpi_tables_show(); // 打印 acpi 表
     // cpu_features_show(); // 打印 cpuinfo
 
-    log("initialization done\n");
 
+    // 创建根任务
     task_create(&root_tcb, "root", 1, 10, root_proc, 0,0,0,0);
-    task_create(&root2_tcb, "root2", 1, 10, root2_proc, 0,0,0,0);
-    log("root task stack va 0x%zx~0x%zx\n", root_tcb.stack.addr, root_tcb.stack.end);
-    log("root task stack pa 0x%zx\n", root_tcb.stack.pa);
-
-
-    // mmu_walk(kernel_vmspace()->table); // 打印页表
-
     sched_cont(&root_tcb);
-    sched_cont(&root2_tcb);
 
     // 需要一个临时 TCB，用来容纳被换出的任务
     static task_t dummy;
     THISCPU_SET(g_tid_prev, &dummy);
     arch_task_switch();
 
-    log("task not switched!\n");
-
-
-    // // 开启中断，需要准备 TCB，ISR 需要保存上下文
-    // THISCPU_SET(g_tid_next, &dummy);
-    __asm__ volatile("sti");
-
 end:
-    while (1) {}
+    log("system cannot start!\n");
+    while (1) {
+        cpu_pause();
+        cpu_halt();
+    }
 }
 
 
 
 void root_proc() {
     log("running in root task\n");
+
+    // TODO 将实模式代码复制到 1M 以下
+
     while (1) {
         log("a");
         loapic_timer_busywait(200000);
     }
 }
 
-void root2_proc() {
-    log("running in root2 task\n");
-    while (1) {
-        log("B");
-        loapic_timer_busywait(300000);
-    }
-}
+// void root2_proc() {
+//     log("running in root2 task\n");
+//     while (1) {
+//         log("B");
+//         loapic_timer_busywait(300000);
+//     }
+// }
