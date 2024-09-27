@@ -215,6 +215,7 @@ void pglist_remove(pglist_t *pl, pfn_t blk) {
 static void block_free_nolock(pfn_t blk) {
     ASSERT(blk < g_page_num);
     ASSERT(g_pages[blk].head);
+    ASSERT(PT_FREE != g_pages[blk].type);
 
     size_t rank = g_pages[blk].rank;
     pfn_t size = 1 << rank;
@@ -243,6 +244,17 @@ static void block_free_nolock(pfn_t blk) {
     // 将合并之后的 block 添加到链表（的开头）
     g_pages[blk].type = PT_FREE;
     pglist_push_head(&g_blocks[rank], blk);
+}
+
+static void pglist_free_nolock(pglist_t *pl) {
+    pfn_t p = pl->head;
+    while (INVALID_PFN != p) {
+        pfn_t q = g_pages[p].next;
+        block_free_nolock(p);
+        p = q;
+    }
+    pl->head = INVALID_PFN;
+    pl->tail = INVALID_PFN;
 }
 
 // 申请一个页块，起始页号必须是 N*period+phase
@@ -331,6 +343,43 @@ void page_block_free(size_t pa) {
     irq_spin_give(&g_pages_lock, key);
 }
 
+// 分配不连续的页块，尽可能使用大的块
+void page_sparse_alloc(pglist_t *pl, int n, page_type_t type) {
+    ASSERT(NULL != pl);
+    ASSERT(PT_FREE != type);
+
+    pl->head = INVALID_PFN;
+    pl->tail = INVALID_PFN;
+
+    int rank = RANK_NUM; // 从最大的 rank开始尝试
+    int key = irq_spin_take(&g_pages_lock);
+
+    while ((n > 0) && (rank >= 0)) {
+        for (; (1 << rank) > n; --rank) {}
+        pfn_t pg = block_alloc_nolock(rank, 1, 0, type);
+        if (INVALID_PFN == pg) {
+            --rank;
+            continue;
+        }
+        pglist_push_tail(pl, pg);
+        n -= (1 << rank);
+    }
+
+    if (n > 0) {
+        log("page not sufficient!\n");
+        pglist_free_nolock(pl);
+    }
+
+    irq_spin_give(&g_pages_lock, key);
+}
+
+void page_sparse_free(pglist_t *pl) {
+    ASSERT(NULL != pl);
+    int key = irq_spin_take(&g_pages_lock);
+    pglist_free_nolock(pl);
+    irq_spin_give(&g_pages_lock, key);
+}
+
 
 //------------------------------------------------------------------------------
 // 物理内存管理初始化
@@ -408,9 +457,11 @@ INIT_TEXT void page_add_range(size_t start, size_t end, page_type_t type) {
         // 创建一个块，并将其回收
         g_pages[start].head = 1;
         g_pages[start].rank = rank;
-        g_pages[start].type = type;
+        // g_pages[start].type = type;
         if (PT_FREE == type) {
             block_free_nolock(start);
+        } else {
+            g_pages[start].type = type;
         }
         start += (1UL << rank);
     }

@@ -25,6 +25,8 @@ static void on_exception(int vec, regs_t *f) {
         uint64_t va = read_cr2();
         log("error accessing va 0x%zx\n", va);
     }
+
+    log_stacktrace();
     cpu_halt();
 }
 

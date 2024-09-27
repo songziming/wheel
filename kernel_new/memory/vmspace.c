@@ -73,13 +73,22 @@ void vmspace_insert(vmspace_t *space, vmrange_t *rng) {
 }
 
 void vmspace_remove(vmspace_t *space, vmrange_t *rng) {
-    ASSERT(NULL != space);
+    // ASSERT(NULL != space);
     ASSERT(NULL != rng);
+
+    if (NULL == space) {
+        space = &g_kernel_space;
+    }
     ASSERT(dl_contains(&space->head, &rng->dl));
 
     if (space->table) {
         size_t end = (rng->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
         mmu_unmap(space->table, rng->addr, end);
+    }
+
+    if (0 != rng->pa) {
+        // TODO init section 映射的物理内存不是一个 block
+        page_block_free(rng->pa);
     }
 
     dl_remove(&rng->dl);
@@ -137,6 +146,7 @@ size_t vmspace_alloc(vmspace_t *space, vmrange_t *rng, size_t start, size_t end,
 
     rng->pa = page_block_alloc(rank, type);
     if (0 == rng->pa) {
+        // TODO 如果连续内存分配失败，尝试分配不连续的物理页
         return 0;
     }
 

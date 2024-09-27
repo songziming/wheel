@@ -264,11 +264,11 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     tick_init();
     loapic_timer_set_periodic(10);
 
-    // 调度
-    sched_init();
-
     // 使用新的内核页表，可以捕获内存访问错误
     write_cr3(kernel_vmspace()->table);
+
+    // 调度初始化（需要使用新页表）
+    sched_init();
 
 
     // pmlayout_show(); // 打印物理内存布局
@@ -283,19 +283,20 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     log("root task stack pa 0x%zx\n", root_tcb.stack.pa);
 
 
-    mmu_walk(kernel_vmspace()->table); // 打印页表
-
+    // mmu_walk(kernel_vmspace()->table); // 打印页表
 
     sched_cont(&root_tcb);
     sched_cont(&root2_tcb);
+
+    // 需要一个临时 TCB，用来容纳被换出的任务
+    static task_t dummy;
+    THISCPU_SET(g_tid_prev, &dummy);
     arch_task_switch();
 
     log("task not switched!\n");
 
 
     // // 开启中断，需要准备 TCB，ISR 需要保存上下文
-    // static task_t dummy;
-    // THISCPU_SET(g_tid_prev, &dummy);
     // THISCPU_SET(g_tid_next, &dummy);
     __asm__ volatile("sti");
 

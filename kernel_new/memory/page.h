@@ -38,6 +38,9 @@ void pglist_remove(pglist_t *pl, pfn_t blk);
 size_t page_block_alloc(int rank, page_type_t type);
 void page_block_free(size_t pa);
 
+void page_sparse_free(pglist_t *pl);
+void page_sparse_alloc(pglist_t *pl, int n, page_type_t type);
+
 INIT_TEXT void page_desc_init(size_t end);
 INIT_TEXT void page_add_range(size_t start, size_t end, page_type_t type);
 
