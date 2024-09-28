@@ -7,6 +7,8 @@
 .global sys_boot
 .extern sys_init
 
+.global sys_boot_ap
+
 
 //------------------------------------------------------------------------------
 // multiboot 引导头
@@ -153,6 +155,9 @@ sys_boot:
     addl    $8, %edi
     loop    .pde
 
+    movl    (mb_eax), %edi
+    movl    (mb_ebx), %esi
+
 // AP 从这里启动
 sys_boot_ap:
     // 加载临时页表
@@ -227,8 +232,8 @@ pd3:  .skip 0x1000
 .code64
 
 higher64:
-    movl    (mb_eax), %edi
-    movl    (mb_ebx), %esi
+    // movl    (mb_eax), %edi
+    // movl    (mb_ebx), %esi
 
     // 使用 jmp 模拟 call，返回地址为零
     movq    $init_stack_top, %rsp

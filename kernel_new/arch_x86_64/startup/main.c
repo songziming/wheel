@@ -184,6 +184,12 @@ void root_proc();
 // void root2_proc();
 
 INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
+    if (0 == eax && 1 == ebx) {
+        log("running in AP\n");
+        // AP 刚启动，gsbase 尚未设置，不能使用 cpu_index
+        goto end;
+    }
+
     serial_init();
     set_log_func(serial_puts);
 
@@ -288,8 +294,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     THISCPU_SET(g_tid_prev, &dummy);
     arch_task_switch();
 
+    log("root task cannot start!\n");
 end:
-    log("system cannot start!\n");
     while (1) {
         cpu_pause();
         cpu_halt();
@@ -297,11 +303,44 @@ end:
 }
 
 
+//------------------------------------------------------------------------------
+// 第一个任务
+//------------------------------------------------------------------------------
+
+// layout.ld
+char _real_addr;
+char _real_end;
 
 void root_proc() {
     log("running in root task\n");
 
-    // TODO 将实模式代码复制到 1M 以下
+    // 将实模式代码复制到 1M 以下
+    char *from = &_real_addr;
+    char *to = (char *)KERNEL_REAL_ADDR + DIRECT_MAP_ADDR;
+    memcpy(to, from, &_real_end - from);
+
+    // 启动代码地址页号就是 startup-IPI 的向量号
+    int vec = KERNEL_REAL_ADDR >> 12;
+
+    // g_cpu_started = 1;
+    for (int i = 1; i < cpu_count(); ++i) {
+        log("starting cpu %d...\n", i);
+
+        loapic_send_init(i);            // 发送 INIT
+        loapic_timer_busywait(10000);   // 等待 10ms
+        loapic_send_sipi(i, vec);       // 发送 startup-IPI
+        loapic_timer_busywait(200);     // 等待 200us
+        loapic_send_sipi(i, vec);       // 再次发送 startup-IPI
+        loapic_timer_busywait(200);     // 等待 200us
+
+        // // 每个 AP 使用相同的栈，必须等前一个 AP 启动完成再启动下一个
+        // // 当 AP 开始运行 idle task，说明该 AP 已完成初始化，不再使用 init stack
+        // // 必须使用双指针，因为更新的是 g_tid_prev 的指向，而非指向的内容
+        // volatile task_t **prev = percpu_ptr(i, &g_tid_prev);
+        // while ((NULL == *prev) || (NULL == (*prev)->name)) {
+        //     cpu_pause();
+        // }
+    }
 
     while (1) {
         log("a");

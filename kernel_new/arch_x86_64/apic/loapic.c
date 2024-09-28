@@ -338,7 +338,7 @@ inline int cpu_count() {
 }
 
 // 向目标处理器发送 INIT-IPI
-INIT_TEXT void local_apic_send_init(int cpu) {
+INIT_TEXT void loapic_send_init(int cpu) {
     ASSERT(cpu >= 0);
     ASSERT(cpu < cpu_count());
 
@@ -347,7 +347,7 @@ INIT_TEXT void local_apic_send_init(int cpu) {
 }
 
 // 向目标处理器发送 startup-IPI
-INIT_TEXT void local_apic_send_sipi(int cpu, int vec) {
+INIT_TEXT void loapic_send_sipi(int cpu, int vec) {
     ASSERT(cpu >= 0);
     ASSERT(cpu < cpu_count());
     ASSERT((vec >= 0) && (vec < 256));
