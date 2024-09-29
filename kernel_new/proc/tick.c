@@ -6,16 +6,6 @@
 #include <library/debug.h>
 
 
-typedef void (*timer_func_t)(void *, void *);
-
-typedef struct timer {
-    dlnode_t    dl;
-    int         delta;  // 和前一个 timer 相差多少个 tick
-
-    timer_func_t func;
-    void       *arg1;
-    void       *arg2;
-} timer_t;
 
 static size_t g_tick = 0;
 static dlnode_t g_tick_q;
@@ -51,8 +41,13 @@ void timer_start(timer_t *timer, int tick, timer_func_t func, void *arg1, void *
     irq_spin_give(&g_q_spin, key);
 }
 
-// TODO timer_cancel
-// TODO timer_cancel_sync
+void timer_cancel(timer_t *timer) {
+    //
+}
+
+void timer_cancel_sync(timer_t *timer) {
+    //
+}
 
 static void timer_advance() {
     ASSERT(cpu_int_depth());

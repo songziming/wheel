@@ -307,6 +307,15 @@ end:
 // 第一个任务，运行在 CPU 0
 //------------------------------------------------------------------------------
 
+static timer_t wd;
+
+static void wd_func(void *a1 UNUSED, void *a2 UNUSED) {
+    static int cnt = 0;
+    log("watchdog-%d\n", cnt++);
+
+    timer_start(&wd, 20, (timer_func_t)wd_func, 0, 0);
+}
+
 static void root_proc() {
     log("running in root task\n");
 
@@ -343,6 +352,7 @@ static void root_proc() {
     // TODO 启动文件系统
 
     // TODO 运行相关测试（检查 boot 参数）
+    timer_start(&wd, 20, (timer_func_t)wd_func, 0, 0);
 
     log("root task exiting...\n");
 }
