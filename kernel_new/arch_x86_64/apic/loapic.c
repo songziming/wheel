@@ -412,6 +412,8 @@ void loapic_timer_busywait(int us) {
 // 统计这段时间前后 apic timer 计数器的取值，计算 timer 频率
 // 同时还计算了 tsc 速度（tsc 可能睿频，导致速度不准）
 
+// TODO 只跑一次可能不准确，可以使用软件锁相环（sw-PLL）循环多次，统计平均值
+
 // channel 2 可以通过软件设置输入，可以通过软件读取输出
 // 写端口 0x61 bit[0] 控制输入，读端口 0x61 bit[5] 获取输出
 #define PIT_CH2 0x42

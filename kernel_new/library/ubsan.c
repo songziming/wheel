@@ -131,4 +131,10 @@ void __ubsan_handle_vla_bound_not_positive(vla_bound_data_t *data, unsigned long
     log_stacktrace();
 }
 
+void __ubsan_handle_builtin_unreachable(source_location_t *loc) {
+    log("\nubsan: running unreachable\n");
+    log_location(loc);
+    log_stacktrace();
+}
+
 #endif // UNIT_TEST

@@ -2,6 +2,7 @@
 
 .global isr_entries
 .global arch_task_switch
+.global task_entry
 .global syscall_entry
 
 // arch_int.c
@@ -12,6 +13,7 @@
 // sched.c
 .extern g_tid_prev
 .extern g_tid_next
+.extern task_exit
 
 .extern work_q_flush
 
@@ -288,6 +290,22 @@ no_yield:
     popfq
 yield_resume:
     ret
+
+
+//------------------------------------------------------------------------------
+// 新任务入口
+//------------------------------------------------------------------------------
+
+task_entry:
+    // 在任务栈上建立最外层 stack frame
+    pushq   $0  // ret addr
+    pushq   $0  // old rbp
+    movq    %rsp, %rbp
+
+    call    *%rax   // 真正的入口函数
+
+    // 从任务的主函数退出，将任务删除
+    call    task_exit
 
 
 //------------------------------------------------------------------------------

@@ -50,10 +50,14 @@ static void priority_q_push(priority_q_t *q, task_t *tid) {
 static int priority_q_contains(priority_q_t *q, task_t *tid) {
     ASSERT(NULL != q);
     ASSERT(NULL != tid);
+
     int pri = tid->priority;
     if ((1U << pri) & q->priorities) {
-        return dl_contains(q->heads[pri], &tid->q_node);
+        dlnode_t *head = q->heads[pri];
+        dlnode_t *node = &tid->q_node;
+        return (head == node) || dl_contains(head, node);
     }
+
     return 0;
 }
 
@@ -70,10 +74,10 @@ static task_t *priority_q_head(priority_q_t *q) {
 static void priority_q_remove(priority_q_t *q, task_t *tid) {
     ASSERT(NULL != q);
     ASSERT(NULL != tid);
+    ASSERT(priority_q_contains(q, tid));
 
     int pri = tid->priority;
     ASSERT((1U << pri) & q->priorities);
-    ASSERT(dl_contains(q->heads[pri], &tid->q_node));
 
     if (dl_is_lastone(&tid->q_node)) {
         ASSERT(q->heads[pri] == &tid->q_node);
@@ -133,7 +137,7 @@ void task_post_delete(task_t *tid) {
 
 
 // 停止当前正在运行的任务
-void sched_stop() {
+void task_exit() {
     task_t *tid = THISCPU_GET(g_tid_prev);
     tid->state |= TASK_STOPPED;
 
@@ -145,7 +149,11 @@ void sched_stop() {
     priority_q_remove(q, tid);
     THISCPU_SET(g_tid_next, priority_q_head(q));
 
+    // TODO 注册 work，下次中断返回时运行，释放任务的资源
+
     irq_spin_give(&q->spin, key);
+
+    arch_task_switch();
 }
 
 
@@ -198,6 +206,7 @@ void sched_advance() {
 // 初始化
 //------------------------------------------------------------------------------
 
+static INIT_BSS task_t g_dummy_task;
 static PERCPU_BSS task_t g_idle_task;
 
 static void idle_proc() {
@@ -208,6 +217,9 @@ static void idle_proc() {
 }
 
 INIT_TEXT void sched_init() {
+    memset(&g_dummy_task, 0, sizeof(task_t));
+    g_dummy_task.stack.desc = "dummy";
+
     for (int i = 0, N = cpu_count(); i < N; ++i) {
         priority_q_t *q = percpu_ptr(i, &g_ready_q);
         spin_init(&q->spin);
@@ -216,12 +228,10 @@ INIT_TEXT void sched_init() {
         task_t *idle = percpu_ptr(i, &g_idle_task);
         task_create(idle, "idle", PRIORITY_IDLE, INT_MAX, idle_proc, 0,0,0,0);
 
-        // 不能用 sched_cont，否则全都会放在 cpu0 的就绪队列中
-        // sched_cont(idle);
         idle->state = TASK_READY;
         priority_q_push(q, idle);
 
-        *(task_t **)percpu_ptr(i, &g_tid_prev) = NULL;
+        *(task_t **)percpu_ptr(i, &g_tid_prev) = &g_dummy_task;
         *(task_t **)percpu_ptr(i, &g_tid_next) = idle;
     }
 }

@@ -31,8 +31,19 @@
 #include <arch_int.h>
 
 
+
+// layout.ld
+char _real_addr;
+char _real_end;
+
 static INIT_DATA size_t g_rsdp = 0;
 static INIT_DATA int g_is_graphical = 0;
+static INIT_DATA volatile int g_cpu_started = 0; // 已启动的 CPU 数量
+
+static task_t root_tcb;
+
+static void root_proc();
+static INIT_TEXT NORETURN void ap_init(int index);
 
 
 //------------------------------------------------------------------------------
@@ -163,7 +174,6 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
 }
 
 
-
 //------------------------------------------------------------------------------
 // 系统初始化入口点
 //------------------------------------------------------------------------------
@@ -178,15 +188,9 @@ static void gui_log(const char *s, size_t n) {
     framebuf_puts(s, n);
 }
 
-static task_t root_tcb;
-void root_proc();
-// static task_t root2_tcb;
-// void root2_proc();
-
 INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     if (0 == eax && 1 == ebx) {
-        log("running in AP\n");
-        // AP 刚启动，gsbase 尚未设置，不能使用 cpu_index
+        ap_init(g_cpu_started);
         goto end;
     }
 
@@ -288,10 +292,6 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // 创建根任务
     task_create(&root_tcb, "root", 1, 10, root_proc, 0,0,0,0);
     sched_cont(&root_tcb);
-
-    // 需要一个临时 TCB，用来容纳被换出的任务
-    static task_t dummy;
-    THISCPU_SET(g_tid_prev, &dummy);
     arch_task_switch();
 
     log("root task cannot start!\n");
@@ -304,14 +304,10 @@ end:
 
 
 //------------------------------------------------------------------------------
-// 第一个任务
+// 第一个任务，运行在 CPU 0
 //------------------------------------------------------------------------------
 
-// layout.ld
-char _real_addr;
-char _real_end;
-
-void root_proc() {
+static void root_proc() {
     log("running in root task\n");
 
     // 将实模式代码复制到 1M 以下
@@ -322,9 +318,9 @@ void root_proc() {
     // 启动代码地址页号就是 startup-IPI 的向量号
     int vec = KERNEL_REAL_ADDR >> 12;
 
-    // g_cpu_started = 1;
     for (int i = 1; i < cpu_count(); ++i) {
-        log("starting cpu %d...\n", i);
+        log("starting cpu %d...", i);
+        g_cpu_started = i;
 
         loapic_send_init(i);            // 发送 INIT
         loapic_timer_busywait(10000);   // 等待 10ms
@@ -333,25 +329,50 @@ void root_proc() {
         loapic_send_sipi(i, vec);       // 再次发送 startup-IPI
         loapic_timer_busywait(200);     // 等待 200us
 
-        // // 每个 AP 使用相同的栈，必须等前一个 AP 启动完成再启动下一个
-        // // 当 AP 开始运行 idle task，说明该 AP 已完成初始化，不再使用 init stack
-        // // 必须使用双指针，因为更新的是 g_tid_prev 的指向，而非指向的内容
-        // volatile task_t **prev = percpu_ptr(i, &g_tid_prev);
-        // while ((NULL == *prev) || (NULL == (*prev)->name)) {
-        //     cpu_pause();
-        // }
+        // 当 CPU 开始运行 task，说明初始化已经结束，不再使用 init stack
+        // 前一个 CPU 初始化完成才能初始化下一个
+        volatile task_t **prev = percpu_ptr(i, &g_tid_prev);
+        while (0 == strcmp("dummy", (*prev)->stack.desc)) {
+            cpu_pause();
+        }
     }
 
-    while (1) {
-        log("a");
-        loapic_timer_busywait(200000);
-    }
+    log("all CPU is started\n");
+
+    // TODO 注册设备驱动
+    // TODO 启动文件系统
+
+    // TODO 运行相关测试（检查 boot 参数）
+
+    log("root task exiting...\n");
 }
 
-// void root2_proc() {
-//     log("running in root2 task\n");
-//     while (1) {
-//         log("B");
-//         loapic_timer_busywait(300000);
-//     }
-// }
+
+//------------------------------------------------------------------------------
+// AP 初始化
+//------------------------------------------------------------------------------
+
+static INIT_TEXT NORETURN void ap_init(int index) {
+    log("CPU %d started running\n", index);
+
+    cpu_features_enable();
+    gdt_load();
+    idt_load();
+
+    thiscpu_init(index);
+    tss_init_load();
+
+    loapic_init();
+    loapic_timer_set_periodic(10);
+
+    write_cr3(kernel_vmspace()->table);
+
+    arch_task_switch();
+
+    log("CPU %d cannot start task!\n");
+
+    while (1) {
+        cpu_pause();
+        cpu_halt();
+    }
+}
