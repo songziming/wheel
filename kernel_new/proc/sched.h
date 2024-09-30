@@ -4,6 +4,7 @@
 #include <library/dllist.h>
 #include <library/spin.h>
 #include <memory/vmspace.h>
+#include "work.h"
 
 #define PRIORITY_NUM  32 // 总共 32 个优先级
 #define PRIORITY_IDLE 31 // 最末优先级用于 idle 任务
@@ -26,6 +27,7 @@ typedef struct task {
     int         tick;
     int         tick_reload;
     vmrange_t   stack;
+    work_t      work;       // 异步操作，如任务退出、阻塞超时
 } task_t;
 
 extern PERCPU_BSS task_t *g_tid_prev;

@@ -6,7 +6,7 @@
 #include <memory/vmspace.h>
 #include <proc/sched.h>
 #include <proc/tick.h>
-#include <proc/sched.h>
+#include <proc/work.h>
 
 #include "multiboot1.h"
 #include "multiboot2.h"
@@ -282,6 +282,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 调度初始化
     sched_init();
+    work_init();
 
 
     // pmlayout_show(); // 打印物理内存布局
