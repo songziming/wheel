@@ -13,7 +13,6 @@ typedef struct font_data {
 
 INIT_TEXT void framebuf_init(uint32_t rows, uint32_t cols, uint32_t pitch, uint32_t addr);
 void framebuf_set_color(uint32_t fg);
-void framebuf_putc(char c);
 void framebuf_puts(const char *s, size_t n);
 
 #endif // FRAMEBUF_H

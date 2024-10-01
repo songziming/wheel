@@ -12,6 +12,7 @@ static spin_t g_serial_lock;
 
 INIT_TEXT void serial_init() {
     spin_init(&g_serial_lock);
+
     out8(COM1_PORT + 1, 0x00);      // disable all interrupts
     out8(COM1_PORT + 3, 0x80);      // enable DLAB (set baud rate divisor)
     out8(COM1_PORT + 0, 0x03);      // set divisor to 3 (lo byte) 38400 baud
@@ -21,7 +22,7 @@ INIT_TEXT void serial_init() {
     out8(COM1_PORT + 4, 0x0b);      // IRQs enabled, RTS/DSR set
 }
 
-void serial_putc(char c) {
+static void serial_putc(char c) {
     while ((in8(COM1_PORT + 5) & 0x20) == 0) {}
     out8(COM1_PORT, c);
 #ifdef DEBUG

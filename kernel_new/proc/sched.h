@@ -36,7 +36,7 @@ extern PERCPU_BSS task_t *g_tid_next;
 void task_create(task_t *tid, const char *name, uint8_t priority, int tick,
         void *entry, void *arg1, void *arg2, void *arg3, void *arg4);
 
-void sched_cont(task_t *tid);
+void task_resume(task_t *tid);
 void task_exit();
 
 void sched_advance();

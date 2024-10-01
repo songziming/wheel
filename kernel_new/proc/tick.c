@@ -91,9 +91,11 @@ inline size_t tick() {
 
 // 由 arch 在每次时钟中断时调用
 void tick_advance() {
-    sched_advance();
     if (0 == cpu_index()) {
         ++g_tick;
         timer_advance();
     }
+
+    // 时钟中断的最后执行调度
+    sched_advance();
 }

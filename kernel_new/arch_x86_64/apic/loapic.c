@@ -357,6 +357,18 @@ INIT_TEXT void loapic_send_sipi(int cpu, int vec) {
     g_write_icr(g_loapics[cpu].apic_id, lo);
 }
 
+void loapic_send_ipi(int cpu, int vec) {
+    ASSERT(cpu < cpu_count());
+    ASSERT((vec >= 0) && (vec < 256));
+
+    uint32_t lo = (vec & 0xff) | LOAPIC_DM_FIXED | LOAPIC_EDGE | LOAPIC_DEASSERT;
+    if (cpu < 0) {
+        g_write_icr(0xffffffffU, lo); // 广播
+    } else {
+        g_write_icr(g_loapics[cpu].apic_id, lo);
+    }
+}
+
 void loapic_timer_set_oneshot(int n) {
     g_write(REG_LVT_TIMER, LOAPIC_DM_FIXED | VEC_LOAPIC_TIMER | LOAPIC_ONESHOT);
     g_write(REG_TIMER_DIV, 0x0b); // divide by 1

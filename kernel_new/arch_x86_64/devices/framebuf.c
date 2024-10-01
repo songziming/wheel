@@ -1,11 +1,15 @@
 #include "framebuf.h"
 #include <arch_impl.h>
 #include <memory/early_alloc.h>
+#include <library/debug.h>
 #include <library/string.h>
+#include <library/spin.h>
 
 
 // 图形化终端，仅支持 32-bit bpp
 
+
+static spin_t g_framebuf_lock;
 
 static CONST uint32_t g_rows  = 0;  // 屏幕高度（单位：像素）
 static CONST uint32_t g_cols  = 0;  // 屏幕宽度（单位：像素）
@@ -14,9 +18,6 @@ static CONST uint64_t g_pitch = 0;  // 一行多少字节，可能不是整数�
 static CONST uint8_t *g_addr = NULL; // framebuffer 映射的虚拟地址
 static CONST uint8_t *g_back = NULL; // 离屏缓冲区
 
-// static CONST uint32_t g_px_r;       // 红色纯色
-// static CONST uint32_t g_px_g;       // 绿色纯色
-// static CONST uint32_t g_px_b;       // 蓝色纯色
 static CONST uint32_t g_px_color;   // 像素颜色
 
 extern font_data_t g_font_terminux_32x16;
@@ -29,15 +30,13 @@ static int g_em_cols;               // 当前字体下的列数
 static int g_caret_row;             // 光标所在行号
 static int g_caret_col;             // 光标所在列号
 
-// static spin_t g_framebuf_spin = SPIN_INIT;
 
-
-static void framebuf_putc_at(char ch, uint32_t fg, int r, int c) {
-    // ASSERT(NULL != g_font);
-    // ASSERT(r >= 0);
-    // ASSERT(r < g_em_rows);
-    // ASSERT(c >= 0);
-    // ASSERT(c < g_em_cols);
+static void put_char_at(char ch, uint32_t fg, int r, int c) {
+    ASSERT(NULL != g_font);
+    ASSERT(r >= 0);
+    ASSERT(r < g_em_rows);
+    ASSERT(c >= 0);
+    ASSERT(c < g_em_cols);
 
     const uint8_t *font_data = g_font->data + ch * g_font->size;
     int pos = r * g_font->rows * g_pitch + c * g_font->cols * sizeof(uint32_t);
@@ -75,9 +74,11 @@ static void framebuf_draw_caret(int fg, int r, int c) {
 }
 
 INIT_TEXT void framebuf_init(uint32_t rows, uint32_t cols, uint32_t pitch, uint32_t addr) {
-    // ASSERT(NULL == g_addr);
-    // ASSERT(NULL == g_back);
-    // ASSERT(NULL == g_font);
+    ASSERT(NULL == g_addr);
+    ASSERT(NULL == g_back);
+    ASSERT(NULL == g_font);
+
+    spin_init(&g_framebuf_lock);
 
     g_rows = rows;
     g_cols = cols;
@@ -102,7 +103,7 @@ void framebuf_set_color(uint32_t fg) {
     g_px_color = fg;
 }
 
-void framebuf_putc(char ch) {
+static void framebuf_putc(char ch) {
     int r = g_caret_row;
     int c = g_caret_col;
 
@@ -142,14 +143,14 @@ void framebuf_putc(char ch) {
         --r;
     }
 
-    framebuf_putc_at(ch, g_px_color, r, c);
+    put_char_at(ch, g_px_color, r, c);
 }
 
 void framebuf_puts(const char *s, size_t n) {
-    // int key = irq_spin_take(&g_framebuf_spin);
+    int key = irq_spin_take(&g_framebuf_lock);
     for (size_t i = 0; i < n; ++i) {
         framebuf_putc(s[i]);
     }
     framebuf_draw_caret(g_px_color, g_caret_row, g_caret_col);
-    // irq_spin_give(&g_framebuf_spin, key);
+    irq_spin_give(&g_framebuf_lock, key);
 }

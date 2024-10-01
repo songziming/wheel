@@ -20,7 +20,8 @@ typedef struct priority_q {
 
 static PERCPU_BSS priority_q_t g_ready_q;
 
-static volatile uint32_t g_lowest_cpu;
+static volatile int g_lowest_load;
+static volatile int g_lowest_cpu;
 
 PERCPU_BSS task_t *g_tid_prev; // 正在运行的任务，只有中断可以更新这个字段
 PERCPU_BSS task_t *g_tid_next; // 即将运行的任务，中断返回时切换
@@ -33,14 +34,15 @@ PERCPU_BSS task_t *g_tid_next; // 即将运行的任务，中断返回时切换
 // 可用于就绪队列、阻塞队列
 
 static void priority_q_init(priority_q_t *q) {
-    q->priorities = 0;
-    memset(q->heads, 0, sizeof(q->heads));
+    memset(q, 0, sizeof(priority_q_t));
 }
 
 static void priority_q_push(priority_q_t *q, task_t *tid) {
     ASSERT(NULL != q);
     ASSERT(NULL != tid);
+
     int pri = tid->priority;
+
     if ((1U << pri) & q->priorities) {
         dl_insert_before(&tid->q_node, q->heads[pri]);
     } else {
@@ -48,6 +50,7 @@ static void priority_q_push(priority_q_t *q, task_t *tid) {
         q->heads[pri] = &tid->q_node;
         q->priorities |= 1U << pri;
     }
+
     q->load += tid->tick_reload;
 }
 
@@ -122,6 +125,48 @@ static void priority_q_remove(priority_q_t *q, task_t *tid) {
 // }
 
 
+//------------------------------------------------------------------------------
+// 任务调度
+//------------------------------------------------------------------------------
+
+// 停止当前任务
+task_t *sched_stop(uint16_t bits) {
+    ASSERT(0 != bits);
+    ASSERT(0 == cpu_int_depth());
+
+    // 任务可能迁移，必须先锁住中断再获取就绪队列
+    int key = cpu_int_lock();
+
+    task_t *tid = THISCPU_GET(g_tid_prev);
+    tid->state |= bits;
+    priority_q_t *q = thiscpu_ptr(&g_ready_q);
+    ASSERT(priority_q_contains(q, tid));
+
+    priority_q_remove(q, tid);
+    THISCPU_SET(g_tid_next, priority_q_head(q));
+
+    cpu_int_unlock(key);
+    return tid;
+}
+
+void sched_cont(task_t *tid, uint16_t bits) {
+    ASSERT(NULL != tid);
+    ASSERT(0 != bits);
+    ASSERT(TASK_READY != tid->state);
+
+    tid->state &= ~bits;
+    if (TASK_READY != tid->state) {
+        return;
+    }
+
+    // 选择一个负载最低的 CPU
+    // g_lowest_cpu
+    priority_q_t *q = thiscpu_ptr(&g_ready_q);
+
+    priority_q_push(q, tid);
+    THISCPU_SET(g_tid_next, priority_q_head(q));
+}
+
 
 
 //------------------------------------------------------------------------------
@@ -154,7 +199,6 @@ void task_create(task_t *tid, const char *name, uint8_t priority, int tick,
 static void task_post_delete(void *arg1, void *arg2 UNUSED) {
     task_t *tid = (task_t *)arg1;
     ASSERT(TASK_DELETED & tid->state);
-    log("(deleting TCB of %s)", tid->stack.desc);
     vmspace_remove(NULL, &tid->stack);
 }
 
@@ -162,32 +206,15 @@ static void task_post_delete(void *arg1, void *arg2 UNUSED) {
 
 // 停止当前正在运行的任务
 void task_exit() {
-    task_t *tid = THISCPU_GET(g_tid_prev);
-    tid->state |= TASK_DELETED;
-
-    cpu_int_lock();
-    priority_q_t *q = thiscpu_ptr(&g_ready_q);
-    // int key = irq_spin_take(&q->spin);
-
-    ASSERT(priority_q_contains(q, tid));
-
-    priority_q_remove(q, tid);
-    THISCPU_SET(g_tid_next, priority_q_head(q));
-
-    // 注册 work，下次中断返回时运行，释放任务的资源
+    task_t *tid = sched_stop(TASK_DELETED);
     work_defer(&tid->work, task_post_delete, tid, NULL);
-
-    // irq_spin_give(&q->spin, key);
-
-    // 中断仍处于关闭，但这个任务不会继续运行
-    // 当切换到其他任务后，中断会自动恢复
     arch_task_switch();
 }
 
 
 // 将任务放进就绪队列，参与调度
 // 放在当前 CPU 的就绪队列上
-void sched_cont(task_t *tid) {
+void task_resume(task_t *tid) {
     ASSERT(NULL != tid);
 
     tid->state &= ~TASK_STOPPED;
@@ -222,7 +249,7 @@ void sched_advance() {
     priority_q_t *q = thiscpu_ptr(&g_ready_q);
 
     // 锁住当前队列，防止 tid_next 改变
-    int key = irq_spin_take(&q->spin);
+    // int key = irq_spin_take(&q->spin);
 
     task_t *tid = THISCPU_GET(g_tid_next);
     if (0 == --tid->tick) {
@@ -231,7 +258,11 @@ void sched_advance() {
         THISCPU_SET(g_tid_next, tid);
     }
 
-    irq_spin_give(&q->spin, key);
+    // 检查当前 CPU 是不是负载最低的
+    if (q->load < g_lowest_load){
+        g_lowest_load = q->load;
+        g_lowest_cpu = cpu_index();
+    }
 }
 
 
@@ -243,6 +274,7 @@ static INIT_BSS task_t g_dummy_task;
 static PERCPU_BSS task_t g_idle_task;
 
 static void idle_proc() {
+    // cpu_int_lock();
     while (1) {
         cpu_pause();
         cpu_halt();
@@ -255,11 +287,11 @@ INIT_TEXT void sched_init() {
 
     for (int i = 0, N = cpu_count(); i < N; ++i) {
         priority_q_t *q = percpu_ptr(i, &g_ready_q);
-        spin_init(&q->spin);
         priority_q_init(q);
+        spin_init(&q->spin);
 
         task_t *idle = percpu_ptr(i, &g_idle_task);
-        task_create(idle, "idle", PRIORITY_IDLE, INT_MAX, idle_proc, 0,0,0,0);
+        task_create(idle, "idle", PRIORITY_IDLE, 100, idle_proc, 0,0,0,0);
 
         idle->state = TASK_READY;
         priority_q_push(q, idle);

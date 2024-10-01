@@ -188,6 +188,9 @@ static void gui_log(const char *s, size_t n) {
     framebuf_puts(s, n);
 }
 
+// devices/hpet.c
+void hpet_init();
+
 INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     if (0 == eax && 1 == ebx) {
         ap_init(g_cpu_started);
@@ -277,6 +280,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     tick_init();
     loapic_timer_set_periodic(10);
 
+    hpet_init();
+
     // 使用正式内核页表
     write_cr3(kernel_vmspace()->table);
 
@@ -292,7 +297,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 创建根任务
     task_create(&root_tcb, "root", 1, 10, root_proc, 0,0,0,0);
-    sched_cont(&root_tcb);
+    task_resume(&root_tcb);
     arch_task_switch();
 
     log("root task cannot start!\n");
@@ -354,6 +359,8 @@ static void root_proc() {
 
     // TODO 运行相关测试（检查 boot 参数）
     timer_start(&wd, 20, (timer_func_t)wd_func, 0, 0);
+
+    loapic_send_ipi(-1, 0x80);
 
     log("root task exiting...\n");
 }

@@ -54,8 +54,8 @@ void __ubsan_handle_type_mismatch_v1(type_mismatch_data_v1_t *data, uintptr_t pt
 
 
 
-void __ubsan_handle_add_overflow(source_location_t *loc, uintptr_t a UNUSED, uintptr_t b UNUSED) {
-    log("\nubsan: addition overflow\n");
+void __ubsan_handle_add_overflow(source_location_t *loc, uintptr_t a, uintptr_t b) {
+    log("\nubsan: addition overflow %zd %zd\n", a, b);
     log_location(loc);
     log_stacktrace();
     // emu_exit(1);

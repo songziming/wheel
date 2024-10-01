@@ -185,6 +185,7 @@ INIT_TEXT void acpi_parse_rsdp(size_t addr) {
 }
 
 // 根据签名寻找 ACPI 表
+// TODO 相同签名的表可能有多个
 acpi_tbl_t *acpi_table_find(const char sig[4]) {
     ASSERT(0 != g_table_num);
     ASSERT(NULL != g_tables);

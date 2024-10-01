@@ -2,6 +2,7 @@
 #include <arch_impl.h>
 #include <generic/rw.h>
 #include <memory/early_alloc.h>
+#include <library/debug.h>
 #include <library/string.h>
 #include <library/spin.h>
 
@@ -27,8 +28,8 @@ static unsigned g_start_row;    // g_vram 首行在 g_vbuf 中的行号
 
 
 INIT_TEXT void console_init() {
-    // ASSERT(NULL == g_vram);
-    // ASSERT(NULL == g_vbuf);
+    ASSERT(NULL == g_vram);
+    ASSERT(NULL == g_vbuf);
 
     spin_init(&g_console_lock);
 
@@ -60,9 +61,9 @@ static void set_caret(uint16_t idx) {
 }
 
 // 显示一个字符，并更新 state
-static void draw_char(char c) {
+static void console_putc(char ch) {
     // 更新光标位置
-    switch (c) {
+    switch (ch) {
     case '\t':
         g_caret_col += 8;
         g_caret_col &= ~7;
@@ -74,7 +75,7 @@ static void draw_char(char c) {
         g_caret_col = 0;
         break;
     default: {
-        uint16_t fill = (uint16_t)c | ((uint16_t)g_text_color << 8);
+        uint16_t fill = (uint16_t)ch | ((uint16_t)g_text_color << 8);
         g_vbuf[g_caret_row % ROWS * COLS + g_caret_col] = fill;
         unsigned vram_row = g_caret_row - g_start_row + ROWS;
         g_vram[vram_row % ROWS * COLS + g_caret_col] = fill;
@@ -106,17 +107,10 @@ static void draw_char(char c) {
     }
 }
 
-void console_putc(char c) {
-    int key = irq_spin_take(&g_console_lock);
-    draw_char(c);
-    set_caret((g_caret_row - g_start_row) * COLS + g_caret_col);
-    irq_spin_give(&g_console_lock, key);
-}
-
 void console_puts(const char *s, size_t n) {
     int key = irq_spin_take(&g_console_lock);
     for (size_t i = 0; i < n; ++i) {
-        draw_char(s[i]);
+        console_putc(s[i]);
     }
     set_caret((g_caret_row - g_start_row) * COLS + g_caret_col);
     irq_spin_give(&g_console_lock, key);
