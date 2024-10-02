@@ -31,10 +31,11 @@
 // 预留缓冲区和栈大小
 //------------------------------------------------------------------------------
 
-#define INIT_STACK_SIZE 0x1000
-
 #define EARLY_RO_SIZE   0x40000
 #define EARLY_RW_SIZE   0x800000
+
+#define INIT_STACK_SIZE 0x1000
+#define KERNEL_HEAP_SIZE    0x2000
 
 #define INT_STACK_SIZE  PAGE_SIZE   // 必须对齐到页
 

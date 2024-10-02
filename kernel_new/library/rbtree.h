@@ -13,13 +13,15 @@ typedef struct rbtree {
     rbnode_t *root;
 } rbtree_t;
 
-#define RBNODE_INIT ((rbnode_t){ 0, NULL, NULL })
-#define RBTREE_INIT ((rbtree_t){ NULL })
+// #define RBNODE_INIT ((rbnode_t){ 0, NULL, NULL })
+// #define RBTREE_INIT ((rbtree_t){ NULL })
 
 #define RB_RED      0
 #define RB_BLACK    1
 #define RB_COLOR(node)  ((size_t)    ((node)->parent_color &  1UL))
 #define RB_PARENT(node) ((rbnode_t *)((node)->parent_color & ~1UL))
+
+void rb_init_root(rbnode_t *node);
 
 void rb_insert(rbtree_t *tree, rbnode_t *node, rbnode_t *parent, rbnode_t **link);
 void rb_insert_left(rbtree_t *tree, rbnode_t *node, rbnode_t *parent);

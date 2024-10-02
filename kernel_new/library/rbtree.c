@@ -74,6 +74,12 @@ static void rb_rotate_right(rbtree_t *tree, rbnode_t *node) {
 }
 
 
+void rb_init_root(rbnode_t *node) {
+    node->left = NULL;
+    node->right = NULL;
+    node->parent_color = (size_t)node; // 根节点的 parent 指向自己
+}
+
 
 // 红黑树需要满足的性质：
 //  1. 节点要么是红色，要么是黑色

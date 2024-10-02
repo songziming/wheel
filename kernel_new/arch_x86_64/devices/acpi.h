@@ -18,7 +18,8 @@ typedef struct acpi_tbl {
 INIT_TEXT size_t acpi_probe_rsdp();
 INIT_TEXT void acpi_parse_rsdp(size_t rsdp);
 
-acpi_tbl_t *acpi_table_find(const char sig[4]);
+int acpi_table_count(const char sig[4]);
+acpi_tbl_t *acpi_table_find(const char sig[4], int idx);
 void acpi_tables_show();
 
 #endif // ACPI_H

@@ -184,18 +184,36 @@ INIT_TEXT void acpi_parse_rsdp(size_t addr) {
     // g_tables[g_table_num++] = check_table(dsdt);
 }
 
-// 根据签名寻找 ACPI 表
-// TODO 相同签名的表可能有多个
-acpi_tbl_t *acpi_table_find(const char sig[4]) {
+int acpi_table_count(const char sig[4]) {
     ASSERT(0 != g_table_num);
     ASSERT(NULL != g_tables);
 
+    int num = 0;
     for (int i = 0; i < g_table_num; ++i) {
         if (NULL == g_tables[i]) {
             continue;
         }
         if (0 == memcmp(sig, g_tables[i]->signature, 4)) {
-            return g_tables[i];
+            ++num;
+        }
+    }
+    return num;
+}
+
+// 根据签名寻找 ACPI 表，相同签名的表可能有多个
+acpi_tbl_t *acpi_table_find(const char sig[4], int idx) {
+    ASSERT(0 != g_table_num);
+    ASSERT(NULL != g_tables);
+
+    int num = 0;
+    for (int i = 0; i < g_table_num; ++i) {
+        if (NULL == g_tables[i]) {
+            continue;
+        }
+        if (0 == memcmp(sig, g_tables[i]->signature, 4)) {
+            if (idx == num++) {
+                return g_tables[i];
+            }
         }
     }
     return NULL;

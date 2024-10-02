@@ -7,6 +7,7 @@
 #include <memory/page.h>
 #include <memory/early_alloc.h>
 #include <memory/vmspace.h>
+#include <memory/heap.h>
 // #include <memory/context.h>
 #include <library/string.h>
 #include <library/debug.h>
@@ -30,6 +31,7 @@ static vmrange_t g_kernel_init;
 static vmrange_t g_kernel_text;
 static vmrange_t g_kernel_rodata;
 static vmrange_t g_kernel_data;
+static vmrange_t g_kernel_heap;
 static vmrange_t g_idmap;
 
 
@@ -85,8 +87,12 @@ INIT_TEXT void mem_init() {
     add_kernel_range(&g_kernel_rodata, (size_t)&_rodata_addr, ro_end, MMU_NONE, "rodata"); // 含 early_ro
     add_kernel_range(&g_kernel_data, (size_t)&_data_addr, rw_end, MMU_WRITE, "data"); // 含 bss、early_rw
 
-    // 可用部分按页对齐
-    // TODO 可以在这里创建 kernel heap
+    // 创建内核堆，按页对齐，留出一个 guard page
+    rw_end += 2 * PAGE_SIZE - 1;
+    rw_end &= ~(PAGE_SIZE - 1);
+    add_kernel_range(&g_kernel_heap, rw_end, rw_end + KERNEL_HEAP_SIZE, MMU_WRITE, "heap");
+    kernel_heap_init((void *)rw_end, KERNEL_HEAP_SIZE);
+    rw_end += KERNEL_HEAP_SIZE;
 
     // 给 percpu 分配空间，开头留出一个 guard page
     rw_end += 2 * PAGE_SIZE - 1;

@@ -1,6 +1,7 @@
 #include "acpi.h"
 #include <arch_impl.h>
 #include <library/debug.h>
+#include <memory/early_alloc.h>
 
 
 
@@ -27,6 +28,21 @@ typedef struct hpet {
     uint8_t  page_protection;
 } PACKED hpet_t;
 
+typedef struct hpet_dev {
+    uint64_t    base;   // 寄存器映射的虚拟地址
+    uint64_t    freq;
+    uint32_t    period; // 单位是飞秒（10^-15）
+} hpet_dev_t;
+
+
+static CONST int        g_hpet_num = 0;
+static CONST hpet_dev_t *g_hpet_devs = NULL;
+
+
+
+//------------------------------------------------------------------------------
+// 寄存器读写
+//------------------------------------------------------------------------------
 
 // HPET 寄存器都是 64-bit，占据八个字节
 #define GENERAL_CAP_ID      0x00
@@ -37,44 +53,81 @@ typedef struct hpet {
 #define TIMER_FSB_ROUTE(n)  (0x110 + ((n) << 5))
 #define MAIN_COUNTER_VAL    0xf0
 
+// general capabilities register fields
+#define COUNT_SIZE_CAP (1UL << 13)
+#define LEG_RT_CAP (1UL << 15)
 
-static CONST uint64_t g_base = 0; // 映射的虚拟地址
+// general configuration register fields
+#define ENABLE_CNF 1
+#define LEG_RT_CNF 2
 
+// timer configuration and capability register fields
+#define INT_TYPE_CNF    0x02    // 0 表示电平触发，1 表示边沿触发
+#define INT_ENB_CNF     0x04    // 中断开关
+#define TYPE_CNF        0x08    // 周期模式开关（如果支持）
+#define PER_INT_CAP     0x10    // （只读）支持周期模式
+#define SIZE_CAP        0x20    // （只读）64-bit
+#define VAL_SET_CNF
 
-static uint64_t hpet_read(int reg) {
-    return *(volatile uint64_t *)(g_base + reg);
+static uint64_t hpet_read(hpet_dev_t *dev, int reg) {
+    return *(volatile uint64_t *)(dev->base + reg);
 }
 
-static void hpet_write(int reg, uint64_t val) {
-    *(volatile uint64_t *)(g_base + reg) = val;
+static void hpet_write(hpet_dev_t *dev, int reg, uint64_t val) {
+    *(volatile uint64_t *)(dev->base + reg) = val;
 }
 
 
-void hpet_init() {
-    hpet_t *hpet = (hpet_t *)acpi_table_find("HPET");
-    if (NULL == hpet) {
-        log("HPET not found!\n");
-        return;
-    }
+//------------------------------------------------------------------------------
+// 设备初始化
+//------------------------------------------------------------------------------
 
-    // HPET 寄存器映射到内存空间
-    g_base = DIRECT_MAP_ADDR + hpet->address.address;
+static INIT_TEXT void hpet_dev_init(hpet_t *tbl, hpet_dev_t *dev) {
+    dev->base = DIRECT_MAP_ADDR + tbl->address.address;
 
-    log("found HPET at %p\n", hpet);
-    log("mapped to %s space address %zx\n",
-        hpet->address.space_id ? "io" : "memory", hpet->address.address);
-    log("%d comparators\n", hpet->comparator_count);
+    hpet_write(dev, GENERAL_CONF, 0); // 确保时钟关闭
 
-    uint64_t cap = hpet_read(GENERAL_CAP_ID);
-    uint32_t period = cap >> 32; // 单位是飞秒（10^-15 s）
-    if (cap & 0x8000) {
+    uint64_t cap = hpet_read(dev, GENERAL_CAP_ID);
+    dev->period = (uint32_t)(cap >> 32);
+    log("period %ld\n", dev->period);
+
+    uint64_t freq = 1000000000000000UL;
+    freq += dev->period >> 1;
+    freq /= dev->period;
+    dev->freq = freq;
+
+    if (cap & LEG_RT_CAP) {
         log("HPET capable of legacy replacement\n");
     }
-    if (cap & 0x2000) {
+    if (cap & COUNT_SIZE_CAP) {
         log("HPET capable of 64-bit mode\n");
     }
 
     int max_timer = (cap >> 8) & 0x1f; // comparator数量，应该和 ACPI 表中的相同
-    log("found %d timers\n", max_timer);
-    ASSERT(max_timer == hpet->comparator_count);
+    for (int i = 0; i <= max_timer; ++i) {
+        uint64_t confcap = hpet_read(dev, TIMER_CONF_CAP(i));
+        log("  - comparator %d", i);
+        if (confcap & PER_INT_CAP) {
+            log(" periodic");
+        }
+        if (confcap & SIZE_CAP) {
+            log(" 64-bit");
+        }
+        log("\n");
+    }
+    // log("found %d timers\n", max_timer);
+    // ASSERT(max_timer == tbl->comparator_count);
+}
+
+INIT_TEXT void hpet_init() {
+    g_hpet_num = acpi_table_count("HPET");
+    if (0 == g_hpet_num) {
+        return;
+    }
+
+    g_hpet_devs = early_alloc_rw(g_hpet_num * sizeof(hpet_dev_t));
+    for (int i = 0; i < g_hpet_num; ++i) {
+        hpet_t *tbl = (hpet_t *)acpi_table_find("HPET", i);
+        hpet_dev_init(tbl, &g_hpet_devs[i]);
+    }
 }

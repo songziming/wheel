@@ -231,7 +231,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     }
     acpi_parse_rsdp(g_rsdp);
 
-    madt_t *madt = (madt_t *)acpi_table_find("APIC");
+    madt_t *madt = (madt_t *)acpi_table_find("APIC", 0);
     if (NULL == madt) {
         log("fatal: MADT not found!\n");
         goto end;
@@ -250,9 +250,11 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // TODO 检查 Acpi::MCFG，分析 PCIe 信息
     // TODO 遍历 PCI 总线，识别并注册 PCI 外设
-    if (acpi_table_find("MCFG")) {
+    if (acpi_table_find("MCFG", 0)) {
         log("has PCIe support!\n");
     }
+
+    hpet_init();
 
     // 切换到正式的 GDT，加载 IDT
     gdt_init();
@@ -279,8 +281,6 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     calibrate_timer();
     tick_init();
     loapic_timer_set_periodic(10);
-
-    hpet_init();
 
     // 使用正式内核页表
     write_cr3(kernel_vmspace()->table);
