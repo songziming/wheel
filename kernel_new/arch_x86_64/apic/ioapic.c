@@ -25,9 +25,14 @@ static CONST ioapic_t *g_ioapics = NULL;
 static CONST uint8_t   g_irq_max = 0;
 static CONST uint32_t  g_gsi_max = 0;
 
+typedef struct trigger_mode {
+    uint8_t edge : 1;
+    uint8_t high : 1;
+} trigger_mode_t;
+
 static CONST uint32_t *g_irq_to_gsi = NULL;
 static CONST uint8_t  *g_gsi_to_irq = NULL;
-static CONST uint16_t *g_gsi_flags  = NULL;
+static CONST trigger_mode_t *g_gsi_modes = NULL;
 
 
 //------------------------------------------------------------------------------
@@ -166,15 +171,18 @@ INIT_TEXT void ioapic_alloc(int n, uint8_t irq_max, uint32_t gsi_max) {
     g_ioapics = early_alloc_ro(n * sizeof(ioapic_t));
     g_irq_to_gsi = early_alloc_ro((irq_max + 1) * sizeof(uint32_t));
     g_gsi_to_irq = early_alloc_ro((gsi_max + 1) * sizeof(uint8_t));
-    g_gsi_flags  = early_alloc_ro((gsi_max + 1) * sizeof(uint16_t));
+    g_gsi_modes  = early_alloc_ro((gsi_max + 1) * sizeof(trigger_mode_t));
 
-    // 默认情况下，8259 IRQ 0~15 与 GSI 0~15 对应，边沿触发
+    // 默认情况下，8259 IRQ 0~15 与 GSI 0~15 对应
     for (uint8_t i = 0; i < irq_max; ++i) {
         g_irq_to_gsi[i] = i;
     }
+
+    // 默认是上升沿触发
     for (uint32_t i = 0; i < gsi_max; ++i) {
         g_gsi_to_irq[i] = i;
-        g_gsi_flags[i] = TRIGMODE_EDGE;
+        g_gsi_modes[i].edge = 1;
+        g_gsi_modes[i].high = 1;
     }
 }
 
@@ -194,7 +202,13 @@ INIT_TEXT void override_int(madt_int_override_t *tbl) {
 
     g_irq_to_gsi[tbl->source] = tbl->gsi;
     g_gsi_to_irq[tbl->gsi] = tbl->source;
-    g_gsi_flags[tbl->gsi] = tbl->inti_flags;
+
+    if (TRIGMODE_LEVEL == (TRIGMODE_MASK & tbl->inti_flags)) {
+        g_gsi_modes[tbl->gsi].edge = 0;
+    }
+    if (POLARITY_LOW == (POLARITY_MASK & tbl->inti_flags)) {
+        g_gsi_modes[tbl->gsi].high = 0;
+    }
 }
 
 INIT_TEXT int irq_to_gsi(int irq) {
@@ -204,27 +218,12 @@ INIT_TEXT int irq_to_gsi(int irq) {
     return irq;
 }
 
-// 获取触发模式，0 = level-trigger，1 = edge-trigger
-INIT_TEXT int gsi_trigmode(int gsi) {
-    if ((uint32_t)gsi <= g_gsi_max) {
-        switch (TRIGMODE_MASK & g_gsi_flags[gsi]) {
-        case TRIGMODE_EDGE:  return 1;  // edge
-        case TRIGMODE_LEVEL: return 0;  // level
-        default:             return 1;  // ISA 默认，edge
-        }
-    }
-    return 0; // TODO 默认触发模式如何确定？
+INIT_TEXT int gsi_is_edge(int gsi) {
+    return g_gsi_modes[gsi].edge;
 }
 
-INIT_TEXT int gsi_polarity(int gsi) {
-    if ((uint32_t)gsi < g_gsi_max) {
-        switch (POLARITY_MASK & g_gsi_flags[gsi]) {
-        case POLARITY_HIGH: return 1;   // high
-        case POLARITY_LOW:  return 0;   // low
-        default:            return 1;   // ISA 默认，high
-        }
-    }
-    return 0; // TODO 默认极性如何确定？
+INIT_TEXT int gsi_is_high(int gsi) {
+    return g_gsi_modes[gsi].high;
 }
 
 static INIT_TEXT void ioapic_init(ioapic_t *io) {
@@ -252,8 +251,8 @@ INIT_TEXT void ioapic_init_all() {
         int ent = 0;
         for (; (io->gsi_base + ent < 16) && (ent < io->red_num); ++ent) {
             uint32_t lo = IOAPIC_DM_LOWEST | IOAPIC_LOGICAL;
-            lo |= gsi_trigmode(ent) ? IOAPIC_EDGE : IOAPIC_LEVEL;
-            lo |= gsi_polarity(ent) ? IOAPIC_HIGH : IOAPIC_LOW;
+            lo |= gsi_is_edge(ent) ? IOAPIC_EDGE : IOAPIC_LEVEL;
+            lo |= gsi_is_high(ent) ? IOAPIC_HIGH : IOAPIC_LOW;
             lo |= (ent + VEC_GSI_BASE) & IOAPIC_VEC_MASK;
             lo |= IOAPIC_INT_MASK;
             // ioapic_write(io->address, IOAPIC_RED_H(ent), 0x01000000); // 固定发送给 CPU0

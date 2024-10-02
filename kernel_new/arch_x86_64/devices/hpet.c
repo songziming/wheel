@@ -5,6 +5,10 @@
 
 
 
+// 高精度时钟，可用来模拟 IRQ 0 (PIT) 和 IRQ 8 (RTC)
+// 如果发现了 HPET，就视为最准确的时钟源，用来校准 Local APIC Timer
+
+
 typedef struct addr {
     uint8_t space_id;    // 0 - system memory, 1 - system I/O
     uint8_t register_bit_width;
