@@ -119,8 +119,6 @@ static INIT_TEXT void hpet_dev_init(hpet_t *tbl, hpet_dev_t *dev) {
         }
         log("\n");
     }
-    // log("found %d timers\n", max_timer);
-    // ASSERT(max_timer == tbl->comparator_count);
 }
 
 INIT_TEXT void hpet_init() {

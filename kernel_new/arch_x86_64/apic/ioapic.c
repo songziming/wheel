@@ -211,19 +211,11 @@ INIT_TEXT void override_int(madt_int_override_t *tbl) {
     }
 }
 
-INIT_TEXT int irq_to_gsi(int irq) {
+int irq_to_gsi(int irq) {
     if (irq < g_irq_max) {
         return g_irq_to_gsi[irq];
     }
     return irq;
-}
-
-INIT_TEXT int gsi_is_edge(int gsi) {
-    return g_gsi_modes[gsi].edge;
-}
-
-INIT_TEXT int gsi_is_high(int gsi) {
-    return g_gsi_modes[gsi].high;
 }
 
 static INIT_TEXT void ioapic_init(ioapic_t *io) {
@@ -239,6 +231,14 @@ static INIT_TEXT void ioapic_init(ioapic_t *io) {
     if (ver & (1 << 15)) {
         log("no Pin Assertion Register\n");
     }
+}
+
+static INIT_TEXT int gsi_is_edge(int gsi) {
+    return g_gsi_modes[gsi].edge;
+}
+
+static INIT_TEXT int gsi_is_high(int gsi) {
+    return g_gsi_modes[gsi].high;
 }
 
 // 初始化所有的 IO APIC，默认禁用所有硬件中断，按需开启
