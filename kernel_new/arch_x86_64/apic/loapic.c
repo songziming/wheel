@@ -369,6 +369,10 @@ void loapic_send_ipi(int cpu, int vec) {
     }
 }
 
+void loapic_send_eoi() {
+    g_write(REG_EOI, 0);
+}
+
 void loapic_timer_set_oneshot(int n) {
     g_write(REG_LVT_TIMER, LOAPIC_DM_FIXED | VEC_LOAPIC_TIMER | LOAPIC_ONESHOT);
     g_write(REG_TIMER_DIV, 0x0b); // divide by 1

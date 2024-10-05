@@ -12,7 +12,7 @@ typedef struct ioapic {
     int      red_num;   // 重定位条目数量
 } ioapic_t;
 
-uint32_t irq_to_gsi(int irq);
+uint32_t irq_to_gsi(uint8_t irq);
 
 void ioapic_mask_gsi(uint32_t gsi);
 void ioapic_unmask_gsi(uint32_t gsi);

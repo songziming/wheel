@@ -54,5 +54,6 @@ typedef struct task task_t;
 
 void arch_task_init(task_t *tid, size_t entry, void *arg1, void *arg2, void *arg3, void *arg4);
 void arch_task_switch();
+void arch_ipi_resched(int cpu);
 
 #endif // ARCH_INTF_H

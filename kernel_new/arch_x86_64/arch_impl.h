@@ -46,6 +46,9 @@
 //------------------------------------------------------------------------------
 
 #define VEC_GSI_BASE        0x40    // 外部中断
+
+#define VEC_IPI_RESCHED     0xd0
+
 #define VEC_LOAPIC_TIMER    0xe0
 #define VEC_LOAPIC_ERROR    0xfe
 #define VEC_LOAPIC_SPURIOUS 0xff    // spurious 向量号最后 4-bit 必须是 f
@@ -91,6 +94,8 @@
     uint64_t: ({ __asm__("movq %0,%%gs:(" #var ")" :: "r"(val)); }), \
     default:  ({ __asm__("movq %0,%%gs:(" #var ")" :: "r"(val)); })  \
 )
+
+INIT_TEXT void install_ipi_handlers();
 
 #endif // C_FILE
 

@@ -2,6 +2,7 @@
 #include "arch_impl.h"
 #include <proc/sched.h>
 #include "arch_int.h"
+#include "apic/loapic.h"
 #include <library/string.h>
 
 
@@ -83,4 +84,26 @@ void arch_task_init(task_t *tid, size_t entry, void *arg1, void *arg2, void *arg
     regs->rcx = (uint64_t)arg4;
 
     tid->arch_regs = regs;
+}
+
+static void on_resched(int vec UNUSED, regs_t *f UNUSED) {
+    loapic_send_eoi();
+}
+
+// static void on_stopall(int vec UNUSED, regs_t *f UNUSED) {
+//     // __asm__("cli");
+//     cpu_int_lock();
+//     while (1) {
+//         cpu_halt();
+//     }
+// }
+
+// 发送 IPI，通知另一个 CPU 切换任务
+void arch_ipi_resched(int cpu) {
+    loapic_send_ipi(cpu, VEC_IPI_RESCHED);
+}
+
+INIT_TEXT void install_ipi_handlers() {
+    set_int_handler(VEC_IPI_RESCHED, on_resched);
+    // set_int_handler(VEC_IPI_STOPALL, on_stopall);
 }

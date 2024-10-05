@@ -271,6 +271,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 中断异常处理机制初始化
     int_init();
+    install_ipi_handlers();
 
     // 中断控制器初始化
     i8259_disable();
@@ -360,7 +361,7 @@ static void root_proc() {
     // TODO 运行相关测试（检查 boot 参数）
     timer_start(&wd, 20, (timer_func_t)wd_func, 0, 0);
 
-    loapic_send_ipi(-1, 0x80);
+    // loapic_send_ipi(-1, 0x80);
 
     log("root task exiting...\n");
 }

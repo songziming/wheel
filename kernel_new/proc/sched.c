@@ -15,6 +15,7 @@ typedef struct priority_q {
     dlnode_t   *heads[PRIORITY_NUM];
     spin_t      spin;
     int         load;
+    int         new_task; // 有新任务，可能不再是最低优先级
 } priority_q_t;
 
 
@@ -134,22 +135,21 @@ task_t *sched_stop(uint16_t bits) {
     ASSERT(0 != bits);
     ASSERT(0 == cpu_int_depth());
 
-    // 任务可能迁移，必须先锁住中断再获取就绪队列
-    int key = cpu_int_lock();
-
     task_t *tid = THISCPU_GET(g_tid_prev);
     tid->state |= bits;
-    priority_q_t *q = thiscpu_ptr(&g_ready_q);
-    ASSERT(priority_q_contains(q, tid));
 
+    priority_q_t *q = thiscpu_ptr(&g_ready_q);
+    int key = irq_spin_take(&q->spin);
+    ASSERT(priority_q_contains(q, tid));
     priority_q_remove(q, tid);
     THISCPU_SET(g_tid_next, priority_q_head(q));
+    irq_spin_give(&q->spin, key);
 
-    cpu_int_unlock(key);
     return tid;
 }
 
-void sched_cont(task_t *tid, uint16_t bits) {
+// 将任务放在指定 CPU 上运行
+void sched_cont_on(task_t *tid, uint16_t bits, int cpu) {
     ASSERT(NULL != tid);
     ASSERT(0 != bits);
     ASSERT(TASK_READY != tid->state);
@@ -159,14 +159,20 @@ void sched_cont(task_t *tid, uint16_t bits) {
         return;
     }
 
-    // 选择一个负载最低的 CPU
-    // g_lowest_cpu
-    priority_q_t *q = thiscpu_ptr(&g_ready_q);
-
+    priority_q_t *q = percpu_ptr(cpu, &g_ready_q);
+    int key = irq_spin_take(&q->spin);
     priority_q_push(q, tid);
-    THISCPU_SET(g_tid_next, priority_q_head(q));
+    // q->new_task = 1;
+    *(task_t **)percpu_ptr(cpu, &g_tid_next) = priority_q_head(q);
+    irq_spin_give(&q->spin, key);
 }
 
+// 返回选中的 CPU 编号
+int sched_cont(task_t *tid, uint16_t bits) {
+    int cpu = g_lowest_cpu;
+    sched_cont_on(tid, bits, cpu);
+    return cpu;
+}
 
 
 //------------------------------------------------------------------------------
@@ -208,6 +214,13 @@ static void task_post_delete(void *arg1, void *arg2 UNUSED) {
 void task_exit() {
     task_t *tid = sched_stop(TASK_DELETED);
     work_defer(&tid->work, task_post_delete, tid, NULL);
+
+    // 挑选出新的最低负载 CPU
+    // TODO 应该换成 compare-and-set，原子性操作
+    if (cpu_index() == g_lowest_cpu) {
+        g_lowest_load = THISCPU_GET(g_ready_q.load);
+    }
+
     arch_task_switch();
 }
 
@@ -217,24 +230,13 @@ void task_exit() {
 void task_resume(task_t *tid) {
     ASSERT(NULL != tid);
 
-    tid->state &= ~TASK_STOPPED;
-    if (TASK_READY != tid->state) {
-        return;
+    int cpu = sched_cont(tid, TASK_STOPPED);
+
+    if (cpu_index() != cpu) {
+        arch_ipi_resched(cpu);
+    } else if (0 == cpu_int_depth()) {
+        arch_task_switch();
     }
-
-    priority_q_t *q = thiscpu_ptr(&g_ready_q);
-    ASSERT(!priority_q_contains(q, tid));
-
-    int key = irq_spin_take(&q->spin);
-    priority_q_push(q, tid); // 放入队列
-    tid = priority_q_head(q); // 可能抢占
-    THISCPU_SET(g_tid_next, tid);
-    irq_spin_give(&q->spin, key);
-}
-
-void start_on_lowest(task_t *tid) {
-    // TODO 找出 load 最低的 CPU，在那个 CPU 上注册一个异步任务
-    // 可以通过发送 IPI 让另一个 CPU 执行代码
 }
 
 
@@ -246,10 +248,9 @@ void start_on_lowest(task_t *tid) {
 void sched_advance() {
     ASSERT(cpu_int_depth());
 
-    priority_q_t *q = thiscpu_ptr(&g_ready_q);
-
     // 锁住当前队列，防止 tid_next 改变
-    // int key = irq_spin_take(&q->spin);
+    priority_q_t *q = thiscpu_ptr(&g_ready_q);
+    raw_spin_take(&q->spin);
 
     task_t *tid = THISCPU_GET(g_tid_next);
     if (0 == --tid->tick) {
@@ -259,10 +260,13 @@ void sched_advance() {
     }
 
     // 检查当前 CPU 是不是负载最低的
-    if (q->load < g_lowest_load){
+    if (q->load < g_lowest_load) {
         g_lowest_load = q->load;
         g_lowest_cpu = cpu_index();
     }
+
+    raw_spin_give(&q->spin);
+    q->new_task = 0;
 }
 
 
@@ -284,6 +288,9 @@ static void idle_proc() {
 INIT_TEXT void sched_init() {
     memset(&g_dummy_task, 0, sizeof(task_t));
     g_dummy_task.stack.desc = "dummy";
+
+    g_lowest_cpu = 0;
+    g_lowest_load = INT_MAX;
 
     for (int i = 0, N = cpu_count(); i < N; ++i) {
         priority_q_t *q = percpu_ptr(i, &g_ready_q);

@@ -211,7 +211,7 @@ INIT_TEXT void override_int(madt_int_override_t *tbl) {
     }
 }
 
-int irq_to_gsi(int irq) {
+uint32_t irq_to_gsi(uint8_t irq) {
     if (irq < g_irq_max) {
         return g_irq_to_gsi[irq];
     }

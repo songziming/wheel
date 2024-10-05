@@ -268,8 +268,7 @@ arch_task_switch:
     cmpq    %rdi, %rsi
     je      no_yield    // 目标任务相同，不用切换
 
-    // 模拟发生了一次中断
-    // 但是不切换中断栈，寄存器保存在当前栈上
+    // 模拟发生中断，不切换中断栈，寄存器保存在当前栈上
     movq    %rsp, %r8       // 获取 rsp
     andq    $-16, %rsp      // 栈帧按 16 字节对齐
     pushq   $0x10           // ss

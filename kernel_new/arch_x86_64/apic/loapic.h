@@ -23,6 +23,8 @@ INIT_TEXT void loapic_send_init(int cpu);
 INIT_TEXT void loapic_send_sipi(int cpu, int vec);
 void loapic_send_ipi(int cpu, int vec);
 
+void loapic_send_eoi();
+
 void loapic_timer_set_oneshot(int n);
 void loapic_timer_set_periodic(int freq);
 void loapic_timer_busywait(int us);
