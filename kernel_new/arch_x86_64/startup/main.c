@@ -7,6 +7,8 @@
 #include <proc/sched.h>
 #include <proc/tick.h>
 #include <proc/work.h>
+#include <drivers/block.h>
+#include <drivers/pci.h>
 
 #include "multiboot1.h"
 #include "multiboot2.h"
@@ -15,6 +17,7 @@
 #include <devices/console.h>
 #include <devices/framebuf.h>
 #include <devices/acpi_madt.h>
+#include <devices/ata.h>
 
 #include <generic/rw.h>
 #include <generic/cpufeatures.h>
@@ -175,6 +178,46 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
 
 
 //------------------------------------------------------------------------------
+// 读写 PCI 地址空间
+//------------------------------------------------------------------------------
+
+// 这段代码可以放在 arch_impl.c
+
+#define CONFIG_ADDR 0xcf8
+#define CONFIG_DATA 0xcfc
+
+static uint32_t pci_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg) {
+    ASSERT(dev < 32);
+    ASSERT(func < 8);
+    ASSERT(0 == (reg & 3));
+
+    uint32_t addr = ((uint32_t)bus  << 16)
+                  | ((uint32_t)dev  << 11)
+                  | ((uint32_t)func <<  8)
+                  |  (uint32_t)reg
+                  | 0x80000000U;
+    out32(CONFIG_ADDR, addr);
+    return in32(CONFIG_DATA);
+}
+
+static void pci_write(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg, uint32_t data) {
+    ASSERT(dev < 32);
+    ASSERT(func < 8);
+    ASSERT(0 == (reg & 3));
+
+    uint32_t addr = ((uint32_t)bus  << 16)
+                  | ((uint32_t)dev  << 11)
+                  | ((uint32_t)func <<  8)
+                  |  (uint32_t)reg
+                  | 0x80000000U;
+    out32(CONFIG_ADDR, addr);
+    out32(CONFIG_DATA, data);
+}
+
+// TODO PCIe 使用 mmio 读写配置空间
+
+
+//------------------------------------------------------------------------------
 // 系统初始化入口点
 //------------------------------------------------------------------------------
 
@@ -248,11 +291,12 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // 关键数据已经备份，可以放开 early-alloc 长度限制
     early_rw_unlock();
 
-    // TODO 检查 Acpi::MCFG，分析 PCIe 信息
-    // TODO 遍历 PCI 总线，识别并注册 PCI 外设
+    // TODO 如果支持 PCIe，则应该使用 mmio 读写
     if (acpi_table_find("MCFG", 0)) {
         log("has PCIe support!\n");
     }
+    pci_lib_init(pci_read, pci_write);
+    pci_probe();
 
     hpet_init();
 
@@ -357,6 +401,8 @@ static void root_proc() {
 
     // TODO 注册设备驱动
     // TODO 启动文件系统
+    block_device_lib_init();
+    ata_driver_init();
 
     // TODO 运行相关测试（检查 boot 参数）
     timer_start(&wd, 20, (timer_func_t)wd_func, 0, 0);

@@ -218,7 +218,8 @@ void task_exit() {
     // 挑选出新的最低负载 CPU
     // TODO 应该换成 compare-and-set，原子性操作
     if (cpu_index() == g_lowest_cpu) {
-        g_lowest_load = THISCPU_GET(g_ready_q.load);
+        // g_lowest_load = THISCPU_GET(g_ready_q.load);
+        g_lowest_load = ((priority_q_t *)thiscpu_ptr(&g_ready_q))->load;
     }
 
     arch_task_switch();

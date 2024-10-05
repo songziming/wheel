@@ -215,7 +215,7 @@ uint32_t irq_to_gsi(uint8_t irq) {
     if (irq < g_irq_max) {
         return g_irq_to_gsi[irq];
     }
-    return irq;
+    return (uint32_t)irq;
 }
 
 static INIT_TEXT void ioapic_init(ioapic_t *io) {
