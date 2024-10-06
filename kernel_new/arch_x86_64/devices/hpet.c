@@ -9,13 +9,13 @@
 // 如果发现了 HPET，就视为最准确的时钟源，用来校准 Local APIC Timer
 
 
-typedef struct addr {
+typedef struct hpet_addr {
     uint8_t space_id;    // 0 - system memory, 1 - system I/O
     uint8_t register_bit_width;
     uint8_t register_bit_offset;
     uint8_t reserved;
     uint64_t address;
-} PACKED addr_t;
+} PACKED hpet_addr_t;
 
 typedef struct hpet {
     acpi_tbl_t  header;
@@ -26,7 +26,7 @@ typedef struct hpet {
     uint8_t reserved            : 1;
     uint8_t legacy_replacement  : 1;
     uint16_t pci_vendor_id;
-    addr_t   address;
+    hpet_addr_t address;
     uint8_t  hpet_number;
     uint16_t minimum_tick;
     uint8_t  page_protection;

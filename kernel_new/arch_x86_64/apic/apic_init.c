@@ -3,7 +3,7 @@
 #include "loapic.h"
 #include <arch_intf.h>
 
-#include <generic/gdt_idt_tss.h>
+#include <cpu/gdt_idt_tss.h>
 #include <memory/percpu.h>
 #include <library/debug.h>
 

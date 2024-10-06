@@ -1,4 +1,4 @@
-#include "cpufeatures.h"
+#include "features.h"
 #include "rw.h"
 #include <arch_impl.h>
 #include <library/string.h>
@@ -423,7 +423,7 @@ static INIT_TEXT void amd_detect_svm() {
     __asm__ volatile("cpuid" : "=c"(c) : "a"(0x80000001) : "ebx", "edx");
     g_cpu_features |= (c & (1U << 2)) ? CPU_FEATURE_SVM : 0;
 
-    // TBD
+    // TODO
 }
 
 
@@ -437,7 +437,7 @@ static INIT_TEXT void intel_detect_vmx() {
     __asm__ volatile("cpuid" : "=c"(c) : "a"(1) : "ebx", "edx");
     g_cpu_features |= (c & (1U << 5)) ? CPU_FEATURE_VMX : 0;
 
-    // TBD
+    // TODO
 }
 
 

@@ -4,7 +4,7 @@
 
 #include <arch_intf.h> // 页表函数定义在 arch api 里
 #include <arch_impl.h>
-#include <generic/cpufeatures.h>
+#include <cpu/features.h>
 
 #include <memory/page.h>
 #include <library/string.h>

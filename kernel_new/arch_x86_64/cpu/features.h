@@ -1,5 +1,5 @@
-#ifndef CPUINFO_H
-#define CPUINFO_H
+#ifndef FEATURES_H
+#define FEATURES_H
 
 #include <common.h>
 
@@ -38,4 +38,4 @@ INIT_TEXT void cpu_features_enable();
 
 void cpu_features_show();
 
-#endif // CPUINFO_H
+#endif // FEATURES_H

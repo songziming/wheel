@@ -9,7 +9,7 @@
 #include <drivers/pci.h>
 #include <memory/heap.h>
 
-#include <generic/rw.h>
+#include <cpu/rw.h>
 
 
 enum ata_flag {

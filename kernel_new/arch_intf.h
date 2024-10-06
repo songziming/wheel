@@ -49,10 +49,12 @@ void   mmu_map(size_t tbl, size_t va, size_t end, size_t pa, mmu_attr_t attrs);
 void   mmu_unmap(size_t tbl, size_t va, size_t end);
 
 //------------------------------------------------------------------------------
+// 多任务
+//------------------------------------------------------------------------------
 
 typedef struct task task_t;
 
-void arch_task_init(task_t *tid, size_t entry, void *arg1, void *arg2, void *arg3, void *arg4);
+void arch_regs_init(task_t *tid, size_t entry, void *arg1, void *arg2, void *arg3, void *arg4);
 void arch_task_switch();
 void arch_ipi_resched(int cpu);
 

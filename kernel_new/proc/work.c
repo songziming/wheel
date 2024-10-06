@@ -44,7 +44,7 @@ void work_defer_on(work_t *work, int cpu, work_func_t func, void *arg1, void *ar
     // arch_emit_ipi(cpu);
 }
 
-// 在中断返回阶段执行，
+// 在中断返回阶段执行
 void work_q_flush() {
     dlnode_t *head = thiscpu_ptr(&g_work_q);
     for (dlnode_t *i = head->next; i != head; i = i->next) {

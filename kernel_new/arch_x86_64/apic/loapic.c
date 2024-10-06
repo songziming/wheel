@@ -2,8 +2,8 @@
 #include <arch_intf.h>
 #include <arch_impl.h>
 #include <arch_int.h>
-#include <generic/rw.h>
-#include <generic/cpufeatures.h>
+#include <cpu/rw.h>
+#include <cpu/features.h>
 #include <memory/early_alloc.h>
 #include <library/debug.h>
 #include <proc/tick.h>

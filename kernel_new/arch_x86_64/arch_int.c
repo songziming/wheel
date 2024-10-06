@@ -1,8 +1,8 @@
 #include "arch_int.h"
 #include <arch_intf.h>
 #include "arch_impl.h"
-#include <generic/rw.h>
-#include <generic/gdt_idt_tss.h>
+#include <cpu/rw.h>
+#include <cpu/gdt_idt_tss.h>
 #include <memory/percpu.h>
 #include <library/debug.h>
 

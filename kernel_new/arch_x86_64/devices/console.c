@@ -1,6 +1,6 @@
 #include "console.h"
 #include <arch_impl.h>
-#include <generic/rw.h>
+#include <cpu/rw.h>
 #include <memory/early_alloc.h>
 #include <library/debug.h>
 #include <library/string.h>

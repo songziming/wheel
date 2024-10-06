@@ -1,8 +1,8 @@
 #include "percpu.h"
 #include <arch_intf.h>
 #include <arch_impl.h>
-#include <generic/rw.h>
-#include <generic/cpufeatures.h>
+#include <cpu/rw.h>
+#include <cpu/features.h>
 #include <memory/vmspace.h>
 #include <memory/page.h>
 #include <library/debug.h>

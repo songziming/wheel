@@ -95,8 +95,6 @@
     default:  ({ __asm__("movq %0,%%gs:(" #var ")" :: "r"(val)); })  \
 )
 
-INIT_TEXT void install_ipi_handlers();
-
 #endif // C_FILE
 
 #endif // ARCH_IMPL_H

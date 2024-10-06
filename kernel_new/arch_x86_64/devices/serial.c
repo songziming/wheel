@@ -1,7 +1,7 @@
 // UART 串口输出
 
 #include "serial.h"
-#include <generic/rw.h>
+#include <cpu/rw.h>
 #include <library/spin.h>
 
 

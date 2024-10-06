@@ -6,9 +6,10 @@
 #include <memory/vmspace.h>
 #include <proc/sched.h>
 #include <proc/tick.h>
-#include <proc/work.h>
 #include <drivers/block.h>
-#include <drivers/pci.h>
+
+#include <arch_pci.h>
+#include <arch_task.h>
 
 #include "multiboot1.h"
 #include "multiboot2.h"
@@ -19,9 +20,9 @@
 #include <devices/acpi_madt.h>
 #include <devices/ata.h>
 
-#include <generic/rw.h>
-#include <generic/cpufeatures.h>
-#include <generic/gdt_idt_tss.h>
+#include <cpu/rw.h>
+#include <cpu/features.h>
+#include <cpu/gdt_idt_tss.h>
 
 #include <memory/mem_init.h>
 #include <memory/percpu.h>
@@ -178,46 +179,6 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
 
 
 //------------------------------------------------------------------------------
-// 读写 PCI 地址空间
-//------------------------------------------------------------------------------
-
-// 这段代码可以放在 arch_impl.c
-
-#define CONFIG_ADDR 0xcf8
-#define CONFIG_DATA 0xcfc
-
-static uint32_t pci_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg) {
-    ASSERT(dev < 32);
-    ASSERT(func < 8);
-    ASSERT(0 == (reg & 3));
-
-    uint32_t addr = ((uint32_t)bus  << 16)
-                  | ((uint32_t)dev  << 11)
-                  | ((uint32_t)func <<  8)
-                  |  (uint32_t)reg
-                  | 0x80000000U;
-    out32(CONFIG_ADDR, addr);
-    return in32(CONFIG_DATA);
-}
-
-static void pci_write(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg, uint32_t data) {
-    ASSERT(dev < 32);
-    ASSERT(func < 8);
-    ASSERT(0 == (reg & 3));
-
-    uint32_t addr = ((uint32_t)bus  << 16)
-                  | ((uint32_t)dev  << 11)
-                  | ((uint32_t)func <<  8)
-                  |  (uint32_t)reg
-                  | 0x80000000U;
-    out32(CONFIG_ADDR, addr);
-    out32(CONFIG_DATA, data);
-}
-
-// TODO PCIe 使用 mmio 读写配置空间
-
-
-//------------------------------------------------------------------------------
 // 系统初始化入口点
 //------------------------------------------------------------------------------
 
@@ -291,12 +252,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // 关键数据已经备份，可以放开 early-alloc 长度限制
     early_rw_unlock();
 
-    // TODO 如果支持 PCIe，则应该使用 mmio 读写
-    if (acpi_table_find("MCFG", 0)) {
-        log("has PCIe support!\n");
-    }
-    pci_lib_init(pci_read, pci_write);
-    pci_probe();
+    arch_pci_lib_init();
 
     hpet_init();
 
@@ -306,7 +262,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     idt_init();
     idt_load();
 
-    // 内存管理初始化
+    // 内存管理初始化，禁用 early_alloc，启用 percpu
     mem_init();
     thiscpu_init(0);
 
@@ -315,7 +271,6 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 中断异常处理机制初始化
     int_init();
-    install_ipi_handlers();
 
     // 中断控制器初始化
     i8259_disable();
@@ -324,15 +279,10 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 系统时钟（主频 10Hz）
     calibrate_timer();
-    tick_init();
     loapic_timer_set_periodic(10);
 
     // 使用正式内核页表
     write_cr3(kernel_vmspace()->table);
-
-    // 调度初始化
-    sched_init();
-    work_init();
 
 
     // pmlayout_show(); // 打印物理内存布局
@@ -340,7 +290,10 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // cpu_features_show(); // 打印 cpuinfo
 
 
-    // 创建根任务
+    // 任务调度初始化
+    arch_task_lib_init();
+
+    // 创建根任务并开始运行
     task_create(&root_tcb, "root", 1, 10, root_proc, 0,0,0,0);
     task_resume(&root_tcb);
     arch_task_switch();

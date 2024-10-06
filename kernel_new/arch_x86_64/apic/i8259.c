@@ -1,5 +1,5 @@
 #include "i8259.h"
-#include <generic/rw.h>
+#include <cpu/rw.h>
 
 // 8259 PIC port
 #define PIC1            0x20        // IO base address for PIC master
