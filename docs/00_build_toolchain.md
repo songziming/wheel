@@ -2,7 +2,7 @@
 
 需要使用 Linux 或 WSL，使用 clang 编译内核，使用 grub 引导器。
 
-## 准备 LLVM 工具链
+## 编译 LLVM 工具链
 
 我们使用 clang 编译内核，好处是 clang 本身就是检查编译器。
 
@@ -26,7 +26,7 @@ make -j 8
 make install
 ~~~
 
-## 准备 GRUB 引导器
+## 编译 GRUB 引导器
 
 如果开发环境是 UEFI Linux，则系统已经安装了 grub，只是缺少 i386-pc 相关文件，使用下面的命令安装：
 
@@ -34,7 +34,7 @@ make install
 sudo apt install grub-pc-bin
 ~~~
 
-如果开发环境是 WSL 或 Docker，则需要从源码编译安装 grub。
+如果开发环境是 WSL 或 Docker，则需要从源码编译安装 grub。只是安装 grub 相关程序，并不会破坏引导扇区。
 
 使用 git 获取源码，并使用 bootstrap 生成 configure 脚本：
 

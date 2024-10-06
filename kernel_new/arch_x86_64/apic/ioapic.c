@@ -19,16 +19,16 @@
 // 但是 LDR 到底是多少 bit？如果是 8-bit，则取值可能冲突；如果 32-bit，怎么与 RED 比较？
 
 
-static CONST int       g_ioapic_num = 0;
-static CONST ioapic_t *g_ioapics = NULL;
-
-static CONST uint8_t   g_irq_max = 0;
-static CONST uint32_t  g_gsi_max = 0;
-
 typedef struct trigger_mode {
     uint8_t edge : 1;
     uint8_t high : 1;
 } trigger_mode_t;
+
+static CONST int       g_ioapic_num = 0;
+static CONST ioapic_t *g_ioapics = NULL;
+
+static CONST uint8_t   g_irq_num = 0;
+static CONST uint32_t  g_gsi_num = 0;
 
 static CONST uint32_t *g_irq_to_gsi = NULL;
 static CONST uint8_t  *g_gsi_to_irq = NULL;
@@ -148,6 +148,25 @@ void ioapic_unmask_gsi(uint32_t gsi) {
     ioapic_write(io->address, IOAPIC_RED_L(gsi), red_lo);
 }
 
+// 设置硬件中断的路由，设置目标 CPU、向量号
+// TODO 使用 cpuset_t 指定目标 CPU，可以把中断发给多个 CPU
+void ioapic_route_gsi(uint32_t gsi, int cpu, int vec) {
+    ioapic_t *io = ioapic_for_gsi(gsi);
+    if (NULL == io) {
+        return;
+    }
+
+    gsi -= io->gsi_base;
+
+    // TODO 向 loapic 查询 8-bit dest 的取值
+    // ioapic_write(io->address, IOAPIC_RED_H(gsi), loapic_red_dest(cpu));
+
+    uint32_t lo = ioapic_read(io->address, IOAPIC_RED_L(gsi));
+    lo &= ~IOAPIC_VEC_MASK;
+    lo |= vec & IOAPIC_VEC_MASK;
+    ioapic_write(io->address, IOAPIC_RED_L(gsi), lo);
+}
+
 // EOI 用来清除 Remote_IRR，使用重定位条目中的向量号进行匹配
 void ioapic_send_eoi(int vec) {
     ASSERT(vec >= VEC_GSI_BASE);
@@ -165,13 +184,13 @@ void ioapic_send_eoi(int vec) {
 
 INIT_TEXT void ioapic_alloc(int n, uint8_t irq_max, uint32_t gsi_max) {
     g_ioapic_num = n;
-    g_irq_max = irq_max;
-    g_gsi_max = gsi_max;
+    g_irq_num = irq_max + 1;
+    g_gsi_num = gsi_max + 1;
 
     g_ioapics = early_alloc_ro(n * sizeof(ioapic_t));
-    g_irq_to_gsi = early_alloc_ro((irq_max + 1) * sizeof(uint32_t));
-    g_gsi_to_irq = early_alloc_ro((gsi_max + 1) * sizeof(uint8_t));
-    g_gsi_modes  = early_alloc_ro((gsi_max + 1) * sizeof(trigger_mode_t));
+    g_irq_to_gsi = early_alloc_ro(irq_max * sizeof(uint32_t));
+    g_gsi_to_irq = early_alloc_ro(gsi_max * sizeof(uint8_t));
+    g_gsi_modes  = early_alloc_ro(gsi_max * sizeof(trigger_mode_t));
 
     // 默认情况下，8259 IRQ 0~15 与 GSI 0~15 对应
     for (uint8_t i = 0; i < irq_max; ++i) {
@@ -197,8 +216,8 @@ INIT_TEXT void ioapic_parse(int i, madt_ioapic_t *tbl) {
 }
 
 INIT_TEXT void override_int(madt_int_override_t *tbl) {
-    ASSERT(g_irq_max > 0);
-    ASSERT(g_gsi_max > 0);
+    ASSERT(g_irq_num > 0);
+    ASSERT(g_gsi_num > 0);
 
     g_irq_to_gsi[tbl->source] = tbl->gsi;
     g_gsi_to_irq[tbl->gsi] = tbl->source;
@@ -212,7 +231,7 @@ INIT_TEXT void override_int(madt_int_override_t *tbl) {
 }
 
 uint32_t irq_to_gsi(uint8_t irq) {
-    if (irq < g_irq_max) {
+    if (irq < g_irq_num) {
         return g_irq_to_gsi[irq];
     }
     return (uint32_t)irq;
@@ -265,6 +284,7 @@ INIT_TEXT void ioapic_init_all() {
         for (; ent < io->red_num; ++ent) {
             uint32_t lo = IOAPIC_DM_LOWEST | IOAPIC_LOGICAL | IOAPIC_LEVEL | IOAPIC_LOW;
             lo |= (io->gsi_base + ent + VEC_GSI_BASE) & IOAPIC_VEC_MASK;
+            lo |= (ent + VEC_GSI_BASE) & IOAPIC_VEC_MASK;
             lo |= IOAPIC_INT_MASK;
             ioapic_write(io->address, IOAPIC_RED_H(ent), 0xff000000);
             ioapic_write(io->address, IOAPIC_RED_L(ent), lo);

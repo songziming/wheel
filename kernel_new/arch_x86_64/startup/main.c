@@ -246,7 +246,10 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // TODO 检查 Acpi::SRAT，获取 numa 信息（个人电脑一般不需要）
 
     if (need_int_remap()) {
-        log("APIC ID not representable using 8-bit LDR, needs remapping\n");
+        acpi_tbl_t *dmar = acpi_table_find("DMAR", 0);
+        if (dmar) {
+            log("found ACPI::DMAR, can remap interrupts\n");
+        }
     }
 
     // 关键数据已经备份，可以放开 early-alloc 长度限制

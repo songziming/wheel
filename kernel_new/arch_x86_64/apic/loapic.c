@@ -216,7 +216,10 @@ INIT_TEXT void loapic_parse_x2(int i, madt_lox2apic_t *tbl) {
     }
 }
 
-// 检查 Local APIC ID，判断 IO APIC 仅使用 8-bit LDR 是否表示所有的 CPU
+// 本函数检查 Local APIC ID，判断 IO APIC 能否精确定位某个特定 CPU
+// IO APIC REDIR.dest 有两种模式：
+// - physical，中断转发给一个 Local APIC，使用 4-bit APIC ID
+// - logical，中断转发给一个 CPU cluster 中的一个或几个，4-bit cluster 编号，4-bit logical 位图
 INIT_TEXT int need_int_remap() {
     if (0 == (CPU_FEATURE_X2APIC & g_cpu_features)) {
         return 0; // xAPIC 没有任何问题
@@ -226,15 +229,34 @@ INIT_TEXT int need_int_remap() {
         return 1;
     }
 
+    char not_physical = 0;  // 无法使用 physical 模式定位每个 CPU
+    char not_logical = 0;   // 无法使用 logical 模式定位每个 CPU
+
     for (int i = 0; i < g_loapic_num; ++i) {
-        uint16_t cluster = g_loapics[i].apic_id >> 4;
-        uint16_t logical = 1 << (g_loapics[i].apic_id & 15);
+        uint32_t apicid = g_loapics[i].apic_id;
+        if (apicid >= 16) {
+            not_physical = 0;
+        }
+        uint16_t cluster = apicid >> 4;
+        uint16_t logical = 1 << (apicid & 15);
         if ((cluster >= 15) || (logical >= 16)) {
-            return 1;
+            not_logical = 0;
         }
     }
 
-    return 0;
+    if (!not_physical) {
+        log("IO APIC redir.dest can use physical mode\n");
+    } else if (!not_logical) {
+        log("IO APIC redir.dest can use logical mode\n");
+    } else {
+        log("IO APIC redir.dest cannot access every CPU!\n");
+    }
+
+    // TODO 根据 CPU 数量，决定 IO APIC 使用 physical 还是 logical
+    // TODO 可以增加一个函数，输入 CPU 编号，返回 8-bit dest 内容
+
+    // 两种模式都无法表示，才说明必须 remap interrupts
+    return not_physical & not_logical;
 }
 
 INIT_TEXT void loapic_init() {
