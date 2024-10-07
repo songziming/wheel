@@ -3,12 +3,9 @@
 
 #include "common.h"
 
-NORETURN void emu_exit(int ret);
+void emu_exit(int ret);
 void emu_break();
 int arch_unwind(size_t *addrs, int max);
-
-uint32_t atomic32_get(volatile uint32_t *ptr);
-uint32_t atomic32_inc(volatile uint32_t *ptr);
 
 void cpu_halt();
 void cpu_pause();
@@ -21,6 +18,25 @@ int cpu_int_lock();
 void cpu_int_unlock(int key);
 
 //------------------------------------------------------------------------------
+// 原子操作
+//------------------------------------------------------------------------------
+
+int32_t atomic32_get(volatile int32_t *ptr);
+int32_t atomic32_set(volatile int32_t *ptr, int32_t val);
+int32_t atomic32_add(volatile int32_t *ptr, int32_t val);
+int32_t atomic32_cas(volatile int32_t *ptr, int32_t cmp, int32_t val);
+
+int64_t atomic64_get(volatile int64_t *ptr);
+int64_t atomic64_set(volatile int64_t *ptr, int64_t val);
+int64_t atomic64_add(volatile int64_t *ptr, int32_t val);
+int64_t atomic64_cas(volatile int64_t *ptr, int64_t cmp, int64_t val);
+
+intptr_t atomic_get(volatile intptr_t *ptr);
+intptr_t atomic_set(volatile intptr_t *ptr, intptr_t val);
+intptr_t atomic_add(volatile intptr_t *ptr);
+intptr_t atomic_cas(volatile intptr_t *ptr, intptr_t cmp, intptr_t val);
+
+//------------------------------------------------------------------------------
 // 多核
 //------------------------------------------------------------------------------
 
@@ -29,7 +45,6 @@ int cpu_index();
 
 void *percpu_ptr(int idx, void *ptr);
 void *thiscpu_ptr(void *ptr);
-
 
 //------------------------------------------------------------------------------
 // 页表操作

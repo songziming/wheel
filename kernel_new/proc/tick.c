@@ -41,12 +41,32 @@ void timer_start(timer_t *timer, int tick, timer_func_t func, void *arg1, void *
     irq_spin_give(&g_q_spin, key);
 }
 
+// 将 timer 从队列中移除时，被移除的 timer 也许正在另一个 CPU 运行
 void timer_cancel(timer_t *timer) {
-    //
+    int key = irq_spin_take(&g_q_spin);
+
+    dlnode_t *next = dl_remove(&timer->dl);
+    if (next) {
+        ASSERT(dl_contains(&g_tick_q, next));
+    }
+
+    irq_spin_give(&g_q_spin, key);
 }
 
+// 保证在本函数返回后，timer 的回调函数未开始运行，或已结束运行
 void timer_cancel_sync(timer_t *timer) {
-    //
+    ASSERT(0 == cpu_int_depth()); // 不能在中断里调用
+
+    int key = irq_spin_take(&g_q_spin);
+    raw_spin_take(&g_func_spin);
+
+    dlnode_t *next = dl_remove(&timer->dl);
+    if (next) {
+        ASSERT(dl_contains(&g_tick_q, next));
+    }
+
+    raw_spin_give(&g_func_spin);
+    irq_spin_give(&g_q_spin, key);
 }
 
 static void timer_advance() {

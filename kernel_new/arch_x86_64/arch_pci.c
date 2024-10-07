@@ -6,7 +6,7 @@
 #include <library/debug.h>
 #include <library/string.h>
 
-#include <drivers/pci.h>
+#include <services/pci.h>
 
 
 typedef struct pci_conf {

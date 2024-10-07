@@ -5,8 +5,8 @@
 #include <library/debug.h>
 #include <library/format.h>
 #include <library/string.h>
-#include <drivers/block.h>
-#include <drivers/pci.h>
+#include <services/block.h>
+#include <services/pci.h>
 #include <memory/heap.h>
 
 #include <cpu/rw.h>

@@ -4,11 +4,23 @@
 // 内联汇编，实现 arch 接口
 
 
+void emu_exit(int ret) {
+#ifdef DEBUG
+    __asm__("outl %0, %1" :: "a"(ret), "Nd"(0xf4));
+#else
+    (void)ret;
+#endif
+}
+
+void emu_break() {
+    __asm__("xchgw %bx, %bx");
+}
+
 inline void cpu_halt() { __asm__("hlt"); }
 inline void cpu_pause() { __asm__("pause"); }
-inline void cpu_rfence() { __asm__("lfence" ::: "memory"); }
-inline void cpu_wfence() { __asm__("sfence" ::: "memory"); }
-inline void cpu_rwfence() { __asm__("mfence" ::: "memory"); }
+inline void cpu_rfence() { __asm__ volatile("lfence" ::: "memory"); }
+inline void cpu_wfence() { __asm__ volatile("sfence" ::: "memory"); }
+inline void cpu_rwfence() { __asm__ volatile("mfence" ::: "memory"); }
 
 inline int cpu_int_lock() {
     uint64_t key;
@@ -21,8 +33,6 @@ inline void cpu_int_unlock(int key) {
         __asm__("sti");
     }
 }
-
-
 
 
 // AMD64 栈结构（向下生长）：

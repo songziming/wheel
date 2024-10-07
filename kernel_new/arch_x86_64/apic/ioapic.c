@@ -160,6 +160,7 @@ void ioapic_route_gsi(uint32_t gsi, int cpu, int vec) {
 
     // TODO 向 loapic 查询 8-bit dest 的取值
     // ioapic_write(io->address, IOAPIC_RED_H(gsi), loapic_red_dest(cpu));
+    ioapic_write(io->address, IOAPIC_RED_H(gsi), cpu << 24);
 
     uint32_t lo = ioapic_read(io->address, IOAPIC_RED_L(gsi));
     lo &= ~IOAPIC_VEC_MASK;

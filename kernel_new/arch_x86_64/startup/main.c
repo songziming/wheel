@@ -6,7 +6,7 @@
 #include <memory/vmspace.h>
 #include <proc/sched.h>
 #include <proc/tick.h>
-#include <drivers/block.h>
+#include <services/block.h>
 
 #include <arch_pci.h>
 #include <arch_task.h>
