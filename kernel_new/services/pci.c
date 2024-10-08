@@ -40,7 +40,7 @@ static INIT_TEXT pci_dev_t *add_device(uint8_t bus, uint8_t slot, uint8_t func, 
 
     dev->vendor = reg0 & 0xffff;
     dev->device = (reg0 >> 16) & 0xffff;
-    log("+ pci vendor=%04x device=%04x\n", dev->vendor, dev->device);
+    // log("+ pci vendor=%04x device=%04x\n", dev->vendor, dev->device);
 
     uint32_t reg2 = g_pci_read(bus, slot, func, 8);
     dev->classcode = (reg2 >> 24) & 0xff;
@@ -99,4 +99,94 @@ void pci_enumerate(void (*cb)(const pci_dev_t *dev)) {
     for (dlnode_t *i = g_pci_devs.next; i != &g_pci_devs; i = i->next) {
         cb(containerof(i, pci_dev_t, dl));
     }
+}
+
+
+//------------------------------------------------------------------------------
+// 信息显示
+//------------------------------------------------------------------------------
+
+static void pci_show_dev(const pci_dev_t *dev) {
+    ASSERT(NULL != dev);
+
+    // const char *type = "?";
+    const char *subtype = "?";
+    switch (dev->classcode) {
+    case 0:
+        // type = "unclassified";
+        break;
+    case 1:
+        // type = "mass storage controller";
+        switch (dev->subclass) {
+        case 0: subtype = "SCSI bus controller"; break;
+        case 1: subtype = "IDE controller"; break;
+        case 2: subtype = "floppy disk controller"; break;
+        case 3: subtype = "IPI controller"; break;
+        case 4: subtype = "RAID controller"; break;
+        case 5: subtype = "ATA controller"; break;
+        case 6: subtype = "Serial ATA controller"; break;
+        case 7: subtype = "Serial Attached SCSI controller"; break;
+        case 8: subtype = "non-volatile memory controller"; break;
+        default: subtype = "other"; break;
+        }
+        break;
+    case 2:
+        // type = "network controller";
+        switch (dev->subclass) {
+        case 0: subtype = "ethernet controller"; break;
+        case 1: subtype = "token ring controller"; break;
+        case 2: subtype = "FDDI controller"; break;
+        case 3: subtype = "ATM controller"; break;
+        }
+        break;
+    case 3:
+        // type = "display controller";
+        switch (dev->subclass) {
+        case 0: subtype = "VGA compatible controller"; break;
+        case 1: subtype = "XGA compatible controller"; break;
+        case 2: subtype = "3D controller"; break;
+        }
+        break;
+    case 6:
+        // type = "bridge";
+        switch (dev->subclass) {
+        case 0: subtype = "host bridge"; break;
+        case 1: subtype = "ISA bridge"; break;
+        case 2: subtype = "EISA bridge"; break;
+        case 3: subtype = "MCA bridge"; break;
+        case 4: subtype = "PCI-to-PCI bridge"; break;
+        case 5: subtype = "PCMCIA bridge"; break;
+        case 6: subtype = "NuBus bridge"; break;
+        case 7: subtype = "CardBus bridge"; break;
+        case 8: subtype = "RACEway bridge"; break;
+        case 9: subtype = "PCI-to-PCI bridge"; break;
+        case 10: subtype = "InfiniBand-to-PCI host bridge"; break;
+        }
+        break;
+    case 0xc:
+        // type = "serial";
+        switch (dev->subclass) {
+        case 0: subtype = "firewire controller"; break;
+        case 1: subtype = "ACCESS bus controller"; break;
+        case 2: subtype = "SSA"; break;
+        case 3: subtype = "USB controller"; break;
+        case 4: subtype = "fibre channel"; break;
+        case 5: subtype = "SMBus controller"; break;
+        case 6: subtype = "InfiniBand controller"; break;
+        case 7: subtype = "IPMI interface"; break;
+        case 8: subtype = "SERCOS interface"; break;
+        case 9: subtype = "CANbus controller"; break;
+        }
+        break;
+    default:
+        break;
+    }
+
+    log("pci %x:%x:%x vendor=%04x device=%04x class/subclass/prog=%x/%x/%x %s\n",
+        dev->bus, dev->slot, dev->func, dev->vendor, dev->device,
+        dev->classcode, dev->subclass, dev->progif, subtype);
+}
+
+void pci_show() {
+    pci_enumerate(pci_show_dev);
 }

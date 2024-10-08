@@ -9,14 +9,14 @@
 
 
 
-// 按优先级排序的有序队列，可用于就绪队列和阻塞队列
-typedef struct priority_q {
-    uint32_t    priorities; // 优先级mask
-    dlnode_t   *heads[PRIORITY_NUM];
-    spin_t      spin;
-    int         load;
-    int         new_task; // 有新任务，可能不再是最低优先级
-} priority_q_t;
+// // 按优先级排序的有序队列，可用于就绪队列和阻塞队列
+// typedef struct priority_q {
+//     uint32_t    priorities; // 优先级mask
+//     dlnode_t   *heads[PRIORITY_NUM];
+//     spin_t      spin;
+//     int         load;
+//     int         new_task; // 有新任务，可能不再是最低优先级
+// } priority_q_t;
 
 
 static PERCPU_BSS priority_q_t g_ready_q;
@@ -34,11 +34,11 @@ PERCPU_BSS task_t *g_tid_next; // 即将运行的任务，中断返回时切换
 
 // 可用于就绪队列、阻塞队列
 
-static void priority_q_init(priority_q_t *q) {
+void priority_q_init(priority_q_t *q) {
     memset(q, 0, sizeof(priority_q_t));
 }
 
-static void priority_q_push(priority_q_t *q, task_t *tid) {
+void priority_q_push(priority_q_t *q, task_t *tid) {
     ASSERT(NULL != q);
     ASSERT(NULL != tid);
 
@@ -55,7 +55,7 @@ static void priority_q_push(priority_q_t *q, task_t *tid) {
     q->load += tid->tick_reload;
 }
 
-static int priority_q_contains(priority_q_t *q, task_t *tid) {
+int priority_q_contains(priority_q_t *q, task_t *tid) {
     ASSERT(NULL != q);
     ASSERT(NULL != tid);
 
@@ -69,7 +69,7 @@ static int priority_q_contains(priority_q_t *q, task_t *tid) {
     return 0;
 }
 
-static task_t *priority_q_head(priority_q_t *q) {
+task_t *priority_q_head(priority_q_t *q) {
     ASSERT(NULL != q);
     if (0 == q->priorities) {
         return NULL;
@@ -79,7 +79,7 @@ static task_t *priority_q_head(priority_q_t *q) {
     return containerof(q->heads[top], task_t, q_node);
 }
 
-static void priority_q_remove(priority_q_t *q, task_t *tid) {
+void priority_q_remove(priority_q_t *q, task_t *tid) {
     ASSERT(NULL != q);
     ASSERT(NULL != tid);
     ASSERT(priority_q_contains(q, tid));
@@ -102,28 +102,6 @@ static void priority_q_remove(priority_q_t *q, task_t *tid) {
         q->heads[pri] = next;
     }
 }
-
-// // 遍历每个 CPU 的就绪队列，找出优先级最低的 CPU
-// static int lowest_cpu() {
-//     for (int i = 0; i < cpu_count(); ++i) {
-//         priority_q_t *q = percpu_ptr(i, &g_ready_q);
-//     }
-//     return 0;
-// }
-
-
-
-// 当前 CPU 的就绪队列已更新，可能变为负载最低的 CPU
-// TODO 如果负载增加，需要查询其他 CPU 的就绪队列，但那样需要加锁
-//      不妨使用一个全局变量 g_needs_update_lowest，每个 CPU 在时钟函数中检查这个变量
-//      如果发生变化，说明 lowest 已失效，需要重新设置。
-// void update_lowest() {
-//     priority_q_t *q = thiscpu_ptr(&g_ready_q);
-// }
-
-// int get_lowest() {
-//     //
-// }
 
 
 //------------------------------------------------------------------------------

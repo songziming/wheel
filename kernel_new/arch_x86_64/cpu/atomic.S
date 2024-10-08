@@ -1,5 +1,8 @@
 // 原子操作
 
+.global atomic8_add
+.global atomic16_add
+
 .global atomic32_get
 .global atomic32_set
 .global atomic32_add
@@ -17,6 +20,16 @@
 
 .text
 .code64
+
+atomic8_add:
+    movl        %esi, %eax
+    lock xaddb  %al, (%rdi)
+    ret
+
+atomic16_add:
+    movl        %esi, %eax
+    lock xaddw  %ax, (%rdi)
+    ret
 
 atomic32_get:
     movl        (%rdi), %eax

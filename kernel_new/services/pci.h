@@ -28,4 +28,6 @@ INIT_TEXT void pci_probe();
 
 void pci_enumerate(void (*cb)(const pci_dev_t *dev));
 
+void pci_show();
+
 #endif // PCI_H

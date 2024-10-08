@@ -30,8 +30,30 @@ typedef struct task {
     work_t      work;       // 异步操作，如任务退出、阻塞超时
 } task_t;
 
+// 按优先级排序的有序队列，可用于就绪队列和阻塞队列
+typedef struct priority_q {
+    uint32_t    priorities; // 优先级mask
+    dlnode_t   *heads[PRIORITY_NUM];
+    spin_t      spin;
+    int         load;
+    int         new_task; // 有新任务，可能不再是最低优先级
+} priority_q_t;
+
+
 extern PERCPU_BSS task_t *g_tid_prev;
 extern PERCPU_BSS task_t *g_tid_next;
+
+
+
+void priority_q_init(priority_q_t *q);
+void priority_q_push(priority_q_t *q, task_t *tid);
+int priority_q_contains(priority_q_t *q, task_t *tid);
+task_t *priority_q_head(priority_q_t *q);
+void priority_q_remove(priority_q_t *q, task_t *tid);
+
+
+task_t *sched_stop(uint16_t bits);
+int sched_cont(task_t *tid, uint16_t bits);
 
 void task_create(task_t *tid, const char *name, uint8_t priority, int tick,
         void *entry, void *arg1, void *arg2, void *arg3, void *arg4);

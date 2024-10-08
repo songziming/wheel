@@ -21,6 +21,9 @@ void cpu_int_unlock(int key);
 // 原子操作
 //------------------------------------------------------------------------------
 
+uint8_t atomic8_add(volatile uint8_t *ptr, uint8_t val);
+uint16_t atomic16_add(volatile uint16_t *ptr, uint16_t val);
+
 int32_t atomic32_get(volatile int32_t *ptr);
 int32_t atomic32_set(volatile int32_t *ptr, int32_t val);
 int32_t atomic32_add(volatile int32_t *ptr, int32_t val);
@@ -33,7 +36,7 @@ int64_t atomic64_cas(volatile int64_t *ptr, int64_t cmp, int64_t val);
 
 intptr_t atomic_get(volatile intptr_t *ptr);
 intptr_t atomic_set(volatile intptr_t *ptr, intptr_t val);
-intptr_t atomic_add(volatile intptr_t *ptr);
+intptr_t atomic_add(volatile intptr_t *ptr, intptr_t val);
 intptr_t atomic_cas(volatile intptr_t *ptr, intptr_t cmp, intptr_t val);
 
 //------------------------------------------------------------------------------
@@ -72,5 +75,6 @@ typedef struct task task_t;
 void arch_regs_init(task_t *tid, size_t entry, void *arg1, void *arg2, void *arg3, void *arg4);
 void arch_task_switch();
 void arch_ipi_resched(int cpu);
+void notify_resched(cpuset_t cpus);
 
 #endif // ARCH_INTF_H

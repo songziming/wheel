@@ -1,3 +1,6 @@
+#include "multiboot1.h"
+#include "multiboot2.h"
+
 #include <wheel.h>
 #include <library/debug.h>
 #include <library/symbols.h>
@@ -7,18 +10,14 @@
 #include <proc/sched.h>
 #include <proc/tick.h>
 #include <services/block.h>
-
-#include <arch_pci.h>
-#include <arch_task.h>
-
-#include "multiboot1.h"
-#include "multiboot2.h"
+#include <services/pci.h>
 
 #include <devices/serial.h>
 #include <devices/console.h>
 #include <devices/framebuf.h>
 #include <devices/acpi_madt.h>
 #include <devices/ata.h>
+#include <devices/hpet.h>
 
 #include <cpu/rw.h>
 #include <cpu/features.h>
@@ -33,7 +32,10 @@
 #include <apic/ioapic.h>
 #include <apic/loapic.h>
 #include <arch_int.h>
+#include <arch_pci.h>
+#include <arch_task.h>
 
+#include <x/target_test.h>
 
 
 // layout.ld
@@ -192,9 +194,6 @@ static void gui_log(const char *s, size_t n) {
     framebuf_puts(s, n);
 }
 
-// devices/hpet.c
-void hpet_init();
-
 INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     if (0 == eax && 1 == ebx) {
         ap_init(g_cpu_started);
@@ -223,8 +222,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         set_log_func(text_log);
     }
 
-    log("welcome to wheel os\n");
-    log("build time %s %s\n", __DATE__, __TIME__);
+    log("WHEEL Operating System, build time %s %s\n", __DATE__, __TIME__);
 
     if (0 == g_rsdp) {
         g_rsdp = acpi_probe_rsdp();
@@ -314,15 +312,6 @@ end:
 // 第一个任务，运行在 CPU 0
 //------------------------------------------------------------------------------
 
-static timer_t wd;
-
-static void wd_func(void *a1 UNUSED, void *a2 UNUSED) {
-    static int cnt = 0;
-    log("watchdog-%d\n", cnt++);
-
-    timer_start(&wd, 20, (timer_func_t)wd_func, 0, 0);
-}
-
 static void root_proc() {
     log("running in root task\n");
 
@@ -360,8 +349,10 @@ static void root_proc() {
     block_device_lib_init();
     ata_driver_init();
 
+    pci_show();
+
     // TODO 运行相关测试（检查 boot 参数）
-    timer_start(&wd, 20, (timer_func_t)wd_func, 0, 0);
+    test_timer_periodic();
 
     // loapic_send_ipi(-1, 0x80);
 

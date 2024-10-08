@@ -1,3 +1,4 @@
+#include "hpet.h"
 #include "acpi.h"
 #include <arch_impl.h>
 #include <library/debug.h>

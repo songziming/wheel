@@ -52,6 +52,11 @@ void arch_ipi_resched(int cpu) {
     loapic_send_ipi(cpu, VEC_IPI_RESCHED);
 }
 
+void notify_resched(cpuset_t cpus) {
+    // TODO 将 resched 中断发送给多个 CPU
+    // 本函数可以放在 sched.c 模块，遍历 cpuset，逐一调用 arch_ipi_resched
+}
+
 INIT_TEXT void arch_task_lib_init() {
     set_int_handler(VEC_IPI_RESCHED, on_resched);
     // set_int_handler(VEC_IPI_STOPALL, on_stopall);
