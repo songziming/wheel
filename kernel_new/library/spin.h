@@ -4,8 +4,8 @@
 #include <common.h>
 
 typedef struct spin {
-    volatile int32_t ticket_counter;
-    volatile int32_t service_counter;
+    volatile uint32_t ticket_counter;
+    volatile uint32_t service_counter;
 } spin_t;
 
 void spin_init(spin_t *lock);

@@ -163,8 +163,11 @@ static void x2_write_icr(uint32_t id, uint32_t lo) {
 // 中断响应函数
 //------------------------------------------------------------------------------
 
-static void on_spurious(int vec UNUSED, regs_t *f UNUSED) {
+static void on_resched(int vec UNUSED, regs_t *f UNUSED) {
+    g_write(REG_EOI, 0);
 }
+
+// static void on_stopall() {}
 
 static void on_timer(int vec UNUSED, regs_t *f UNUSED) {
     g_write(REG_EOI, 0);
@@ -173,8 +176,11 @@ static void on_timer(int vec UNUSED, regs_t *f UNUSED) {
 
 static void on_error(int vec UNUSED, regs_t *f UNUSED) {
     log("APIC error\n");
+    // 出现错误，需要停止，所以不发送 EOI
 }
 
+static void on_spurious(int vec UNUSED, regs_t *f UNUSED) {
+}
 
 //------------------------------------------------------------------------------
 // 初始化
@@ -275,6 +281,8 @@ INIT_TEXT void loapic_init() {
             g_write_icr = x_write_icr;
         }
 
+        set_int_handler(VEC_IPI_RESCHED, on_resched);
+        // set_int_handler(VEC_IPI_STOPALL, on_stopall);
         set_int_handler(VEC_LOAPIC_TIMER, on_timer);
         set_int_handler(VEC_LOAPIC_ERROR, on_error);
         set_int_handler(VEC_LOAPIC_SPURIOUS, on_spurious);
@@ -388,6 +396,20 @@ void loapic_send_ipi(int cpu, int vec) {
         g_write_icr(0xffffffffU, lo); // 广播
     } else {
         g_write_icr(g_loapics[cpu].apic_id, lo);
+    }
+}
+
+void arch_ipi_resched(int cpu) {
+    loapic_send_ipi(cpu, VEC_IPI_RESCHED);
+}
+
+// Local APIC 要么发给一个 CPU，要么发给所有 CPU
+// 无法发给特定几个处理器，只能遍历
+void notify_resched(cpuset_t cpus) {
+    while (cpus) {
+        int cpu = __builtin_clzll(cpus);
+        loapic_send_ipi(cpu, VEC_IPI_RESCHED);
+        cpus &= cpus - 1;
     }
 }
 

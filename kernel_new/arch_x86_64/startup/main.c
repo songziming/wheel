@@ -7,8 +7,9 @@
 #include <memory/pmlayout.h>
 #include <memory/early_alloc.h>
 #include <memory/vmspace.h>
-#include <proc/sched.h>
 #include <proc/tick.h>
+#include <proc/work.h>
+#include <proc/sched.h>
 #include <services/block.h>
 #include <services/pci.h>
 
@@ -17,7 +18,7 @@
 #include <devices/framebuf.h>
 #include <devices/acpi_madt.h>
 #include <devices/ata.h>
-#include <devices/hpet.h>
+// #include <devices/hpet.h>
 
 #include <cpu/rw.h>
 #include <cpu/features.h>
@@ -32,8 +33,8 @@
 #include <apic/ioapic.h>
 #include <apic/loapic.h>
 #include <arch_int.h>
-#include <arch_pci.h>
-#include <arch_task.h>
+// #include <arch_pci.h>
+// #include <arch_task.h>
 
 #include <x/target_test.h>
 
@@ -50,6 +51,11 @@ static task_t root_tcb;
 
 static void root_proc();
 static INIT_TEXT NORETURN void ap_init(int index);
+
+// hwinit.c
+INIT_TEXT void pre_memory_hwinit();
+INIT_TEXT void pre_task_hwinit();
+INIT_TEXT void post_task_hwinit();
 
 
 //------------------------------------------------------------------------------
@@ -253,9 +259,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // 关键数据已经备份，可以放开 early-alloc 长度限制
     early_rw_unlock();
 
-    arch_pci_lib_init();
-
-    hpet_init();
+    pre_memory_hwinit();
 
     // 切换到正式的 GDT，加载 IDT
     gdt_init();
@@ -285,6 +289,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // 使用正式内核页表
     write_cr3(kernel_vmspace()->table);
 
+    pre_task_hwinit();
+
 
     // pmlayout_show(); // 打印物理内存布局
     // acpi_tables_show(); // 打印 acpi 表
@@ -292,7 +298,10 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
 
     // 任务调度初始化
-    arch_task_lib_init();
+    // arch_task_lib_init();
+    tick_init();
+    work_init();
+    sched_init();
 
     // 创建根任务并开始运行
     task_create(&root_tcb, "root", 1, 10, root_proc, 0,0,0,0);
@@ -349,7 +358,7 @@ static void root_proc() {
     block_device_lib_init();
     ata_driver_init();
 
-    pci_show();
+    post_task_hwinit();
 
     // TODO 运行相关测试（检查 boot 参数）
     test_timer_periodic();

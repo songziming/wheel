@@ -8,7 +8,7 @@ void spin_init(spin_t *lock) {
 }
 
 void raw_spin_take(spin_t *lock) {
-    int32_t ticket = atomic32_add(&lock->ticket_counter, 1);
+    uint32_t ticket = atomic32_add(&lock->ticket_counter, 1);
     while (atomic32_get(&lock->service_counter) != ticket) {
         cpu_pause();
     }
@@ -20,7 +20,7 @@ void raw_spin_give(spin_t *lock) {
 
 int irq_spin_take(spin_t *lock) {
     int key = cpu_int_lock();
-    int32_t tickket = atomic32_add(&lock->ticket_counter, 1);
+    uint32_t tickket = atomic32_add(&lock->ticket_counter, 1);
     while (atomic32_get(&lock->service_counter) != tickket) {
         cpu_int_unlock(key);
         cpu_pause();

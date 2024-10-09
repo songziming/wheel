@@ -13,9 +13,13 @@ void cpu_rfence();
 void cpu_wfence();
 void cpu_rwfence();
 
-int cpu_int_depth();
+//------------------------------------------------------------------------------
+// 中断
+//------------------------------------------------------------------------------
+
 int cpu_int_lock();
 void cpu_int_unlock(int key);
+int cpu_int_depth();
 
 //------------------------------------------------------------------------------
 // 原子操作
@@ -24,20 +28,20 @@ void cpu_int_unlock(int key);
 uint8_t atomic8_add(volatile uint8_t *ptr, uint8_t val);
 uint16_t atomic16_add(volatile uint16_t *ptr, uint16_t val);
 
-int32_t atomic32_get(volatile int32_t *ptr);
-int32_t atomic32_set(volatile int32_t *ptr, int32_t val);
-int32_t atomic32_add(volatile int32_t *ptr, int32_t val);
-int32_t atomic32_cas(volatile int32_t *ptr, int32_t cmp, int32_t val);
+uint32_t atomic32_get(volatile uint32_t *ptr);
+uint32_t atomic32_set(volatile uint32_t *ptr, uint32_t val);
+uint32_t atomic32_add(volatile uint32_t *ptr, uint32_t val);
+uint32_t atomic32_cas(volatile uint32_t *ptr, uint32_t cmp, uint32_t val);
 
-int64_t atomic64_get(volatile int64_t *ptr);
-int64_t atomic64_set(volatile int64_t *ptr, int64_t val);
-int64_t atomic64_add(volatile int64_t *ptr, int32_t val);
-int64_t atomic64_cas(volatile int64_t *ptr, int64_t cmp, int64_t val);
+uint64_t atomic64_get(volatile uint64_t *ptr);
+uint64_t atomic64_set(volatile uint64_t *ptr, uint64_t val);
+uint64_t atomic64_add(volatile uint64_t *ptr, uint32_t val);
+uint64_t atomic64_cas(volatile uint64_t *ptr, uint64_t cmp, uint64_t val);
 
-intptr_t atomic_get(volatile intptr_t *ptr);
-intptr_t atomic_set(volatile intptr_t *ptr, intptr_t val);
-intptr_t atomic_add(volatile intptr_t *ptr, intptr_t val);
-intptr_t atomic_cas(volatile intptr_t *ptr, intptr_t cmp, intptr_t val);
+size_t atomic_get(volatile size_t *ptr);
+size_t atomic_set(volatile size_t *ptr, size_t val);
+size_t atomic_add(volatile size_t *ptr, size_t val);
+size_t atomic_cas(volatile size_t *ptr, size_t cmp, size_t val);
 
 //------------------------------------------------------------------------------
 // 多核

@@ -41,6 +41,18 @@ static void on_interrupt(int vec, regs_t *f) {
 // 公开函数
 //------------------------------------------------------------------------------
 
+inline int cpu_int_lock() {
+    uint64_t key;
+    __asm__("pushfq; cli; popq %0" : "=r"(key));
+    return (key & 0x200) ? 1 : 0;
+}
+
+inline void cpu_int_unlock(int key) {
+    if (key) {
+        __asm__("sti");
+    }
+}
+
 inline int cpu_int_depth() {
     return THISCPU_GET(g_int_depth);
 }
