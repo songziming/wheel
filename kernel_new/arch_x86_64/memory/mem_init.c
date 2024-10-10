@@ -128,7 +128,6 @@ INIT_TEXT void mem_init() {
         }
     }
 
-
     // 内核占据的内存分为许多 section，之间还有 guard pages，可以回收
     for (dlnode_t *i = kspace->head.next; i != &kspace->head; i = i->next) {
         vmrange_t *prev = containerof(i->prev, vmrange_t, dl);
@@ -157,6 +156,4 @@ INIT_TEXT void mem_init() {
         size_t va_end = (rng->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
         mmu_map(kspace->table, rng->addr, va_end, rng->pa, rng->attrs);
     }
-
-    // vmspace_show(kspace);
 }

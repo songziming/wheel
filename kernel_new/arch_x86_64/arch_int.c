@@ -5,36 +5,13 @@
 #include <cpu/gdt_idt_tss.h>
 #include <memory/percpu.h>
 #include <library/debug.h>
+#include <library/dwarf.h>
 
-
-void *g_handlers[256];
 
 PERCPU_DATA int   g_int_depth = 0;
 PERCPU_DATA void *g_int_stack = NULL;
 
-//------------------------------------------------------------------------------
-// default handler
-//------------------------------------------------------------------------------
-
-static void on_exception(int vec, regs_t *f) {
-    log("[CPU%d] exception %d\n", cpu_index(), vec);
-    log("  rip=%lx rsp=%lx\n", f->rip, f->rsp);
-
-
-    if (14 == vec) {
-        uint64_t va = read_cr2();
-        log("error accessing va 0x%zx\n", va);
-    }
-
-    log_stacktrace();
-    cpu_halt();
-}
-
-static void on_interrupt(int vec, regs_t *f) {
-    log("[CPU%d] interrupt %d\n", cpu_index(), vec);
-    log("  rip=%lx rsp=%lx\n", f->rip, f->rsp);
-    // cpu_halt();
-}
+void *g_handlers[256];
 
 
 //------------------------------------------------------------------------------
@@ -59,6 +36,62 @@ inline int cpu_int_depth() {
 
 void set_int_handler(int vec, void (*handler)(int, regs_t *)) {
     g_handlers[vec] = handler;
+}
+
+//------------------------------------------------------------------------------
+// default handler
+//------------------------------------------------------------------------------
+
+static void on_exception(int vec, regs_t *f) {
+    log("[CPU%d] exception %d\n", cpu_index(), vec);
+    log("  rip=%lx rsp=%lx\n", f->rip, f->rsp);
+
+    log_stacktrace();
+    cpu_halt();
+}
+
+static void on_interrupt(int vec, regs_t *f) {
+    log("[CPU%d] interrupt %d\n", cpu_index(), vec);
+    log("  rip=%lx rsp=%lx\n", f->rip, f->rsp);
+    // cpu_halt();
+}
+
+static void on_generic_protect(int vec UNUSED, regs_t *f) {
+    ASSERT(13 == vec);
+
+    log("general protection\n");
+    log("cpu%d rip=%lx rsp=%lx\n", cpu_index(), f->rip, f->rsp);
+    log("errcode %zx\n", f->errcode);
+
+    char *file = NULL;
+    int line = addr_to_line(f->rip, &file);
+    log("called from %s:%d\n", file, line);
+}
+
+static void on_page_fault(int vec UNUSED, regs_t *f) {
+    ASSERT(14 == vec);
+
+    uint64_t va = read_cr2();
+    const char *p  = (f->errcode & 1) ? "non-exist " : "";
+    const char *wr = (f->errcode & 2) ? "write to" : "read from";
+    const char *us = (f->errcode & 4) ? "user mode" : "kernel";
+    if (f->errcode & 16) {
+        wr = "execute";
+    }
+
+    log("page fault %s %sva 0x%zx under %s\n", wr, p, va, us);
+
+    if (f->errcode & 8) {
+        // 页表项中的保留位必须是 0
+        log("reserved bit set in paging-structure\n");
+    }
+
+    // TODO 获取当前 vmspace，定位所在 vmrange 的名称
+    // 如果支持动态映射，应该在这里找到 range，执行里面的 handler，更新映射
+
+    char *file = NULL;
+    int line = addr_to_line(f->rip, &file);
+    log("called from %s:%d\n", file, line);
 }
 
 
@@ -93,4 +126,7 @@ INIT_TEXT void int_init() {
     for (int i = 32; i < 256; ++i) {
         g_handlers[i] = on_interrupt;
     }
+
+    g_handlers[13] = on_generic_protect;
+    g_handlers[14] = on_page_fault;
 }
