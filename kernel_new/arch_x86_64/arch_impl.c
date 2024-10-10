@@ -64,7 +64,7 @@ void task_entry();
 
 
 // 创建新任务，初始化 TCB
-void arch_regs_init(task_t *tid, size_t entry, void *arg1, void *arg2, void *arg3, void *arg4) {
+void arch_task_init(task_t *tid, size_t entry, void *arg1, void *arg2, void *arg3, void *arg4) {
     size_t top = tid->stack.end & ~7UL; // 栈顶按 8 字节对齐
 
     regs_t *regs = (regs_t *)(top - sizeof(regs_t));

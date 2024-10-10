@@ -176,7 +176,7 @@ void task_create(task_t *tid, const char *name, uint8_t priority, int tick,
 
     tid->stack.desc = name;
 
-    arch_regs_init(tid, (size_t)entry, arg1, arg2, arg3, arg4);
+    arch_task_init(tid, (size_t)entry, arg1, arg2, arg3, arg4);
 }
 
 // 任务已经结束，在中断返回阶段执行此函数

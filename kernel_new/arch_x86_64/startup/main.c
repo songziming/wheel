@@ -17,6 +17,7 @@
 #include <devices/console.h>
 #include <devices/framebuf.h>
 #include <devices/acpi_madt.h>
+#include <devices/i8259.h>
 #include <devices/ata.h>
 // #include <devices/hpet.h>
 
@@ -29,7 +30,6 @@
 #include <memory/mmu.h>
 
 #include <apic/apic_init.h>
-#include <apic/i8259.h>
 #include <apic/ioapic.h>
 #include <apic/loapic.h>
 #include <arch_int.h>
