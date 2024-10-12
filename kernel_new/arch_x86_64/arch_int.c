@@ -38,6 +38,7 @@ void set_int_handler(int vec, void (*handler)(int, regs_t *)) {
     g_handlers[vec] = handler;
 }
 
+
 //------------------------------------------------------------------------------
 // default handler
 //------------------------------------------------------------------------------
@@ -63,7 +64,7 @@ static void on_generic_protect(int vec UNUSED, regs_t *f) {
     log("cpu%d rip=%lx rsp=%lx\n", cpu_index(), f->rip, f->rsp);
     log("errcode %zx\n", f->errcode);
 
-    char *file = NULL;
+    const char *file = NULL;
     int line = addr_to_line(f->rip, &file);
     log("called from %s:%d\n", file, line);
 }

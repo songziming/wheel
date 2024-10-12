@@ -6,10 +6,17 @@
 #include "cpu/rw.h"
 #include <devices/acpi.h>
 #include <devices/hpet.h>
+#include <devices/i8042.h>
 
 #include <library/debug.h>
 #include <library/string.h>
 #include <services/pci.h>
+
+#include <x/keyboard.h>
+
+
+
+INIT_TEXT void tty_init(); // x/tty.c
 
 
 typedef struct pci_conf {
@@ -108,10 +115,12 @@ INIT_TEXT void pre_memory_hwinit() {
 
 // 可以分配物理页、映射虚拟地址
 INIT_TEXT void pre_task_hwinit() {
-    //
+    keyboard_init();
+    i8042_init();
 }
 
 // 可以创建任务
 INIT_TEXT void post_task_hwinit() {
     pci_enumerate(install_pci_dev);
+    tty_init();
 }

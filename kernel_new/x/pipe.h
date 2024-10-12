@@ -14,6 +14,10 @@ typedef struct pipe {
     dlnode_t readers; // 排队等待读取数据的
 } pipe_t;
 
+
+#define NOWAIT -1
+#define FOREVER -2
+
 void pipe_init(pipe_t *pipe, void *buff, size_t size);
 
 size_t pipe_write(pipe_t *pipe, const void *src, size_t min, size_t max, int timeout);

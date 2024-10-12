@@ -361,7 +361,7 @@ static void root_proc() {
     post_task_hwinit();
 
     // TODO 运行相关测试（检查 boot 参数）
-    test_timer_periodic();
+    // test_timer_periodic();
 
     // loapic_send_ipi(-1, 0x80);
 

@@ -24,10 +24,6 @@ typedef struct pender {
 } pender_t;
 
 
-#define NOWAIT -1
-#define FOREVER -2
-
-
 //------------------------------------------------------------------------------
 // 初始化
 //------------------------------------------------------------------------------
@@ -160,6 +156,7 @@ static void wakeup_reader(void *a1, void *a2) {
 // 写入数据（up）
 //------------------------------------------------------------------------------
 
+// 可能阻塞，不能在中断里运行
 size_t pipe_write(pipe_t *pipe, const void *src, size_t min, size_t max, int timeout) {
     ASSERT(0 == cpu_int_depth());
     ASSERT(NULL != pipe);

@@ -2,12 +2,10 @@
 #include <cpu/rw.h>
 
 // 8259 PIC port
-#define PIC1            0x20        // IO base address for PIC master
-#define PIC2            0xA0        // IO base address for PIC slave
-#define PIC1_CMD        PIC1
-#define PIC1_DAT        (PIC1 + 1)
-#define PIC2_CMD        PIC2
-#define PIC2_DAT        (PIC2 + 1)
+#define PIC1_CMD        0x20        // IO base address for PIC master
+#define PIC1_DAT        PIC1_CMD + 1
+#define PIC2_CMD        0xA0        // IO base address for PIC slave
+#define PIC2_DAT        PIC2_CMD + 1
 
 // 8259 PIC control words
 #define ICW1_ICW4       0x01        // ICW4 (not) needed

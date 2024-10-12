@@ -407,7 +407,7 @@ void arch_ipi_resched(int cpu) {
 // 无法发给特定几个处理器，只能遍历
 void notify_resched(cpuset_t cpus) {
     while (cpus) {
-        int cpu = __builtin_clzll(cpus);
+        int cpu = __builtin_ctzll(cpus);
         loapic_send_ipi(cpu, VEC_IPI_RESCHED);
         cpus &= cpus - 1;
     }
