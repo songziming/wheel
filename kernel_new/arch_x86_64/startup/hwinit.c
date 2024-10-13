@@ -122,5 +122,5 @@ INIT_TEXT void pre_task_hwinit() {
 // 可以创建任务
 INIT_TEXT void post_task_hwinit() {
     pci_enumerate(install_pci_dev);
-    tty_init();
+    // tty_init();
 }

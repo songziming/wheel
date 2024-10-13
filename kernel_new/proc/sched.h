@@ -11,7 +11,8 @@ typedef enum task_state {
     TASK_READY   = 0,
     TASK_PENDING = 1,   // 因为 semaphore、pipe、msgqueue 等资源而阻塞，处于它们的等待队列中
     TASK_STOPPED = 2,   // 被手动暂停，不在就绪队列中
-    TASK_DELETED = 4,   // 已停止，即将删除（已预约下一次 work_queue）
+    TASK_WAITING = 4,   // 等待固定时间
+    TASK_DELETED = 8,   // 已停止，即将删除（已预约下一次 work_queue）
 } task_state_t;
 
 // 代表一个线程
@@ -28,7 +29,7 @@ typedef struct task {
 } task_t;
 
 
-extern PERCPU_DATA task_t *g_tid_prev;
+extern PERCPU_BSS task_t *g_tid_prev;
 extern PERCPU_BSS task_t *g_tid_next;
 
 
@@ -39,6 +40,7 @@ void task_create(task_t *tid, const char *name, uint8_t priority, int tick,
         void *entry, void *arg1, void *arg2, void *arg3, void *arg4);
 
 void task_resume(task_t *tid);
+void task_sleep(int tick);
 void task_exit();
 
 void sched_advance();

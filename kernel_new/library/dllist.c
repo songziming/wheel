@@ -21,12 +21,6 @@ int dl_is_lastone(dlnode_t *node) {
     return (node->prev == node) && (node->next == node);
 }
 
-// // 判断节点是否位于链表中（自环也是合法的链表）
-// int dl_is_wired(dlnode_t *node) {
-//     ASSERT(NULL != node);
-//     return (NULL != node->prev) && (NULL != node->next);
-// }
-
 // 判断节点是否位于链表中
 int dl_contains(dlnode_t *head, dlnode_t *node) {
     ASSERT(NULL != head);
@@ -94,27 +88,3 @@ dlnode_t *dl_remove(dlnode_t *node) {
 
     return node;
 }
-
-// dlnode_t *dl_pop_prev(dlnode_t *node) {
-//     ASSERT(NULL != node);
-
-//     if (dl_is_lastone(node)) {
-//         return NULL;
-//     }
-
-//     dlnode_t *prev = node->prev;
-//     dl_remove(prev);
-//     return prev;
-// }
-
-// dlnode_t *dl_pop_next(dlnode_t *node) {
-//     ASSERT(NULL != node);
-
-//     if (dl_is_lastone(node)) {
-//         return NULL;
-//     }
-
-//     dlnode_t *next = node->next;
-//     dl_remove(next);
-//     return next;
-// }

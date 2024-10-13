@@ -144,45 +144,6 @@ int semaphore_take(semaphore_t *sem, int n, int timeout) {
 // 释放信号量，将阻塞的任务恢复，可以在任务和中断里执行
 //------------------------------------------------------------------------------
 
-int fifo_semaphore_give(fifo_semaphore_t *sem, int n) {
-    ASSERT(NULL != sem);
-    ASSERT(n > 0);
-
-    semaphore_t *common = &sem->common;
-    dlnode_t *pend_q = &sem->penders;
-
-    int key = irq_spin_take(&common->spin);
-
-    common->value += n;
-    if (common->value > common->limit) {
-        n -= common->value - common->limit;
-        common->value = common->limit;
-    }
-
-    cpuset_t resched_mask = 0;
-    while ((common->value > 0) && !dl_is_lastone(pend_q)) {
-        pend_item_t *item = containerof(pend_q->next, pend_item_t, dl);
-        if (common->value < item->require) {
-            continue;
-        }
-
-        dl_remove(&item->dl);
-        common->value -= item->require;
-        item->got = item->require;
-
-        task_t *task = item->task;
-        int cpu = sched_cont(task, TASK_PENDING); // 恢复任务
-        if (cpu >= 0) {
-            resched_mask |= 1UL << cpu;
-        }
-    }
-
-    irq_spin_give(&common->spin, key);
-    notify_resched(resched_mask);
-
-    return n;
-}
-
 int semaphore_give(semaphore_t *sem, int n) {
     ASSERT(NULL != sem);
     ASSERT(n > 0);

@@ -284,7 +284,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 系统时钟（主频 10Hz）
     calibrate_timer();
-    loapic_timer_set_periodic(10);
+    loapic_timer_set_periodic(100);
 
     // 使用正式内核页表
     write_cr3(kernel_vmspace()->table);
@@ -366,6 +366,8 @@ static void root_proc() {
     // loapic_send_ipi(-1, 0x80);
 
     log("root task exiting...\n");
+    test_task_sleep();
+    // test_producer_consumer();
 }
 
 

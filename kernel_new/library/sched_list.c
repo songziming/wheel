@@ -31,6 +31,11 @@ dlnode_t *sched_list_arr_head(sched_list_arr_t *l) {
     return l->heads[top];
 }
 
+dlnode_t *sched_list_arr_rotate(sched_list_arr_t *l, dlnode_t *dl) {
+    (void)l;
+    return dl->next;
+}
+
 void sched_list_arr_insert(sched_list_arr_t *l, int pri, dlnode_t *dl) {
     ASSERT(NULL != l);
     ASSERT(NULL != dl);
@@ -92,6 +97,21 @@ void sched_list_jmp_init(sched_list_jmp_t *l) {
 
 dlnode_t *sched_list_jmp_head(sched_list_jmp_t *l) {
     return l->priorities ? l->head.next : NULL;
+}
+
+dlnode_t *sched_list_jmp_rotate(sched_list_jmp_t *l, dlnode_t *dl) {
+    // 轮转的元素一定是链表中优先级最高的
+    ASSERT(l->priorities);
+    ASSERT(dl_contains(&l->head, dl));
+
+    // 如果当前任务是最高优先级的最后一个，说明
+    dlnode_t *tail = l->tails[__builtin_ctz(l->priorities)];
+    if (tail == dl) {
+        return l->head.next;
+    }
+
+    // 不是同优先级的最后一个
+    return dl->next;
 }
 
 // 返回优先级 [0..pri] 之间最后一个节点，如果没有就返回 head

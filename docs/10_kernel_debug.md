@@ -13,6 +13,14 @@
 (gdb) c                             # 让 qemu 继续执行
 ~~~
 
+## gdb 访问 percpu var
+
+thiscpu 变量需要偏移 gs.base，gdb 可以访问这个寄存器：
+
+~~~bash
+(gdb) p (*(task_t**)((size_t)&g_tid_prev + $gs_base))
+~~~
+
 ## Bochs 使用符号名
 
 Bochs 不像 gdb，不能解析 elf 文件里的符号表。

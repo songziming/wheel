@@ -4,6 +4,7 @@
 #include <cpu/rw.h>
 #include <cpu/gdt_idt_tss.h>
 #include <memory/percpu.h>
+#include <memory/vmspace.h>
 #include <library/debug.h>
 #include <library/dwarf.h>
 
@@ -67,24 +68,37 @@ static void on_generic_protect(int vec UNUSED, regs_t *f) {
     const char *file = NULL;
     int line = addr_to_line(f->rip, &file);
     log("called from %s:%d\n", file, line);
+    log_stacktrace();
+    cpu_halt();
 }
 
 static void on_page_fault(int vec UNUSED, regs_t *f) {
     ASSERT(14 == vec);
 
+    emu_break();
+
     uint64_t va = read_cr2();
-    const char *p  = (f->errcode & 1) ? "non-exist " : "";
+    const char *p  = (f->errcode & 1) ? "" : "non-";
     const char *wr = (f->errcode & 2) ? "write to" : "read from";
     const char *us = (f->errcode & 4) ? "user mode" : "kernel";
     if (f->errcode & 16) {
         wr = "execute";
     }
 
-    log("page fault %s %sva 0x%zx under %s\n", wr, p, va, us);
+    log("page fault %s %sexisting addr 0x%zx under %s\n", wr, p, va, us);
+    log("rip=%lx rsp=%lx\n", f->rip, f->rsp);
 
     if (f->errcode & 8) {
         // 页表项中的保留位必须是 0
         log("reserved bit set in paging-structure\n");
+    }
+
+    vmspace_t *space = kernel_vmspace();
+    vmrange_t *rng = vmspace_locate(space, va);
+    if (NULL == rng) {
+        log("cannot locate valid range in vmspace\n");
+    } else {
+        log("within vmrange %s\n", rng->desc);
     }
 
     // TODO 获取当前 vmspace，定位所在 vmrange 的名称
@@ -93,6 +107,8 @@ static void on_page_fault(int vec UNUSED, regs_t *f) {
     const char *file = NULL;
     int line = addr_to_line(f->rip, &file);
     log("called from %s:%d\n", file, line);
+    // log_stacktrace();
+    cpu_halt();
 }
 
 

@@ -1,4 +1,5 @@
 #include "sched.h"
+#include "tick.h"
 #include <library/sched_list.h>
 #include <arch_intf.h>
 #include <arch_impl.h>
@@ -34,7 +35,7 @@ static volatile int g_lowest_cpu;
 static INIT_BSS task_t g_dummy_task;
 static PERCPU_BSS task_t g_idle_task;
 
-PERCPU_DATA task_t *g_tid_prev = &g_dummy_task; // 正在运行的任务，只有中断可以更新这个字段
+PERCPU_BSS task_t *g_tid_prev; // 正在运行的任务，只有中断可以更新这个字段
 PERCPU_BSS task_t *g_tid_next; // 即将运行的任务，中断返回时切换
 
 
@@ -78,7 +79,8 @@ static int sched_cont_on(task_t *tid, uint16_t bits, int cpu) {
     q->load += tid->tick_reload;
     sched_list_insert(&q->sl, tid->priority, &tid->q_node);
     task_t *next = containerof(sched_list_head(&q->sl), task_t, q_node);
-    *(task_t **)percpu_ptr(cpu, &g_tid_next) = next;
+    *(task_t**)percpu_ptr(cpu, &g_tid_next) = next;
+    // log("cpu%d cont %s setting next to %s\n", cpu, tid->stack.desc, next->stack.desc);
     irq_spin_give(&q->spin, key);
 
     return cpu;
@@ -116,14 +118,56 @@ void task_create(task_t *tid, const char *name, uint8_t priority, int tick,
     arch_task_init(tid, (size_t)entry, arg1, arg2, arg3, arg4);
 }
 
+
+// 将任务放进就绪队列，参与调度
+// 放在当前 CPU 的就绪队列上
+void task_resume(task_t *tid) {
+    ASSERT(NULL != tid);
+
+    int cpu = sched_cont(tid, TASK_STOPPED);
+
+    if ((cpu < 0) || cpu_int_depth()) {
+        return;
+    }
+
+    if (cpu_index() != cpu) {
+        arch_ipi_resched(cpu);
+    } else {
+        arch_task_switch();
+    }
+}
+
+
+// 唤醒正在睡眠的任务
+static void task_wakeup(void *arg1, void *arg2 UNUSED) {
+    task_t *tid = (task_t *)arg1;
+    int cpu = sched_cont(tid, TASK_WAITING);
+    if ((cpu >= 0) && (cpu != cpu_index())) {
+        arch_ipi_resched(cpu);
+    }
+}
+
+// 休眠一段时间
+void task_sleep(int tick) {
+    task_t *tid = sched_stop(TASK_WAITING);
+
+    // 设定唤醒自己的闹钟
+    timer_t timer;
+    timer_start(&timer, tick, task_wakeup, tid, NULL);
+
+    // 交出控制权
+    arch_task_switch();
+
+    // 只能被 timer 唤醒，不用手动取消 timer
+}
+
+
 // 任务已经结束，在中断返回阶段执行此函数
 static void task_post_delete(void *arg1, void *arg2 UNUSED) {
     task_t *tid = (task_t *)arg1;
     ASSERT(TASK_DELETED & tid->state);
     vmspace_remove(NULL, &tid->stack);
 }
-
-
 
 // 停止当前正在运行的任务
 void task_exit() {
@@ -138,21 +182,6 @@ void task_exit() {
     }
 
     arch_task_switch();
-}
-
-
-// 将任务放进就绪队列，参与调度
-// 放在当前 CPU 的就绪队列上
-void task_resume(task_t *tid) {
-    ASSERT(NULL != tid);
-
-    int cpu = sched_cont(tid, TASK_STOPPED);
-
-    if (cpu_index() != cpu) {
-        arch_ipi_resched(cpu);
-    } else if (0 == cpu_int_depth()) {
-        arch_task_switch();
-    }
 }
 
 
@@ -171,8 +200,14 @@ void sched_advance() {
     task_t *tid = THISCPU_GET(g_tid_next);
     if (0 == --tid->tick) {
         tid->tick = tid->tick_reload;
-        tid = containerof(tid->q_node.next, task_t, q_node);
-        THISCPU_SET(g_tid_next, tid);
+
+        // sched_list_remove(&q->sl, tid->priority, &tid->q_node);
+        // sched_list_insert(&q->sl, tid->priority, &tid->q_node);
+        // tid = containerof(sched_list_head(&q->sl), task_t, q_node);
+        // THISCPU_SET(g_tid_next, tid);
+
+        dlnode_t *next = sched_list_rotate(&q->sl, &tid->q_node);
+        THISCPU_SET(g_tid_next, containerof(next, task_t, q_node));
     }
 
     // 检查当前 CPU 是不是负载最低的
@@ -208,6 +243,8 @@ INIT_TEXT void sched_init() {
         sched_list_init(&q->sl);
         spin_init(&q->spin);
         q->load = 0;
+
+        *(task_t**)percpu_ptr(i, &g_tid_prev) = &g_dummy_task;
 
         task_t *idle = percpu_ptr(i, &g_idle_task);
         task_create(idle, "idle", PRIORITY_NUM - 1, 100, idle_proc, 0,0,0,0);
