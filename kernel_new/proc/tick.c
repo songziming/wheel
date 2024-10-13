@@ -45,7 +45,7 @@ void timer_start(timer_t *timer, int tick, timer_func_t func, void *arg1, void *
 void timer_cancel(timer_t *timer) {
     int key = irq_spin_take(&g_q_spin);
 
-    dlnode_t *next = dl_remove(&timer->dl);
+    dlnode_t *next = dl_remove(&timer->dl)->next;
     if (next) {
         ASSERT(dl_contains(&g_tick_q, next));
     }
@@ -60,7 +60,7 @@ void timer_cancel_sync(timer_t *timer) {
     int key = irq_spin_take(&g_q_spin);
     raw_spin_take(&g_func_spin);
 
-    dlnode_t *next = dl_remove(&timer->dl);
+    dlnode_t *next = dl_remove(&timer->dl)->next;
     if (next) {
         ASSERT(dl_contains(&g_tick_q, next));
     }

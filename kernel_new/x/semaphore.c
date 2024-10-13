@@ -12,7 +12,7 @@
 
 
 
-// 代表一个阻塞的任务
+// 代表一个阻塞的任务，保存在栈上
 typedef struct pend_item {
     dlnode_t  dl;
     task_t   *task;
@@ -26,7 +26,7 @@ typedef struct pend_item {
 // 初始化信号量
 //------------------------------------------------------------------------------
 
-static void semaphore_init(semaphore_t *sem, int initial, int max) {
+void semaphore_init(semaphore_t *sem, int initial, int max) {
     ASSERT(NULL != sem);
     ASSERT(initial >= 0);
     ASSERT(max > 0);
@@ -39,18 +39,8 @@ static void semaphore_init(semaphore_t *sem, int initial, int max) {
     spin_init(&sem->spin);
     sem->limit = max;
     sem->value = initial;
+    sched_list_init(&sem->penders);
 }
-
-void fifo_semaphore_init(fifo_semaphore_t *sem, int initial, int max) {
-    semaphore_init(&sem->common, initial, max);
-    dl_init_circular(&sem->penders);
-}
-
-void priority_semaphore_init(priority_semaphore_t *sem, int initial, int max) {
-    semaphore_init(&sem->common, initial, max);
-    priority_q_init(&sem->penders);
-}
-
 
 
 //------------------------------------------------------------------------------
@@ -58,8 +48,10 @@ void priority_semaphore_init(priority_semaphore_t *sem, int initial, int max) {
 //------------------------------------------------------------------------------
 
 // 尚未得到信号量，但等待时间已过
-static void semaphore_wakeup(semaphore_t *sem, pend_item_t *item,
-        dlnode_t *fifo_q, priority_q_t *priority_q) {
+static void semaphore_wakeup(void *arg1, void *arg2) {
+    semaphore_t *sem = (semaphore_t *)arg1;
+    pend_item_t *item = (pend_item_t *)arg2;
+
     ASSERT(cpu_int_depth());
     ASSERT(NULL != sem);
     ASSERT(NULL != item);
@@ -74,41 +66,20 @@ static void semaphore_wakeup(semaphore_t *sem, pend_item_t *item,
     // 这段代码可能与其他 CPU 竞争恢复目标任务
     // 可能与恢复运行的目标任务竞争 pend_item 的访问
 
-    if (fifo_q) {
-        if (!dl_contains(fifo_q, &item->dl)) {
-            irq_spin_give(&sem->spin, key);
-            return;
-        }
-        dl_remove(&item->dl);
+    if (sched_list_contains(&sem->penders, task->priority, &item->dl)) {
+        irq_spin_give(&sem->spin, key);
+        return;
     }
-    if (priority_q) {
-        if (priority_q_contains(priority_q, task)) {
-            irq_spin_give(&sem->spin, key);
-            return;
-        }
-        priority_q_remove(priority_q, task);
-    }
+    sched_list_remove(&sem->penders, task->priority, &item->dl);
+
     int cpu = sched_cont(task, TASK_PENDING); // 恢复任务
     irq_spin_give(&sem->spin, key);
 
     // 如果任务在当前 CPU 恢复，则无需切换任务，因为目前就处在中断
-    if ((-1 != cpu) && (cpu_index() != cpu)) {
+    if ((cpu >= 0) && (cpu_index() != cpu)) {
         arch_ipi_resched(cpu);
     }
 }
-
-static void fifo_semaphore_wakeup(void *arg1, void *arg2) {
-    fifo_semaphore_t *sem = (fifo_semaphore_t *)arg1;
-    pend_item_t *item = (pend_item_t *)arg2;
-    semaphore_wakeup(&sem->common, item, &sem->penders, NULL);
-}
-
-static void priority_semaphore_wakeup(void *arg1, void *arg2) {
-    priority_semaphore_t *sem = (priority_semaphore_t *)arg1;
-    pend_item_t *item = (pend_item_t *)arg2;
-    semaphore_wakeup(&sem->common, item, NULL, &sem->penders);
-}
-
 
 
 //------------------------------------------------------------------------------
@@ -118,8 +89,9 @@ static void priority_semaphore_wakeup(void *arg1, void *arg2) {
 // 如果成功获得信号量，则返回非零
 // 如果获取信号量失败（例如超时、信号量被删除），则返回零
 
-static int semaphore_take(semaphore_t *sem, int n, int timeout,
-        dlnode_t *fifo_q, priority_q_t *priority_q, timer_func_t wakup_func) {
+// 成功则返回 n，失败返回 0，总之返回实际得到的资源数
+
+int semaphore_take(semaphore_t *sem, int n, int timeout) {
     ASSERT(0 == cpu_int_depth());
     ASSERT(NULL != sem);
     ASSERT(n > 0);
@@ -134,6 +106,10 @@ static int semaphore_take(semaphore_t *sem, int n, int timeout,
         return n;
     }
 
+    if (NOWAIT == timeout) {
+        return 0;
+    }
+
     // 当前任务变为阻塞态，但开启中断前还能保持运行
     task_t *self = sched_stop(TASK_PENDING);
 
@@ -142,17 +118,12 @@ static int semaphore_take(semaphore_t *sem, int n, int timeout,
     item.task = self;
     item.require = n;
     item.got = 0;
-    if (fifo_q) {
-        dl_insert_before(&item.dl, fifo_q);
-    }
-    if (priority_q) {
-        priority_q_push(priority_q, self);
-    }
+    sched_list_insert(&sem->penders, self->priority, &item.dl);
 
     // 指定了超时时间，则开启一个 timer
     timer_t wakeup;
-    if (wakup_func && (timeout > 0)) {
-        timer_start(&wakeup, timeout, wakup_func, &sem, &item);
+    if (FOREVER != timeout) {
+        timer_start(&wakeup, timeout, semaphore_wakeup, &sem, &item);
     }
 
     // 放开锁，切换到其他任务
@@ -160,22 +131,13 @@ static int semaphore_take(semaphore_t *sem, int n, int timeout,
     arch_task_switch();
 
     // 重新恢复运行，把计时器停止
-    if (wakup_func && (timeout > 0)) {
+    if (FOREVER != timeout) {
         timer_cancel(&wakeup);
     }
 
     // 检查原因（因为得到了信号量，还是因为超时）
     return item.got;
 }
-
-int fifo_semaphore_take(fifo_semaphore_t *sem, int n, int timeout) {
-    return semaphore_take(&sem->common, n, timeout, &sem->penders, NULL, fifo_semaphore_wakeup);
-}
-
-int priority_semaphore_take(priority_semaphore_t *sem, int n, int timeout) {
-    return semaphore_take(&sem->common, n, timeout, NULL, &sem->penders, priority_semaphore_wakeup);
-}
-
 
 
 //------------------------------------------------------------------------------
@@ -221,36 +183,36 @@ int fifo_semaphore_give(fifo_semaphore_t *sem, int n) {
     return n;
 }
 
-int priority_semaphore_give(priority_semaphore_t *sem, int n) {
+int semaphore_give(semaphore_t *sem, int n) {
     ASSERT(NULL != sem);
     ASSERT(n > 0);
 
-    semaphore_t *common = &sem->common;
-    priority_q_t *pend_q = &sem->penders;
+    // semaphore_t *sem = &sem->sem;
+    sched_list_t *pend_q = &sem->penders;
 
-    int key = irq_spin_take(&common->spin);
+    int key = irq_spin_take(&sem->spin);
 
-    common->value += n;
-    if (common->value > common->limit) {
-        n -= common->value - common->limit;
-        common->value = common->limit;
+    sem->value += n;
+    if (sem->value > sem->limit) {
+        n -= sem->value - sem->limit;
+        sem->value = sem->limit;
     }
 
     cpuset_t resched_mask = 0;
-    while (common->value > 0) {
-        dlnode_t *head = priority_q_head(pend_q);
+    while (sem->value > 0) {
+        dlnode_t *head = sched_list_head(pend_q);
         if (NULL == head) {
             break;
         }
 
         pend_item_t *item = containerof(head, pend_item_t, dl);
-        if (common->value < item->require) {
+        if (sem->value < item->require) {
             continue;
         }
 
         task_t *task = item->task;
-        priority_q_remove(pend_q, task);
-        common->value -= item->require;
+        sched_list_remove(pend_q, task->priority, &item->dl);
+        sem->value -= item->require;
         item->got = item->require;
 
         int cpu = sched_cont(task, TASK_PENDING); // 恢复任务
@@ -259,7 +221,7 @@ int priority_semaphore_give(priority_semaphore_t *sem, int n) {
         }
     }
 
-    irq_spin_give(&common->spin, key);
+    irq_spin_give(&sem->spin, key);
     notify_resched(resched_mask);
 
     return n;

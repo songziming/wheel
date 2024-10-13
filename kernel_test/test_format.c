@@ -42,39 +42,72 @@ static void print_n_check(const char *wanted, const char *fmt, ...) {
     dst_teardown();
 }
 
-TEST(Format, Split) {
+TEST(StringFormat, Split) {
     print_n_check("abcdefghijklmn", "abcdefghijklmn");
     print_n_check("1234_hello_5678", "1234%s5678", "_hello_");
     print_n_check("1234_hello_world_5678", "1234%s5678", "_hello_world_");
     print_n_check("hello_1234567890_world", "hello_%ld_world", 1234567890L);
 }
 
-TEST(Format, Length) {
-    EXPECT(6 == snprintk(NULL, 0, "%d", 123456));
-    EXPECT(4 == snprintk(NULL, 0, "%.4s", "hello"));
-    EXPECT(0 == snprintk(NULL, 0, "%.0s", "goodbye"));
+TEST(StringFormat, Length) {
+    EXPECT_EQ(6, snprintk(NULL, 0, "%d", 123456));
+    EXPECT_EQ(8, snprintk(NULL, 0, "%8d", 123456));
+    EXPECT_EQ(8, snprintk(NULL, 0, "%*d", 8, 123456));
+    EXPECT_EQ(4, snprintk(NULL, 0, "%.4s", "hello"));
+    EXPECT_EQ(4, snprintk(NULL, 0, "%.*s", 4, "hello"));
+    EXPECT_EQ(0, snprintk(NULL, 0, "%.0s", "goodbye"));
 }
 
-TEST(Format, String) {
+TEST(StringFormat, Special) {
     char buff[1024];
 
-    snprintk(buff, sizeof(buff), "hello %s", "world");
-    EXPECT(0 == strcmp(buff, "hello world"));
+    snprintk(buff, sizeof(buff), "a%cc", 'b');
+    EXPECT_EQ(0, strcmp(buff, "abc"));
 
-    snprintk(buff, sizeof(buff), "%s", "");
-    EXPECT(0 == strcmp(buff, ""));
+    snprintk(buff, sizeof(buff), "a%3cc", 'b');
+    EXPECT_EQ(0, strcmp(buff, "a  bc"));
+
+    snprintk(buff, sizeof(buff), "a%-3cc", 'b');
+    EXPECT_EQ(0, strcmp(buff, "ab  c"));
+
+    snprintk(buff, sizeof(buff), "100%%");
+    EXPECT_EQ(0, strcmp(buff, "100%"));
+
+    snprintk(buff, sizeof(buff), "%p", (void*)0xdeadbeef);
+    EXPECT_EQ(0, strcmp(buff, "0xdeadbeef"));
 }
 
-TEST(Format, Number) {
+TEST(StringFormat, String) {
+    char buff[1024];
+
+    snprintk(buff, sizeof(buff), "%s", "");
+    EXPECT_EQ(0, strcmp(buff, ""));
+
+    snprintk(buff, sizeof(buff), "hello %s", (char *)NULL);
+    EXPECT_EQ(0, strcmp(buff, "hello (null)"));
+
+    snprintk(buff, sizeof(buff), "hello %s.", "world");
+    EXPECT_EQ(0, strcmp(buff, "hello world."));
+
+    snprintk(buff, sizeof(buff), "hello %7s.", "world");
+    EXPECT_EQ(0, strcmp(buff, "hello   world."));
+
+    snprintk(buff, sizeof(buff), "hello %-7s.", "world");
+    EXPECT_EQ(0, strcmp(buff, "hello world  ."));
+}
+
+TEST(StringFormat, Number) {
     static const struct {
         const char *fmt;
-        int         val;
+        long long   val;
         const char *res;
     } test_cases[] = {
         //  测试 width、precision、对齐方式的处理
         { "%04d",       12,     "0012"  },
         { "%.3d",       12,     "012"   },
         { "%3d",        12,     " 12"   },
+        { "%d",        -12,     "-12"   },
+        { "%4d",       -12,     " -12"  },
         { "%-3d",       12,     "12 "   },
         { "%+3d",       12,     "+12"   },
         { "%+-5d",      12,     "+12  " },
@@ -83,6 +116,12 @@ TEST(Format, Number) {
         { "% d",        12,     " 12"   },
         { "%0-5d",      12,     "12   " },
         { "%-05d",      12,     "12   " },
+
+        // 测试不同长度
+        { "%hhx",   0xdeadbeef, "ef"    }, // char
+        { "%hx",    0xdeadbeef, "beef"  }, // short
+        { "%lx",    0x1234deadbeefL, "1234deadbeef"  }, // long
+        { "%llx",   0x1234deadbeefLL, "1234deadbeef"  }, // long long
 
         // precision 取零时，数字零不显示，但八进制前缀、width、符号仍有效
         { "%.0d",       0,      ""      },

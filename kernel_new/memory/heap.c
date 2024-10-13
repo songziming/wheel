@@ -109,7 +109,7 @@ static void take_chunk_from_heap(heap_t *heap, chunk_t *chk) {
 
     // 检查 parent 指针，判断是否位于 sizetree（红黑树根节点为黑色，非零）
     if (chk->sizenode.parent_color) {
-        dlnode_t *next_dl = dl_remove(&chk->freenode);
+        dlnode_t *next_dl = dl_remove(&chk->freenode)->next;
         if (NULL == next_dl) {
             rb_remove(&heap->sizetree, &chk->sizenode);
         } else {

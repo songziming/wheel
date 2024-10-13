@@ -2,7 +2,7 @@
 #include <library/leb128.h>
 
 
-TEST(Leb128, Unsigned) {
+TEST(DwarfLeb128, Unsigned) {
     uint8_t buf[64];
     const uint8_t *end;
     int len = encode_uleb128(12345, buf);
@@ -20,7 +20,7 @@ TEST(Leb128, Unsigned) {
     EXPECT(val == 624485);
 }
 
-TEST(Leb128, Signed) {
+TEST(DwarfLeb128, Signed) {
     uint8_t buf[64];
     const uint8_t *end;
     int len = encode_sleb128(12345, buf);

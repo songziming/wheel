@@ -47,7 +47,7 @@ static INIT_TEXT pci_dev_t *add_device(uint8_t bus, uint8_t slot, uint8_t func, 
     dev->subclass = (reg2 >> 16) & 0xff;
     dev->progif = (reg2 >> 8) & 0xff;
 
-    dev->dl = DLNODE_INIT;
+    // dev->dl = DLNODE_INIT;
     dl_insert_before(&dev->dl, &g_pci_devs);
     return dev;
 }
@@ -57,7 +57,10 @@ INIT_TEXT void pci_probe() {
     ASSERT(NULL != g_pci_read);
     ASSERT(NULL != g_pci_write);
 
-    dl_init_circular(&g_pci_devs);
+    if (!dl_is_lastone(&g_pci_devs)) {
+        log("warning: discarding existing pci devices\n");
+        dl_init_circular(&g_pci_devs);
+    }
 
     uint8_t buses[256];
     uint8_t num = 1;

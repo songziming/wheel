@@ -6,8 +6,8 @@
 // 块设备管理
 
 
-static dlnode_t g_block_devices = DLNODE_INIT;
-static dlnode_t g_block_drivers = DLNODE_INIT;
+static dlnode_t g_block_devices; // = DLNODE_INIT;
+static dlnode_t g_block_drivers; // = DLNODE_INIT;
 
 
 

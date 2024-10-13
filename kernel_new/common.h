@@ -39,4 +39,8 @@ typedef uint32_t pfn_t;
 #define INVALID_PFN  0xffffffffU
 // #define INVALID_ADDR 0xffffffffffffffffUL
 
+// 等待时间，单位是 tick
+#define NOWAIT -1
+#define FOREVER -2
+
 #endif // COMMON_H

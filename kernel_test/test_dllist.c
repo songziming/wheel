@@ -28,7 +28,7 @@ static void teardown() {
 
 static listitem_t *new_item(int val) {
     listitem_t *item = malloc(sizeof(listitem_t));
-    item->dl = DLNODE_INIT;
+    // item->dl = DLNODE_INIT;
     item->val = val;
     return item;
 }
@@ -118,7 +118,31 @@ void compare_item_and_free(listitem_t *item, int num) {
 // 测试用例
 //------------------------------------------------------------------------------
 
-TEST_F(List, PushHead, setup, teardown) {
+TEST(DoubleLinkedList, Remove) {
+    listitem_t item1 = { .val = 1 };
+    listitem_t item2 = { .val = 2 };
+    listitem_t item3 = { .val = 3 };
+
+    setup();
+    push_tail(&item1);
+    push_tail(&item2);
+    push_tail(&item3);
+
+    dlnode_t *out = dl_remove(&item2.dl);
+    EXPECT_EQ(&item1.dl, out->prev);
+    EXPECT_EQ(&item3.dl, out->next);
+
+    dl_remove(&item1.dl);
+    dl_remove(&item3.dl);
+    EXPECT(dl_is_lastone(&myhead));
+
+    // 删除最后一个元素
+    dl_remove(&myhead);
+    EXPECT_EQ(NULL, myhead.prev);
+    EXPECT_EQ(NULL, myhead.next);
+}
+
+TEST_F(DoubleLinkedList, PushHead, setup, teardown) {
     EXPECT(dl_is_lastone(&myhead));
     push_head(new_item(1));
     push_head(new_item(2));
@@ -127,7 +151,7 @@ TEST_F(List, PushHead, setup, teardown) {
     EXPECT_ARRAY(4,3,2,1);
 }
 
-TEST_F(List, PushTail, setup, teardown) {
+TEST_F(DoubleLinkedList, PushTail, setup, teardown) {
     EXPECT(dl_is_lastone(&myhead));
     push_tail(new_item(1));
     push_tail(new_item(2));
@@ -136,7 +160,7 @@ TEST_F(List, PushTail, setup, teardown) {
     EXPECT_ARRAY(1,2,3,4);
 }
 
-TEST_F(List, PopHead, setup, teardown) {
+TEST_F(DoubleLinkedList, PopHead, setup, teardown) {
     EXPECT(dl_is_lastone(&myhead));
     push_tail(new_item(1));
     push_tail(new_item(2));
@@ -146,7 +170,7 @@ TEST_F(List, PopHead, setup, teardown) {
     EXPECT(dl_is_lastone(&myhead));
 }
 
-TEST_F(List, PopTail, setup, teardown) {
+TEST_F(DoubleLinkedList, PopTail, setup, teardown) {
     EXPECT(dl_is_lastone(&myhead));
     push_tail(new_item(1));
     push_tail(new_item(2));
@@ -156,7 +180,7 @@ TEST_F(List, PopTail, setup, teardown) {
     EXPECT(dl_is_lastone(&myhead));
 }
 
-TEST_F(List, InsertBefore, setup, teardown) {
+TEST_F(DoubleLinkedList, InsertBefore, setup, teardown) {
     EXPECT(dl_is_lastone(&myhead));
     listitem_t *i1 = insert_before(new_item(1), NULL);
     listitem_t *i2 = insert_before(new_item(2), i1);
@@ -169,7 +193,7 @@ TEST_F(List, InsertBefore, setup, teardown) {
     EXPECT_ARRAY(4,3,2,5,6,7,8,1);
 }
 
-TEST_F(List, InsertAfter, setup, teardown) {
+TEST_F(DoubleLinkedList, InsertAfter, setup, teardown) {
     EXPECT(dl_is_lastone(&myhead));
     listitem_t *i1 = insert_after(new_item(1), NULL);
     listitem_t *i2 = insert_after(new_item(2), i1);
@@ -182,7 +206,7 @@ TEST_F(List, InsertAfter, setup, teardown) {
     EXPECT_ARRAY(1,8,7,6,5,2,3,4);
 }
 
-TEST_F(List, Pop, setup, teardown) {
+TEST_F(DoubleLinkedList, Pop, setup, teardown) {
     EXPECT(dl_is_lastone(&myhead));
     listitem_t *i1 = push_tail(new_item(1));
     listitem_t *i2 = push_tail(new_item(2));

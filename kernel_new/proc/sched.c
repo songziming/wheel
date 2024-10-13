@@ -1,4 +1,5 @@
 #include "sched.h"
+#include <library/sched_list.h>
 #include <arch_intf.h>
 #include <arch_impl.h>
 #include <library/dllist.h>
@@ -16,92 +17,25 @@
 //     spin_t      spin;
 //     int         load;
 //     int         new_task; // 有新任务，可能不再是最低优先级
-// } priority_q_t;
+// } sched_list_t;
 
 
-static PERCPU_BSS priority_q_t g_ready_q;
+typedef struct ready_q {
+    sched_list_t sl;
+    spin_t spin;
+    int load;
+} ready_q_t;
+
+static PERCPU_BSS ready_q_t g_ready_q;
 
 static volatile int g_lowest_load;
 static volatile int g_lowest_cpu;
 
-PERCPU_BSS task_t *g_tid_prev; // 正在运行的任务，只有中断可以更新这个字段
+static INIT_BSS task_t g_dummy_task;
+static PERCPU_BSS task_t g_idle_task;
+
+PERCPU_DATA task_t *g_tid_prev = &g_dummy_task; // 正在运行的任务，只有中断可以更新这个字段
 PERCPU_BSS task_t *g_tid_next; // 即将运行的任务，中断返回时切换
-
-
-//------------------------------------------------------------------------------
-// 任务队列
-//------------------------------------------------------------------------------
-
-// 可用于就绪队列、阻塞队列
-
-void priority_q_init(priority_q_t *q) {
-    memset(q, 0, sizeof(priority_q_t));
-}
-
-void priority_q_push(priority_q_t *q, task_t *tid) {
-    ASSERT(NULL != q);
-    ASSERT(NULL != tid);
-
-    int pri = tid->priority;
-
-    if ((1U << pri) & q->priorities) {
-        dl_insert_before(&tid->q_node, q->heads[pri]);
-    } else {
-        dl_init_circular(&tid->q_node);
-        q->heads[pri] = &tid->q_node;
-        q->priorities |= 1U << pri;
-    }
-
-    q->load += tid->tick_reload;
-}
-
-int priority_q_contains(priority_q_t *q, task_t *tid) {
-    ASSERT(NULL != q);
-    ASSERT(NULL != tid);
-
-    int pri = tid->priority;
-    if ((1U << pri) & q->priorities) {
-        dlnode_t *head = q->heads[pri];
-        dlnode_t *node = &tid->q_node;
-        return (head == node) || dl_contains(head, node);
-    }
-
-    return 0;
-}
-
-task_t *priority_q_head(priority_q_t *q) {
-    ASSERT(NULL != q);
-    if (0 == q->priorities) {
-        return NULL;
-    }
-    int top = __builtin_ctz(q->priorities);
-    ASSERT(NULL != q->heads[top]);
-    return containerof(q->heads[top], task_t, q_node);
-}
-
-void priority_q_remove(priority_q_t *q, task_t *tid) {
-    ASSERT(NULL != q);
-    ASSERT(NULL != tid);
-    ASSERT(priority_q_contains(q, tid));
-    ASSERT(q->load >= tid->tick_reload);
-
-    int pri = tid->priority;
-    ASSERT((1U << pri) & q->priorities);
-
-    q->load -= tid->tick_reload;
-
-    if (dl_is_lastone(&tid->q_node)) {
-        ASSERT(q->heads[pri] == &tid->q_node);
-        q->heads[pri] = NULL;
-        q->priorities &= ~(1U << pri);
-        return;
-    }
-
-    dlnode_t *next = dl_remove(&tid->q_node);
-    if (q->heads[pri] == &tid->q_node) {
-        q->heads[pri] = next;
-    }
-}
 
 
 //------------------------------------------------------------------------------
@@ -116,40 +50,43 @@ task_t *sched_stop(uint16_t bits) {
     task_t *tid = THISCPU_GET(g_tid_prev);
     tid->state |= bits;
 
-    priority_q_t *q = thiscpu_ptr(&g_ready_q);
+    ready_q_t *q = thiscpu_ptr(&g_ready_q);
     int key = irq_spin_take(&q->spin);
-    ASSERT(priority_q_contains(q, tid));
-    priority_q_remove(q, tid);
-    THISCPU_SET(g_tid_next, priority_q_head(q));
+    ASSERT(sched_list_contains(&q->sl, tid->priority, &tid->q_node));
+    q->load -= tid->tick_reload;
+    sched_list_remove(&q->sl, tid->priority, &tid->q_node);
+    task_t *next = containerof(sched_list_head(&q->sl), task_t, q_node);
+    THISCPU_SET(g_tid_next, next);
     irq_spin_give(&q->spin, key);
 
     return tid;
 }
 
 // 将任务放在指定 CPU 上运行
-void sched_cont_on(task_t *tid, uint16_t bits, int cpu) {
+static int sched_cont_on(task_t *tid, uint16_t bits, int cpu) {
     ASSERT(NULL != tid);
     ASSERT(0 != bits);
     ASSERT(TASK_READY != tid->state);
 
     tid->state &= ~bits;
     if (TASK_READY != tid->state) {
-        return;
+        return -1;
     }
 
-    priority_q_t *q = percpu_ptr(cpu, &g_ready_q);
+    ready_q_t *q = percpu_ptr(cpu, &g_ready_q);
     int key = irq_spin_take(&q->spin);
-    priority_q_push(q, tid);
-    // q->new_task = 1;
-    *(task_t **)percpu_ptr(cpu, &g_tid_next) = priority_q_head(q);
+    q->load += tid->tick_reload;
+    sched_list_insert(&q->sl, tid->priority, &tid->q_node);
+    task_t *next = containerof(sched_list_head(&q->sl), task_t, q_node);
+    *(task_t **)percpu_ptr(cpu, &g_tid_next) = next;
     irq_spin_give(&q->spin, key);
+
+    return cpu;
 }
 
 // 返回选中的 CPU 编号
 int sched_cont(task_t *tid, uint16_t bits) {
-    int cpu = g_lowest_cpu;
-    sched_cont_on(tid, bits, cpu);
-    return cpu;
+    return sched_cont_on(tid, bits, g_lowest_cpu);
 }
 
 
@@ -197,7 +134,7 @@ void task_exit() {
     // TODO 应该换成 compare-and-set，原子性操作
     if (cpu_index() == g_lowest_cpu) {
         // g_lowest_load = THISCPU_GET(g_ready_q.load);
-        g_lowest_load = ((priority_q_t *)thiscpu_ptr(&g_ready_q))->load;
+        g_lowest_load = ((ready_q_t *)thiscpu_ptr(&g_ready_q))->load;
     }
 
     arch_task_switch();
@@ -228,7 +165,7 @@ void sched_advance() {
     ASSERT(cpu_int_depth());
 
     // 锁住当前队列，防止 tid_next 改变
-    priority_q_t *q = thiscpu_ptr(&g_ready_q);
+    ready_q_t *q = thiscpu_ptr(&g_ready_q);
     raw_spin_take(&q->spin);
 
     task_t *tid = THISCPU_GET(g_tid_next);
@@ -245,7 +182,6 @@ void sched_advance() {
     }
 
     raw_spin_give(&q->spin);
-    q->new_task = 0;
 }
 
 
@@ -253,11 +189,7 @@ void sched_advance() {
 // 初始化
 //------------------------------------------------------------------------------
 
-static INIT_BSS task_t g_dummy_task;
-static PERCPU_BSS task_t g_idle_task;
-
 static void idle_proc() {
-    // cpu_int_lock();
     while (1) {
         cpu_pause();
         cpu_halt();
@@ -272,17 +204,13 @@ INIT_TEXT void sched_init() {
     g_lowest_load = INT_MAX;
 
     for (int i = 0, N = cpu_count(); i < N; ++i) {
-        priority_q_t *q = percpu_ptr(i, &g_ready_q);
-        priority_q_init(q);
+        ready_q_t *q = percpu_ptr(i, &g_ready_q);
+        sched_list_init(&q->sl);
         spin_init(&q->spin);
+        q->load = 0;
 
         task_t *idle = percpu_ptr(i, &g_idle_task);
-        task_create(idle, "idle", PRIORITY_IDLE, 100, idle_proc, 0,0,0,0);
-
-        idle->state = TASK_READY;
-        priority_q_push(q, idle);
-
-        *(task_t **)percpu_ptr(i, &g_tid_prev) = &g_dummy_task;
-        *(task_t **)percpu_ptr(i, &g_tid_next) = idle;
+        task_create(idle, "idle", PRIORITY_NUM - 1, 100, idle_proc, 0,0,0,0);
+        sched_cont_on(idle, TASK_STOPPED, i);
     }
 }

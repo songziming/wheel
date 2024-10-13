@@ -3,7 +3,7 @@
 #include <library/string.h>
 
 
-TEST(Str, Length) {
+TEST(String, Length) {
     EXPECT(5 == def_strlen("hello"));
     EXPECT(3 == def_strlen("hel\0lo"));
 }
@@ -13,7 +13,7 @@ static int sgn(int x) {
     return (x > 0) - (x < 0);
 }
 
-TEST(Str, Compare) {
+TEST(String, Compare) {
     const char *s1 = "hello";
     const char *s2 = "world";
     EXPECT(sgn(def_strcmp(s1, s2)) == sgn(strcmp(s1, s2)));

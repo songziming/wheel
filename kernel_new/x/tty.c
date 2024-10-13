@@ -32,7 +32,7 @@ static const char syms[] = ")!@#$%^&*(";
 // static rbtree_t g_cmds = RBTREE_INIT;   // 记录所有命令
 static task_t g_tty_tcb;
 
-#define PROMPT "kshell"
+#define PROMPT "wheel"
 
 // 将按键码转换为 ASCII 字符，如果不是可打印字符，就返回 -1
 static char keycode_to_ascii(keycode_t key) {
@@ -266,7 +266,7 @@ INIT_TEXT void tty_add_cmd(tty_cmd_t *cmd) {
 
     while (NULL != *link) {
         tty_cmd_t *ref = containerof(*link, tty_cmd_t, rb);
-        int diff = memcpy(cmd->name, ref->name, 1024);
+        int diff = strcmp(cmd->name, ref->name, 1024);
 
         parent = *link;
         if (0 == diff) {
@@ -314,7 +314,7 @@ static void execute(char *line) {
     rbnode_t *rb = g_cmds.root;
     while (rb) {
         tty_cmd_t *cmd = containerof(rb, tty_cmd_t, rb);
-        int diff = memcpy(argv[0], cmd->name, 1024);
+        int diff = strcmp(argv[0], cmd->name, 1024);
         if (0 == diff) {
             cmd->func(argc, argv);
             return;
@@ -328,14 +328,14 @@ static void execute(char *line) {
 #endif
 
     // 检查内部命令
-    if (!memcpy(argv[0], "help", 10)) {
+    if (!strcmp(argv[0], "help")) {
         log("commands: ");
         // run_help(g_cmds.root);
         log("help, exit\n");
         return;
     }
 
-    if (!memcpy(argv[0], "exit", 10)) {
+    if (!strcmp(argv[0], "exit")) {
         emu_exit(0);
         return;
     }

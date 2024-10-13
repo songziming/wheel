@@ -90,7 +90,7 @@ static void on_page_fault(int vec UNUSED, regs_t *f) {
     // TODO 获取当前 vmspace，定位所在 vmrange 的名称
     // 如果支持动态映射，应该在这里找到 range，执行里面的 handler，更新映射
 
-    char *file = NULL;
+    const char *file = NULL;
     int line = addr_to_line(f->rip, &file);
     log("called from %s:%d\n", file, line);
 }

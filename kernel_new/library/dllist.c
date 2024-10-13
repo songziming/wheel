@@ -21,11 +21,11 @@ int dl_is_lastone(dlnode_t *node) {
     return (node->prev == node) && (node->next == node);
 }
 
-// 判断节点是否位于链表中（自环也是合法的链表）
-int dl_is_wired(dlnode_t *node) {
-    ASSERT(NULL != node);
-    return (NULL != node->prev) && (NULL != node->next);
-}
+// // 判断节点是否位于链表中（自环也是合法的链表）
+// int dl_is_wired(dlnode_t *node) {
+//     ASSERT(NULL != node);
+//     return (NULL != node->prev) && (NULL != node->next);
+// }
 
 // 判断节点是否位于链表中
 int dl_contains(dlnode_t *head, dlnode_t *node) {
@@ -72,8 +72,8 @@ void dl_insert_after(dlnode_t *node, dlnode_t *ref) {
     node->next = next;
 }
 
-// 将 node 从双链表中取出，返回链表中的下一个元素
-// 如果 node 就是最后一个元素，则返回空指针
+// 将 node 从双链表中取出，返回被删除的节点，节点仍引用删除前的前驱和后继
+// 如果 node 就是最后一个元素，则节点清空
 dlnode_t *dl_remove(dlnode_t *node) {
     ASSERT(NULL != node);
 
@@ -84,38 +84,37 @@ dlnode_t *dl_remove(dlnode_t *node) {
     ASSERT(((prev == node) && (next == node))
         || ((prev != node) && (next != node)));
 
-    node->prev = NULL;
-    node->next = NULL;
-
     if ((prev != node) && (next != node)) {
         prev->next = next;
         next->prev = prev;
-        return next;
+    } else {
+        node->prev = NULL;
+        node->next = NULL;
     }
 
-    return NULL;
+    return node;
 }
 
-dlnode_t *dl_pop_prev(dlnode_t *node) {
-    ASSERT(NULL != node);
+// dlnode_t *dl_pop_prev(dlnode_t *node) {
+//     ASSERT(NULL != node);
 
-    if (dl_is_lastone(node)) {
-        return NULL;
-    }
+//     if (dl_is_lastone(node)) {
+//         return NULL;
+//     }
 
-    dlnode_t *prev = node->prev;
-    dl_remove(prev);
-    return prev;
-}
+//     dlnode_t *prev = node->prev;
+//     dl_remove(prev);
+//     return prev;
+// }
 
-dlnode_t *dl_pop_next(dlnode_t *node) {
-    ASSERT(NULL != node);
+// dlnode_t *dl_pop_next(dlnode_t *node) {
+//     ASSERT(NULL != node);
 
-    if (dl_is_lastone(node)) {
-        return NULL;
-    }
+//     if (dl_is_lastone(node)) {
+//         return NULL;
+//     }
 
-    dlnode_t *next = node->next;
-    dl_remove(next);
-    return next;
-}
+//     dlnode_t *next = node->next;
+//     dl_remove(next);
+//     return next;
+// }

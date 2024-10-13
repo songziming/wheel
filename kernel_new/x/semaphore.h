@@ -3,12 +3,14 @@
 
 #include <common.h>
 #include <library/spin.h>
-#include <proc/sched.h>
+// #include <proc/sched.h>
+#include <library/sched_list.h>
 
 typedef struct semaphore {
-    spin_t   spin;
-    int      limit;
-    int      value;
+    spin_t       spin;
+    int          limit;
+    int          value;
+    sched_list_t penders;
 } semaphore_t;
 
 typedef struct fifo_semaphore {
@@ -18,7 +20,7 @@ typedef struct fifo_semaphore {
 
 typedef struct priority_semaphore {
     semaphore_t common;
-    priority_q_t penders;
+    sched_list_t penders;
 } priority_semaphore_t;
 
 void fifo_semaphore_init(fifo_semaphore_t *sem, int initial, int max);
