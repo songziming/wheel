@@ -32,7 +32,13 @@ inline void cpu_int_unlock(int key) {
 }
 
 inline int cpu_int_depth() {
-    return THISCPU_GET(g_int_depth);
+    int depth = 0;
+#ifndef UNIT_TEST
+    // 这句汇编会产生 R_X86_64_32S reloc，无法用于单元测试
+    __asm__("movl %%gs:(g_int_depth), %0" : "=r"(depth));
+#endif
+    return depth;
+    // return THISCPU_GET(g_int_depth);
 }
 
 void set_int_handler(int vec, void (*handler)(int, regs_t *)) {

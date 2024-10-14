@@ -15,12 +15,22 @@
 #define PRINTF(s,a)     __attribute__((format(printf,s,a)))
 #define ALIGNED(x)      __attribute__((aligned(x)))
 #define SECTION(x)      __attribute__((section(x)))
+
+// #ifdef UNIT_TEST
+// #define CONST
+// #define INIT_TEXT
+// #define INIT_DATA
+// #define INIT_BSS
+// #define PERCPU_DATA
+// #define PERCPU_BSS
+// #else
 #define CONST           SECTION(".rodata")
 #define INIT_TEXT       SECTION(".init.text")
 #define INIT_DATA       SECTION(".init.data")
 #define INIT_BSS        SECTION(".init.bss")
 #define PERCPU_DATA     SECTION(".percpu.data")
 #define PERCPU_BSS      SECTION(".percpu.bss")
+// #endif
 
 #ifndef offsetof
 #define offsetof(t,m) ((size_t)&((t *)0)->m)

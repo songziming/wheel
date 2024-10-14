@@ -19,6 +19,7 @@ OUT_ELF := $(OUT_DIR)/wheel.elf
 OUT_MAP := $(OUT_DIR)/wheel.map
 OUT_ISO := $(OUT_DIR)/cd.iso
 OUT_IMG := $(OUT_DIR)/hd.img
+OUT_LIB := $(OUT_DIR)/wheel.so
 OUT_TEST := $(OUT_DIR)/test
 
 COV_DIR := $(OUT_DIR)/coverage
@@ -47,8 +48,11 @@ KOBJECTS := $(patsubst %,$(OUT_DIR)/%.ko,$(KSOURCES))
 TSOURCES := $(wildcard kernel_test/*.c) $(KSOURCES)
 TOBJECTS := $(patsubst %,$(OUT_DIR)/%.to,$(TSOURCES))
 
+# 内核代码，编译成动态库，用于单元测试
+T2OBJS := $(patsubst %,$(OUT_DIR)/t2/%.to,$(filter %.c,$(KSOURCES)))
+
 # 依赖文件和输出目录
-DEPENDS  := $(patsubst %,%.d,$(KOBJECTS) $(TOBJECTS))
+DEPENDS  := $(patsubst %,%.d,$(KOBJECTS) $(TOBJECTS) $(T2OBJS))
 OBJDIRS  := $(sort $(dir $(DEPENDS)))
 
 
@@ -105,6 +109,7 @@ elf: $(OUT_ELF)
 iso: $(OUT_ISO)
 img: $(OUT_IMG)
 
+lib: $(OUT_LIB)
 test: $(OUT_TEST)
 
 cov: $(COV_DIR)
@@ -117,7 +122,7 @@ clean:
 # 构建规则
 #-------------------------------------------------------------------------------
 
-$(KOBJECTS) $(TOBJECTS): | $(OBJDIRS)
+$(KOBJECTS) $(TOBJECTS) $(T2OBJS): | $(OBJDIRS)
 
 $(OUT_DIR)/%/:
 	mkdir -p $@
@@ -154,6 +159,14 @@ $(OUT_DIR)/kernel_test/%.c.to: kernel_test/%.c
 	clang -c -DC_FILE $(TCFLAGS) $(MAKEDEP) -o $@ $<
 $(OUT_TEST): $(TOBJECTS)
 	clang -fuse-ld=lld $(TLFLAGS) $(MAKECOV) -o $@ $^ -lasan
+
+# 基于动态库的单元测试（方便函数 mock）
+# $(OUT_DIR)/t2/$(KERNEL)/%.S.to: $(KERNEL)/%.S
+# 	clang -c -DS_FILE -fPIC $(TCFLAGS) $(BAREMETAL) $(MAKECOV) $(MAKEDEP) -o $@ $<
+$(OUT_DIR)/t2/$(KERNEL)/%.c.to: $(KERNEL)/%.c
+	clang -c -DC_FILE -fPIC $(TCFLAGS) $(BAREMETAL) $(MAKECOV) $(MAKEDEP) -o $@ $<
+$(OUT_LIB): $(T2OBJS)
+	clang -fPIC -shared -o $@ $^
 
 # 运行单元测试，生成代码覆盖率文件
 $(COV_RAW): $(OUT_TEST)

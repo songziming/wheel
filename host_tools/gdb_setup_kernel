@@ -2,7 +2,10 @@ set confirm off
 set history filename .gdb_history
 set history save
 
-file build/wheel.elf
+# 必须用 symbol-file，如果使用 file 可能报错
+# Error in sourced command file:
+# Remote target doesn't support qGetTIBAddr packet
+symbol-file build/wheel.elf
 target remote localhost:4444
 
 # b type_mismatch_common

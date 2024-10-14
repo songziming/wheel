@@ -59,18 +59,25 @@
 
 #ifdef C_FILE
 
+#ifdef UNIT_TEST
+
+// 一个 32-bit mov 指令会产生 R_X86_64_32S reloc
+// 无法生成动态库，因为动态库可能把代码放在任意地址，不一定是最高 2GB
+#define THISCPU_GET(var)        var
+#define THISCPU_SET(var,val)    var = val
+
+#else // UNIT_TEST
+
 #include <stdint.h>
 
 // Generic 展开之后必须是 expression，不能是 statement，而且表达式类型必须和类型 case 一致
 // 内联汇编是 statement，不是 expression，不能直接放在 _Generic 里面
 // 必须用 statement-expression，强行封装为 expression
-
 #define GS_LOAD_EXPR(opsize, var) ({ \
     __typeof__(var) dst; \
     __asm__("mov" opsize " %%gs:(" #var "), %0" : "=r"(dst)); \
     dst; \
 })
-
 #define THISCPU_GET(var) _Generic((var),   \
      int8_t:  GS_LOAD_EXPR("b", var), \
     uint8_t:  GS_LOAD_EXPR("b", var), \
@@ -82,7 +89,6 @@
     uint64_t: GS_LOAD_EXPR("q", var), \
     default:  GS_LOAD_EXPR("q", var)  \
 )
-
 #define THISCPU_SET(var, val) _Generic((var), \
      int8_t:  ({ __asm__("movb %0,%%gs:(" #var ")" :: "r"(val)); }), \
     uint8_t:  ({ __asm__("movb %0,%%gs:(" #var ")" :: "r"(val)); }), \
@@ -94,6 +100,8 @@
     uint64_t: ({ __asm__("movq %0,%%gs:(" #var ")" :: "r"(val)); }), \
     default:  ({ __asm__("movq %0,%%gs:(" #var ")" :: "r"(val)); })  \
 )
+
+#endif // UNIT_TEST
 
 #endif // C_FILE
 
