@@ -10,27 +10,18 @@
 #include <memory/vmspace.h>
 
 
-
-// // 按优先级排序的有序队列，可用于就绪队列和阻塞队列
-// typedef struct priority_q {
-//     uint32_t    priorities; // 优先级mask
-//     dlnode_t   *heads[PRIORITY_NUM];
-//     spin_t      spin;
-//     int         load;
-//     int         new_task; // 有新任务，可能不再是最低优先级
-// } sched_list_t;
-
-
 typedef struct ready_q {
-    sched_list_t sl;
+    sched_list_arr_t sl; // 使用数组实现的有序队列，轮转性能更好
     spin_t spin;
     int load;
 } ready_q_t;
 
 static PERCPU_BSS ready_q_t g_ready_q;
 
-static volatile int g_lowest_load;
-static volatile int g_lowest_cpu;
+// 低 8-bit 代表 CPU 编号，bit[8] 以上代表负载
+#define CPU_MASK    0xff
+#define LOAD_SHIFT  8
+static volatile uint64_t g_lowest_load_cpu = 0;
 
 static INIT_BSS task_t g_dummy_task;
 static PERCPU_BSS task_t g_idle_task;
@@ -43,7 +34,7 @@ PERCPU_BSS task_t *g_tid_next; // 即将运行的任务，中断返回时切换
 // 任务调度
 //------------------------------------------------------------------------------
 
-// 停止当前任务
+// 停止当前任务，运行在当前 CPU
 task_t *sched_stop(uint16_t bits) {
     ASSERT(0 != bits);
     ASSERT(0 == cpu_int_depth());
@@ -53,13 +44,28 @@ task_t *sched_stop(uint16_t bits) {
 
     ready_q_t *q = thiscpu_ptr(&g_ready_q);
     int key = irq_spin_take(&q->spin);
-    ASSERT(sched_list_contains(&q->sl, tid->priority, &tid->q_node));
-    q->load -= tid->tick_reload;
-    sched_list_remove(&q->sl, tid->priority, &tid->q_node);
-    task_t *next = containerof(sched_list_head(&q->sl), task_t, q_node);
-    THISCPU_SET(g_tid_next, next);
-    irq_spin_give(&q->spin, key);
 
+    // ASSERT(sched_list_arr_contains(&q->sl, tid->priority, &tid->q_node));
+    sched_list_arr_remove(&q->sl, tid->priority, &tid->q_node);
+    task_t *next = containerof(sched_list_arr_head(&q->sl), task_t, q_node);
+    THISCPU_SET(g_tid_next, next);
+
+    // 负载降低，可能变为优先级最低的 CPU
+    q->load -= tid->tick_reload;
+    uint64_t new_load = ((uint64_t)q->load << LOAD_SHIFT) | (cpu_index() & CPU_MASK);
+
+    // 使用 compare-and-set 循环，最多尝试五次
+    for (int retry = 0; retry < 5; ++retry) {
+        uint64_t old = g_lowest_load_cpu;
+        if ((new_load & ~CPU_MASK) >= (old & ~CPU_MASK)) {
+            break;
+        }
+        if (atomic64_cas(&g_lowest_load_cpu, old, new_load) == old) {
+            break;
+        }
+    }
+
+    irq_spin_give(&q->spin, key);
     return tid;
 }
 
@@ -76,19 +82,19 @@ static int sched_cont_on(task_t *tid, uint16_t bits, int cpu) {
 
     ready_q_t *q = percpu_ptr(cpu, &g_ready_q);
     int key = irq_spin_take(&q->spin);
-    q->load += tid->tick_reload;
-    sched_list_insert(&q->sl, tid->priority, &tid->q_node);
-    task_t *next = containerof(sched_list_head(&q->sl), task_t, q_node);
-    *(task_t**)percpu_ptr(cpu, &g_tid_next) = next;
-    // log("cpu%d cont %s setting next to %s\n", cpu, tid->stack.desc, next->stack.desc);
-    irq_spin_give(&q->spin, key);
 
+    q->load += tid->tick_reload;
+    sched_list_arr_insert(&q->sl, tid->priority, &tid->q_node);
+    tid = containerof(sched_list_arr_head(&q->sl), task_t, q_node);
+    *(task_t**)percpu_ptr(cpu, &g_tid_next) = tid;
+
+    irq_spin_give(&q->spin, key);
     return cpu;
 }
 
 // 返回选中的 CPU 编号
 int sched_cont(task_t *tid, uint16_t bits) {
-    return sched_cont_on(tid, bits, g_lowest_cpu);
+    return sched_cont_on(tid, bits, g_lowest_load_cpu & CPU_MASK);
 }
 
 
@@ -173,14 +179,6 @@ static void task_post_delete(void *arg1, void *arg2 UNUSED) {
 void task_exit() {
     task_t *tid = sched_stop(TASK_DELETED);
     work_defer(&tid->work, task_post_delete, tid, NULL);
-
-    // 挑选出新的最低负载 CPU
-    // TODO 应该换成 compare-and-set，原子性操作
-    if (cpu_index() == g_lowest_cpu) {
-        // g_lowest_load = THISCPU_GET(g_ready_q.load);
-        g_lowest_load = ((ready_q_t *)thiscpu_ptr(&g_ready_q))->load;
-    }
-
     arch_task_switch();
 }
 
@@ -200,20 +198,20 @@ void sched_advance() {
     task_t *tid = THISCPU_GET(g_tid_next);
     if (0 == --tid->tick) {
         tid->tick = tid->tick_reload;
-
-        // sched_list_remove(&q->sl, tid->priority, &tid->q_node);
-        // sched_list_insert(&q->sl, tid->priority, &tid->q_node);
-        // tid = containerof(sched_list_head(&q->sl), task_t, q_node);
-        // THISCPU_SET(g_tid_next, tid);
-
-        dlnode_t *next = sched_list_rotate(&q->sl, &tid->q_node);
+        dlnode_t *next = sched_list_arr_rotate(&q->sl, &tid->q_node);
         THISCPU_SET(g_tid_next, containerof(next, task_t, q_node));
     }
 
     // 检查当前 CPU 是不是负载最低的
-    if (q->load < g_lowest_load) {
-        g_lowest_load = q->load;
-        g_lowest_cpu = cpu_index();
+    uint64_t new_load = ((uint64_t)q->load << LOAD_SHIFT) | (cpu_index() & CPU_MASK);
+    for (int retry = 0; retry < 5; ++retry) {
+        uint64_t old = g_lowest_load_cpu;
+        if ((old & ~CPU_MASK) <= (new_load & ~CPU_MASK)) {
+            break;
+        }
+        if (atomic64_cas(&g_lowest_load_cpu, old, new_load) == old) {
+            break;
+        }
     }
 
     raw_spin_give(&q->spin);
@@ -235,12 +233,9 @@ INIT_TEXT void sched_init() {
     memset(&g_dummy_task, 0, sizeof(task_t));
     g_dummy_task.stack.desc = "dummy";
 
-    g_lowest_cpu = 0;
-    g_lowest_load = INT_MAX;
-
     for (int i = 0, N = cpu_count(); i < N; ++i) {
         ready_q_t *q = percpu_ptr(i, &g_ready_q);
-        sched_list_init(&q->sl);
+        sched_list_arr_init(&q->sl);
         spin_init(&q->spin);
         q->load = 0;
 

@@ -3,14 +3,13 @@
 
 #include <common.h>
 #include <library/spin.h>
-// #include <proc/sched.h>
 #include <library/sched_list.h>
 
 typedef struct semaphore {
-    spin_t       spin;
-    int          limit;
-    int          value;
-    sched_list_t penders;
+    spin_t           spin;
+    int              limit;
+    int              value;
+    sched_list_jmp_t penders;
 } semaphore_t;
 
 void semaphore_init(semaphore_t *sem, int initial, int max);

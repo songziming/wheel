@@ -43,7 +43,8 @@ KSOURCES := $(foreach d,$(KSUBDIRS),$(shell find $(d) -name "*.S" -o -name "*.c"
 KOBJECTS := $(patsubst %,$(OUT_DIR)/%.ko,$(KSOURCES))
 
 # 单元测试文件
-TSOURCES := $(wildcard kernel_test/*.c) $(filter %.c,$(KSOURCES))
+# TSOURCES := $(wildcard kernel_test/*.c) $(filter %.c,$(KSOURCES))
+TSOURCES := $(wildcard kernel_test/*.c) $(KSOURCES)
 TOBJECTS := $(patsubst %,$(OUT_DIR)/%.to,$(TSOURCES))
 
 # 依赖文件和输出目录
@@ -145,6 +146,8 @@ endif
 	mcopy -i $(OUT_IMG)@@1M -D o -nv $(OUT_ELF) ::/wheel.elf
 
 # 编译单元测试
+$(OUT_DIR)/$(KERNEL)/%.S.to: $(KERNEL)/%.S
+	clang -c -DS_FILE $(TCFLAGS) $(BAREMETAL) $(MAKECOV) $(MAKEDEP) -o $@ $<
 $(OUT_DIR)/$(KERNEL)/%.c.to: $(KERNEL)/%.c
 	clang -c -DC_FILE $(TCFLAGS) $(BAREMETAL) $(MAKECOV) $(MAKEDEP) -o $@ $<
 $(OUT_DIR)/kernel_test/%.c.to: kernel_test/%.c

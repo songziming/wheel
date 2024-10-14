@@ -9,3 +9,4 @@ next to do
 - [ ] 调试输出区分不同 level，只有高于 DEBUG 的输出才显示在屏幕上
 - [ ] 单元测试使用 ASSERT 检查，替换内核的 assert_fail 实现
 - [ ] 改进单元测试，不必要求和 gtest 一样按 suite-case 命名，可以更加灵活
+- [ ] 开发 gdb 调试内核用的辅助命令（使用 gdb python API）

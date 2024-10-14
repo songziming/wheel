@@ -1,6 +1,8 @@
 .vscode/
 /build*
 
+.gdb_history
+
 *.bak
 *.profraw
 *.profdata

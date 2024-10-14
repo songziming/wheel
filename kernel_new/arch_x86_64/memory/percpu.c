@@ -33,6 +33,7 @@ extern char _percpu_bss_end;
 
 static CONST size_t g_percpu_base = 0; // 首个 pcpu 区域的偏移量，跳过 guard
 static CONST size_t g_percpu_skip = 0; // 相邻两个 pcpu 的间距
+// PERCPU_BSS int g_this_index; // 需要被内联汇编使用，不能使用 static
 
 // percpu sections
 static PERCPU_BSS vmrange_t g_percpu_vars; // data + bss
@@ -149,6 +150,9 @@ INIT_TEXT void thiscpu_init(int idx) {
     ASSERT(idx < cpu_count());
 
     write_gsbase(g_percpu_base + g_percpu_skip * idx);
+
+    // g_this_index = idx;
+    // __asm__("movl %0, %%gs:(g_this_index)" :: "r"(idx));
 }
 
 
@@ -186,6 +190,9 @@ inline int cpu_index() {
 
     size_t base = (size_t)read_gsbase() - g_percpu_base;
     ASSERT(0 == (base % g_percpu_skip));
-
     return base / g_percpu_skip;
+
+    // int idx;
+    // __asm__("movl %%gs:(g_this_index), %0" : "=r"(idx));
+    // return idx;
 }

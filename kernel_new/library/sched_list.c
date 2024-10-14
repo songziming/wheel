@@ -39,8 +39,7 @@ dlnode_t *sched_list_arr_rotate(sched_list_arr_t *l, dlnode_t *dl) {
 void sched_list_arr_insert(sched_list_arr_t *l, int pri, dlnode_t *dl) {
     ASSERT(NULL != l);
     ASSERT(NULL != dl);
-    ASSERT(pri >= 0);
-    ASSERT(pri < PRIORITY_NUM);
+    ASSERT((0 <= pri) && (pri < PRIORITY_NUM));
 
     if ((1U << pri) & l->priorities) {
         dl_insert_before(dl, l->heads[pri]);
@@ -53,8 +52,7 @@ void sched_list_arr_insert(sched_list_arr_t *l, int pri, dlnode_t *dl) {
 void sched_list_arr_remove(sched_list_arr_t *l, int pri, dlnode_t *dl) {
     ASSERT(NULL != l);
     ASSERT(NULL != dl);
-    ASSERT(pri >= 0);
-    ASSERT(pri < PRIORITY_NUM);
+    ASSERT((0 <= pri) && (pri < PRIORITY_NUM));
     ASSERT((l->heads[pri] == dl) || dl_contains(l->heads[pri], dl));
 
     if (dl_is_lastone(dl)) {
@@ -73,8 +71,7 @@ void sched_list_arr_remove(sched_list_arr_t *l, int pri, dlnode_t *dl) {
 int sched_list_arr_contains(sched_list_arr_t *l, int pri, dlnode_t *dl) {
     ASSERT(NULL != l);
     ASSERT(NULL != dl);
-    ASSERT(pri >= 0);
-    ASSERT(pri < PRIORITY_NUM);
+    ASSERT((0 <= pri) && (pri < PRIORITY_NUM));
 
     if ((1U << pri) & l->priorities) {
         dlnode_t *head = l->heads[pri];
@@ -132,8 +129,7 @@ static inline dlnode_t *last(sched_list_jmp_t *l, int pri) {
 void sched_list_jmp_insert(sched_list_jmp_t *l, int pri, dlnode_t *dl) {
     ASSERT(NULL != l);
     ASSERT(NULL != dl);
-    ASSERT(pri >= 0);
-    ASSERT(pri < PRIORITY_NUM);
+    ASSERT((0 <= pri) && (pri < PRIORITY_NUM));
 
     dlnode_t *prev = last(l, pri);
     dl_insert_after(dl, prev);
@@ -144,8 +140,7 @@ void sched_list_jmp_insert(sched_list_jmp_t *l, int pri, dlnode_t *dl) {
 void sched_list_jmp_remove(sched_list_jmp_t *l, int pri, dlnode_t *dl) {
     ASSERT(NULL != l);
     ASSERT(NULL != dl);
-    ASSERT(pri >= 0);
-    ASSERT(pri < PRIORITY_NUM);
+    ASSERT((0 <= pri) && (pri < PRIORITY_NUM));
     ASSERT(l->priorities & (1U << pri));
     ASSERT(dl_contains(&l->head, dl));
 

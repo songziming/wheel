@@ -1,0 +1,1 @@
+gdb --quiet --nx --init-command=host_tools/gdb_setup_kernel

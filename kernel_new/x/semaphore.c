@@ -4,11 +4,10 @@
 // 信号量可以简化为互斥锁（mutex），不少 OS 只提供 mutex，不提供 semaphore
 
 #include "semaphore.h"
-// #include <wheel.h>
-#include <library/debug.h>
+#include <arch_intf.h>
 #include <proc/tick.h>
 #include <proc/sched.h>
-#include <arch_intf.h>
+#include <library/debug.h>
 
 
 
@@ -39,7 +38,7 @@ void semaphore_init(semaphore_t *sem, int initial, int max) {
     spin_init(&sem->spin);
     sem->limit = max;
     sem->value = initial;
-    sched_list_init(&sem->penders);
+    sched_list_jmp_init(&sem->penders);
 }
 
 
@@ -66,11 +65,11 @@ static void semaphore_wakeup(void *arg1, void *arg2) {
     // 这段代码可能与其他 CPU 竞争恢复目标任务
     // 可能与恢复运行的目标任务竞争 pend_item 的访问
 
-    if (sched_list_contains(&sem->penders, task->priority, &item->dl)) {
+    if (sched_list_jmp_contains(&sem->penders, task->priority, &item->dl)) {
         irq_spin_give(&sem->spin, key);
         return;
     }
-    sched_list_remove(&sem->penders, task->priority, &item->dl);
+    sched_list_jmp_remove(&sem->penders, task->priority, &item->dl);
 
     int cpu = sched_cont(task, TASK_PENDING); // 恢复任务
     irq_spin_give(&sem->spin, key);
@@ -88,9 +87,8 @@ static void semaphore_wakeup(void *arg1, void *arg2) {
 
 // 如果成功获得信号量，则返回非零
 // 如果获取信号量失败（例如超时、信号量被删除），则返回零
-
 // 成功则返回 n，失败返回 0，总之返回实际得到的资源数
-
+// TODO 应该允许得到部分数据，例如 0..n 之间的数据量
 int semaphore_take(semaphore_t *sem, int n, int timeout) {
     ASSERT(0 == cpu_int_depth());
     ASSERT(NULL != sem);
@@ -118,7 +116,7 @@ int semaphore_take(semaphore_t *sem, int n, int timeout) {
     item.task = self;
     item.require = n;
     item.got = 0;
-    sched_list_insert(&sem->penders, self->priority, &item.dl);
+    sched_list_jmp_insert(&sem->penders, self->priority, &item.dl);
 
     // 指定了超时时间，则开启一个 timer
     timer_t wakeup;
@@ -149,7 +147,7 @@ int semaphore_give(semaphore_t *sem, int n) {
     ASSERT(n > 0);
 
     // semaphore_t *sem = &sem->sem;
-    sched_list_t *pend_q = &sem->penders;
+    sched_list_jmp_t *pend_q = &sem->penders;
 
     int key = irq_spin_take(&sem->spin);
 
@@ -161,7 +159,7 @@ int semaphore_give(semaphore_t *sem, int n) {
 
     cpuset_t resched_mask = 0;
     while (sem->value > 0) {
-        dlnode_t *head = sched_list_head(pend_q);
+        dlnode_t *head = sched_list_jmp_head(pend_q);
         if (NULL == head) {
             break;
         }
@@ -172,7 +170,7 @@ int semaphore_give(semaphore_t *sem, int n) {
         }
 
         task_t *task = item->task;
-        sched_list_remove(pend_q, task->priority, &item->dl);
+        sched_list_jmp_remove(pend_q, task->priority, &item->dl);
         sem->value -= item->require;
         item->got = item->require;
 

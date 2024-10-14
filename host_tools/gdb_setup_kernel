@@ -1,0 +1,36 @@
+set confirm off
+set history filename .gdb_history
+set history save
+
+file build/wheel.elf
+target remote localhost:4444
+
+# b type_mismatch_common
+# b handle_assert_fail
+
+# 以下脚本对调试单元测试也适用
+# 可以做成
+python
+
+import gdb.printing
+
+class examplePrinter:
+    def __init__(self, val):
+        self.val = val
+    def to_string(self):
+        return ("example_struct = {foo = " + str(self.val["foo"]) +
+            " {inner_example = {bar = "
+            + str(self.val["ie"]["bar"]) + "}}")
+
+class TaskPrinter:
+    def __init__(self, tcb):
+        self.tcb = tcb
+    def to_string(self):
+        return f'task-{self.tcb.stack.desc}'
+
+pp = gdb.printing.RegexpCollectionPrettyPrinter('wheel')
+pp.add_printer('Example Printer', '^example_struct$', examplePrinter)
+pp.add_printer('task', '^task$', TaskPrinter)
+gdb.printing.register_pretty_printer(gdb.current_objfile(), pp)
+
+end
