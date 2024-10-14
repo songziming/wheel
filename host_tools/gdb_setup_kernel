@@ -26,7 +26,8 @@ class TaskPrinter:
     def __init__(self, tcb):
         self.tcb = tcb
     def to_string(self):
-        return f'task-{self.tcb.stack.desc}'
+        name = self.tcb['stack']['desc']
+        return f'task-{name}'
 
 pp = gdb.printing.RegexpCollectionPrettyPrinter('wheel')
 pp.add_printer('Example Printer', '^example_struct$', examplePrinter)
