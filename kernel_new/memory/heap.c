@@ -36,7 +36,7 @@ static inline chunk_t *build_chunk_used(size_t addr, size_t prevsize, size_t sel
     ASSERT(0 == (prevsize & (ALIGNMENT - 1)));
     ASSERT(0 == (selfsize & (ALIGNMENT - 1)));
 
-    chunk_t *chk = (chunk_t *)addr;
+    chunk_t *chk = (chunk_t*)addr;
     chk->hdr.prevsize = prevsize;
     chk->hdr.selfsize = selfsize | CHUNK_INUSE;
     return chk;
@@ -49,7 +49,7 @@ static inline chunk_t *build_chunk_free(size_t addr, size_t prevsize, size_t sel
     ASSERT(0 == (prevsize & (ALIGNMENT - 1)));
     ASSERT(0 == (selfsize & (ALIGNMENT - 1)));
 
-    chunk_t *chk = (chunk_t *)addr;
+    chunk_t *chk = (chunk_t*)addr;
     chk->hdr.prevsize = prevsize;
     chk->hdr.selfsize = selfsize;
     dl_init_circular(&chk->freenode);
@@ -166,7 +166,7 @@ static chunk_t *chunk_alloc(heap_t *heap, size_t size) {
         chunk_t *rest = build_chunk_free((size_t)chk + size, size, remain);
         put_chunk_into_heap(heap, rest);
 
-        chunk_t *next = (chunk_t *)((size_t)chk + selfsize);
+        chunk_t *next = (chunk_t*)((size_t)chk + selfsize);
         ASSERT(selfsize == next->hdr.prevsize);
         next->hdr.prevsize = remain;
 
@@ -185,13 +185,13 @@ static void chunk_free(heap_t *heap, chunk_t *chk) {
     // size_t addr = (size_t)ptr - sizeof(chunk_hdr_t);
     // ASSERT(0 == (addr & (ALIGNMENT - 1)));
 
-    // chunk_t *chk = (chunk_t *)addr;
+    // chunk_t *chk = (chunk_t*)addr;
     ASSERT(chk->hdr.selfsize & CHUNK_INUSE);
     size_t size = chk->hdr.selfsize & ~CHUNK_INUSE;
     ASSERT(0 == (size & (ALIGNMENT - 1)));
 
-    chunk_t *prev = (chunk_t *)((size_t)chk - chk->hdr.prevsize);
-    chunk_t *next = (chunk_t *)((size_t)chk + size);
+    chunk_t *prev = (chunk_t*)((size_t)chk - chk->hdr.prevsize);
+    chunk_t *next = (chunk_t*)((size_t)chk + size);
 
     if (0 == (prev->hdr.selfsize & CHUNK_INUSE)) {
         take_chunk_from_heap(heap, prev);
@@ -205,7 +205,7 @@ static void chunk_free(heap_t *heap, chunk_t *chk) {
     if (0 == (next->hdr.selfsize & CHUNK_INUSE)) {
         take_chunk_from_heap(heap, next);
         uint32_t nextsize = next->hdr.selfsize & ~CHUNK_INUSE;
-        chunk_t *after = (chunk_t *)((size_t)next + nextsize);
+        chunk_t *after = (chunk_t*)((size_t)next + nextsize);
         after->hdr.prevsize += next->hdr.prevsize;
         chk->hdr.selfsize += nextsize;
     }
@@ -244,8 +244,8 @@ void heap_init(heap_t *heap, void *buff, size_t size) {
     spin_init(&heap->spin);
     // heap->spin = SPIN_INIT;
     // heap->sizetree = RBTREE_INIT;
-    heap->buff = (char *)start;
-    heap->end  = (char *)end;
+    heap->buff = (char*)start;
+    heap->end  = (char*)end;
     put_chunk_into_heap(heap, body_chk);
 }
 
@@ -272,10 +272,10 @@ void heap_free(heap_t *heap, void *ptr) {
     ASSERT(NULL != heap);
     ASSERT(NULL != ptr);
 
-    chunk_t *chk = (chunk_t *)((size_t)ptr - sizeof(chunk_hdr_t));
+    chunk_t *chk = (chunk_t*)((size_t)ptr - sizeof(chunk_hdr_t));
 
     // 检查这个 chk 是否位于 heap 内部
-    if (((char *)chk < heap->buff) || ((char *)chk >= heap->end)) {
+    if (((char*)chk < heap->buff) || ((char*)chk >= heap->end)) {
         return;
     }
 

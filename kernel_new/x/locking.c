@@ -22,9 +22,9 @@ void k42_lock(k42_lock_t *lock) {
     // 节点的 tail 表示是否正在等待
 
     cpu_rwfence();
-    k42_lock_t *pred = (k42_lock_t *)atomic_set((size_t *)&lock->tail, (size_t)&self);
+    k42_lock_t *pred = (k42_lock_t*)atomic_set((size_t*)&lock->tail, (size_t)&self);
     if (NULL != pred) {
-        self.tail = (void *)1; // 非零
+        self.tail = (void*)1; // 非零
         cpu_rwfence();
         pred->next = &self; // 当前节点放入队列
         cpu_rwfence();
@@ -44,7 +44,7 @@ void k42_lock(k42_lock_t *lock) {
 
         // 自己不再是队尾，说明就在此时又出现了新的 lock-waker
         // lock 流程是先设置 tail，再设置 next，因此需要等 next 字段设置好
-        if (atomic_cas((size_t *)&lock->tail, (size_t)&self, (size_t)lock) != (size_t)&self) {
+        if (atomic_cas((size_t*)&lock->tail, (size_t)&self, (size_t)lock) != (size_t)&self) {
             while (!self.next) {
                 cpu_pause();
             }
@@ -61,7 +61,7 @@ void k42_unlock(k42_lock_t *lock) {
     cpu_rwfence();
 
     if (!succ) {
-        if (atomic_cas((size_t *)&lock->tail, (size_t)lock, 0) == (size_t)lock) {
+        if (atomic_cas((size_t*)&lock->tail, (size_t)lock, 0) == (size_t)lock) {
             return;
         }
         while (!lock->next) {

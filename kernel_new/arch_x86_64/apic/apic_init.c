@@ -21,22 +21,22 @@ INIT_TEXT void parse_madt(madt_t *madt) {
 
     // 第一次遍历，统计数量
     for (size_t i = sizeof(madt_t); i < madt->header.length;) {
-        acpi_subtbl_t *sub = (acpi_subtbl_t *)((size_t)madt + i);
+        acpi_subtbl_t *sub = (acpi_subtbl_t*)((size_t)madt + i);
         i += sub->length;
 
         switch (sub->type) {
         case MADT_TYPE_LOCAL_APIC_OVERRIDE:
-            loapic_addr = ((madt_loapic_override_t *)sub)->address;
+            loapic_addr = ((madt_loapic_override_t*)sub)->address;
             break;
         case MADT_TYPE_LOCAL_APIC: {
-            madt_loapic_t *lo = (madt_loapic_t *)sub;
+            madt_loapic_t *lo = (madt_loapic_t*)sub;
             if ((1 & lo->loapic_flags) && (loapic_num < MAX_CPU_COUNT)) {
                 ++loapic_num;
             }
             break;
         }
         case MADT_TYPE_LOCAL_X2APIC: {
-            madt_lox2apic_t *lo = (madt_lox2apic_t *)sub;
+            madt_lox2apic_t *lo = (madt_lox2apic_t*)sub;
             if ((1 & lo->loapic_flags) && (loapic_num < MAX_CPU_COUNT)) {
                 ++loapic_num;
             }
@@ -46,7 +46,7 @@ INIT_TEXT void parse_madt(madt_t *madt) {
             ++ioapic_num;
             break;
         case MADT_TYPE_INTERRUPT_OVERRIDE: {
-            madt_int_override_t *override = (madt_int_override_t *)sub;
+            madt_int_override_t *override = (madt_int_override_t*)sub;
             if (override->source > irq_max) {
                 irq_max = override->source;
             }
@@ -56,7 +56,7 @@ INIT_TEXT void parse_madt(madt_t *madt) {
             break;
         }
         case MADT_TYPE_NMI_SOURCE: {
-            madt_nmi_t *nmi = (madt_nmi_t *)sub;
+            madt_nmi_t *nmi = (madt_nmi_t*)sub;
             if (nmi->gsi > gsi_max) {
                 gsi_max = nmi->gsi;
             }
@@ -74,20 +74,20 @@ INIT_TEXT void parse_madt(madt_t *madt) {
     int loapic_idx = 0;
     int ioapic_idx = 0;
     for (size_t i = sizeof(madt_t); i < madt->header.length;) {
-        acpi_subtbl_t *sub = (acpi_subtbl_t *)((size_t)madt + i);
+        acpi_subtbl_t *sub = (acpi_subtbl_t*)((size_t)madt + i);
         i += sub->length;
         switch (sub->type)  {
         case MADT_TYPE_LOCAL_APIC:
-            loapic_parse(loapic_idx++, (madt_loapic_t *)sub);
+            loapic_parse(loapic_idx++, (madt_loapic_t*)sub);
             break;
         case MADT_TYPE_LOCAL_X2APIC:
-            loapic_parse_x2(loapic_idx++, (madt_lox2apic_t *)sub);
+            loapic_parse_x2(loapic_idx++, (madt_lox2apic_t*)sub);
             break;
         case MADT_TYPE_IO_APIC:
-            ioapic_parse(ioapic_idx++, (madt_ioapic_t *)sub);
+            ioapic_parse(ioapic_idx++, (madt_ioapic_t*)sub);
             break;
         case MADT_TYPE_INTERRUPT_OVERRIDE:
-            override_int((madt_int_override_t *)sub);
+            override_int((madt_int_override_t*)sub);
             break;
         default:
             break;
@@ -99,19 +99,19 @@ INIT_TEXT void parse_madt(madt_t *madt) {
     // 第三次遍历 MADT，记录 NMI 信息
     // 把 NMI 信息记录在 ioapic、loapic 结构体中
     for (size_t i = sizeof(madt_t); i < madt->header.length;) {
-        acpi_subtbl_t *sub = (acpi_subtbl_t *)((size_t)madt + i);
+        acpi_subtbl_t *sub = (acpi_subtbl_t*)((size_t)madt + i);
         i += sub->length;
 
         switch (sub->type) {
         case MADT_TYPE_NMI_SOURCE: {
             // 描述了 NMI 连接到哪个 IO APIC，以及连接到哪个引脚
-            madt_nmi_t *nmi = (madt_nmi_t *)sub;
+            madt_nmi_t *nmi = (madt_nmi_t*)sub;
             log("NMI connects to GSI %d\n", nmi->gsi);
             break;
         }
         case MADT_TYPE_LOCAL_APIC_NMI: {
             // 描述了 NMI 连接到哪个 Local APIC 的哪个 LINT 引脚，不经过 IO APIC
-            madt_loapic_nmi_t *nmi = (madt_loapic_nmi_t *)sub;
+            madt_loapic_nmi_t *nmi = (madt_loapic_nmi_t*)sub;
             if (0xff == nmi->processor_id) {
                 log("NMI connects to all cpu, lint %d, flags %x\n",
                     nmi->lint, nmi->inti_flags);
@@ -122,7 +122,7 @@ INIT_TEXT void parse_madt(madt_t *madt) {
             break;
         }
         case MADT_TYPE_LOCAL_X2APIC_NMI: {
-            madt_lox2apic_nmi_t *nmi = (madt_lox2apic_nmi_t *)sub;
+            madt_lox2apic_nmi_t *nmi = (madt_lox2apic_nmi_t*)sub;
             if (0xffffffff == nmi->processor_id) {
                 log("NMI connects to all cpu, lint %d, flags %x\n",
                     nmi->lint, nmi->inti_flags);

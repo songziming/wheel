@@ -38,7 +38,7 @@ int arch_unwind_from(size_t *addrs, int max, uint64_t rbp) {
     int i = 0;
 
     for (; (i < max) && (0 != rbp); ++i) {
-        uint64_t *frame = (uint64_t *)rbp;
+        uint64_t *frame = (uint64_t*)rbp;
         addrs[i] = (size_t)frame[1];
         if (0 == addrs[i]) {
             break;
@@ -67,7 +67,7 @@ void task_entry();
 void arch_task_init(task_t *tid, size_t entry, void *arg1, void *arg2, void *arg3, void *arg4) {
     size_t top = tid->stack.end & ~7UL; // 栈顶按 8 字节对齐
 
-    regs_t *regs = (regs_t *)(top - sizeof(regs_t));
+    regs_t *regs = (regs_t*)(top - sizeof(regs_t));
     memset(regs, 0, sizeof(regs_t));
 
     regs->cs = 0x08;

@@ -3,7 +3,7 @@
 
 #include <library/dllist.h>
 
-typedef void (*work_func_t)(void *, void *);
+typedef void (*work_func_t)(void *, void*);
 
 typedef struct work {
     dlnode_t    dl;

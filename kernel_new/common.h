@@ -33,11 +33,11 @@
 // #endif
 
 #ifndef offsetof
-#define offsetof(t,m) ((size_t)&((t *)0)->m)
+#define offsetof(t,m) ((size_t)&((t*)0)->m)
 #endif
 
 #ifndef containerof
-#define containerof(p,t,m) ((t *)((size_t)(p) - offsetof(t,m)))
+#define containerof(p,t,m) ((t*)((size_t)(p) - offsetof(t,m)))
 #endif
 
 // 使用 uint64 表示 CPU 位图，最多支持 64 个核心

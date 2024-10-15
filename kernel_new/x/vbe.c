@@ -23,26 +23,26 @@ typedef struct vbe_info_block {
 
 
 static void *far_pointer(uint16_t ptr[2]) {
-    return (void *)(((size_t)ptr[1] << 4) + ptr[0] + DIRECT_MAP_ADDR);
+    return (void*)(((size_t)ptr[1] << 4) + ptr[0] + DIRECT_MAP_ADDR);
 }
 
 
 // TODO 不应直接接收 GRUB tag，应该像 framebuf 一样，自己定义一套结构体
 //      multiboot 1 也可以返回 VBE 信息
 void vbe_parse(mb2_tag_vbe_t *tag) {
-    vbe_info_block_t *info = (vbe_info_block_t *)tag->vbe_control_info;
+    vbe_info_block_t *info = (vbe_info_block_t*)tag->vbe_control_info;
 
     log("current mode %x, interface at %x:%x, len %x\n",
         tag->vbe_mode, tag->vbe_interface_seg, tag->vbe_interface_off,
         tag->vbe_interface_len);
 
     log("vbe sig %.4s, version %x\n", info->sig, info->version);
-    log("oem %s\n", (char *)far_pointer(info->oem_str));
+    log("oem %s\n", (char*)far_pointer(info->oem_str));
 
     if (info->version >= 0x200) {
-        log("vendor name  %s\n", (char *)far_pointer(info->oem_vendor_name));
-        log("product name %s\n", (char *)far_pointer(info->oem_product_name));
-        log("product rev  %s\n", (char *)far_pointer(info->oem_product_rev));
+        log("vendor name  %s\n", (char*)far_pointer(info->oem_vendor_name));
+        log("product name %s\n", (char*)far_pointer(info->oem_product_name));
+        log("product rev  %s\n", (char*)far_pointer(info->oem_product_rev));
     }
 
     if (info->capabilities & 1) {

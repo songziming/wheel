@@ -104,8 +104,8 @@ static cpuset_t unpend_readers(pipe_t *pipe) {
 static void wakeup_writer(void *a1, void *a2) {
     ASSERT(cpu_int_depth());
 
-    pipe_t *pipe = (pipe_t *)a1;
-    pender_t *pender = (pender_t *)a2;
+    pipe_t *pipe = (pipe_t*)a1;
+    pender_t *pender = (pender_t*)a2;
 
     int key = irq_spin_take(&pipe->spin);
     task_t *tid = pender->tid;
@@ -128,8 +128,8 @@ static void wakeup_writer(void *a1, void *a2) {
 static void wakeup_reader(void *a1, void *a2) {
     ASSERT(cpu_int_depth());
 
-    pipe_t *pipe = (pipe_t *)a1;
-    pender_t *pender = (pender_t *)a2;
+    pipe_t *pipe = (pipe_t*)a1;
+    pender_t *pender = (pender_t*)a2;
 
     int key = irq_spin_take(&pipe->spin);
     task_t *tid = pender->tid;
@@ -188,7 +188,7 @@ size_t pipe_write(pipe_t *pipe, const void *src, size_t min, size_t max, int tim
     pender.tid = self;
     pender.min = min;
     pender.max = max;
-    pender.buff = (void *)src;
+    pender.buff = (void*)src;
     pender.actual = 0;
     dl_insert_before(&pender.dl, &pipe->writers);
 

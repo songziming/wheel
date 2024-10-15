@@ -118,13 +118,13 @@ enum loapic_reg {
 static uint32_t x_read(uint8_t reg) {
     ASSERT(REG_SELF_IPI != reg);
     size_t map = DIRECT_MAP_ADDR + g_loapic_addr + ((size_t)reg << 4);
-    return *(volatile uint32_t *)map;
+    return *(volatile uint32_t*)map;
 }
 
 static void x_write(uint8_t reg, uint32_t val) {
     ASSERT(REG_SELF_IPI != reg);
     size_t map = DIRECT_MAP_ADDR + g_loapic_addr + ((size_t)reg << 4);
-    *(volatile uint32_t *)map = val;
+    *(volatile uint32_t*)map = val;
 }
 
 // xAPIC 模式的目标 ID 只有 8-bit

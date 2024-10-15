@@ -83,18 +83,18 @@ static CONST trigger_mode_t *g_gsi_modes = NULL;
 //------------------------------------------------------------------------------
 
 static uint32_t ioapic_read(size_t base, uint32_t reg) {
-    *(volatile uint32_t *)(base + DIRECT_MAP_ADDR + IO_REG_SEL) = reg;
-    return *(volatile uint32_t *)(base + DIRECT_MAP_ADDR + IO_REG_WIN);
+    *(volatile uint32_t*)(base + DIRECT_MAP_ADDR + IO_REG_SEL) = reg;
+    return *(volatile uint32_t*)(base + DIRECT_MAP_ADDR + IO_REG_WIN);
 }
 
 static void ioapic_write(size_t base, uint32_t reg, uint32_t data) {
-    *(volatile uint32_t *)(base + DIRECT_MAP_ADDR + IO_REG_SEL) = reg;
-    *(volatile uint32_t *)(base + DIRECT_MAP_ADDR + IO_REG_WIN) = data;
+    *(volatile uint32_t*)(base + DIRECT_MAP_ADDR + IO_REG_SEL) = reg;
+    *(volatile uint32_t*)(base + DIRECT_MAP_ADDR + IO_REG_WIN) = data;
 }
 
 // void ioapic_send_eoi(ioapic_t *io, uint8_t vec) {
 //     if (io->ver >= 0x20) {
-//         *(volatile uint32_t *)(io->address + DIRECT_MAP_ADDR + IO_REG_EOI) = vec;
+//         *(volatile uint32_t*)(io->address + DIRECT_MAP_ADDR + IO_REG_EOI) = vec;
 //     }
 // }
 
@@ -174,7 +174,7 @@ void ioapic_send_eoi(int vec) {
 
     ioapic_t *io = ioapic_for_gsi(vec - VEC_GSI_BASE);
     if (io && (io->ver >= 0x20)) {
-        *(volatile uint32_t *)(io->address + DIRECT_MAP_ADDR + IO_REG_EOI) = vec;
+        *(volatile uint32_t*)(io->address + DIRECT_MAP_ADDR + IO_REG_EOI) = vec;
     }
 }
 

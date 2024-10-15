@@ -1,8 +1,10 @@
-#include "test.h"
+#include <gtest/gtest.h>
 #include <stdlib.h>
 #include <string.h>
-#include <library/format.h>
 
+extern "C" {
+#include "format.h"
+}
 
 
 static size_t dst_len = 0;
@@ -11,7 +13,7 @@ static char  *dst_buf = NULL;
 
 static void dst_prepare() {
     dst_max = 16;
-    dst_buf = malloc(dst_max);
+    dst_buf = (char*)malloc(dst_max);
 }
 
 static void dst_teardown() {
@@ -23,7 +25,7 @@ static void dst_teardown() {
 static void dst_print(const char *s, size_t n) {
     while (dst_len + n >= dst_max) {
         dst_max <<= 1;
-        dst_buf = realloc(dst_buf, dst_max);
+        dst_buf = (char*)realloc(dst_buf, dst_max);
     }
     memcpy(dst_buf + dst_len, s, n);
     dst_len += n;
@@ -38,18 +40,18 @@ static void print_n_check(const char *wanted, const char *fmt, ...) {
     format(tmp, sizeof(tmp), dst_print, fmt, args);
     va_end(args);
 
-    EXPECT(0 == strcmp(wanted, dst_buf), "expected %s, got %s", wanted, dst_buf);
+    EXPECT_STREQ(wanted, dst_buf);
     dst_teardown();
 }
 
-TEST(StringFormat, Split) {
+TEST(StrFormat, Split) {
     print_n_check("abcdefghijklmn", "abcdefghijklmn");
     print_n_check("1234_hello_5678", "1234%s5678", "_hello_");
     print_n_check("1234_hello_world_5678", "1234%s5678", "_hello_world_");
     print_n_check("hello_1234567890_world", "hello_%ld_world", 1234567890L);
 }
 
-TEST(StringFormat, Length) {
+TEST(StrFormat, Length) {
     EXPECT_EQ(6, snprintk(NULL, 0, "%d", 123456));
     EXPECT_EQ(8, snprintk(NULL, 0, "%8d", 123456));
     EXPECT_EQ(8, snprintk(NULL, 0, "%*d", 8, 123456));
@@ -58,45 +60,45 @@ TEST(StringFormat, Length) {
     EXPECT_EQ(0, snprintk(NULL, 0, "%.0s", "goodbye"));
 }
 
-TEST(StringFormat, Special) {
+TEST(StrFormat, Special) {
     char buff[1024];
 
     snprintk(buff, sizeof(buff), "a%cc", 'b');
-    EXPECT_EQ(0, strcmp(buff, "abc"));
+    EXPECT_STREQ(buff, "abc");
 
     snprintk(buff, sizeof(buff), "a%3cc", 'b');
-    EXPECT_EQ(0, strcmp(buff, "a  bc"));
+    EXPECT_STREQ(buff, "a  bc");
 
     snprintk(buff, sizeof(buff), "a%-3cc", 'b');
-    EXPECT_EQ(0, strcmp(buff, "ab  c"));
+    EXPECT_STREQ(buff, "ab  c");
 
     snprintk(buff, sizeof(buff), "100%%");
-    EXPECT_EQ(0, strcmp(buff, "100%"));
+    EXPECT_STREQ(buff, "100%");
 
     snprintk(buff, sizeof(buff), "%p", (void*)0xdeadbeef);
-    EXPECT_EQ(0, strcmp(buff, "0xdeadbeef"));
+    EXPECT_STREQ(buff, "0xdeadbeef");
 }
 
-TEST(StringFormat, String) {
+TEST(StrFormat, String) {
     char buff[1024];
 
     snprintk(buff, sizeof(buff), "%s", "");
-    EXPECT_EQ(0, strcmp(buff, ""));
+    EXPECT_STREQ(buff, "");
 
-    snprintk(buff, sizeof(buff), "hello %s", (char *)NULL);
-    EXPECT_EQ(0, strcmp(buff, "hello (null)"));
+    snprintk(buff, sizeof(buff), "hello %s", (char*)NULL);
+    EXPECT_STREQ(buff, "hello (null)");
 
     snprintk(buff, sizeof(buff), "hello %s.", "world");
-    EXPECT_EQ(0, strcmp(buff, "hello world."));
+    EXPECT_STREQ(buff, "hello world.");
 
     snprintk(buff, sizeof(buff), "hello %7s.", "world");
-    EXPECT_EQ(0, strcmp(buff, "hello   world."));
+    EXPECT_STREQ(buff, "hello   world.");
 
     snprintk(buff, sizeof(buff), "hello %-7s.", "world");
-    EXPECT_EQ(0, strcmp(buff, "hello world  ."));
+    EXPECT_STREQ(buff, "hello world  .");
 }
 
-TEST(StringFormat, Number) {
+TEST(StrFormat, Number) {
     static const struct {
         const char *fmt;
         long long   val;
@@ -165,6 +167,6 @@ TEST(StringFormat, Number) {
     char buff[1024];
     for (int i = 0; i < case_count; ++i) {
         snprintk(buff, sizeof(buff), test_cases[i].fmt, test_cases[i].val);
-        EXPECT(0 == strcmp(buff, test_cases[i].res));
+        EXPECT_STREQ(buff, test_cases[i].res);
     }
 }

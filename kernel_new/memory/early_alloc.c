@@ -72,7 +72,7 @@ INIT_TEXT void early_rw_unlock() {
     size_t pa = (size_t)g_rw_buff.ptr - KERNEL_TEXT_ADDR;
     pmrange_t *pmr = pmrange_at_addr(pa);
     ASSERT(NULL != pmr);
-    g_rw_buff.end = (uint8_t *)pmr->end + KERNEL_TEXT_ADDR;
+    g_rw_buff.end = (uint8_t*)pmr->end + KERNEL_TEXT_ADDR;
 }
 
 

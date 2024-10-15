@@ -242,9 +242,9 @@ static INIT_TEXT void ata_detect(int secondary, int slave) {
 
     ata->blk.sec_size = 512;
     if (ata->flags & ATA_LBA48) {
-        ata->blk.sec_num = *(uint64_t *)&info[100]; // lba-48
+        ata->blk.sec_num = *(uint64_t*)&info[100]; // lba-48
     } else {
-        ata->blk.sec_num = *(uint32_t *)&info[60];  // lba-28
+        ata->blk.sec_num = *(uint32_t*)&info[60];  // lba-28
     }
 
     // 像系统注册这个块设备
@@ -304,7 +304,7 @@ void ata_pio_read_sector(blk_dev_t *blk, void *dst, uint64_t sector, uint64_t nu
     }
 
     // 读取数据
-    uint16_t *buff = (uint16_t *)dst;
+    uint16_t *buff = (uint16_t*)dst;
     for (uint64_t i = 0; i < 256 * num; ++i) {
         buff[i] = in16(ch->io_base);
     }
@@ -350,7 +350,7 @@ void ata_pio_write_sector(blk_dev_t *blk, const void *src, uint64_t sector, uint
     }
 
     // 写入数据
-    const uint16_t *buff = (const uint16_t *)src;
+    const uint16_t *buff = (const uint16_t*)src;
     for (uint64_t i = 0; i < 256 * num; ++i) {
         out16(ch->io_base, buff[i]);
         cpu_pause();

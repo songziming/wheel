@@ -125,8 +125,8 @@ INIT_TEXT size_t percpu_init(size_t va) {
     for (int i = 0; i < ncpu; ++i) {
         size_t next = va + g_percpu_skip;
 
-        memcpy((void *)va, &_percpu_addr, copy_size); // 复制 per-cpu data
-        memset((void *)va + copy_size, 0, zero_size); // per-cpu bss 清零
+        memcpy((void*)va, &_percpu_addr, copy_size); // 复制 per-cpu data
+        memset((void*)va + copy_size, 0, zero_size); // per-cpu bss 清零
 
         va = add_percpu_range(i, &g_percpu_vars, va, vars_size,      "percpu vars");
         va = add_percpu_range(i, &g_percpu_nmi,  va, INT_STACK_SIZE, "NMI IST");
@@ -161,8 +161,8 @@ INIT_TEXT void thiscpu_init(int idx) {
 //------------------------------------------------------------------------------
 
 static inline int is_percpu_var(void *ptr) {
-    return ((char *)ptr >= &_percpu_addr)
-        && ((char *)ptr < &_percpu_bss_end);
+    return ((char*)ptr >= &_percpu_addr)
+        && ((char*)ptr < &_percpu_bss_end);
 }
 
 inline void *percpu_ptr(int idx, void *ptr) {
@@ -171,7 +171,7 @@ inline void *percpu_ptr(int idx, void *ptr) {
     ASSERT(is_percpu_var(ptr));
     ASSERT(idx < cpu_count());
 
-    return (uint8_t *)ptr + g_percpu_base + g_percpu_skip * idx;
+    return (uint8_t*)ptr + g_percpu_base + g_percpu_skip * idx;
 }
 
 // 依赖 gsbase
@@ -180,7 +180,7 @@ inline void *thiscpu_ptr(void *ptr) {
     ASSERT(0 != g_percpu_skip);
     ASSERT(is_percpu_var(ptr));
 
-    return (uint8_t *)ptr + read_gsbase();
+    return (uint8_t*)ptr + read_gsbase();
 }
 
 // 依赖 gsbase

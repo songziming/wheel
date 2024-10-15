@@ -146,7 +146,7 @@ void task_resume(task_t *tid) {
 
 // 唤醒正在睡眠的任务
 static void task_wakeup(void *arg1, void *arg2 UNUSED) {
-    task_t *tid = (task_t *)arg1;
+    task_t *tid = (task_t*)arg1;
     int cpu = sched_cont(tid, TASK_WAITING);
     if ((cpu >= 0) && (cpu != cpu_index())) {
         arch_ipi_resched(cpu);
@@ -170,7 +170,7 @@ void task_sleep(int tick) {
 
 // 任务已经结束，在中断返回阶段执行此函数
 static void task_post_delete(void *arg1, void *arg2 UNUSED) {
-    task_t *tid = (task_t *)arg1;
+    task_t *tid = (task_t*)arg1;
     ASSERT(TASK_DELETED & tid->state);
     vmspace_remove(NULL, &tid->stack);
 }

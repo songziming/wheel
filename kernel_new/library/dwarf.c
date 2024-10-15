@@ -170,7 +170,7 @@ static INIT_TEXT const char *parse_field_str(line_number_state_t *state, dwarf_f
     const char *s = NULL;
     switch (form) {
     case DW_FORM_string:
-        s = (const char *)state->ptr;
+        s = (const char*)state->ptr;
         state->ptr += strlen(s);
         break;
     case DW_FORM_strp: {
@@ -376,7 +376,7 @@ static INIT_TEXT const uint8_t *parse_debug_line_unit(line_number_state_t *state
     state->unit.min_ins_len = *state->ptr++;
     state->unit.ops_per_ins = *state->ptr++;
     UNUSED uint8_t default_is_stmt = *state->ptr++;
-    state->unit.line_base = *(int8_t *)state->ptr++;
+    state->unit.line_base = *(int8_t*)state->ptr++;
     state->unit.line_range = *state->ptr++;
     state->unit.opcode_base = *state->ptr++;
 
@@ -435,8 +435,8 @@ static INIT_TEXT const uint8_t *parse_debug_line_unit(line_number_state_t *state
             map->file = ref->file;
         } else {
             map = early_alloc_ro(map_size + strlen(seq.file) + 1);
-            map->file = (char *)map + map_size;
-            memcpy((char *)map->file, seq.file, strlen(seq.file) + 1);
+            map->file = (char*)map + map_size;
+            memcpy((char*)map->file, seq.file, strlen(seq.file) + 1);
         }
         map->nbytes = seq.bytes_in_leb128;
 

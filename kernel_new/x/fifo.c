@@ -13,7 +13,7 @@ void fifo_init(fifo_t *fifo, void *buff, size_t size) {
     ASSERT(NULL != buff);
     ASSERT(0 == (size & (size - 1)));
 
-    fifo->data = (uint8_t *)buff;
+    fifo->data = (uint8_t*)buff;
     fifo->size = size;
     fifo->r_head = 0;
     fifo->w_head = 0;
@@ -52,7 +52,7 @@ size_t fifo_write(fifo_t *fifo, const void *ptr, size_t min, size_t max) {
         remain = max;
     }
 
-    const uint8_t *src = (const uint8_t *)ptr;
+    const uint8_t *src = (const uint8_t*)ptr;
     size_t mask = fifo->size - 1;
 
     size_t start = fifo->w_head & mask;
@@ -76,7 +76,7 @@ void fifo_force_write(fifo_t *fifo, const void *ptr, size_t len) {
     ASSERT(NULL != ptr);
     ASSERT(0 != len);
 
-    const uint8_t *src = (const uint8_t *)ptr;
+    const uint8_t *src = (const uint8_t*)ptr;
     size_t mask = fifo->size - 1;
 
     // 不大可能，调用者使用有误
@@ -119,7 +119,7 @@ size_t fifo_read(fifo_t *fifo, void *ptr, size_t min, size_t max) {
         size = max;
     }
 
-    uint8_t *dst = (uint8_t *)ptr;
+    uint8_t *dst = (uint8_t*)ptr;
     size_t mask = fifo->size - 1;
 
     size_t start = fifo->r_head & mask;

@@ -42,8 +42,8 @@ static void put_char_at(char ch, uint32_t fg, int r, int c) {
     int pos = r * g_font->rows * g_pitch + c * g_font->cols * sizeof(uint32_t);
 
     for (int y = 0; y < g_font->rows; ++y) {
-        uint32_t *fb_line = (uint32_t *)(g_addr + pos);
-        uint32_t *fb_back = (uint32_t *)(g_back + pos);
+        uint32_t *fb_line = (uint32_t*)(g_addr + pos);
+        uint32_t *fb_back = (uint32_t*)(g_back + pos);
         for (int x = 0; x < g_font->cols; ++x) {
             uint8_t bit = 0x80 >> (x & 7);
             if (font_data[x >> 3] & bit) {
@@ -63,8 +63,8 @@ static void framebuf_draw_caret(int fg, int r, int c) {
     int pos = r * g_font->rows * g_pitch + c * g_font->cols * sizeof(uint32_t);
 
     for (int y = 0; y < g_font->rows; ++y) {
-        uint32_t *fb_line = (uint32_t *)(g_addr + pos);
-        uint32_t *fb_back = (uint32_t *)(g_back + pos);
+        uint32_t *fb_line = (uint32_t*)(g_addr + pos);
+        uint32_t *fb_back = (uint32_t*)(g_back + pos);
         for (int x = 0; x < g_font->cols; ++x) {
             fb_line[x] = fg;
             fb_back[x] = fg;
@@ -84,7 +84,7 @@ INIT_TEXT void framebuf_init(uint32_t rows, uint32_t cols, uint32_t pitch, uint3
     g_cols = cols;
     g_pitch = pitch;
 
-    g_addr = (uint8_t *)(DIRECT_MAP_ADDR + addr);
+    g_addr = (uint8_t*)(DIRECT_MAP_ADDR + addr);
 
     g_back = early_alloc_rw(g_rows * g_pitch);
     memset(g_back, 0, g_rows * g_pitch);

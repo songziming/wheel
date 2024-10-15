@@ -73,7 +73,7 @@ static uint64_t alloc_table() {
     info->ent_num = 0;
 
     // uint64_t *va = VIRT(pa);
-    memset((char *)pa + DIRECT_MAP_ADDR, 0, PAGE_SIZE);
+    memset((char*)pa + DIRECT_MAP_ADDR, 0, PAGE_SIZE);
     return pa;
 }
 
@@ -104,7 +104,7 @@ static uint64_t pt_map(uint64_t pt, uint64_t va, uint64_t end, uint64_t pa, uint
     ASSERT(0 == (attrs & ~MMU_ATTRS));
 
     page_info_t *info = page_block_info(pt);
-    uint64_t *tbl = (uint64_t *)(pt + DIRECT_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)(pt + DIRECT_MAP_ADDR);
 
     uint64_t start = va;
     for (int i = (va >> 12) & 0x1ff; (i < 512) && (va < end); ++i) {
@@ -126,7 +126,7 @@ static uint64_t pt_unmap(uint64_t pt, uint64_t va, uint64_t end) {
     ASSERT(va <= end);
 
     page_info_t *info = page_block_info(pt);
-    uint64_t *tbl = (uint64_t *)(pt + DIRECT_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)(pt + DIRECT_MAP_ADDR);
 
     for (int i = (va >> 12) & 0x1ff; (i < 512) && (va < end); ++i) {
         if (tbl[i] & MMU_P) {
@@ -149,7 +149,7 @@ static uint64_t pt_unmap(uint64_t pt, uint64_t va, uint64_t end) {
 static void pd_free(uint64_t pd) {
     ASSERT(0 == OFFSET_4K(pd));
 
-    uint64_t *tbl = (uint64_t *)(pd + DIRECT_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)(pd + DIRECT_MAP_ADDR);
     for (int i = 0; i < 512; ++i) {
         if ((tbl[i] & MMU_P) && !(tbl[i] & MMU_PS)) {
             pt_free(tbl[i] & MMU_ADDR);
@@ -168,7 +168,7 @@ static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint
     ASSERT(0 == (attrs & ~MMU_ATTRS));
 
     page_info_t *info = page_block_info(pd);
-    uint64_t *tbl = (uint64_t *)(pd + DIRECT_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)(pd + DIRECT_MAP_ADDR);
 
     uint64_t start = va;
     for (int i = (va >> 21) & 0x1ff; (i < 512) && (va < end); ++i) {
@@ -224,7 +224,7 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
     ASSERT(va <= end);
 
     page_info_t *info = page_block_info(pd);
-    uint64_t *tbl = (uint64_t *)(pd + DIRECT_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)(pd + DIRECT_MAP_ADDR);
 
     for (int i = (va >> 21) & 0x1ff; (i < 512) && (va < end); ++i) {
         if (0 == (tbl[i] & MMU_P)) {
@@ -290,7 +290,7 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
 static void pdp_free(uint64_t pdp) {
     ASSERT(0 == OFFSET_4K(pdp));
 
-    uint64_t *tbl = (uint64_t *)(pdp + DIRECT_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)(pdp + DIRECT_MAP_ADDR);
     for (int i = 0; i < 512; ++i) {
         if ((tbl[i] & MMU_P) && !(tbl[i] & MMU_PS)) {
             pd_free(tbl[i] & MMU_ADDR);
@@ -309,7 +309,7 @@ static uint64_t pdp_map(uint64_t pdp, uint64_t va, uint64_t end, uint64_t pa, ui
     ASSERT(0 == (attrs & ~MMU_ATTRS));
 
     page_info_t *info = page_block_info(pdp);
-    uint64_t *tbl = (uint64_t *)(pdp + DIRECT_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)(pdp + DIRECT_MAP_ADDR);
 
     uint64_t start = va;
     for (int i = (va >> 30) & 0x1ff; (i < 512) && (va < end); ++i) {
@@ -363,7 +363,7 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
     ASSERT(va <= end);
 
     page_info_t *info = page_block_info(pdp);
-    uint64_t *tbl = (uint64_t *)(pdp + DIRECT_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)(pdp + DIRECT_MAP_ADDR);
 
     for (int i = (va >> 30) & 0x1ff; (i < 512) && (va < end); ++i) {
         if (0 == (tbl[i] & MMU_P)) {
@@ -429,7 +429,7 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
 static void pml4_free(uint64_t pml4) {
     ASSERT(0 == OFFSET_4K(pml4));
 
-    uint64_t *tbl = (uint64_t *)(pml4 + DIRECT_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)(pml4 + DIRECT_MAP_ADDR);
     for (int i = 0; i < 512; ++i) {
         // 如果带有 global 标记，说明被所有进程共享，不能删除
         if ((tbl[i] & MMU_P) && !(tbl[i] & MMU_G)) {
@@ -449,7 +449,7 @@ static uint64_t pml4_map(uint64_t pml4, uint64_t va, uint64_t end, uint64_t pa, 
     ASSERT(0 == (attrs & ~MMU_ATTRS));
 
     page_info_t *info = page_block_info(pml4);
-    uint64_t *tbl = (uint64_t *)(pml4 + DIRECT_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)(pml4 + DIRECT_MAP_ADDR);
 
     uint64_t start = va;
     for (int i = (va >> 39) & 0x1ff; (i < 512) && (va < end); ++i) {
@@ -476,7 +476,7 @@ static uint64_t pml4_unmap(uint64_t pml4, uint64_t va, uint64_t end) {
     ASSERT(va <= end);
 
     page_info_t *info = page_block_info(pml4);
-    uint64_t *tbl = (uint64_t *)(pml4 + DIRECT_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)(pml4 + DIRECT_MAP_ADDR);
 
     for (int i = (va >> 39) & 0x1ff; (i < 512) && (va < end); ++i) {
         if (0 == (tbl[i] & MMU_P)) {
@@ -515,7 +515,7 @@ INIT_TEXT size_t mmu_create_kernel_table() {
 
     // 填充 canonical hole 之后对 PDP 的映射
     // TODO 256 个 PDP 可以连续分配
-    uint64_t *pml4 = (uint64_t *)(g_kernel_cr3 + DIRECT_MAP_ADDR);
+    uint64_t *pml4 = (uint64_t*)(g_kernel_cr3 + DIRECT_MAP_ADDR);
     for (int i = 256; i < 512; ++i) {
         uint64_t pdp = alloc_table();
         pml4[i] = (pdp & MMU_ADDR) | MMU_G | MMU_P | MMU_US | MMU_RW;
@@ -534,8 +534,8 @@ INIT_TEXT size_t mmu_create_kernel_table() {
 size_t mmu_create_table() {
     ASSERT(0 != g_kernel_cr3);
     size_t tbl = alloc_table();
-    uint64_t *pml4 = (uint64_t *)(tbl + DIRECT_MAP_ADDR);
-    uint64_t *kernel_pml4 = (uint64_t *)(g_kernel_cr3 + DIRECT_MAP_ADDR);
+    uint64_t *pml4 = (uint64_t*)(tbl + DIRECT_MAP_ADDR);
+    uint64_t *kernel_pml4 = (uint64_t*)(g_kernel_cr3 + DIRECT_MAP_ADDR);
     memcpy(&pml4[256], &kernel_pml4[256], 256 * sizeof(uint64_t));
     return tbl;
 }
@@ -554,7 +554,7 @@ void mmu_delete_table(size_t tbl) {
 //      可以用 Present 属性位区分
 
 size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs) {
-    uint64_t *pml4 = (uint64_t *)(tbl + DIRECT_MAP_ADDR);
+    uint64_t *pml4 = (uint64_t*)(tbl + DIRECT_MAP_ADDR);
     uint64_t pml4e = pml4[(va >> 39) & 0x1ff];
     if (0 == (pml4e & MMU_P)) {
         return 0;
@@ -565,7 +565,7 @@ size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs) {
     *attrs |= (pml4e & MMU_RW) ? MMU_WRITE : 0;
     *attrs |= (pml4e & MMU_NX) ? 0 : MMU_EXEC;
 
-    uint64_t *pdp = (uint64_t *)((pml4e & MMU_ADDR) + DIRECT_MAP_ADDR);
+    uint64_t *pdp = (uint64_t*)((pml4e & MMU_ADDR) + DIRECT_MAP_ADDR);
     uint64_t pdpe = pdp[(va >> 30) & 0x1ff];
     if (0 == (pdpe & MMU_P)) {
         return 0;
@@ -580,7 +580,7 @@ size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs) {
         return (pdpe & MMU_ADDR) | OFFSET_1G(va);
     }
 
-    uint64_t *pd = (uint64_t *)((pdpe & MMU_ADDR) + DIRECT_MAP_ADDR);
+    uint64_t *pd = (uint64_t*)((pdpe & MMU_ADDR) + DIRECT_MAP_ADDR);
     uint64_t pde = pd[(va >> 21) & 0x1ff];
     if (0 == (pde & MMU_P)) {
         return 0;
@@ -595,7 +595,7 @@ size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs) {
         return (pde & MMU_ADDR) | OFFSET_2M(va);
     }
 
-    uint64_t *pt = (uint64_t *)((pde & MMU_ADDR) + DIRECT_MAP_ADDR);
+    uint64_t *pt = (uint64_t*)((pde & MMU_ADDR) + DIRECT_MAP_ADDR);
     uint64_t pte = pt[(va >> 12) & 0x1ff];
     if (0 == (pte & MMU_P)) {
         return 0;
@@ -660,7 +660,7 @@ void mmu_walk(uint64_t tbl) {
 
     log("page table 0x%lx content:\n", tbl);
 
-    uint64_t *pml4 = (uint64_t *)(tbl + DIRECT_MAP_ADDR);
+    uint64_t *pml4 = (uint64_t*)(tbl + DIRECT_MAP_ADDR);
     uint64_t va4 = 0;
     for (int i = 0; i < 512; ++i, va4 += (SIZE_1G << 9)) {
         if (256 == i) {
@@ -677,7 +677,7 @@ void mmu_walk(uint64_t tbl) {
             continue;
         }
 
-        uint64_t *pdp = (uint64_t *)((pml4[i] & MMU_ADDR) + DIRECT_MAP_ADDR);
+        uint64_t *pdp = (uint64_t*)((pml4[i] & MMU_ADDR) + DIRECT_MAP_ADDR);
         uint64_t va3 = va4;
         for (int j = 0; j < 512; ++j, va3 += SIZE_1G) {
             if (0 == (pdp[j] & MMU_P)) {
@@ -707,7 +707,7 @@ void mmu_walk(uint64_t tbl) {
                 continue;
             }
 
-            uint64_t *pd = (uint64_t *)((pdp[j] & MMU_ADDR) + DIRECT_MAP_ADDR);
+            uint64_t *pd = (uint64_t*)((pdp[j] & MMU_ADDR) + DIRECT_MAP_ADDR);
             uint64_t va2 = va3;
             for (int k = 0; k < 512; ++k, va2 += SIZE_2M) {
                 if (0 == (pd[k] & MMU_P)) {
@@ -737,7 +737,7 @@ void mmu_walk(uint64_t tbl) {
                     continue;
                 }
 
-                uint64_t *pt = (uint64_t *)((pd[k] & MMU_ADDR) + DIRECT_MAP_ADDR);
+                uint64_t *pt = (uint64_t*)((pd[k] & MMU_ADDR) + DIRECT_MAP_ADDR);
                 uint64_t va = va2;
                 for (int l = 0; l < 512; ++l, va += PAGE_SIZE) {
                     if (0 == (pt[l] & MMU_P)) {

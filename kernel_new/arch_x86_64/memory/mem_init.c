@@ -91,7 +91,7 @@ INIT_TEXT void mem_init() {
     rw_end += 2 * PAGE_SIZE - 1;
     rw_end &= ~(PAGE_SIZE - 1);
     add_kernel_range(&g_kernel_heap, rw_end, rw_end + KERNEL_HEAP_SIZE, MMU_WRITE, "heap");
-    kernel_heap_init((void *)rw_end, KERNEL_HEAP_SIZE);
+    kernel_heap_init((void*)rw_end, KERNEL_HEAP_SIZE);
     rw_end += KERNEL_HEAP_SIZE;
 
     // 给 percpu 分配空间，开头留出一个 guard page

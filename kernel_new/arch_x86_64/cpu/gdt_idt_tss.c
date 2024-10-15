@@ -60,7 +60,7 @@ INIT_TEXT void gdt_init() {
     int ncpu = cpu_count();
     ASSERT(0 != ncpu);
 
-    g_gdt = (uint64_t *)early_alloc_ro((6 + ncpu * 2) * sizeof(uint64_t));
+    g_gdt = (uint64_t*)early_alloc_ro((6 + ncpu * 2) * sizeof(uint64_t));
     g_gdt[0] = 0UL;                   // dummy
     g_gdt[1] = 0x00a0980000000000UL;  // 内核代码段
     g_gdt[2] = 0x00c0920000000000UL;  // 内核数据段

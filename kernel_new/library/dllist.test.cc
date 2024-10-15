@@ -1,7 +1,10 @@
-#include "test.h"
+#include <gtest/gtest.h>
 #include <stdlib.h>
 #include <string.h>
-#include <library/dllist.h>
+
+extern "C" {
+#include "dllist.h"
+}
 
 
 
@@ -26,21 +29,33 @@ static void teardown() {
     }
 }
 
+class DlListTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        setup();
+    }
+    void TearDown() override {
+        teardown();
+    }
+};
+
+
+
 static listitem_t *new_item(int val) {
-    listitem_t *item = malloc(sizeof(listitem_t));
+    listitem_t *item = (listitem_t*)malloc(sizeof(listitem_t));
     // item->dl = DLNODE_INIT;
     item->val = val;
     return item;
 }
 
 static listitem_t *push_head(listitem_t *item) {
-    EXPECT(!dl_contains(&myhead, &item->dl));
+    EXPECT_FALSE(dl_contains(&myhead, &item->dl));
     dl_insert_after(&item->dl, &myhead);
     return item;
 }
 
 static listitem_t *push_tail(listitem_t *item) {
-    EXPECT(!dl_contains(&myhead, &item->dl));
+    EXPECT_FALSE(dl_contains(&myhead, &item->dl));
     dl_insert_before(&item->dl, &myhead);
     return item;
 }
@@ -64,29 +79,29 @@ static listitem_t *pop_tail() {
 }
 
 listitem_t *insert_before(listitem_t *item, listitem_t *ref) {
-    EXPECT(!dl_contains(&myhead, &item->dl));
+    EXPECT_FALSE(dl_contains(&myhead, &item->dl));
     if (NULL == ref) {
         dl_insert_before(&item->dl, &myhead);
     } else {
-        EXPECT(dl_contains(&myhead, &ref->dl));
+        EXPECT_TRUE(dl_contains(&myhead, &ref->dl));
         dl_insert_before(&item->dl, &ref->dl);
     }
     return item;
 }
 
 listitem_t *insert_after(listitem_t *item, listitem_t *ref) {
-    EXPECT(!dl_contains(&myhead, &item->dl));
+    EXPECT_FALSE(dl_contains(&myhead, &item->dl));
     if (NULL == ref) {
         dl_insert_after(&item->dl, &myhead);
     } else {
-        EXPECT(dl_contains(&myhead, &ref->dl));
+        EXPECT_TRUE(dl_contains(&myhead, &ref->dl));
         dl_insert_after(&item->dl, &ref->dl);
     }
     return item;
 }
 
 void remove_and_free(listitem_t *item) {
-    EXPECT(dl_contains(&myhead, &item->dl));
+    EXPECT_TRUE(dl_contains(&myhead, &item->dl));
     dl_remove(&item->dl);
     free(item);
 }
@@ -97,9 +112,9 @@ void compare_array(const int *arr, int len) {
     while (node != &myhead) {
         listitem_t *item = containerof(node, listitem_t, dl);
         node = node->next;
-        EXPECT(item->val == *it++);
+        EXPECT_TRUE(item->val == *it++);
     }
-    EXPECT(it == arr + len);
+    EXPECT_TRUE(it == arr + len);
 }
 
 #define EXPECT_ARRAY(...)   do {    \
@@ -109,7 +124,7 @@ void compare_array(const int *arr, int len) {
 } while (0)
 
 void compare_item_and_free(listitem_t *item, int num) {
-    EXPECT(item->val == num);
+    EXPECT_TRUE(item->val == num);
     free(item);
 }
 
@@ -118,7 +133,15 @@ void compare_item_and_free(listitem_t *item, int num) {
 // 测试用例
 //------------------------------------------------------------------------------
 
-TEST(DoubleLinkedList, Remove) {
+TEST(DlList, Init) {
+    dlnode_t head;
+
+    dl_init_circular(&head);
+    EXPECT_EQ(head.prev, &head);
+    EXPECT_EQ(head.next, &head);
+}
+
+TEST(DlList, Remove) {
     listitem_t item1 = { .val = 1 };
     listitem_t item2 = { .val = 2 };
     listitem_t item3 = { .val = 3 };
@@ -134,7 +157,7 @@ TEST(DoubleLinkedList, Remove) {
 
     dl_remove(&item1.dl);
     dl_remove(&item3.dl);
-    EXPECT(dl_is_lastone(&myhead));
+    EXPECT_TRUE(dl_is_lastone(&myhead));
 
     // 删除最后一个元素
     dl_remove(&myhead);
@@ -142,8 +165,8 @@ TEST(DoubleLinkedList, Remove) {
     EXPECT_EQ(NULL, myhead.next);
 }
 
-TEST_F(DoubleLinkedList, PushHead, setup, teardown) {
-    EXPECT(dl_is_lastone(&myhead));
+TEST_F(DlListTest, PushHead) {
+    EXPECT_TRUE(dl_is_lastone(&myhead));
     push_head(new_item(1));
     push_head(new_item(2));
     push_head(new_item(3));
@@ -151,8 +174,8 @@ TEST_F(DoubleLinkedList, PushHead, setup, teardown) {
     EXPECT_ARRAY(4,3,2,1);
 }
 
-TEST_F(DoubleLinkedList, PushTail, setup, teardown) {
-    EXPECT(dl_is_lastone(&myhead));
+TEST_F(DlListTest, PushTail) {
+    EXPECT_TRUE(dl_is_lastone(&myhead));
     push_tail(new_item(1));
     push_tail(new_item(2));
     push_tail(new_item(3));
@@ -160,28 +183,28 @@ TEST_F(DoubleLinkedList, PushTail, setup, teardown) {
     EXPECT_ARRAY(1,2,3,4);
 }
 
-TEST_F(DoubleLinkedList, PopHead, setup, teardown) {
-    EXPECT(dl_is_lastone(&myhead));
+TEST_F(DlListTest, PopHead) {
+    EXPECT_TRUE(dl_is_lastone(&myhead));
     push_tail(new_item(1));
     push_tail(new_item(2));
     compare_item_and_free(pop_head(), 1);
     compare_item_and_free(pop_head(), 2);
-    EXPECT(NULL == pop_head());
-    EXPECT(dl_is_lastone(&myhead));
+    EXPECT_TRUE(NULL == pop_head());
+    EXPECT_TRUE(dl_is_lastone(&myhead));
 }
 
-TEST_F(DoubleLinkedList, PopTail, setup, teardown) {
-    EXPECT(dl_is_lastone(&myhead));
+TEST_F(DlListTest, PopTail) {
+    EXPECT_TRUE(dl_is_lastone(&myhead));
     push_tail(new_item(1));
     push_tail(new_item(2));
     compare_item_and_free(pop_tail(), 2);
     compare_item_and_free(pop_tail(), 1);
-    EXPECT(NULL == pop_tail());
-    EXPECT(dl_is_lastone(&myhead));
+    EXPECT_TRUE(NULL == pop_tail());
+    EXPECT_TRUE(dl_is_lastone(&myhead));
 }
 
-TEST_F(DoubleLinkedList, InsertBefore, setup, teardown) {
-    EXPECT(dl_is_lastone(&myhead));
+TEST_F(DlListTest, InsertBefore) {
+    EXPECT_TRUE(dl_is_lastone(&myhead));
     listitem_t *i1 = insert_before(new_item(1), NULL);
     listitem_t *i2 = insert_before(new_item(2), i1);
     listitem_t *i3 = insert_before(new_item(3), i2);
@@ -193,8 +216,8 @@ TEST_F(DoubleLinkedList, InsertBefore, setup, teardown) {
     EXPECT_ARRAY(4,3,2,5,6,7,8,1);
 }
 
-TEST_F(DoubleLinkedList, InsertAfter, setup, teardown) {
-    EXPECT(dl_is_lastone(&myhead));
+TEST_F(DlListTest, InsertAfter) {
+    EXPECT_TRUE(dl_is_lastone(&myhead));
     listitem_t *i1 = insert_after(new_item(1), NULL);
     listitem_t *i2 = insert_after(new_item(2), i1);
     listitem_t *i3 = insert_after(new_item(3), i2);
@@ -206,8 +229,8 @@ TEST_F(DoubleLinkedList, InsertAfter, setup, teardown) {
     EXPECT_ARRAY(1,8,7,6,5,2,3,4);
 }
 
-TEST_F(DoubleLinkedList, Pop, setup, teardown) {
-    EXPECT(dl_is_lastone(&myhead));
+TEST_F(DlListTest, Pop) {
+    EXPECT_TRUE(dl_is_lastone(&myhead));
     listitem_t *i1 = push_tail(new_item(1));
     listitem_t *i2 = push_tail(new_item(2));
     listitem_t *i3 = push_tail(new_item(3));

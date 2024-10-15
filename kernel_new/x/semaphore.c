@@ -48,8 +48,8 @@ void semaphore_init(semaphore_t *sem, int initial, int max) {
 
 // 尚未得到信号量，但等待时间已过
 static void semaphore_wakeup(void *arg1, void *arg2) {
-    semaphore_t *sem = (semaphore_t *)arg1;
-    pend_item_t *item = (pend_item_t *)arg2;
+    semaphore_t *sem = (semaphore_t*)arg1;
+    pend_item_t *item = (pend_item_t*)arg2;
 
     ASSERT(cpu_int_depth());
     ASSERT(NULL != sem);

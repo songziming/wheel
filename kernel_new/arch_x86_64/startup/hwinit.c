@@ -103,7 +103,7 @@ static INIT_TEXT void install_pci_dev(const pci_dev_t *dev) {
 
 // 可以使用 early_alloc
 INIT_TEXT void pre_memory_hwinit() {
-    mcfg_t *mcfg = (mcfg_t *)acpi_table_find("MCFG", 0);
+    mcfg_t *mcfg = (mcfg_t*)acpi_table_find("MCFG", 0);
     if (mcfg) {
         show_mcfg(mcfg);
     }

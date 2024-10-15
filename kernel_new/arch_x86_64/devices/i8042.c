@@ -236,7 +236,7 @@ INIT_TEXT void i8042_init() {
 #if 0
     // 检查 FADT，判断有无 8042 兼容硬件
     // PC 一般都有，Intel Mac 可能没有
-    fadt_t *fadt = (fadt_t *)acpi_get_table("FACP");
+    fadt_t *fadt = (fadt_t*)acpi_get_table("FACP");
     if ((NULL != fadt) && (0 != g_acpi_revision)) {
         if (0 == (fadt->ia_boot_arch & 2)) {
             klog("fatal: no 8042 equivalent device!\n");

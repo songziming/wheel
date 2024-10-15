@@ -40,7 +40,7 @@ INIT_TEXT void console_init() {
 
     // 两屏内容清空
     g_vbuf = early_alloc_rw(ROWS * COLS * sizeof(uint16_t));
-    uint64_t *dst = (uint64_t *)g_vbuf;
+    uint64_t *dst = (uint64_t*)g_vbuf;
     uint64_t fill = (uint64_t)' ' | ((uint64_t)g_text_color << 8);
     fill |= fill << 16;
     fill |= fill << 32;
@@ -49,7 +49,7 @@ INIT_TEXT void console_init() {
     }
 
     // 映射到 higher half，启动完成后低地址会取消映射
-    g_vram = (uint16_t *)(DIRECT_MAP_ADDR + 0xb8000);
+    g_vram = (uint16_t*)(DIRECT_MAP_ADDR + 0xb8000);
     memcpy(g_vram, g_vbuf, ROWS*COLS * sizeof(uint16_t));
 }
 

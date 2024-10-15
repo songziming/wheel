@@ -1,5 +1,8 @@
-#include "test.h"
-#include <library/sched_list.h>
+#include <gtest/gtest.h>
+
+extern "C" {
+#include "sched_list.h"
+}
 
 
 typedef struct item {
@@ -17,7 +20,7 @@ static sched_list_arr_t g_arr;
 #define LIST_INSERT(x)   sched_list_arr_insert(&g_arr, x.priority, &x.dl)
 #define LIST_REMOVE(x)   sched_list_arr_remove(&g_arr, x.priority, &x.dl)
 #define LIST_CONTAINS(x) sched_list_arr_contains(&g_arr, x.priority, &x.dl)
-#include "test_sched_list_impl.h"
+#include "sched_list.test.h"
 #undef LIST_NAME
 #undef LIST_INIT
 #undef LIST_HEAD
@@ -33,7 +36,7 @@ static sched_list_jmp_t g_jmp;
 #define LIST_INSERT(x)   sched_list_jmp_insert(&g_jmp, x.priority, &x.dl)
 #define LIST_REMOVE(x)   sched_list_jmp_remove(&g_jmp, x.priority, &x.dl)
 #define LIST_CONTAINS(x) sched_list_jmp_contains(&g_jmp, x.priority, &x.dl)
-#include "test_sched_list_impl.h"
+#include "sched_list.test.h"
 #undef LIST_NAME
 #undef LIST_INIT
 #undef LIST_HEAD

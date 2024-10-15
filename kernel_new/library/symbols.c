@@ -32,7 +32,7 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, un
         return;
     }
 
-    const Elf64_Shdr *secs = (const Elf64_Shdr *)ptr;
+    const Elf64_Shdr *secs = (const Elf64_Shdr*)ptr;
 
 #ifdef PARSE_DWARF
     // 段名字符串，匹配 debug 信息需要
@@ -40,7 +40,7 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, un
     if ((SHN_UNDEF != shstrndx) && (shstrndx < num)) {
         const Elf64_Shdr shstr = secs[shstrndx];
         if (SHT_STRTAB == shstr.sh_type) {
-            shname = (const char *)shstr.sh_addr;
+            shname = (const char*)shstr.sh_addr;
         }
     }
 
@@ -58,15 +58,15 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, un
         if (NULL != shname) {
             const char *name = &shname[sec.sh_name];
             if (0 == strcmp(".debug_str", name)) {
-                dbg_line.str = (const char *)sec.sh_addr;
+                dbg_line.str = (const char*)sec.sh_addr;
                 dbg_line.str_size = sec.sh_size;
             }
             if (0 == strcmp(".debug_line_str", name)) {
-                dbg_line.line_str = (const char *)sec.sh_addr;
+                dbg_line.line_str = (const char*)sec.sh_addr;
                 dbg_line.line_str_size = sec.sh_size;
             }
             if (0 == strcmp(".debug_line", name)) {
-                dbg_line.line = (uint8_t *)sec.sh_addr;
+                dbg_line.line = (uint8_t*)sec.sh_addr;
                 dbg_line.line_end = dbg_line.line + sec.sh_size;
             }
         }
@@ -85,8 +85,8 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, un
         }
 
         size_t sym_num = sec.sh_size / sec.sh_entsize;
-        const Elf64_Sym *symtab = (const Elf64_Sym *)sec.sh_addr;
-        const char *strtab = (const char *)link.sh_addr;
+        const Elf64_Sym *symtab = (const Elf64_Sym*)sec.sh_addr;
+        const char *strtab = (const char*)link.sh_addr;
 
         // 遍历该表中的每个符号，只记录函数类型的符号
         for (size_t j = 1; j < sym_num; ++j) {
@@ -132,8 +132,8 @@ INIT_TEXT void parse_kernel_symtab(void *ptr, uint32_t entsize, unsigned num, un
         }
 
         size_t sym_num = sec.sh_size / sec.sh_entsize;
-        const Elf64_Sym *symtab = (const Elf64_Sym *)sec.sh_addr;
-        const char *strtab = (const char *)link.sh_addr;
+        const Elf64_Sym *symtab = (const Elf64_Sym*)sec.sh_addr;
+        const char *strtab = (const char*)link.sh_addr;
 
         for (size_t j = 1; j < sym_num; ++j) {
             const Elf64_Sym *sym = &symtab[j];

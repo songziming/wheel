@@ -107,8 +107,8 @@ typedef struct exbs {
 
 // 判断 FAT 文件系统的具体类型
 void fat_determine(uint8_t *sec0) {
-    bs16_t *bs16 = (bs16_t *)sec0;
-    bs32_t *bs32 = (bs32_t *)sec0;
+    bs16_t *bs16 = (bs16_t*)sec0;
+    bs32_t *bs32 = (bs32_t*)sec0;
 
     // 计算根目录区占据的扇区数量
     int root_ent_cnt = bs16->bpb.root_ent_cnt;
@@ -143,7 +143,7 @@ void fat_determine(uint8_t *sec0) {
 
 // 判断文件系统是不是 exFAT
 int is_exfat(uint8_t *sec0) {
-    exbs_t *bs = (exbs_t *)sec0;
+    exbs_t *bs = (exbs_t*)sec0;
 
     if ((0xeb != bs->jump[0]) || (0x76 != bs->jump[1]) || (0x90 != bs->jump[2])) {
         log("jump field not valid.\n");

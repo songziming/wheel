@@ -19,7 +19,7 @@ typedef struct rbtree {
 #define RB_RED      0
 #define RB_BLACK    1
 #define RB_COLOR(node)  ((size_t)    ((node)->parent_color &  1UL))
-#define RB_PARENT(node) ((rbnode_t *)((node)->parent_color & ~1UL))
+#define RB_PARENT(node) ((rbnode_t*)((node)->parent_color & ~1UL))
 
 void rb_init_root(rbnode_t *node);
 

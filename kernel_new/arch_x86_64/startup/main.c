@@ -65,7 +65,7 @@ INIT_TEXT void post_task_hwinit();
 static INIT_TEXT void mb1_parse_mmap(uint32_t mmap, uint32_t len) {
     int range_num = 0;
     for (uint32_t off = 0; off < len;) {
-        mb1_mmap_entry_t *ent = (mb1_mmap_entry_t *)(size_t)(mmap + off);
+        mb1_mmap_entry_t *ent = (mb1_mmap_entry_t*)(size_t)(mmap + off);
         off += ent->size + sizeof(ent->size);
         ++range_num;
     }
@@ -73,7 +73,7 @@ static INIT_TEXT void mb1_parse_mmap(uint32_t mmap, uint32_t len) {
     pmranges_alloc(range_num);
 
     for (uint32_t off = 0; off < len;) {
-        mb1_mmap_entry_t *ent = (mb1_mmap_entry_t *)(size_t)(mmap +off);
+        mb1_mmap_entry_t *ent = (mb1_mmap_entry_t*)(size_t)(mmap +off);
         off += ent->size + sizeof(ent->size);
 
         pmtype_t type = (MB1_MEMORY_AVAILABLE == ent->type)
@@ -84,7 +84,7 @@ static INIT_TEXT void mb1_parse_mmap(uint32_t mmap, uint32_t len) {
 }
 
 static INIT_TEXT void mb2_parse_mmap(void *tag) {
-    mb2_tag_mmap_t *mmap = (mb2_tag_mmap_t *)tag;
+    mb2_tag_mmap_t *mmap = (mb2_tag_mmap_t*)tag;
     uint32_t mmap_len = mmap->tag.size - sizeof(mb2_tag_mmap_t);
     int range_num = (int)(mmap_len / mmap->entry_size);
 
@@ -110,7 +110,7 @@ static INIT_TEXT void mb2_parse_mmap(void *tag) {
 //------------------------------------------------------------------------------
 
 static INIT_TEXT void mb1_init(uint32_t ebx) {
-    mb1_info_t *info = (mb1_info_t *)(size_t)ebx;
+    mb1_info_t *info = (mb1_info_t*)(size_t)ebx;
 
     if (MB1_INFO_MEM_MAP & info->flags) {
         mb1_parse_mmap(info->mmap_addr, info->mmap_length);
@@ -118,7 +118,7 @@ static INIT_TEXT void mb1_init(uint32_t ebx) {
 
     if (MB1_INFO_ELF_SHDR & info->flags) {
         mb1_elf_sec_tbl_t *elf = &info->elf;
-        void *tab = (void *)(size_t)elf->addr;
+        void *tab = (void*)(size_t)elf->addr;
         parse_kernel_symtab(tab, elf->size, elf->num, elf->shndx);
     }
 
@@ -138,11 +138,11 @@ static INIT_TEXT void mb1_init(uint32_t ebx) {
 
 static INIT_TEXT void mb2_init(uint32_t ebx) {
     size_t info = (size_t)ebx;
-    uint32_t total_size = *(uint32_t *)info;
+    uint32_t total_size = *(uint32_t*)info;
 
     uint32_t offset = 8;
     while (offset < total_size) {
-        mb2_tag_t *tag = (mb2_tag_t *)(info + offset);
+        mb2_tag_t *tag = (mb2_tag_t*)(info + offset);
         offset += (tag->size + 7) & ~7;
 
         switch (tag->type) {
@@ -155,12 +155,12 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
             mb2_parse_mmap(tag);
             break;
         case MB2_TAG_TYPE_ELF_SECTIONS: {
-            mb2_tag_elf_sections_t *elf = (mb2_tag_elf_sections_t *)tag;
+            mb2_tag_elf_sections_t *elf = (mb2_tag_elf_sections_t*)tag;
             parse_kernel_symtab(elf->sections, elf->entsize, elf->num, elf->shndx);
             break;
         }
         case MB2_TAG_TYPE_FRAMEBUFFER: {
-            mb2_tag_framebuffer_t *fb = (mb2_tag_framebuffer_t *)tag;
+            mb2_tag_framebuffer_t *fb = (mb2_tag_framebuffer_t*)tag;
             if (1 == fb->type && 32 == fb->bpp) {
                 g_is_graphical = 1;
                 framebuf_init(fb->height, fb->width, fb->pitch, fb->addr);
@@ -174,10 +174,10 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
             break;
         }
         case MB2_TAG_TYPE_ACPI_OLD:
-            g_rsdp = (size_t)((mb2_tag_old_acpi_t *)tag)->rsdp;
+            g_rsdp = (size_t)((mb2_tag_old_acpi_t*)tag)->rsdp;
             break;
         case MB2_TAG_TYPE_ACPI_NEW:
-            g_rsdp = (size_t)((mb2_tag_new_acpi_t *)tag)->rsdp;
+            g_rsdp = (size_t)((mb2_tag_new_acpi_t*)tag)->rsdp;
             break;
         default:
             break;
@@ -239,7 +239,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     }
     acpi_parse_rsdp(g_rsdp);
 
-    madt_t *madt = (madt_t *)acpi_table_find("APIC", 0);
+    madt_t *madt = (madt_t*)acpi_table_find("APIC", 0);
     if (NULL == madt) {
         log("fatal: MADT not found!\n");
         goto end;
@@ -326,7 +326,7 @@ static void root_proc() {
 
     // 将实模式代码复制到 1M 以下
     char *from = &_real_addr;
-    char *to = (char *)KERNEL_REAL_ADDR + DIRECT_MAP_ADDR;
+    char *to = (char*)KERNEL_REAL_ADDR + DIRECT_MAP_ADDR;
     memcpy(to, from, &_real_end - from);
 
     // 启动代码地址页号就是 startup-IPI 的向量号

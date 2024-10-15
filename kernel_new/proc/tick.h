@@ -3,7 +3,7 @@
 
 #include <library/dllist.h>
 
-typedef void (*timer_func_t)(void *, void *);
+typedef void (*timer_func_t)(void *, void*);
 
 typedef struct timer {
     dlnode_t    dl;

@@ -75,11 +75,11 @@ static CONST hpet_dev_t *g_hpet_devs = NULL;
 #define VAL_SET_CNF
 
 static uint64_t hpet_read(hpet_dev_t *dev, int reg) {
-    return *(volatile uint64_t *)(dev->base + reg);
+    return *(volatile uint64_t*)(dev->base + reg);
 }
 
 static void hpet_write(hpet_dev_t *dev, int reg, uint64_t val) {
-    *(volatile uint64_t *)(dev->base + reg) = val;
+    *(volatile uint64_t*)(dev->base + reg) = val;
 }
 
 
@@ -130,7 +130,7 @@ INIT_TEXT void hpet_init() {
 
     g_hpet_devs = early_alloc_rw(g_hpet_num * sizeof(hpet_dev_t));
     for (int i = 0; i < g_hpet_num; ++i) {
-        hpet_t *tbl = (hpet_t *)acpi_table_find("HPET", i);
+        hpet_t *tbl = (hpet_t*)acpi_table_find("HPET", i);
         hpet_dev_init(tbl, &g_hpet_devs[i]);
     }
 }

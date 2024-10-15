@@ -35,7 +35,7 @@ inline int cpu_int_depth() {
     return THISCPU_GET(g_int_depth);
 }
 
-void set_int_handler(int vec, void (*handler)(int, regs_t *)) {
+void set_int_handler(int vec, void (*handler)(int, regs_t*)) {
     g_handlers[vec] = handler;
 }
 
@@ -127,7 +127,7 @@ INIT_TEXT void int_init() {
         int *pdepth = percpu_ptr(i, &g_int_depth);
         void **pstack = percpu_ptr(i, &g_int_stack);
         *pdepth = 0;
-        *pstack = (void *)percpu_int_stack_top(i);
+        *pstack = (void*)percpu_int_stack_top(i);
     }
 
     // 在 IDT 里面填入 IST 编号

@@ -22,7 +22,7 @@ int def_strcmp(const char *s1, const char *s2) {
 
 void *def_memset(void *buf, int x, size_t n) {
     uint8_t v = x;
-    uint8_t *d = (uint8_t *)buf;
+    uint8_t *d = (uint8_t*)buf;
     for (; n > 0; ++d, --n) {
         *d = v;
     }
@@ -30,8 +30,8 @@ void *def_memset(void *buf, int x, size_t n) {
 }
 
 int def_memcmp(const void *s1, const void *s2, size_t n) {
-    const uint8_t *p1 = (const uint8_t *)s1;
-    const uint8_t *p2 = (const uint8_t *)s2;
+    const uint8_t *p1 = (const uint8_t*)s1;
+    const uint8_t *p2 = (const uint8_t*)s2;
     for (; n > 0; ++p1, ++p2, --n) {
         if (*p1 != *p2) {
             return (int)*p1 - (int)*p2;
@@ -42,8 +42,8 @@ int def_memcmp(const void *s1, const void *s2, size_t n) {
 
 // 类似 memcpy，不考虑内存重叠的情况
 void *def_memcpy(void *dst, const void *src, size_t n) {
-    uint8_t *d = (uint8_t *)dst;
-    const uint8_t *s = (const uint8_t *)src;
+    uint8_t *d = (uint8_t*)dst;
+    const uint8_t *s = (const uint8_t*)src;
 
     if (d == s) {
         return dst;

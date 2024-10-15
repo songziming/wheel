@@ -83,7 +83,7 @@ int main() {
     set_log_func(intercepted_log_func);
 
     size_t num = (size_t)(&__stop_testitems - &__start_testitems) / sizeof(testitem_t);
-    testitem_t *items = (testitem_t *)&__start_testitems;
+    testitem_t *items = (testitem_t*)&__start_testitems;
 
     // 统计 suite、test 名称字符串长度上限
     for (size_t i = 0; i < num; ++i) {

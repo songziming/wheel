@@ -302,7 +302,7 @@ size_t format(char *buf, size_t n, void (*func)(const char *, size_t), const cha
             }
             continue;
         case 's':
-            fmt_string(&ctx, va_arg(args, char *), flags, width, precision);
+            fmt_string(&ctx, va_arg(args, char*), flags, width, precision);
             ++fmt;
             continue;
         default:
