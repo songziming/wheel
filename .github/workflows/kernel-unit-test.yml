@@ -8,6 +8,9 @@ jobs:
   run-unit-test:
     runs-on: ubuntu-latest
     steps:
+      - name: install packages
+        run: sudo apt install -y libgtest-dev
+
       - name: cheskout repo
         uses: actions/checkout@v4
 
