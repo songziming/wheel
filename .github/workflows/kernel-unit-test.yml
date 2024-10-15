@@ -16,3 +16,5 @@ jobs:
 
       - name: run unit test
         run: build/test
+        env:
+          LD_LIBRARY_PATH: build

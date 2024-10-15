@@ -10,7 +10,8 @@ typedef struct item {
     int      priority;
 } item_t;
 
-// static item_t g_idle = { .priority = PRIORITY_IDLE };
+
+// TODO 可以替换成模板，不必两次包含文件
 
 
 static sched_list_arr_t g_arr;
