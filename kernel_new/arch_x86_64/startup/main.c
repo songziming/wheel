@@ -399,3 +399,8 @@ static INIT_TEXT NORETURN void ap_init(int index) {
         cpu_halt();
     }
 }
+
+int test_called_by_host() {
+    log("calling kernel from kernel\n");
+    return cpu_int_depth();
+}

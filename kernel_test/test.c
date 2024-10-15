@@ -65,10 +65,23 @@ static void run_test_case(testitem_t *item) {
 }
 
 
+// TODO 将测试中产生的输出保存下来？case 跑完再一起打印？
+static void intercepted_log_func(const char *s, size_t n) {
+    fprintf(stdout, "%.*s", (int)n, s);
+}
+
+
 // TODO 解析命令行，可以只运行某些 suite
 // TODO 解析环境变量 LLVM_PROFILE_FILE，设置输出文件位置
+#include <arch_intf.h>
+#include <devices/acpi.h>
+#include <library/debug.h>
+int test_called_by_host();
 
 int main() {
+    // 拦截内核的调试输出
+    set_log_func(intercepted_log_func);
+
     size_t num = (size_t)(&__stop_testitems - &__start_testitems) / sizeof(testitem_t);
     testitem_t *items = (testitem_t *)&__start_testitems;
 
@@ -94,6 +107,10 @@ int main() {
     fprintf(stdout, "\n");
     fprintf(stdout, "total success: %d\n", total_pass_cnt);
     fprintf(stdout, "total fail:    %d\n", total_fail_cnt);
+
+    acpi_table_find("ABCD", -123);
+    fprintf(stdout, "interrupt depth = %d\n", cpu_int_depth());
+    fprintf(stdout, "interrupt depth = %d\n", test_called_by_host());
 
     return total_fail_cnt;
 }
