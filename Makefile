@@ -4,7 +4,7 @@
 UNAME_S := $(shell uname -s)
 
 ifeq ($(UNAME_S),Darwin)
-    TOOLCHAIN=$(brew --prefix llvm)/bin/
+    TOOLCHAIN=$(shell brew --prefix llvm)/bin/
     GRUB_MKRESCUE=i686-elf-grub-mkrescue
 else
     GRUB_MKRESCUE=grub-mkrescue

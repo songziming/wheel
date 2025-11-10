@@ -1,10 +1,19 @@
 # 准备开发工具
 
-## macos
+## macos 开发环境准备
+
+Apple Silicon 开发 x86 os 也需要交叉编译器
 
 ~~~bash
+brew install gmake llvm lld pkgconf googletest
 brew install i686-elf-grub qemu gdb
-brew install llvm lld pkgconf googletest
+~~~
+
+macos 自带的 make 版本太老，许多特性都不支持，将 brew 安装的新版作为默认：
+
+~~~bash
+# 添加到 ~/.zshrc 末尾
+export PATH="/opt/homebrew/opt/make/libexec/gnubin:$PATH"
 ~~~
 
 ## 编译 llvm
