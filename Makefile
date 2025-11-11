@@ -43,13 +43,13 @@ UNIT_COV := $(OUT_DIR)/coverage
 
 # source files and objects
 KERNEL := kernel
-KDIRS  := core #lib mem
-AFILES := $(shell find $(KERNEL)/arch_$(ARCH) -name "*.S" -o -name "*.c")
-KFILES := $(shell find $(KDIRS:%=$(KERNEL)/%) -name "*.c")
+KDIRS  := arch_$(ARCH) core lib #mem
+# AFILES := $(shell find $(KERNEL)/arch_$(ARCH) -name "*.S" -o -name "*.c")
+KFILES := $(shell find $(KDIRS:%=$(KERNEL)/%) -name "*.S" -o -name "*.c")
 TFILES := $(shell find $(KDIRS:%=$(KERNEL)/%) -name "*.cc")
 
-KOBJS := $(patsubst $(KERNEL)/%,$(OUT_DIR)/%.ko,$(AFILES) $(KFILES))
-LOBJS := $(patsubst $(KERNEL)/%,$(OUT_DIR)/%.to,$(AFILES) $(KFILES))
+KOBJS := $(patsubst $(KERNEL)/%,$(OUT_DIR)/%.ko,$(KFILES))
+LOBJS := $(patsubst $(KERNEL)/%,$(OUT_DIR)/%.to,$(KFILES))
 TOBJS := $(patsubst $(KERNEL)/%,$(OUT_DIR)/%.to,$(TFILES))
 
 ALLOBJS := $(KOBJS) $(LOBJS) $(TOBJS)
@@ -61,11 +61,13 @@ OBJDEPS := $(patsubst %,%.d,$(ALLOBJS))
 # 编译链接选项
 #-------------------------------------------------------------------------------
 
-NOSTD := -ffreestanding -fno-builtin -nostdlib
-KINC := $(KDIRS:%=-I$(KERNEL)/%) -I$(KERNEL)/arch_$(ARCH)
+KINC   := $(KDIRS:%=-I$(KERNEL)/%)
+NOSTD  := -ffreestanding -fno-builtin -nostdlib
+GENCOV := -fprofile-instr-generate -fcoverage-mapping
+GENDEP  = -MT $@ -MMD -MP -MF $@.d
 
 # 内核编译选项，C & asm
-KCFLAGS := -c -std=c11 -target $(ARCH)-none-elf $(KINC)
+KCFLAGS := -c -std=c11 -target $(ARCH)-none-elf $(KINC) $(NOSTD)
 KCFLAGS += -ffunction-sections -fdata-sections -fstack-protector-strong
 KCFLAGS += -Wall -Wextra -Wshadow -Werror=implicit
 
@@ -73,22 +75,25 @@ KCFLAGS += -Wall -Wextra -Wshadow -Werror=implicit
 KLFLAGS := -T $(KERNEL)/arch_$(ARCH)/layout.ld -Map=$(OUT_MAP)
 KLFLAGS += -nostdlib --gc-sections --no-warnings
 
-# 单元测试编译选项，C & C++
-TCFLAGS := -c -g -DUNIT_TEST $(KINC)
-TCFLAGS += $(shell pkg-config --cflags gtest)
+# 内核库编译选项，生成单元测试用到的动态库，C & asm
+LCFLAGS := -c -std=c11 -g -fPIC -DUNIT_TEST $(KINC) $(NOSTD) $(GENCOV)
 
-ifeq ($(UNAME_S),Darwin)
-ALLOWUNDEF := -Wl,-undefined,dynamic_lookup,-flat_namespace
-else ifeq ($(UNAME_S),Linux)
-TCFLAGS += -fsanitize=address
-ALLOWUNDEF := -Wl,--allow-shlib-undefined -fsanitize=address
+# 内核库链接选项
+LLFLAGS := -shared $(GENCOV)
+
+# 单元测试代码的编译选项，C++
+TXFLAGS := -c -std=c++17 -g -DUNIT_TEST $(KINC)
+TXFLAGS += $(shell pkg-config --cflags gtest)
+
+# 允许 so 里面包含未定义的符号，不去调用就没有问题
+ifeq ($(UNAME_S),Linux)
+    LCFLAGS += -fsanitize=address
+    LLFLAGS += -fsanitize=address
+    TLFLAGS += -fsanitize=address
 endif
 
 # 单元测试链接选项
-TLFLAGS := $(shell pkg-config --libs gtest gtest_main)
-
-GENDEP = -MT $@ -MMD -MP -MF $@.d
-GENCOV := -fprofile-instr-generate -fcoverage-mapping
+TLIBS := $(shell pkg-config --libs gtest gtest_main)
 
 ifeq ($(DEBUG),1)
 	KCFLAGS += -DDEBUG -g -fno-omit-frame-pointer
@@ -103,7 +108,10 @@ include $(KERNEL)/arch_$(ARCH)/config.mk
 # 构建规则
 #-------------------------------------------------------------------------------
 
-.PHONY: elf iso unit cov clean loc
+.PHONY: dbg elf iso unit cov clean loc
+
+dbg:
+	@echo $(KFILES)
 
 elf: $(OUT_ELF)
 iso: $(OUT_ISO)
@@ -122,23 +130,23 @@ $(OBJDIRS):
 
 # 编译内核
 $(OUT_DIR)/%.S.ko: $(KERNEL)/%.S
-	$(KCC) $(KCFLAGS) $(KINC) $(NOSTD) $(GENDEP) -DS_FILE -o $@ $<
+	$(KCC) $(KCFLAGS) $(GENDEP) -DS_FILE -o $@ $<
 $(OUT_DIR)/%.c.ko: $(KERNEL)/%.c
-	$(KCC) $(KCFLAGS) $(KINC) $(NOSTD) $(GENDEP) -DC_FILE -o $@ $<
+	$(KCC) $(KCFLAGS) $(GENDEP) -DC_FILE -o $@ $<
 $(OUT_ELF): $(KOBJS)
 	$(KLD) $(KLFLAGS) -o $@ $^
 
 # 编译单元测试程序
 $(OUT_DIR)/%.S.to: $(KERNEL)/%.S
-	$(KCC) -std=c11 -fPIC $(TCFLAGS) $(NOSTD) $(GENCOV) $(GENDEP) -DS_FILE -o $@ $<
+	$(KCC) $(LCFLAGS) $(GENDEP) -DS_FILE -o $@ $<
 $(OUT_DIR)/%.c.to: $(KERNEL)/%.c
-	$(KCC) -std=c11 -fPIC $(TCFLAGS) $(NOSTD) $(GENCOV) $(GENDEP) -DC_FILE -o $@ $<
+	$(KCC) $(LCFLAGS) $(GENDEP) -DC_FILE -o $@ $<
 $(OUT_DIR)/%.cc.to: $(KERNEL)/%.cc
-	$(KXX) -std=c++17 $(TCFLAGS) $(GENDEP) -DC_FILE -o $@ $<
+	$(KXX) $(TXFLAGS) $(GENDEP) -DC_FILE -o $@ $<
 $(UNIT_LIB): $(LOBJS)
-	$(KCC) $(GENCOV) $(ALLOWUNDEF) -shared -o $@ $^
+	$(KCC) $(LLFLAGS) -o $@ $^
 $(UNIT_BIN): $(TOBJS) | $(UNIT_LIB)
-	$(KXX)  $(ALLOWUNDEF) -o $@ $^ -L$(OUT_DIR) -lwheel $(TLFLAGS)
+	$(KXX) $(TLFLAGS) -o $@ $^ -L$(OUT_DIR) -lwheel $(TLIBS)
 
 # 运行单元测试，生成代码覆盖率报告
 $(UNIT_RAW): $(UNIT_BIN) $(UNIT_LIB)
