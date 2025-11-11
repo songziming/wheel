@@ -1,5 +1,6 @@
 #include "multiboot1.h"
 #include "multiboot2.h"
+#include "arch_config.h"
 
 #define MB1_HEADER_FLAGS (MB1_HEADER_PAGE_ALIGN + MB1_HEADER_MEMORY_INFO)
 #define MB1_HEADER_CHECK (0 - MB1_HEADER_MAGIC - MB1_HEADER_FLAGS)
@@ -7,6 +8,8 @@
 #define MB2_HEADER_CHECK (0 - MB2_HEADER_MAGIC - MB2_ARCHITECTURE_I386 - MB2_HEADER_LEN)
 
 .global sys_boot
+.global sys_boot_ap
+.extern sys_init
 
 
 //------------------------------------------------------------------------------
@@ -81,20 +84,166 @@ gdtr64:
 .section ".boot.text", "ax"
 .code32
 
+// BSP（CPU0）从这里开始运行
 sys_boot:
-    cli
+    // 使用临时页表空间作为栈
+    movl    $pd3 + 0x1000, %esp
 
-    xorw    %ax, %ax
+    // 重置 eflags，关闭中断
+    pushl   $2
+    popfl
+
+    // 保存 multiboot magic（接下来要用到 eax，需要保存，但不会用到 ebx 和 ebp）
+    movl    %eax, %ebp
+
+    // 关分页
+    movl    %cr0, %eax
+    andl    $0x7fffffff, %eax
+    movl    %eax, %cr0
+
+    // 准备启动阶段的页表，包含三段地址映射：
+    //  1. 0~4G 映射到物理地址 0~4G
+    //  2. Canonical hole 之后的 4G 映射到物理地址 0~4G
+    //  3. 虚拟地址最后 2G 映射到物理地址 0~2G
+    // 使用 2M page，以节省页表大小
+
+    // 页表清零
+    movl    $pml4, %edi
+    movl    $0x7000, %ecx
+    xorl    %eax, %eax
+    rep stosb
+
+    // 准备 PML4
+    movl    $pml4, %edi
+    xorl    %edx, %edx
+    movl    $pdp0 + 3, (%edi, %edx, 8)  // pml4[0]   -> pdp0
+    movl    $256, %edx
+    movl    $pdp0 + 3, (%edi, %edx, 8)  // pml4[256] -> pdp0
+    movl    $511, %edx
+    movl    $pdp1 + 3, (%edi, %edx, 8)  // pml4[511] -> pdp1
+
+    // 准备第一张 PDP
+    movl    $pdp0, %edi
+    xorl    %edx, %edx
+    movl    $pd0 + 3, (%edi, %edx, 8)   // pdp0[0]   -> pd0
+    incl    %edx
+    movl    $pd1 + 3, (%edi, %edx, 8)   // pdp0[1]   -> pd1
+    incl    %edx
+    movl    $pd2 + 3, (%edi, %edx, 8)   // pdp0[2]   -> pd2
+    incl    %edx
+    movl    $pd3 + 3, (%edi, %edx, 8)   // pdp0[3]   -> pd3
+
+    // 准备第二张 PDP
+    movl    $pdp1, %edi
+    movl    $510, %edx
+    movl    $pd0 + 3, (%edi, %edx, 8)   // pdp1[510] -> pd0
+    movl    $511, %edx
+    movl    $pd1 + 3, (%edi, %edx, 8)   // pdp1[511] -> pd1
+
+    // 准备 4 张 PD
+    movl    $0x87, %eax
+    movl    $pd0, %edi
+    movl    $2048, %ecx
+.pde:
+    movl    %eax, (%edi)
+    addl    $0x200000, %eax
+    addl    $8, %edi
+    loop    .pde
+
+    movl    %ebp, %edi  // multiboot eax
+    movl    %ebx, %esi
+
+// AP 从这里开始运行
+sys_boot_ap:
+    // 加载临时页表
+    movl    $pml4, %eax
+    movl    %eax, %cr3
+
+    // 开启 PAE
+    movl    %cr4, %eax
+    orl     $1 << 5, %eax
+    movl    %eax, %cr4
+
+    // 开启 EFER.LME
+    movl    $0xc0000080, %ecx
+    rdmsr
+    orl     $1 << 8, %eax
+    wrmsr
+
+    // 开启分页，进入 long mode
+    movl    %cr0, %eax
+    orl     $1 << 31, %eax
+    movl    %eax, %cr0
+
+    // 此时处于 compatibility mode
+    // 加载新的 GDT，跳转到 64-bit 代码段，进入 64-bit mode
+    lgdt    gdtr64
+    ljmp    $8, $lower64
+1:
+    hlt
+    jmp     1b
+
+
+//------------------------------------------------------------------------------
+// 64-bit code in lower half
+//------------------------------------------------------------------------------
+
+.code64
+
+lower64:
+    movw    $16, %ax
     movw    %ax, %ds
     movw    %ax, %es
     movw    %ax, %fs
     movw    %ax, %gs
-
-    movw    %ax, %ds
-    movb    $'B', %al
-    movb    $0x1f, %ah
-    movl    $0xb8000, %edi
-    movw    %ax, (%edi)
-1:
+    movw    %ax, %ss
+    jmp     higher64
+2:
     hlt
-    jmp     1b
+    jmp     2b
+
+
+//------------------------------------------------------------------------------
+// 临时页表，lower-half
+//------------------------------------------------------------------------------
+
+.section ".boot.bss", "aw", @nobits
+
+.balign 0x1000
+pml4: .skip 0x1000
+pdp0: .skip 0x1000
+pdp1: .skip 0x1000
+pd0:  .skip 0x1000
+pd1:  .skip 0x1000
+pd2:  .skip 0x1000
+pd3:  .skip 0x1000
+
+
+//------------------------------------------------------------------------------
+// 64-bit mode，高地址
+//------------------------------------------------------------------------------
+
+.section ".init.text", "ax"
+.code64
+
+higher64:
+    // 使用 jmp 模拟 call，返回地址为零
+    // 此时 edi = multiboot magic，esi = multiboot info
+    movq    $init_stack_top, %rsp
+    pushq   $0
+    jmp     sys_init
+3:
+    hlt
+    jmp     3b
+
+
+//------------------------------------------------------------------------------
+// 初始化阶段使用的临时栈，开启调度之后弃用
+//------------------------------------------------------------------------------
+
+.section ".init.bss", "aw", @nobits
+
+.balign 16
+init_stack:
+    .skip   INIT_STACK_SIZE
+init_stack_top:

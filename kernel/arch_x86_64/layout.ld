@@ -6,6 +6,10 @@ ENTRY(sys_boot)
 
 PHDRS {
     boot        PT_LOAD;
+    init        PT_LOAD;
+    text        PT_LOAD;
+    rodata      PT_LOAD;
+    data        PT_LOAD;
 }
 
 /* NOLOAD section 必须位于 segment 末尾 */
@@ -21,6 +25,42 @@ SECTIONS {
 
     /* 后面的位于高地址 */
     . += TEXT_ADDR;
+
+    /* 初始化阶段的代码和数据 */
+    .init.text : AT(ADDR(.init.text) - TEXT_ADDR) { *(.init.text) } : init = 0x90
+    .init.data : AT(ADDR(.init.data) - TEXT_ADDR) { *(.init.data) } : init = 0
+    .init.bss (NOLOAD) : AT(ADDR(.init.bss) - TEXT_ADDR) { *(.init.bss) } : init
+    _init_end = .;
+
+    . += 4K;
+    .text ALIGN(4K) : AT(ADDR(.text) - TEXT_ADDR) {
+        _text_addr = .;
+        *(.text)
+        *(.text.*)
+        _text_end = .;
+    } : text = 0x90
+
+    . += 4K;
+    .rodata ALIGN(4K) : AT(ADDR(.rodata) - TEXT_ADDR) {
+        _rodata_addr = .;
+        *(.rodata)
+        *(.rodata.*)
+    } : rodata = 0
+    .rotail (NOLOAD) : AT(ADDR(.rotail) - TEXT_ADDR) {
+        *(.rotail)
+    } : rodata = 0
+
+    . += 4K;
+    .data ALIGN(4K) : AT(ADDR(.data) - TEXT_ADDR) {
+        _data_addr = .;
+        *(.data)
+        *(.data.*)
+    } : data
+    .bss (NOLOAD) : AT(ADDR(.bss) - TEXT_ADDR) {
+        *(.bss)
+        *(.bss.*)
+        *(.rwtail)
+    } : data
 
     /DISCARD/ : {
         *(.comment)

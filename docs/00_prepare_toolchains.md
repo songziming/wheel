@@ -16,6 +16,9 @@ macos 自带的 make 版本太老，许多特性都不支持，将 brew 安装�
 export PATH="/opt/homebrew/opt/make/libexec/gnubin:$PATH"
 ~~~
 
+使用 brew 安装的 llvm 只能用来开发 arm64，无法用于交叉编译 x86_64
+还是需要自己构建一套 llvm 工具链
+
 ## 编译 llvm
 
 ~~~bash

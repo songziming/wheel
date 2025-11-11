@@ -4,10 +4,10 @@
 UNAME_S := $(shell uname -s)
 
 ifeq ($(UNAME_S),Darwin)
-    TOOLCHAIN=$(shell brew --prefix llvm)/bin/
-    GRUB_MKRESCUE=i686-elf-grub-mkrescue
+# 	TOOLCHAIN=$(shell brew --prefix llvm)/bin/
+	GRUB_MKRESCUE=i686-elf-grub-mkrescue
 else
-    GRUB_MKRESCUE=grub-mkrescue
+	GRUB_MKRESCUE=grub-mkrescue
 endif
 
 
@@ -63,43 +63,37 @@ OBJDEPS := $(patsubst %,%.d,$(ALLOBJS))
 
 KINC   := $(KDIRS:%=-I$(KERNEL)/%)
 NOSTD  := -ffreestanding -fno-builtin -nostdlib
-GENCOV := -fprofile-instr-generate -fcoverage-mapping
+ASAN   := -fsanitize=address
+GENCOV := -fprofile-instr-generate -fcoverage-mapping -fdebug-compilation-dir $(KERNEL)
 GENDEP  = -MT $@ -MMD -MP -MF $@.d
 
-# 内核编译选项，C & asm
+# 内核编译选项，C & ASM
 KCFLAGS := -c -std=c11 -target $(ARCH)-none-elf $(KINC) $(NOSTD)
 KCFLAGS += -ffunction-sections -fdata-sections -fstack-protector-strong
 KCFLAGS += -Wall -Wextra -Wshadow -Werror=implicit
-
-# 内核链接选项
-KLFLAGS := -T $(KERNEL)/arch_$(ARCH)/layout.ld -Map=$(OUT_MAP)
-KLFLAGS += -nostdlib --gc-sections --no-warnings
-
-# 内核库编译选项，生成单元测试用到的动态库，C & asm
-LCFLAGS := -c -std=c11 -g -fPIC -DUNIT_TEST $(KINC) $(NOSTD) $(GENCOV)
-
-# 内核库链接选项
-LLFLAGS := -shared $(GENCOV)
-
-# 单元测试代码的编译选项，C++
-TXFLAGS := -c -std=c++17 -g -DUNIT_TEST $(KINC)
-TXFLAGS += $(shell pkg-config --cflags gtest)
-
-# 允许 so 里面包含未定义的符号，不去调用就没有问题
-ifeq ($(UNAME_S),Linux)
-    LCFLAGS += -fsanitize=address
-    LLFLAGS += -fsanitize=address
-    TLFLAGS += -fsanitize=address
-endif
-
-# 单元测试链接选项
-TLIBS := $(shell pkg-config --libs gtest gtest_main)
 
 ifeq ($(DEBUG),1)
 	KCFLAGS += -DDEBUG -g -fno-omit-frame-pointer
 else
 	KCFLAGS += -DNDEBUG -O2
 endif
+
+# 内核链接选项
+KLFLAGS := -T $(KERNEL)/arch_$(ARCH)/layout.ld -Map=$(OUT_MAP)
+KLFLAGS += -nostdlib --gc-sections --no-warnings
+
+# 内核库编译选项，生成单元测试用到的动态库，C & ASM
+LCFLAGS := -c -std=c11 -g -fPIC -DUNIT_TEST $(KINC) $(NOSTD) $(GENCOV) $(ASAN)
+
+# 内核库链接选项
+LLFLAGS := -shared $(GENCOV) $(ASAN)
+
+# 单元测试代码的编译选项，C++
+TXFLAGS := -c -std=c++17 -g -DUNIT_TEST $(KINC) $(ASAN)
+TXFLAGS += $(shell pkg-config --cflags gtest)
+
+# 单元测试链接选项
+TLFLAGS := $(shell pkg-config --libs gtest gtest_main) $(ASAN)
 
 include $(KERNEL)/arch_$(ARCH)/config.mk
 
@@ -146,7 +140,7 @@ $(OUT_DIR)/%.cc.to: $(KERNEL)/%.cc
 $(UNIT_LIB): $(LOBJS)
 	$(KCC) $(LLFLAGS) -o $@ $^
 $(UNIT_BIN): $(TOBJS) | $(UNIT_LIB)
-	$(KXX) $(TLFLAGS) -o $@ $^ -L$(OUT_DIR) -lwheel $(TLIBS)
+	$(KXX) $(TLFLAGS) -o $@ $^ -L$(OUT_DIR) -lwheel $(TLFLAGS)
 
 # 运行单元测试，生成代码覆盖率报告
 $(UNIT_RAW): $(UNIT_BIN) $(UNIT_LIB)
@@ -154,7 +148,7 @@ $(UNIT_RAW): $(UNIT_BIN) $(UNIT_LIB)
 $(UNIT_DAT): $(UNIT_RAW)
 	$(TOOLCHAIN)llvm-profdata merge -sparse $< -o $@
 cov: $(UNIT_DAT)
-	$(TOOLCHAIN)llvm-cov show $(UNIT_LIB) -instr-profile=$< -format=html -o $(UNIT_COV)
+	$(TOOLCHAIN)llvm-cov show $(UNIT_LIB) -compilation-dir . -instr-profile=$< -format=html -o $(UNIT_COV)
 
 -include $(OBJDEPS)
 
