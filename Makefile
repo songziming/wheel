@@ -43,14 +43,14 @@ UNIT_COV := $(OUT_DIR)/coverage
 
 # source files and objects
 KERNEL := kernel
-KDIRS  := arch_$(ARCH) core lib #mem
-# AFILES := $(shell find $(KERNEL)/arch_$(ARCH) -name "*.S" -o -name "*.c")
-KFILES := $(shell find $(KDIRS:%=$(KERNEL)/%) -name "*.S" -o -name "*.c")
-TFILES := $(shell find $(KDIRS:%=$(KERNEL)/%) -name "*.cc")
+KDIRS  := $(KERNEL)/arch_$(ARCH) core lib #mem
+AFILES := $(shell find $(KDIRS:%=$(KERNEL)/%) -name "*.S")
+CFILES := $(shell find $(KDIRS:%=$(KERNEL)/%) -name "*.c")
+XFILES := $(shell find $(KDIRS:%=$(KERNEL)/%) -name "*.cc")
 
-KOBJS := $(patsubst $(KERNEL)/%,$(OUT_DIR)/%.ko,$(KFILES))
-LOBJS := $(patsubst $(KERNEL)/%,$(OUT_DIR)/%.to,$(KFILES))
-TOBJS := $(patsubst $(KERNEL)/%,$(OUT_DIR)/%.to,$(TFILES))
+KOBJS := $(patsubst $(KERNEL)/%,$(OUT_DIR)/%.ko,$(AFILES) $(CFILES))
+LOBJS := $(patsubst $(KERNEL)/%,$(OUT_DIR)/%.to,$(CFILES))
+TOBJS := $(patsubst $(KERNEL)/%,$(OUT_DIR)/%.to,$(XFILES))
 
 ALLOBJS := $(KOBJS) $(LOBJS) $(TOBJS)
 OBJDIRS := $(sort $(dir $(ALLOBJS)))
@@ -105,7 +105,7 @@ include $(KERNEL)/arch_$(ARCH)/config.mk
 .PHONY: dbg elf iso unit cov clean loc
 
 dbg:
-	@echo $(KFILES)
+	@echo $(CFILES)
 
 elf: $(OUT_ELF)
 iso: $(OUT_ISO)
@@ -130,6 +130,9 @@ $(OUT_DIR)/%.c.ko: $(KERNEL)/%.c
 $(OUT_ELF): $(KOBJS)
 	$(KLD) $(KLFLAGS) -o $@ $^
 
+# 内核库，单元测试用，只包括 C 代码
+
+
 # 编译单元测试程序
 $(OUT_DIR)/%.S.to: $(KERNEL)/%.S
 	$(KCC) $(LCFLAGS) $(GENDEP) -DS_FILE -o $@ $<
@@ -140,7 +143,7 @@ $(OUT_DIR)/%.cc.to: $(KERNEL)/%.cc
 $(UNIT_LIB): $(LOBJS)
 	$(KCC) $(LLFLAGS) -o $@ $^
 $(UNIT_BIN): $(TOBJS) | $(UNIT_LIB)
-	$(KXX) $(TLFLAGS) -o $@ $^ -L$(OUT_DIR) -lwheel $(TLFLAGS)
+	$(KXX) -o $@ $^ -L$(OUT_DIR) -lwheel $(TLFLAGS)
 
 # 运行单元测试，生成代码覆盖率报告
 $(UNIT_RAW): $(UNIT_BIN) $(UNIT_LIB)

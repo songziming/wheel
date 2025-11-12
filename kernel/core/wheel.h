@@ -7,4 +7,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define WEAK __attribute__((weak))
+
 #endif // WHEEL_H
