@@ -1,3 +1,8 @@
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
 .vscode/
 /build*
 
@@ -6,6 +11,3 @@
 *.bak
 *.profraw
 *.profdata
-
-/*.img
-/*.lock

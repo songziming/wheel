@@ -1,15 +1,6 @@
 # build wheel kernel and unit test
 
 
-UNAME_S := $(shell uname -s)
-
-ifeq ($(UNAME_S),Darwin)
-# 	TOOLCHAIN=$(shell brew --prefix llvm)/bin/
-	GRUB_MKRESCUE=i686-elf-grub-mkrescue
-else
-	GRUB_MKRESCUE=grub-mkrescue
-endif
-
 
 
 # build settings
@@ -23,8 +14,21 @@ KCOV  ?= 1
 
 # toolchain
 KCC := $(TOOLCHAIN)clang
-KXX := $(TOOLCHAIN)clang++
-KLD := ld.lld
+KLD := $(TOOLCHAIN)ld.lld
+TCC := $(TOOLCHAIN)clang
+TXX := $(TOOLCHAIN)clang++
+
+# host-dependent tools
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+	GRUB_MKRESCUE=i686-elf-grub-mkrescue
+	LLVM_PROFDATA=xcrun llvm-profdata
+	LLVM_COV=xcrun llvm-cov
+else
+	GRUB_MKRESCUE=grub-mkrescue
+	LLVM_PROFDATA=llvm-profdata
+	LLVM_COV=llvm-cov
+endif
 
 # output dir and files
 OUT_DIR ?= build
@@ -43,7 +47,7 @@ UNIT_COV := $(OUT_DIR)/coverage
 
 # source files and objects
 KERNEL := kernel
-KDIRS  := $(KERNEL)/arch_$(ARCH) core lib #mem
+KDIRS  := arch_$(ARCH) core lib #mem
 AFILES := $(shell find $(KDIRS:%=$(KERNEL)/%) -name "*.S")
 CFILES := $(shell find $(KDIRS:%=$(KERNEL)/%) -name "*.c")
 XFILES := $(shell find $(KDIRS:%=$(KERNEL)/%) -name "*.cc")
@@ -71,7 +75,6 @@ GENDEP  = -MT $@ -MMD -MP -MF $@.d
 KCFLAGS := -c -std=c11 -target $(ARCH)-none-elf $(KINC) $(NOSTD)
 KCFLAGS += -ffunction-sections -fdata-sections -fstack-protector-strong
 KCFLAGS += -Wall -Wextra -Wshadow -Werror=implicit
-
 ifeq ($(DEBUG),1)
 	KCFLAGS += -DDEBUG -g -fno-omit-frame-pointer
 else
@@ -102,10 +105,7 @@ include $(KERNEL)/arch_$(ARCH)/config.mk
 # 构建规则
 #-------------------------------------------------------------------------------
 
-.PHONY: dbg elf iso unit cov clean loc
-
-dbg:
-	@echo $(CFILES)
+.PHONY: elf iso unit cov clean
 
 elf: $(OUT_ELF)
 iso: $(OUT_ISO)
@@ -113,9 +113,6 @@ unit: $(UNIT_BIN)
 
 clean:
 	rm -rf $(OUT_DIR)
-
-loc:
-	find $(KERNEL) -name "*.h" -o -name "*.c" -o -name "*.S" | xargs wc -l
 
 # 创建目标文件所在目录
 $(ALLOBJS) : | $(OBJDIRS)
@@ -130,28 +127,25 @@ $(OUT_DIR)/%.c.ko: $(KERNEL)/%.c
 $(OUT_ELF): $(KOBJS)
 	$(KLD) $(KLFLAGS) -o $@ $^
 
-# 内核库，单元测试用，只包括 C 代码
-
-
-# 编译单元测试程序
-$(OUT_DIR)/%.S.to: $(KERNEL)/%.S
-	$(KCC) $(LCFLAGS) $(GENDEP) -DS_FILE -o $@ $<
+# 内核库，单元测试用，只包括 C 代码，使用默认工具链
 $(OUT_DIR)/%.c.to: $(KERNEL)/%.c
-	$(KCC) $(LCFLAGS) $(GENDEP) -DC_FILE -o $@ $<
-$(OUT_DIR)/%.cc.to: $(KERNEL)/%.cc
-	$(KXX) $(TXFLAGS) $(GENDEP) -DC_FILE -o $@ $<
+	$(TCC) $(LCFLAGS) $(GENDEP) -DC_FILE -o $@ $<
 $(UNIT_LIB): $(LOBJS)
-	$(KCC) $(LLFLAGS) -o $@ $^
+	$(TXX) $(LLFLAGS) -o $@ $^
+
+# 编译单元测试程序，使用默认工具链
+$(OUT_DIR)/%.cc.to: $(KERNEL)/%.cc
+	$(TXX) $(TXFLAGS) $(GENDEP) -DC_FILE -o $@ $<
 $(UNIT_BIN): $(TOBJS) | $(UNIT_LIB)
-	$(KXX) -o $@ $^ -L$(OUT_DIR) -lwheel $(TLFLAGS)
+	$(TXX) -o $@ $^ -L$(OUT_DIR) -lwheel $(TLFLAGS)
 
 # 运行单元测试，生成代码覆盖率报告
 $(UNIT_RAW): $(UNIT_BIN) $(UNIT_LIB)
 	LLVM_PROFILE_FILE=$@ LD_LIBRARY_PATH=$(OUT_DIR) $<
 $(UNIT_DAT): $(UNIT_RAW)
-	$(TOOLCHAIN)llvm-profdata merge -sparse $< -o $@
+	$(LLVM_PROFDATA) merge -sparse $< -o $@
 cov: $(UNIT_DAT)
-	$(TOOLCHAIN)llvm-cov show $(UNIT_LIB) -compilation-dir . -instr-profile=$< -format=html -o $(UNIT_COV)
+	$(LLVM_COV) show $(UNIT_LIB) -compilation-dir . -instr-profile=$< -format=html -o $(UNIT_COV)
 
 -include $(OBJDEPS)
 
@@ -170,7 +164,6 @@ $(OUT_ISO): $(OUT_ELF)
 	GRUB_GFXMODE=auto
 	menuentry "wheel (multiboot 2, graphical)" {
 	    multiboot2 /wheel.elf
-	    # module2 /init.text option to init text
 	}
 	menuentry "wheel (multiboot 1)" {
 	    multiboot /wheel.elf
