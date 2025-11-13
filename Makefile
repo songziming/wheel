@@ -91,6 +91,13 @@ LCFLAGS := -c -std=c11 -g -fPIC -DUNIT_TEST $(KINC) $(NOSTD) $(GENCOV) $(ASAN)
 # 内核库链接选项
 LLFLAGS := -shared $(GENCOV) $(ASAN)
 
+# 允许内核库中出现未定义的符号
+ifeq ($(UNAME_S),Darwin)
+	LLFLAGS += -Wl,-undefined,dynamic_lookup,-flat_namespace
+else ifeq ($(UNAME_S),Linux)
+	LLFLAGS += -Wl,--allow-shlib-undefined -fsanitize=address
+endif
+
 # 单元测试代码的编译选项，C++
 TXFLAGS := -c -std=c++17 -g -DUNIT_TEST $(KINC) $(ASAN)
 TXFLAGS += $(shell pkg-config --cflags gtest)

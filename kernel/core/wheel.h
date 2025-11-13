@@ -7,6 +7,18 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define WEAK __attribute__((weak))
+#define WEAK        __attribute__((weak))
+
+#if defined(UNIT_TEST)
+    #define SECTION(x)
+    #define ASM(...)
+    #define ASMV(...)
+#else
+    #define SECTION(x)  __attribute__((section(x)))
+    #define ASM         __asm__
+    #define ASMV        __asm__ volatile
+#endif
+
+#define INIT_TEXT   SECTION(".init.text")
 
 #endif // WHEEL_H

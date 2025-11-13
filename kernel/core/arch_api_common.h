@@ -10,10 +10,10 @@
 uint8_t  atomic8_get_add(volatile uint8_t *ptr, uint8_t val);
 uint16_t atomic16_get_add(volatile uint16_t *ptr, uint16_t val);
 
-void atomic32_or(volatile uint32_t *ptr, uint32_t val);
 uint32_t atomic32_get(volatile uint32_t *ptr);
 uint32_t atomic32_get_set(volatile uint32_t *ptr, uint32_t val);
 uint32_t atomic32_get_add(volatile uint32_t *ptr, uint32_t val);
+void     atomic32_get_or (volatile uint32_t *ptr, uint32_t val);
 uint32_t atomic32_cmp_set(volatile uint32_t *ptr, uint32_t cmp, uint32_t val);
 
 uint64_t atomic64_get(volatile uint64_t *ptr);

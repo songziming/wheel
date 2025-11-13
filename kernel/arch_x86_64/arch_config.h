@@ -1,6 +1,11 @@
 #ifndef ARCH_X86_64_ARCH_CONFIG_H
 #define ARCH_X86_64_ARCH_CONFIG_H
 
+// 与 x86_64 平台相关的配置参数
+
+#define PAGE_SHIFT  12
+#define PAGE_SIZE   0x1000
+
 #define INIT_STACK_SIZE 0x1000
 
 #endif // ARCH_X86_64_ARCH_CONFIG_H
