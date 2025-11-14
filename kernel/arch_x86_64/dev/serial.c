@@ -8,9 +8,11 @@
 #define COM1_PORT 0x3f8
 #define BOCHS_PORT 0xe9 // Bochs 调试输出端口
 
-static spin_t g_serial_spin = SPIN_INIT;
+static spin_t g_serial_spin;
 
 INIT_TEXT void serial_init() {
+    spin_init(&g_serial_spin);
+
     out8(COM1_PORT + 1, 0x00);      // disable all interrupts
     out8(COM1_PORT + 3, 0x80);      // enable DLAB (set baud rate divisor)
     out8(COM1_PORT + 0, 0x03);      // set divisor to 3 (lo byte) 38400 baud

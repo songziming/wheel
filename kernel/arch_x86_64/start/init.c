@@ -4,6 +4,7 @@
 #include "multiboot2.h"
 
 #include <dev/serial.h>
+#include <dev/console.h>
 
 #include <kstring.h>
 
@@ -21,11 +22,11 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     }
 
     serial_init();
-    serial_puts(msg, kstrlen(msg));
+    console_init();
 
-    for (int i = 0; msg[i]; ++i) {
-        video[2*i] = msg[i];
-        video[2*i+1] = 0x1f;
-    }
+    size_t n = kstrlen(msg);
+    serial_puts(msg, n);
+    console_puts(msg, n);
+
     while (1) {}
 }

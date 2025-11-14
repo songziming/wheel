@@ -1,6 +1,10 @@
 #include "spin.h"
 #include <arch_api.h>
+#include <kstring.h>
 
+void spin_init(spin_t *spin) {
+    kmemset(spin, 0, sizeof(spin_t));
+}
 
 void raw_spin_take(spin_t *spin) {
     uint32_t ticket = atomic32_get_add(&spin->ticket_counter, 1);

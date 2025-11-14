@@ -8,8 +8,7 @@ typedef struct spin {
     uint32_t service_counter;
 } spin_t;
 
-#define SPIN_INIT ((spin_t){0,0})
-
+void spin_init(spin_t *spin);
 void raw_spin_take(spin_t *spin);
 void raw_spin_give(spin_t *spin);
 int  irq_spin_take(spin_t *spin);

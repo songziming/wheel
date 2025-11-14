@@ -19,6 +19,7 @@
     #define ASMV        __asm__ volatile
 #endif
 
+#define CONST       SECTION(".rodata")
 #define INIT_TEXT   SECTION(".init.text")
 
 #endif // WHEEL_H
