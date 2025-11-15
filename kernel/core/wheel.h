@@ -28,4 +28,12 @@
 #define INIT_TEXT   SECTION(".init.text")
 #define INIT_DATA   SECTION(".init.data")
 
+#ifndef offsetof
+#define offsetof(t,m) ((size_t)&((t*)0)->m)
+#endif
+
+#ifndef containerof
+#define containerof(p,t,m) ((t*)((size_t)(p) - offsetof(t,m)))
+#endif
+
 #endif // WHEEL_H

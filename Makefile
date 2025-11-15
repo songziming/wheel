@@ -152,7 +152,8 @@ $(UNIT_RAW): $(UNIT_BIN) $(UNIT_LIB)
 $(UNIT_DAT): $(UNIT_RAW)
 	$(LLVM_PROFDATA) merge -sparse $< -o $@
 cov: $(UNIT_DAT)
-	$(LLVM_COV) show $(UNIT_LIB) -compilation-dir . -instr-profile=$< -format=html -o $(UNIT_COV)
+	$(LLVM_COV) show $(UNIT_LIB) -compilation-dir . -instr-profile=$< \
+		-format=html -show-regions --show-branches=count -o $(UNIT_COV)
 
 -include $(OBJDEPS)
 

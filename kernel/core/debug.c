@@ -26,6 +26,12 @@ void logk(const char *fmt, ...) {
 
 void panic(const char *fmt, ...) {}
 
+// 断言失败
+void assertion_fail(const char *file, int line, const char *func) {
+    logk("Assertion fail: %s:%d func:%s\n", file, line, func);
+    // log_stacktrace();
+}
+
 
 //------------------------------------------------------------------------------
 // 栈溢出保护，编译选项 -fstack-protector

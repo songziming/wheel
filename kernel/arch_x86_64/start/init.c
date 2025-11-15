@@ -11,7 +11,7 @@
 #include <kstring.h>
 
 
-static INIT_DATA uint32_t g_fgcolor = 0;
+static INIT_DATA uint32_t g_fgcolor;
 static INIT_DATA size_t   g_rsdp;
 
 
@@ -84,13 +84,14 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     serial_init();
     g_log_func = serial_puts;
 
+    g_fgcolor = 0;
+    g_rsdp = 0;
     switch (eax) {
     case MB1_BOOTLOADER_MAGIC: mb1_init(ebx); break;
     case MB2_BOOTLOADER_MAGIC: mb2_init(ebx); break;
     }
 
     if (g_fgcolor) {
-        // graphics mode
         g_log_func = gui_log;
     } else {
         console_init();
