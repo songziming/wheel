@@ -12,6 +12,9 @@
 #define KERNEL_TEXT_ADDR    0xffffffff80000000UL // -2G
 #define DIRECT_MAP_ADDR     0xffff800000000000UL // 物理内存映射地址（共 16TB）
 
+// 预留空间大小
+#define EARLY_RO_SIZE   0x1000
+#define EARLY_RW_SIZE   0x400000    // 需要容纳framebuf
 #define INIT_STACK_SIZE 0x1000
 
 #endif // ARCH_X86_64_ARCH_CONFIG_H

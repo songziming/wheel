@@ -1,0 +1,43 @@
+#include "debug.h"
+#include <kstring.h>
+#include <format.h>
+
+log_func_t g_log_func = NULL;
+
+static void log_cb(void *user UNUSED, const char *s, size_t n) {
+    if (g_log_func) {
+        g_log_func(s, n);
+    }
+}
+
+void logk(const char *fmt, ...) {
+    char tmp[1024];
+
+    va_list args;
+    va_start(args, fmt);
+    format(tmp, sizeof(tmp), log_cb, NULL, fmt, args);
+    va_end(args);
+
+    // size_t n = kstrlen(fmt);
+    // if (g_log_func) {
+    //     g_log_func(fmt, n);
+    // }
+}
+
+void panic(const char *fmt, ...) {}
+
+
+//------------------------------------------------------------------------------
+// 栈溢出保护，编译选项 -fstack-protector
+//------------------------------------------------------------------------------
+
+#ifndef UNIT_TEST
+
+const uintptr_t __stack_chk_guard = 0x595e9fbd94fda766ULL;
+
+void __stack_chk_fail() {
+    logk("fatal: stack smashing detected\n");
+    // log_stacktrace();
+}
+
+#endif // UNIT_TEST

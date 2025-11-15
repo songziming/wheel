@@ -4,8 +4,8 @@
 #include <wheel.h>
 
 typedef struct spin {
-    uint32_t ticket_counter;
-    uint32_t service_counter;
+    atomic_uint ticket_counter;
+    atomic_uint service_counter;
 } spin_t;
 
 void spin_init(spin_t *spin);
