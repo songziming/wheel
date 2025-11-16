@@ -51,12 +51,6 @@ void DLListTest::TearDown() {
     }
 }
 
-// static ListItem *new_item(int val) {
-//     ListItem *item = new ListItem;
-//     item->val = val;
-//     return item;
-// }
-
 ListItem *DLListTest::push_head(ListItem *item) {
     EXPECT_FALSE(dl_contains(&head_, &item->dl));
     dl_insert_after(&item->dl, &head_);
