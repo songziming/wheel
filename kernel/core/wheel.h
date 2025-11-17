@@ -9,8 +9,11 @@
 #include <stdatomic.h>
 
 #define UNUSED      __attribute__((unused))
+#define PACKED      __attribute__((packed))
 #define PURE        __attribute__((pure))
 #define WEAK        __attribute__((weak))
+#define NORETURN    __attribute__((noreturn))
+#define MALLOC      __attribute__((malloc))
 #define PRINTF(s,a) __attribute__((format(printf,s,a)))
 #define ALIGNED(x)  __attribute__((aligned(x)))
 

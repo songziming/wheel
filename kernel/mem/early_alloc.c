@@ -1,4 +1,5 @@
 #include "early_alloc.h"
+#include "pmlayout.h"
 #include <arch_config.h>
 #include <debug.h>
 
@@ -35,9 +36,6 @@ static INIT_TEXT void *buff_alloc(buff_t *buff, size_t n) {
     return cur;
 }
 
-// TODO 调试模式下，记录每次调用 early_alloc 来自哪个函数哪一行，分配了多大空间
-//      这样可以清晰地看到 early-mem-map，方便后续优化
-
 INIT_TEXT void *early_alloc_ro(size_t n) {
     void *p = buff_alloc(&g_ro_buff, n);
     if (NULL == p) {
@@ -58,10 +56,10 @@ INIT_TEXT void *early_alloc_rw(size_t n) {
 
 // 将 early_rw 可分配范围延长到所在内存的上限
 INIT_TEXT void early_rw_unlock() {
-    // size_t pa = (size_t)g_rw_buff.ptr - KERNEL_TEXT_ADDR;
-    // pmrange_t *pmr = pmrange_at(pa);
-    // ASSERT(NULL != pmr);
-    // g_rw_buff.end = (uint8_t*)pmr->end + KERNEL_TEXT_ADDR;
+    size_t pa = (size_t)g_rw_buff.ptr - KERNEL_TEXT_ADDR;
+    pmrange_t *pmr = pmrange_at(pa);
+    ASSERT(NULL != pmr);
+    g_rw_buff.end = (uint8_t*)pmr->end + KERNEL_TEXT_ADDR;
 }
 
 // 禁用临时内存分配

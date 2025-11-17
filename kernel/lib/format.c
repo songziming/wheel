@@ -204,25 +204,23 @@ static void fmt_number(fmt_context_t *ctx, uint64_t abs, int base, uint32_t flag
 
 
 // 格式化字符串，返回完整输出字符串的长度（不含结尾的零）
-// 如果能完整地格式化，则返回0
-// 如果不能完整格式化（目标buf不够大），则返回值表示fmt前面多少字节已经完成格式化
-// 如果回调函数para为空，则最多打印n个字符到buf
+// 如果输出字符串超过 buf 长度，则会多次调用 func，每次传入一部分字符串
 size_t format(char *buf, size_t n, format_cb_t func, void *user, const char *fmt, va_list args) {
     if (NULL == fmt) {
         return 0;
     }
 
-    // 使用 NULL 会产生 UB，于是指向一块只读字节
-    static char dummy_buf = 0xbe;
+    // 使用 NULL 会产生 UB，于是指向一块局部变量
+    char dummy_buf[8] = {0};
+    if ((NULL == buf) || (0 == n)) {
+        buf = dummy_buf;
+        n   = sizeof(dummy_buf);
+        func = NULL;
+    }
 
     fmt_context_t ctx;
-    if ((NULL == buf) || (0 == n)) {
-        ctx.buf = &dummy_buf;
-        ctx.end = &dummy_buf;
-    } else {
-        ctx.buf = buf;
-        ctx.end = buf + n;
-    }
+    ctx.buf = buf;
+    ctx.end = buf + n;
     ctx.ptr = ctx.buf;
     ctx.len = 0;
     ctx.func = func;
@@ -393,7 +391,7 @@ size_t vsnprintk(char *buf, size_t n, const char *fmt, va_list args) {
     if (NULL != buf) {
         if (len < n) {
             buf[len] = '\0';
-        } else {
+        } else if (n > 0) {
             buf[n - 1] = '\0';
         }
     }

@@ -5,6 +5,10 @@
 #include <arch_config.h>
 #include <arch_api_common.h>
 
+
+int arch_unwind_from(size_t *addrs, int max, uint64_t rbp);
+int arch_unwind(size_t *addrs, int max);
+
 //------------------------------------------------------------------------------
 // inline assembly helpers
 //------------------------------------------------------------------------------

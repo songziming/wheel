@@ -1,4 +1,5 @@
 #include "debug.h"
+#include <arch_api.h>
 #include <kstring.h>
 #include <format.h>
 
@@ -26,10 +27,24 @@ void logk(const char *fmt, ...) {
 
 void panic(const char *fmt, ...) {}
 
+
+
+//------------------------------------------------------------------------------
+// 错误处理
+//------------------------------------------------------------------------------
+
+static void log_stacktrace() {
+    size_t frames[32];
+    int depth = arch_unwind(frames, 32);
+    for (int i = 0; i < depth; ++i) {
+        logk("  - %02d. 0x%zx\n", i, frames[i]);
+    }
+}
+
 // 断言失败
 void assertion_fail(const char *file, int line, const char *func) {
     logk("Assertion fail: %s:%d func:%s\n", file, line, func);
-    // log_stacktrace();
+    log_stacktrace();
 }
 
 
@@ -43,7 +58,7 @@ const uintptr_t __stack_chk_guard = 0x595e9fbd94fda766ULL;
 
 void __stack_chk_fail() {
     logk("fatal: stack smashing detected\n");
-    // log_stacktrace();
+    log_stacktrace();
 }
 
 #endif // UNIT_TEST

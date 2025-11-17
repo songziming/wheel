@@ -1,0 +1,107 @@
+// 检查 CPU 支持哪些功能，控制这些功能的启用
+
+#include "features.h"
+#include <kstring.h>
+#include <debug.h>
+
+
+#define VENDOR_INTEL "GenuineIntel"
+#define VENDOR_AMD   "AuthenticAMD"
+
+
+static CONST uint32_t g_vendor[3];
+static CONST uint8_t  g_cpu_model;
+static CONST uint8_t g_cpu_family;
+
+CONST uint32_t g_cpu_features;
+
+
+// 获取处理器功能开关
+// 参考 linux/arch/x86/boot/cpuflags.c, 函数 get_cpuflags(void)
+INIT_TEXT void cpu_features_detect() {
+    uint32_t a, c, d;
+    uint32_t g_max_eax;
+
+    // 获取 vendor string
+    ASMV("cpuid" : "=a"(g_max_eax), "=b"(g_vendor[0]), "=c"(g_vendor[2]), "=d"(g_vendor[1]) : "a"(0));
+
+    // basic information
+    g_cpu_features  = 0;
+    ASMV("cpuid" : "=a"(a), "=c"(c), "=d"(d) : "a"(1) : "ebx");
+    // g_cpu_stepping  =  a        & 0x0f;
+    g_cpu_model     = (a >>  4) & 0x0f;
+    g_cpu_family    = (a >>  8) & 0x0f;
+    // g_cpu_type      = (a >> 12) & 0x03;
+    // g_cpu_ex_model  = (a >> 16) & 0x0f;
+    // g_cpu_ex_family = (a >> 20) & 0xff;
+    g_cpu_features |= (c & (1U <<  5)) ? CPU_FEATURE_VMX    : 0;
+    g_cpu_features |= (c & (1U << 17)) ? CPU_FEATURE_PCID   : 0;
+    g_cpu_features |= (c & (1U << 21)) ? CPU_FEATURE_X2APIC : 0;
+    g_cpu_features |= (d & (1U <<  4)) ? CPU_FEATURE_TSC    : 0;
+    g_cpu_features |= (d & (1U << 28)) ? CPU_FEATURE_HT     : 0;
+    // if (g_cpu_features & CPU_FEATURE_HT) {
+    //     g_num_ids = (b >> 16) & 0xff;
+    // }
+
+    // extended function
+    ASMV("cpuid" : "=d"(d) : "a"(0x80000001) : "ebx", "ecx");
+    g_cpu_features |= (d & (1U << 20)) ? CPU_FEATURE_NX : 0;
+    g_cpu_features |= (d & (1U << 26)) ? CPU_FEATURE_1G : 0;
+
+    // thermal and power
+    ASMV("cpuid" : "=a"(a) : "a"(6) : "ebx", "ecx", "edx");
+    g_cpu_features |= (a & (1U <<  2)) ? CPU_FEATURE_ARAT     : 0;
+    g_cpu_features |= (a & (1U << 19)) ? CPU_FEATURE_FEEDBACK : 0;
+
+    // // core crystal clock
+    // ASMV("cpuid" : "=a"(a), "=b"(b), "=c"(c) : "a"(0x15) : "edx");
+    // g_core_freq = c;
+    // g_tsc_ratio[0] = b;
+    // g_tsc_ratio[1] = a;
+
+    // 获取各级缓存信息，获取方式与 vendor 有关
+    if (0 == kmemcmp(g_vendor, VENDOR_INTEL, 12)) {
+        // intel_get_cache_info();
+        // intel_get_topology();
+        // intel_detect_vmx();
+    } else if (0 == kmemcmp(g_vendor, VENDOR_AMD, 12)) {
+        // amd_get_cache_info();
+        // amd_detect_svm();
+    } else {
+        logk("unknown vendor name '%.12s'\n", g_vendor);
+    }
+}
+
+void cpu_features_show() {
+    logk("cpu info:\n");
+    logk("  - vendor: %.12s\n", (char*)g_vendor);
+
+    static const struct {
+        const char *name;
+        uint32_t mask;
+    } FEATS[] = {
+        { "pcid",     CPU_FEATURE_PCID      },
+        { "x2apic",   CPU_FEATURE_X2APIC    },
+        { "tsc",      CPU_FEATURE_TSC       },
+        { "ht",       CPU_FEATURE_HT        },
+        { "nx",       CPU_FEATURE_NX        },
+        { "pdpe1gb",  CPU_FEATURE_1G        },
+        { "arat",     CPU_FEATURE_ARAT      },
+        { "incpcid",  CPU_FEATURE_INVPCID   },
+        { "smep",     CPU_FEATURE_SMEP      },
+        { "smap",     CPU_FEATURE_SMAP      },
+        { "fsgsbase", CPU_FEATURE_FSGSBASE  },
+        { "feedback", CPU_FEATURE_FEEDBACK  },
+        { "vmx",      CPU_FEATURE_VMX       },
+        { "svm",      CPU_FEATURE_SVM       },
+    };
+    size_t nfeats = sizeof(FEATS) / sizeof(FEATS[0]);
+
+    logk("  - features:");
+    for (size_t i = 0; i < nfeats; ++i) {
+        if (g_cpu_features & FEATS[i].mask) {
+            logk(" %s", FEATS[i].name);
+        }
+    }
+    logk("\n");
+}

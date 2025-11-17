@@ -34,7 +34,9 @@ TEST(Fmt, Split) {
 
 // 验证格式化字符串长度计算
 TEST(Fmt, Length) {
+    char dest[8];
     EXPECT_EQ(6, snprintk(NULL, 0, "%d", 123456));
+    EXPECT_EQ(6, snprintk(dest, 0, "%d", 123456));
     EXPECT_EQ(8, snprintk(NULL, 0, "%8d", 123456));
     EXPECT_EQ(8, snprintk(NULL, 0, "%*d", 8, 123456));
     EXPECT_EQ(4, snprintk(NULL, 0, "%.4s", "hello"));
@@ -80,9 +82,15 @@ TEST(Fmt, String) {
     snprintk(buff, sizeof(buff), "hello %s.", "world");
     EXPECT_STREQ(buff, "hello world.");
 
+    // 测试 precision
+    snprintk(buff, sizeof(buff), "hello %.3s.", "world");
+    EXPECT_STREQ(buff, "hello wor.");
+    snprintk(buff, sizeof(buff), "hello %.7s.", "world");
+    EXPECT_STREQ(buff, "hello world.");
+
+    // 测试 width 和对齐方向
     snprintk(buff, sizeof(buff), "hello %7s.", "world");
     EXPECT_STREQ(buff, "hello   world.");
-
     snprintk(buff, sizeof(buff), "hello %-7s.", "world");
     EXPECT_STREQ(buff, "hello world  .");
 }
@@ -116,6 +124,8 @@ TEST(Fmt, Types) {
     cmp_print("10deadbeef", "%tx",  0x10deadbeefL);
     cmp_print("10deadbeef", "%lx",  0x10deadbeefL);
     cmp_print("10deadbeef", "%llx", 0x10deadbeefLL);
+    cmp_print("-10086",     "%d",   -10086);
+    cmp_print("-10086",     "%i",   -10086);
     cmp_print("-1",         "%hhd", 0x111111ff);
     cmp_print("-1",         "%hd",  0x1111ffff);
     cmp_print("-1",         "%jd",  (long)0xffffffffffffffffL);
