@@ -9,6 +9,7 @@
 #include <dev/framebuf.h>
 #include <cpu/features.h>
 #include <acpi/madt.h>
+#include <apic/apic.h>
 
 #include <debug.h>
 #include <kstring.h>
@@ -114,11 +115,6 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
     }
 }
 
-// TODO move to standalone file
-INIT_TEXT void parse_madt(madt_t *madt) {
-    logk("local apic base = %lx\n", madt->loapic_addr);
-}
-
 static INIT_TEXT void text_log(const char *s, size_t n) {
     serial_puts(s, n);
     console_puts(s, n);
@@ -134,6 +130,7 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     g_log_func = serial_puts;
 
     cpu_features_detect();
+    cpu_features_enable();
 
     // parse multiboot info
     g_fgcolor = 0;
@@ -169,6 +166,11 @@ void sys_init(uint32_t eax, uint32_t ebx) {
         goto end;
     }
     parse_madt(madt);
+
+    // 内存中的关键数据已备份，可以放开 early-rw 增长限制
+    early_rw_unlock();
+
+    // 创建正式的 gdt、idt
 
     pmlayout_show();
     cpu_features_show();

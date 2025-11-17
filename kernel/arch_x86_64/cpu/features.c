@@ -1,6 +1,7 @@
 // 检查 CPU 支持哪些功能，控制这些功能的启用
 
 #include "features.h"
+#include <arch_api.h>
 #include <kstring.h>
 #include <debug.h>
 
@@ -70,6 +71,46 @@ INIT_TEXT void cpu_features_detect() {
     } else {
         logk("unknown vendor name '%.12s'\n", g_vendor);
     }
+}
+
+// 开启功能开关
+INIT_TEXT void cpu_features_enable() {
+    // 设置 cr0
+    uint64_t cr0 = read_cr0();
+    cr0 |=  (1UL << 16); // WP 分页写保护
+    write_cr0(cr0);
+
+    // 设置 cr4
+    uint64_t cr4 = read_cr4();
+    cr4 |= 1UL << 2; // time stamp counter
+    cr4 |= 1UL << 5; // PAE（应该已经开启了）
+    cr4 |= 1UL << 7; // PGE 全局页（标记为 global 的页表项不会从 TLB 中清除）
+    if (CPU_FEATURE_FSGSBASE & g_cpu_features) {
+        cr4 |= 1UL << 16; // FSGSBASE 启用读写 fs.base、gs.base 的指令
+    }
+    if (CPU_FEATURE_PCID & g_cpu_features) {
+        cr4 |= 1UL << 17; // PCIDE 上下文标识符
+    }
+    if (CPU_FEATURE_SMEP & g_cpu_features) {
+        cr4 |= 1UL << 20; // SMEP
+    }
+    if (CPU_FEATURE_SMAP & g_cpu_features) {
+        cr4 |= 1UL << 21; // SMAP
+    }
+    write_cr4(cr4);
+
+    // 设置 efer
+    uint64_t efer = read_msr(MSR_EFER);
+    efer |= (1UL <<  0); // SCE，启用快速系统调用指令 syscall/sysret
+    if (CPU_FEATURE_NX & g_cpu_features) {
+        efer |= 1UL << 11;  // NXE
+    }
+    write_msr(MSR_EFER, efer);
+
+    // // 设置系统调用相关 MSR（只允许 64-bit 模式下的系统调用入口）
+    // write_msr(MSR_STAR, 0x001b0008UL << 32);    // STAR
+    // write_msr(MSR_LSTAR, (uint64_t)syscall_entry); // LSTAR
+    // write_msr(MSR_SFMASK, 0UL);                     // SFMASK
 }
 
 void cpu_features_show() {
