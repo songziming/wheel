@@ -121,14 +121,14 @@ enum {
 static inline uint64_t read_msr(uint32_t msr) {
     uint32_t hi;
     uint32_t lo;
-    ASM("rdmsr" : "=d"(hi), "=a"(lo) : "c"(msr));
+    ASMV("rdmsr" : "=d"(hi), "=a"(lo) : "c"(msr));
     return ((uint64_t)hi << 32) | lo;
 }
 
 static inline void write_msr(uint32_t msr, uint64_t val) {
     uint32_t hi = val >> 32;
     uint32_t lo = val & 0xffffffff;
-    ASM("wrmsr" :: "d"(hi), "a"(lo), "c"(msr));
+    ASMV("wrmsr" :: "d"(hi), "a"(lo), "c"(msr));
 }
 
 static inline uint64_t read_fsbase() { return read_msr(MSR_FSBASE); }
@@ -142,7 +142,7 @@ static inline void write_kgsbase(uint64_t val) { write_msr(MSR_KGSBASE, val); }
 static inline uint64_t read_tsc() {
     uint32_t hi;
     uint32_t lo;
-    ASM("rdtsc" : "=d"(hi), "=a"(lo));
+    ASMV("rdtsc" : "=d"(hi), "=a"(lo));
     return ((uint64_t)hi << 32) | lo;
 }
 

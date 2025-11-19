@@ -25,7 +25,17 @@ void logk(const char *fmt, ...) {
     // }
 }
 
-void panic(const char *fmt, ...) {}
+void panic(const char *fmt, ...) {
+    char tmp[1024];
+
+    va_list args;
+    va_start(args, fmt);
+    format(tmp, sizeof(tmp), log_cb, NULL, fmt, args);
+    va_end(args);
+
+    log_stacktrace();
+    cpu_halt();
+}
 
 
 

@@ -1,4 +1,5 @@
 #include "apic.h"
+#include <cpu/features.h>
 #include <early_alloc.h>
 #include <debug.h>
 
@@ -24,24 +25,16 @@ static CONST uint8_t  *g_gsi_modes = NULL; // 记录该中断的 polarity、trig
 #define GSI_MODE_HIGH 2 // active-high
 
 
-// 最大的 apicid，能否使用 4bit 表示，决定了我们能否使用 x2APIC
-// 如果无法对单个 CPU 发送 IPI，就必须 remap
-static INIT_DATA uint32_t g_max_apicid = 0;
-
-
 // 判断是否需要配置 interrupt remapper
 // TODO 该函数应该放在 apic_init.c
 INIT_TEXT int need_int_remap() {
     uint32_t max_apicid = 0;
-    for (int i = 0; i < g_loapic_num; ++i) {
-    }
-
     char not_physical = 0;  // 无法使用 physical 模式定位每个 CPU
     char not_logical = 0;   // 无法使用 logical 模式定位每个 CPU
     for (int i = 0; i < g_loapic_num; ++i) {
         uint32_t apicid = g_loapics[i].apic_id;
-        if (g_max_apicid < apicid) {
-            g_max_apicid = apicid;
+        if (max_apicid < apicid) {
+            max_apicid = apicid;
         }
         if (apicid >= 16) {
             not_physical = 1;
@@ -53,8 +46,9 @@ INIT_TEXT int need_int_remap() {
         }
     }
 
-    // cpu-id 超过了 255，无法使用 8-bit 表示
-    if (g_max_apicid >= 255) {
+    // apic-id 超过了 255，无法使用 8-bit 表示
+    // 某些 cpu 无法作为 IPI 目标，必然需要 remap
+    if (max_apicid >= 255) {
         return 1;
     }
 
@@ -89,10 +83,15 @@ INIT_TEXT void override_int(madt_int_override_t *tbl) {
 }
 
 
-// TODO move to standalone file
+// 解析 MADT，获取 apic 信息
 INIT_TEXT void parse_madt(madt_t *madt) {
     g_loapic_addr = (size_t)madt->loapic_addr;
     logk("local apic base = %zx\n", g_loapic_addr);
+
+    // 如果支持 x2APIC，则使用 MSR 操作 local APIC 寄存器
+    if (g_cpu_features & CPU_FEATURE_X2APIC) {
+        loapic_enable_x2();
+    }
 
     // 统计 local apic、io apic 个数，irq-gsi 映射表长度
     g_loapic_num = 0;

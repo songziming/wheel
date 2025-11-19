@@ -82,6 +82,7 @@ enum loapic_reg {
 // xAPIC 使用内存映射读写，每个寄存器地址按 16 字节对齐
 // 读写映射寄存器时，要注意内存屏障。编译器和 CPU 都可能重排序
 // volatile 可以防止编译器优化
+// xAPIC 寄存器映射在 un-cached 区域，读写这些寄存器不会乱序
 
 static uint32_t x_read(uint32_t reg) {
     ASSERT(REG_SELF_IPI != reg);
@@ -154,21 +155,30 @@ INIT_TEXT void loapic_init() {
     uint64_t msr_base = read_msr(IA32_APIC_BASE);
     if ((msr_base & LOAPIC_MSR_BASE) != g_loapic_addr) {
         logk("warning: Local APIC base different!\n");
-        msr_base &= LOAPIC_MSR_BASE;
+        msr_base &= ~LOAPIC_MSR_BASE;
         msr_base |= g_loapic_addr & LOAPIC_MSR_BASE;
     }
-    if (1) {
-        msr_base |= LOAPIC_MSR_BSP;
-    }
     msr_base |= LOAPIC_MSR_EN;
+    // if (1) {
+    //     msr_base |= LOAPIC_MSR_BSP;
+    // }
     write_msr(IA32_APIC_BASE, msr_base);
 
-    // 如果 CPU 支持，则启用 x2APIC
+    // 如果 CPU 支持，则启用 x2APIC（必须 enable 之后再启用 x2APIC，不能一步完成）
     // bochs bug，base 寄存器写两次，LDR 才能生效
     // https://github.com/bochs-emu/Bochs/pull/250
     if (g_cpu_features & CPU_FEATURE_X2APIC) {
         msr_base |= LOAPIC_MSR_EXTD;
         write_msr(IA32_APIC_BASE, msr_base);
         write_msr(IA32_APIC_BASE, msr_base);
+    }
+
+}
+
+void loapic_show() {
+    logk("local APICs:\n");
+    for (int i = 0; i < g_loapic_num; ++i) {
+        logk("  - apic-id: %u, processor-id: %u\n",
+            g_loapics[i].apic_id, g_loapics[i].processor_id);
     }
 }

@@ -170,10 +170,14 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     // 内存中的关键数据已备份，可以放开 early-rw 增长限制
     early_rw_unlock();
 
-    // 创建正式的 gdt、idt
+    // TODO 创建正式的 gdt、idt
+
+    // 初始化中断控制器
+    loapic_init();
 
     pmlayout_show();
     cpu_features_show();
+    loapic_show();
 
 end:
     while (1) {
