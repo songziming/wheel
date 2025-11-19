@@ -15,24 +15,26 @@ enum loapic_reg {
     REG_RRD         = 0x0c, // remote read
     REG_LDR         = 0x0d, // logical destination
     REG_DFR         = 0x0e, // destination format
-    REG_SVR         = 0x0f, // spurious interrupt
+    REG_SVR         = 0x0f, // spurious interrupt vector
     REG_ISR         = 0x10, // 8 in-service regs, 0x10~0x17
     REG_TMR         = 0x18, // 8 trigger mode regs, 0x18~0x1f
     REG_IRR         = 0x20, // 8 interrupt request regs, 0x20~0x27
     REG_ESR         = 0x28, // error status
-    REG_LVT_CMCI    = 0x2f, // LVT (CMCI)
-    REG_ICR_LO      = 0x30, // int-command-reg upper half
-    REG_ICR_HI      = 0x31, // int-command-reg lower half
+    REG_LVT_CMCI    = 0x2f, // LVT corrected machine check interrupt (CMCI)
+    REG_ICR_LO      = 0x30, // interrupt command reg upper half
+    REG_ICR_HI      = 0x31, // interrupt command reg lower half
     REG_LVT_TIMER   = 0x32, // LVT (timer)
     REG_LVT_THERMAL = 0x33, // LVT (thermal)
-    REG_LVT_PMC     = 0x34, // LVT (performance counter)
+    REG_LVT_PMC     = 0x34, // LVT (performance monitoring counters)
     REG_LVT_LINT0   = 0x35, // LVT (LINT0)
     REG_LVT_LINT1   = 0x36, // LVT (LINT1)
     REG_LVT_ERROR   = 0x37, // LVT (error)
     REG_TIMER_ICR   = 0x38, // timer initial count
     REG_TIMER_CCR   = 0x39, // timer current count
-    REG_TIMER_DIV   = 0x3e, // timer divide config
-    REG_SELF_IPI    = 0x3f,
+    REG_TIMER_DIV   = 0x3e, // timer divide configuration
+
+
+    REG_SELF_IPI    = 0x3f, // x2APIC only
 };
 
 // IA32_APIC_BASE msr

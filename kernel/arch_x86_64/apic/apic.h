@@ -32,6 +32,9 @@ INIT_TEXT void loapic_parse_x2(loapic_t *dst, const madt_lox2apic_t *tbl);
 
 // IO APIC
 extern int  g_ioapic_num;
+extern ioapic_t *g_ioapics;
+
+INIT_TEXT void ioapic_parse(ioapic_t *dst, const madt_ioapic_t *tbl);
 
 // init func
 INIT_TEXT void parse_madt(madt_t *madt);
