@@ -26,7 +26,8 @@ static CONST uint8_t  *g_gsi_modes = NULL; // 记录该中断的 polarity、trig
 
 
 // 判断是否需要配置 interrupt remapper
-// TODO 该函数应该放在 apic_init.c
+// 如果 local apic-id 超过了 8-bit，则无法在 IO APIC redirect entry 里表示
+// 要么只让 apic-id 小于 8-bit 的 CPU 处理外部中断，要么必须使用 interrupt remapper
 INIT_TEXT int need_int_remap() {
     uint32_t max_apicid = 0;
     char not_physical = 0;  // 无法使用 physical 模式定位每个 CPU

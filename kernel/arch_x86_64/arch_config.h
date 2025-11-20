@@ -17,4 +17,11 @@
 #define EARLY_RW_SIZE   0x400000    // 需要容纳framebuf
 #define INIT_STACK_SIZE 0x1000
 
+// 中断向量号
+#define VEC_GSI_BASE        0x40
+#define VEC_LOAPIC_TIMER    0xe0
+#define VEC_LOAPIC_ERROR    0xf0
+#define VEC_LOAPIC_THERMAL  0xf1
+#define VEC_LOAPIC_SPURIOUS 0xff    // spurious 向量号最后 4-bit 必须都是 1
+
 #endif // ARCH_X86_64_ARCH_CONFIG_H

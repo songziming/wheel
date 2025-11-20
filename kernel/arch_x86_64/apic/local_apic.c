@@ -173,6 +173,23 @@ INIT_TEXT void loapic_init() {
         write_msr(IA32_APIC_BASE, msr_base);
     }
 
+    // 设置 LDR、DFR，这两个寄存器用于发送 IPI 时指定目标
+    if (g_cpu_features & CPU_FEATURE_X2APIC) {
+        // x2APIC 使用 32-bit apic-ID
+    }
+
+    // 屏蔽中断向量号 0~31
+    g_write(REG_TPR, 16);
+
+    // 设置 LVT 向量号
+    g_write(REG_LVT_ERROR, VEC_LOAPIC_ERROR);
+    g_write(REG_LVT_THERMAL, VEC_LOAPIC_THERMAL);
+
+    // 设置 spurious interrupt，开启这个 Local APIC
+    g_write(REG_SVR, LOAPIC_SVR_ENABLE | VEC_LOAPIC_SPURIOUS);
+
+    // 丢弃已有中断
+    g_write(REG_EOI, 0);
 }
 
 void loapic_show() {

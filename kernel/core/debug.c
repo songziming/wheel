@@ -25,6 +25,15 @@ void logk(const char *fmt, ...) {
     // }
 }
 
+
+static void log_stacktrace() {
+    size_t frames[32];
+    int depth = arch_unwind(frames, 32);
+    for (int i = 0; i < depth; ++i) {
+        logk("  - %02d. 0x%zx\n", i, frames[i]);
+    }
+}
+
 void panic(const char *fmt, ...) {
     char tmp[1024];
 
@@ -42,14 +51,6 @@ void panic(const char *fmt, ...) {
 //------------------------------------------------------------------------------
 // 错误处理
 //------------------------------------------------------------------------------
-
-static void log_stacktrace() {
-    size_t frames[32];
-    int depth = arch_unwind(frames, 32);
-    for (int i = 0; i < depth; ++i) {
-        logk("  - %02d. 0x%zx\n", i, frames[i]);
-    }
-}
 
 // 断言失败
 void assertion_fail(const char *file, int line, const char *func) {
