@@ -33,8 +33,15 @@ INIT_TEXT void loapic_init();
 void loapic_show();
 
 // IO APIC
-extern int  g_ioapic_num;
+extern int       g_ioapic_num;
 extern ioapic_t *g_ioapics;
+extern uint8_t   g_irq_max;
+extern uint32_t  g_gsi_max;
+extern uint32_t *g_irq_to_gsi;
+extern uint8_t  *g_gsi_to_irq;
+extern uint8_t  *g_gsi_modes; // 记录该中断的 polarity、trigger level
+#define GSI_MODE_EDGE 1 // edge-triggered
+#define GSI_MODE_HIGH 2 // active-high
 
 INIT_TEXT void ioapic_parse(ioapic_t *dst, const madt_ioapic_t *tbl);
 

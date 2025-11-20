@@ -5,24 +5,6 @@
 
 
 
-CONST int    g_loapic_num;
-CONST size_t g_loapic_addr;
-CONST loapic_t *g_loapics;
-
-CONST int g_ioapic_num;
-CONST ioapic_t *g_ioapics;
-
-
-
-
-static CONST uint8_t   g_irq_max = 0;
-static CONST uint32_t  g_gsi_max = 0;
-
-static CONST uint32_t *g_irq_to_gsi = NULL;
-static CONST uint8_t  *g_gsi_to_irq = NULL;
-static CONST uint8_t  *g_gsi_modes = NULL; // 记录该中断的 polarity、trigger level
-#define GSI_MODE_EDGE 1 // edge-triggered
-#define GSI_MODE_HIGH 2 // active-high
 
 
 // 判断是否需要配置 interrupt remapper

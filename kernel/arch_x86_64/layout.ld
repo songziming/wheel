@@ -6,6 +6,7 @@ ENTRY(sys_boot)
 
 PHDRS {
     boot        PT_LOAD;
+    percpu      PT_LOAD;
     init        PT_LOAD;
     text        PT_LOAD;
     rodata      PT_LOAD;
@@ -25,6 +26,13 @@ SECTIONS {
 
     /* 后面的位于高地址 */
     . += TEXT_ADDR;
+
+    /* percpu 模板，会被复制多份（取决于 CPU 个数） */
+    _percpu_addr = .;
+    .percpu.data : AT(ADDR(.percpu.data) - TEXT_ADDR) { *(.percpu.data) } : percpu = 0x90
+    _percpu_data_end = .;
+    .percpu.bss (NOLOAD) : AT(ADDR(.percpu.bss) - TEXT_ADDR) { *(.percpu.bss) } : percpu
+    _percpu_bss_end = .;
 
     /* 初始化阶段的代码和数据 */
     .init.text : AT(ADDR(.init.text) - TEXT_ADDR) { *(.init.text) } : init = 0x90

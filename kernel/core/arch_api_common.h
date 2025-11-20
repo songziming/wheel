@@ -26,4 +26,6 @@
 // size_t atomic_get_add(volatile size_t *ptr, size_t val);
 // size_t atomic_cmp_set(volatile size_t *ptr, size_t cmp, size_t val);
 
+int cpu_count();
+
 #endif // ARCH_API_COMMON_H

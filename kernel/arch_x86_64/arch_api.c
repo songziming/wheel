@@ -1,4 +1,5 @@
 #include "arch_api.h"
+#include <apic/apic.h>
 
 
 // AMD64 栈结构（向下生长）：
@@ -28,4 +29,8 @@ int arch_unwind(size_t *addrs, int max) {
     uint64_t rbp;
     ASM("movq %%rbp, %0" : "=r"(rbp));
     return arch_unwind_from(addrs, max, rbp);
+}
+
+int cpu_count() {
+    return g_loapic_num;
 }

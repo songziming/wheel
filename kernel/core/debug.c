@@ -18,11 +18,6 @@ void logk(const char *fmt, ...) {
     va_start(args, fmt);
     format(tmp, sizeof(tmp), log_cb, NULL, fmt, args);
     va_end(args);
-
-    // size_t n = kstrlen(fmt);
-    // if (g_log_func) {
-    //     g_log_func(fmt, n);
-    // }
 }
 
 

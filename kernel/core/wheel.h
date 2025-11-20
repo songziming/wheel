@@ -30,6 +30,8 @@
 #define CONST       SECTION(".rodata")
 #define INIT_TEXT   SECTION(".init.text")
 #define INIT_DATA   SECTION(".init.data")
+#define PERCPU_DATA SECTION(".percpu.data")
+#define PERCPU_BSS  SECTION(".percpu.bss")
 
 #ifndef offsetof
 #define offsetof(t,m) ((size_t)&((t*)0)->m)

@@ -4,7 +4,16 @@
 #include <debug.h>
 
 
+
+CONST int    g_loapic_num;
+CONST size_t g_loapic_addr;
+CONST loapic_t *g_loapics;
+
+
+//------------------------------------------------------------------------------
 // local apic 寄存器编号
+//------------------------------------------------------------------------------
+
 enum loapic_reg {
     REG_ID          = 0x02, // local APIC id
     REG_VER         = 0x03, // local APIC version
