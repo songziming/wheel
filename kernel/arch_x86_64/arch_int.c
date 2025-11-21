@@ -34,8 +34,16 @@ typedef struct regs {
 } regs_t;
 
 
+static int irq_idx = 0;
+
 void handle_irq(int vec, regs_t *f) {
     logk("handling interrupt vec 0x%x\n", vec);
+    logk("rip=%lx rsp=%lx\n", f->rip, f->rsp);
+
+    if (++irq_idx < 5) {
+        return;
+    }
+
     while (1) {
         cpu_pause();
         cpu_halt();

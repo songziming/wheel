@@ -119,20 +119,26 @@ isr_\vec:
 // 应该使用 IST 机制，处理 double fault 使用专用栈
 // 这可以保证处理 double fault 不会溢出，不会引发 triple fault
 
+// 异常响应流程，不切换中断栈，不允许重入，不切换任务
+// 异常更像是被动的函数调用，无需保存 callee-save regs，因为调用 C 函数时会自动保存
 exception_stub:
-    // save_exp_regs       // 保存寄存器
-    // subq    $48, %rsp   // 跳过 6 个 callee-saved regs
+    save_exp_regs       // 保存寄存器，不含 callee-saved regs
+    subq    $48, %rsp   // 跳过 6 个 callee-saved regs
+    movq    %rax, %rdi  // 参数：向量号
+    movq    %rsp, %rsi  // 参数：寄存器文件
+    call    handle_irq  // 调用 C 函数，函数会自己保存 callee-saved regs
+    addq    $48, %rsp   // 跳过 6 个 callee-save regs
+    load_exp_regs       // 恢复寄存器
+    addq    $8, %rsp    // 跳过错误码
+    iretq
 
-    // movq    %rax, %rdi  // 参数：向量号
-    // movq    %rsp, %rsi  // 参数：寄存器文件
-    // retq
-
+// 中断响应流程，需要切换中断栈，允许重入，可能切换任务
+// 需要保存全部寄存器（不含浮点寄存器）
 interrupt_stub:
-    save_int_regs       // 保存所有寄存器
+    save_int_regs       // 保存所有寄存器，包括 callee-saved regs
     movq    %rax, %rdi  // 参数：向量号
     movq    %rsp, %rsi  // 参数：当前栈顶
     call    handle_irq  // 调用 C 函数处理中断
-
-    load_int_regs
-    addq    $8, %rsp        // 跳过错误码
+    load_int_regs       // 恢复所有寄存器
+    addq    $8, %rsp    // 跳过错误码
     iretq
