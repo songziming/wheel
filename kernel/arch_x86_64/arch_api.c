@@ -1,5 +1,6 @@
 #include "arch_api.h"
-#include <apic/apic.h>
+#include "apic/apic.h"
+#include "mem/mem.h"
 
 
 // AMD64 栈结构（向下生长）：
@@ -31,6 +32,15 @@ int arch_unwind(size_t *addrs, int max) {
     return arch_unwind_from(addrs, max, rbp);
 }
 
+
+//------------------------------------------------------------------------------
+// SMP
+//------------------------------------------------------------------------------
+
 int cpu_count() {
     return g_loapic_num;
+}
+
+void *percpu_ptr(int idx, void *ptr) {
+    return (uint8_t*)ptr + g_percpu_base + g_percpu_step * idx;
 }
