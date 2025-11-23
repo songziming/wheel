@@ -11,6 +11,7 @@
 #include <cpu/gdt_idt_tss.h>
 #include <acpi/madt.h>
 #include <apic/apic.h>
+#include <mem/mem.h>
 
 #include <debug.h>
 #include <kstring.h>
@@ -114,22 +115,6 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
             break;
         }
     }
-}
-
-
-// defined in percpu.c
-INIT_TEXT size_t percpu_init(size_t va);
-
-// 初始化内存布局，规划内核虚拟地址空间
-INIT_TEXT void mem_init() {
-    // 不再使用 early-alloc
-    size_t ro_end = (size_t)early_alloc_ro(0);
-    size_t rw_end = (size_t)early_alloc_rw(0);
-    early_alloc_disable();
-    logk("ro_end=0x%lx, rw_end=0x%lx\n", ro_end, rw_end);
-
-    // 内核结尾部分用作 percpu
-    rw_end = percpu_init(rw_end);
 }
 
 static INIT_TEXT void text_log(const char *s, size_t n) {

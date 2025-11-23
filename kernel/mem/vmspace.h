@@ -20,5 +20,6 @@ typedef struct vmspace {
 void vmspace_init(vmspace_t *space);
 vmrange_t *vmspace_find(vmspace_t *space, size_t addr);
 void vmspace_insert(vmspace_t *space, vmrange_t *rng);
+void vmspace_show(vmspace_t *space);
 
 #endif // VMSPACE_H

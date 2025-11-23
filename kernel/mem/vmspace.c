@@ -42,3 +42,10 @@ void vmspace_insert(vmspace_t *space, vmrange_t *rng) {
 
     dl_insert_before(&rng->dl, node);
 }
+
+void vmspace_show(vmspace_t *space) {
+    for (dlnode_t *i = space->head.next; &space->head != i; i = i->next) {
+        vmrange_t *rng = containerof(i, vmrange_t, dl);
+        logk("  - vm 0x%016zx~0x%016zx %s\n", rng->vaddr, rng->vend, rng->desc);
+    }
+}
