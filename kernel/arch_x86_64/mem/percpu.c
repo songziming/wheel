@@ -30,7 +30,7 @@ CONST size_t g_percpu_base = 0; // 首个 percpu 区域的偏移量，跳过 gap
 CONST size_t g_percpu_step = 0; // 相邻两个 percpu 的起始地址的距离
 
 
-// percpu (sub)sections
+// percpu ranges
 static PERCPU_BSS vmrange_t g_percpu_vars; // data + bss
 static PERCPU_BSS vmrange_t g_percpu_nmi;  // NMI IST
 static PERCPU_BSS vmrange_t g_percpu_df;   // #DF IST
@@ -43,7 +43,9 @@ static PERCPU_BSS vmrange_t g_percpu_int;  // int stack
 
 // 返回结束地址，包括 guard page，对齐到页
 static INIT_TEXT size_t percpu_add(int cpu, vmrange_t *rng, size_t addr, size_t size, const char *desc) {
-    return kspace_add(PERCPU(cpu, rng), addr, size, desc) + PAGE_SIZE;
+    size_t end = addr + size;
+    kspace_add(PERCPU(cpu, rng), addr, end, desc);
+    return end + PAGE_SIZE;
 }
 
 
@@ -77,12 +79,12 @@ INIT_TEXT size_t percpu_init(size_t va) {
     for (int i = 0; i < ncpu; ++i) {
         kmemcpy((uint8_t*)va, &_percpu_addr, copy_size); // 复制 percpu data
         kmemset((uint8_t*)va + copy_size, 0, zero_size); // percpu bss 清零
-        va = percpu_add(i, &g_percpu_vars, va, vars_size,      "percpu data");
-        va = percpu_add(i, &g_percpu_nmi,  va, INT_STACK_SIZE, "percpu NMI");
-        va = percpu_add(i, &g_percpu_pf,   va, INT_STACK_SIZE, "percpu #PF");
-        va = percpu_add(i, &g_percpu_df,   va, INT_STACK_SIZE, "percpu #DF");
-        va = percpu_add(i, &g_percpu_mc,   va, INT_STACK_SIZE, "percpu #MC");
-        va = percpu_add(i, &g_percpu_int,  va, INT_STACK_SIZE, "percpu int stack");
+        va = percpu_add(i, &g_percpu_vars, va, vars_size,      "smp data");
+        va = percpu_add(i, &g_percpu_nmi,  va, INT_STACK_SIZE, "smp NMI");
+        va = percpu_add(i, &g_percpu_pf,   va, INT_STACK_SIZE, "smp #PF");
+        va = percpu_add(i, &g_percpu_df,   va, INT_STACK_SIZE, "smp #DF");
+        va = percpu_add(i, &g_percpu_mc,   va, INT_STACK_SIZE, "smp #MC");
+        va = percpu_add(i, &g_percpu_int,  va, INT_STACK_SIZE, "smp int stack");
     }
 
     return va;
