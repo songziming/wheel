@@ -3,6 +3,7 @@
 #include <vmspace.h>
 #include <pmlayout.h>
 #include <early_alloc.h>
+#include <page.h>
 #include <debug.h>
 
 
@@ -26,6 +27,7 @@ static vmrange_t g_kernel_data;
 
 
 
+// 记录一段虚拟地址范围
 INIT_TEXT void kspace_add(vmrange_t *rng, size_t va, size_t end, const char *desc) {
     va += PAGE_SIZE - 1;
     va &= ~(PAGE_SIZE - 1);
@@ -35,18 +37,22 @@ INIT_TEXT void kspace_add(vmrange_t *rng, size_t va, size_t end, const char *des
     vmspace_insert(&g_kernel_vm, rng);
 }
 
-static void pages_add(size_t start, size_t end) {
-    start +=   PAGE_SIZE - 1;
-    start &= ~(PAGE_SIZE - 1);
-    end   &= ~(PAGE_SIZE - 1);
-    if (start < end) {
-        logk("  + usable pages 0x%lx~0x%lx\n");
-    }
-}
-
 
 // 初始化内存布局，规划内核虚拟地址空间
 INIT_TEXT void mem_init() {
+    // 找出物理内存的结束地址
+    size_t pa_end = 0;
+    for (int i = g_pmrange_num - 1; i >= 0; --i) {
+        pmtype_t type = g_pmranges[i].type;
+        if ((PM_AVAILABLE == type) || (PM_RECLAIMABLE == type)) {
+            pa_end = g_pmranges[i].end;
+            break;
+        }
+    }
+
+    // 1M 以下属于 low-mem，不可分配
+    page_init(0x100000, pa_end);
+
     // 不再使用 early-alloc
     size_t ro_end = (size_t)early_alloc_ro(0);
     size_t rw_end = (size_t)early_alloc_rw(0);
@@ -54,8 +60,6 @@ INIT_TEXT void mem_init() {
 
     // 记录内核的虚拟地址空间布局
     vmspace_init(&g_kernel_vm);
-
-    // 把内核地址空间布局记录下来
     size_t init_addr = KERNEL_TEXT_ADDR + KERNEL_LOAD_ADDR;
     kspace_add(&g_kernel_init, init_addr, (size_t)&_init_end, "init");
     kspace_add(&g_kernel_text, (size_t)&_text_addr, (size_t)&_text_end, "text");
@@ -79,14 +83,6 @@ INIT_TEXT void mem_init() {
 
         size_t start = g_pmranges[i].start;
         size_t end   = g_pmranges[i].end;
-
-        // 跳过 1M 以下的 low mem
-        if (start < 0x100000) {
-            start = 0x100000;
-        }
-        if (start >= end) {
-            continue;
-        }
 
         // 内核必然完整包含于一段 pmrange
         if ((start <= KERNEL_LOAD_ADDR) && (kend <= end)) {
