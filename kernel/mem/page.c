@@ -14,6 +14,121 @@ CONST page_t *g_pages;
 static pglist_t g_blocks[RANK_NUM];
 
 
+//------------------------------------------------------------------------------
+// 块操作函数
+//------------------------------------------------------------------------------
+
+// // 返回块大小
+// uint32_t blk_size(uint32_t pfn) {
+//     ASSERT(pfn >= g_page_start);
+//     ASSERT(pfn < g_page_end);
+//     ASSERT(g_pages[pfn].head);
+//     return 1U << g_pages[pfn].rank;
+// }
+
+
+
+//------------------------------------------------------------------------------
+// 页块链表
+//------------------------------------------------------------------------------
+
+void pglist_push_tail(pglist_t *pl, uint32_t blk) {
+    uint32_t tail = pl->tail;
+    pl->tail = blk;
+
+    g_pages[blk].prev = tail;
+    g_pages[blk].next = 0;
+
+    if (0 == tail) {
+        pl->head = blk;
+    } else {
+        g_pages[tail].next = blk;
+    }
+}
+
+void pglist_push_head(pglist_t *pl, uint32_t blk) {
+    uint32_t head = pl->head;
+    pl->head = blk;
+
+    g_pages[blk].prev = 0;
+    g_pages[blk].next = head;
+
+    if (0 == head) {
+        pl->tail = blk;
+    } else {
+        g_pages[head].prev = blk;
+    }
+}
+
+void pglist_remove(pglist_t *pl, uint32_t blk) {
+    uint32_t prev = g_pages[blk].prev;
+    uint32_t next = g_pages[blk].next;
+
+    if (prev) {
+        g_pages[prev].next = next;
+    } else {
+        pl->head = next;
+    }
+    if (next) {
+        g_pages[next].prev = prev;
+    } else {
+        pl->tail = prev;
+    }
+}
+
+
+//------------------------------------------------------------------------------
+// 物理页块级别的分配释放
+//------------------------------------------------------------------------------
+
+// 释放一个页块
+static void block_free_nolock(uint32_t blk) {
+    ASSERT(blk >= g_page_start);
+    ASSERT(blk < g_page_end);
+    ASSERT(g_pages[blk].head);
+
+    // 不断检查伙伴块，如果也是 free，则不断合并为更大的块
+    uint32_t rank = g_pages[blk].rank;
+    for (; rank < RANK_NUM; ++rank) {
+        uint32_t sib = blk ^ (1U << rank); // 伙伴块地址
+
+        // 检查能否合并
+        if ((sib < g_page_start)
+        ||  (sib >= g_page_end)
+        ||  (0 == g_pages[sib].head)
+        ||  (rank != g_pages[sib].rank)
+        ||  (PT_FREE != g_pages[sib].type)) {
+            break;
+        }
+
+        // 将伙伴块从 free-list 中移除，合并为更大的块
+        pglist_remove(&g_blocks[rank], sib);
+        g_pages[blk | sib].head = 0; // 后一个块
+        g_pages[blk & sib].rank++;   // 前一个块
+        blk &= sib;
+    }
+
+    // 已经合并到最大，标记为 FREE
+    g_pages[blk].type = PT_FREE;
+    pglist_push_head(&g_blocks[rank], blk);
+}
+
+// 分配一个页块，起始页号必须是 N*period+phase
+// 限制起始页号可以实现页面着色，优化缓存性能
+static uint32_t block_alloc_nolock(uint32_t rank, uint32_t period, uint32_t phase, uint32_t type) {
+    // 不断寻找大小足够的块，将更大的块拆分
+    for (uint32_t rk = rank; rk < RANK_NUM; ++rk) {
+        // 检查相对于这个级别 block 的偏移
+        uint32_t blk_phase = phase & ~((1U << rk) - 1);
+
+        // 遍历本层的 free blocks，寻找
+    }
+
+    return 0U;
+}
+
+
+
 // 分配页描述符数组
 INIT_TEXT void page_init(size_t pa_start, size_t pa_end) {
     pa_start >>= PAGE_SHIFT;

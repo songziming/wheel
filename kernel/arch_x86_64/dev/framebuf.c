@@ -20,6 +20,8 @@ static CONST uint32_t g_rows  = 0;  // 屏幕高度（单位：像素）
 static CONST uint32_t g_cols  = 0;  // 屏幕宽度（单位：像素）
 static CONST uint64_t g_pitch = 0;  // 一行多少字节，可能不是整数个像素
 
+// framebuf 的页表映射应该使用 WC (Write-Combining)
+
 static CONST uint8_t *g_addr = NULL; // framebuffer 映射的虚拟地址
 static CONST uint8_t *g_back = NULL; // 离屏缓冲区
 

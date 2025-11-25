@@ -75,6 +75,7 @@ static INIT_TEXT void mb1_init(uint32_t ebx) {
             g_fgcolor  = ((1U << info->r_size) - 1) << info->r_shift;
             g_fgcolor |= ((1U << info->g_size) - 1) << info->g_shift;
             g_fgcolor |= ((1U << info->b_size) - 1) << info->b_shift;
+            logk("framebuf mapped at 0x%lx\n", info->fb_addr);
             framebuf_init(info->fb_height, info->fb_width, info->fb_pitch, info->fb_addr);
         }
     }
@@ -101,6 +102,7 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
                 g_fgcolor  = ((1U << fb->r_size) - 1) << fb->r_shift;
                 g_fgcolor |= ((1U << fb->g_size) - 1) << fb->g_shift;
                 g_fgcolor |= ((1U << fb->b_size) - 1) << fb->b_shift;
+                logk("framebuf mapped at 0x%lx\n", fb->addr);
                 framebuf_init(fb->height, fb->width, fb->pitch, fb->addr);
             }
             break;
