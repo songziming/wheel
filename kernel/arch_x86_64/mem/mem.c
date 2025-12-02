@@ -93,6 +93,6 @@ INIT_TEXT void mem_init() {
         }
     }
 
-    logk("kernel vmspace layout:\n");
-    vmspace_show(&g_kernel_vm);
+    // logk("kernel vmspace layout:\n");
+    // vmspace_show(&g_kernel_vm);
 }

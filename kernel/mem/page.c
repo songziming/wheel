@@ -194,20 +194,22 @@ INIT_TEXT void page_init(size_t pa_start, size_t pa_end) {
         return;
     }
 
+    spin_init(&g_page_spin);
+
     g_page_start = (uint32_t)pa_start;
     g_page_end = (uint32_t)pa_end;
     uint32_t page_num = g_page_end - g_page_start;
     g_pages = early_alloc_rw(page_num * sizeof(page_t));
+    kmemset(g_pages, 0, page_num * sizeof(page_t));
     g_pages -= g_page_start;
 
-    kmemset(g_pages, 0, page_num * sizeof(page_t));
     kmemset(g_blocks, 0, sizeof(g_blocks));
 }
 
 INIT_TEXT void pages_add(size_t start, size_t end) {
-    start +=   PAGE_SIZE - 1;
-    start &= ~(PAGE_SIZE - 1);
-    end   &= ~(PAGE_SIZE - 1);
+    start += PAGE_SIZE - 1;
+    start >>= PAGE_SHIFT;
+    end   >>= PAGE_SHIFT;
 
     if (start < g_page_start) {
         start = g_page_start;
@@ -215,8 +217,29 @@ INIT_TEXT void pages_add(size_t start, size_t end) {
     if (end > g_page_end) {
         end = g_page_end;
     }
-
-    if (start < end) {
-        logk("  + usable pages 0x%lx~0x%lx\n");
+    if (start >= end) {
+        return;
     }
+
+    int key = irq_spin_take(&g_page_spin);
+
+    // 这一段内存不一定是按块对齐的，尽可能使用更大的块
+    while (start < end) {
+        int rank = __builtin_ctz(start);
+        if (rank >= RANK_NUM) {
+            rank = RANK_NUM - 1;
+        }
+
+        while (start + (1U << rank) > end) {
+            --rank;
+        }
+
+        // 创建一个块，并将其回收
+        g_pages[start].head = 1;
+        g_pages[start].rank = rank;
+        block_free_nolock(start);
+        start += 1U << rank;
+    }
+
+    irq_spin_give(&g_page_spin, key);
 }
