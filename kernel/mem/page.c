@@ -2,6 +2,7 @@
 #include "early_alloc.h"
 #include <arch_api.h>
 #include <kstring.h>
+#include <spin.h>
 #include <debug.h>
 
 
@@ -13,6 +14,7 @@ CONST page_t *g_pages;
 #define RANK_NUM 16
 static pglist_t g_blocks[RANK_NUM];
 
+static spin_t g_page_spin;
 
 
 
@@ -102,55 +104,74 @@ static void block_free_nolock(uint32_t blk) {
     pglist_push_head(&g_blocks[rank], blk);
 }
 
+
 // 分配一个页块，起始页号必须是 N*period+phase
 // 限制起始页号可以实现页面着色，优化缓存性能
 static uint32_t block_alloc_nolock(uint32_t rank, uint32_t period, uint32_t phase, uint32_t type) {
     ASSERT(type > PT_FREE);
+    ASSERT(0 == (period & (period - 1)));
 
     // 不断寻找大小足够的块，将更大的块拆分
-    for (uint32_t blk_rank = rank; blk_rank < RANK_NUM; ++blk_rank) {
-        // 检查相对于这个级别 block 的偏移
-        uint32_t color = phase & (0U - (1U << blk_rank));
+    uint32_t blk_rank;
+    uint32_t blk;
+    for (blk_rank = rank; blk_rank < RANK_NUM; ++blk_rank) {
+        uint32_t color = phase & (0U - (1U << blk_rank));   // 相对于这个级别 block 的偏移
 
-        // 遍历本层的 free blocks，寻找
-        uint32_t blk = g_blocks[blk_rank].head;
+        // 遍历本层的 free blocks，寻找起始地址符合要求的块
+        blk = g_blocks[blk_rank].head;
         for (; blk; blk = g_pages[blk].next) {
             if ((blk & (period - 1)) == color) {
-                break;
+                goto found;
             }
         }
+    }
+    return 0U;
 
-        // 如果找不到符合要求的块，则尝试拆分更大的块
-        if (0 == blk) {
-            continue;
+found:
+    pglist_remove(&g_blocks[blk_rank], blk);
+    g_pages[blk].type = type; // 标记为已分配
+
+    // 如果这个块超过所需，则将 block 分割为两个子块，返回不需要的部分
+    // 根据 phase 决定每一级回收前一半还是后一半
+    while (blk_rank > rank) {
+        --blk_rank;
+        uint32_t sib = blk + (1U << blk_rank);
+        g_pages[blk].rank = blk_rank;
+        g_pages[sib].head = 1;
+        g_pages[sib].rank = blk_rank;
+        g_pages[sib].type = type;
+
+        if ((blk ^ sib) & phase) {
+            block_free_nolock(blk); // 回收前一半，保留后一半
+            blk = sib;
+        } else {
+            block_free_nolock(sib); // 回收后一半，保留前一半
         }
-
-        // 标记为已分配
-        pglist_remove(&g_blocks[blk_rank], blk);
-        g_pages[blk].type = type;
-
-        // 如果这个块超过所需，则将 block 分割为两个子块，返回不需要的部分
-        // 根据 phase 决定每一级回收前一半还是后一半
-        while (blk_rank > rank) {
-            --blk_rank;
-            uint32_t sib = blk + (1U << blk_rank);
-            g_pages[blk].rank = blk_rank;
-            g_pages[sib].head = 1;
-            g_pages[sib].rank = blk_rank;
-            g_pages[sib].type = type;
-
-            if ((blk ^ sib) & phase) {
-                block_free_nolock(blk); // 回收前一半，保留后一半
-                blk = sib;
-            } else {
-                block_free_nolock(sib); // 回收后一半，保留前一半
-            }
-        }
-
-        return blk;
     }
 
-    return 0U;
+    return blk;
+}
+
+
+//------------------------------------------------------------------------------
+// public functions
+//------------------------------------------------------------------------------
+
+size_t page_alloc_color(uint32_t rank, uint32_t type, uint32_t period, uint32_t phase) {
+    int key = irq_spin_take(&g_page_spin);
+    uint32_t blk = block_alloc_nolock(rank, period, phase, type);
+    irq_spin_give(&g_page_spin, key);
+    return (size_t)blk << PAGE_SHIFT;
+}
+
+size_t page_alloc(uint32_t rank, uint32_t type) {
+    return page_alloc_color(rank, type, 1, 0);
+}
+
+void page_free(size_t pa) {
+    int key = irq_spin_take(&g_page_spin);
+    block_free_nolock((uint32_t)(pa >> PAGE_SHIFT));
+    irq_spin_give(&g_page_spin, key);
 }
 
 
@@ -181,9 +202,6 @@ INIT_TEXT void page_init(size_t pa_start, size_t pa_end) {
 
     kmemset(g_pages, 0, page_num * sizeof(page_t));
     kmemset(g_blocks, 0, sizeof(g_blocks));
-    // for (uint32_t i = g_page_start; i < g_page_end; ++i) {
-    //     g_pages[i].prev = 0;
-    // }
 }
 
 INIT_TEXT void pages_add(size_t start, size_t end) {
