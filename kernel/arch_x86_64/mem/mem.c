@@ -93,6 +93,21 @@ INIT_TEXT void mem_init() {
         }
     }
 
+    // 内核占据的物理内存不是连续的，相邻 range 之间留有 gap，将这些 gap 回收
+    dlnode_t *dl0 = g_kernel_vm.head.next;
+    dlnode_t *dl1 = dl0->next;
+    while (dl1 != &g_kernel_vm.head) {
+        vmrange_t *rng0 = containerof(dl0, vmrange_t, dl);
+        vmrange_t *rng1 = containerof(dl1, vmrange_t, dl);
+
+        logk("adding space between `%s` and `%s`, from %zx to %zx\n",
+            rng0->desc, rng1->desc, rng0->vend, rng1->vaddr);
+        pages_add(rng0->vend, rng1->vaddr);
+
+        dl0 = dl1;
+        dl1 = dl1->next;
+    }
+
     // logk("kernel vmspace layout:\n");
     // vmspace_show(&g_kernel_vm);
 }
