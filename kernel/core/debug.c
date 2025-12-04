@@ -29,7 +29,7 @@ static void log_stacktrace() {
     }
 }
 
-void panic(const char *fmt, ...) {
+NORETURN void panic(const char *fmt, ...) {
     char tmp[1024];
 
     va_list args;
@@ -38,7 +38,11 @@ void panic(const char *fmt, ...) {
     va_end(args);
 
     log_stacktrace();
-    cpu_halt();
+
+    while (1) {
+        cpu_pause();
+        cpu_halt();
+    }
 }
 
 

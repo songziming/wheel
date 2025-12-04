@@ -8,6 +8,7 @@ enum {
     PT_INVALID = 0,
     PT_FREE    = 1,
     PT_KERNEL  = 2,
+    PT_PGTBL   = 3,
 };
 
 // 使用 uint32 表示页号，最多支持 4G-1 个物理页
