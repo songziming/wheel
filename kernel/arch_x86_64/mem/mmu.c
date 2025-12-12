@@ -109,6 +109,8 @@ static void pt_free(uint64_t pt) {
 //------------------------------------------------------------------------------
 
 static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint64_t bits) {
+    ASSERT(0 == OFFSET_4K(pd));
+
     uint64_t *tbl = (uint64_t*)(DIRECT_MAP_ADDR + pd);
     page_t *info = &g_pages[pd >> PAGE_SHIFT];
 
@@ -156,7 +158,6 @@ static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint
 
     return va;
 }
-
 
 uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
     ASSERT(0 == OFFSET_4K(pd));

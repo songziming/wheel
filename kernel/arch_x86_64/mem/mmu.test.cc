@@ -43,8 +43,15 @@ protected:
 
 TEST_F(MmuTest, Mapping) {
     size_t pgtbl = mmu_create();
+    mmu_attr_t attrs;
 
-    mmu_map(pgtbl, 2*G, 3*G, 1*G, MMU_WRITE);  // 2G~3G --> 1G
+    EXPECT_EQ(mmu_translate(pgtbl, 1*G, &attrs), 0);
+
+    // 2G~3G --> 1G
+    mmu_map(pgtbl, 2*G, 3*G, 1*G, MMU_WRITE);
+    EXPECT_EQ(mmu_translate(pgtbl, 2*G, &attrs), 1*G);
+    EXPECT_EQ(mmu_translate(pgtbl, 3*G - 4*K, &attrs), 2*G - 4*K);
+
     mmu_map(pgtbl, 4*M, 6*M, 2*M, MMU_WRITE);  // 4M~6M --> 2M
     mmu_map(pgtbl, 4*K, 8*K, 8*K, MMU_WRITE);  // 4K~8K --> 8K
 
