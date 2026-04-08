@@ -14,7 +14,9 @@ typedef struct vmrange {
 // 代表一个虚拟地址空间
 typedef struct vmspace {
     dlnode_t head;   // vmrange 链表头节点
-    size_t  table;  // 页表
+    size_t   table;  // 页表
+    // pglist_t cache;  // 缓存几个物理页，页表操作时无需访问 page-alloc
+    // int      cache_num;
 } vmspace_t;
 
 void vmspace_init(vmspace_t *space);

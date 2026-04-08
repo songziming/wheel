@@ -141,10 +141,11 @@ $(UNIT_LIB): $(LOBJS)
 	$(TXX) $(LLFLAGS) -o $@ $^
 
 # 编译单元测试程序，使用默认工具链
+# 链接单元测试程序时，指定 rpath，便于在运行目录下寻找 libwheel.so
 $(OUT_DIR)/%.cc.to: $(KERNEL)/%.cc
 	$(TXX) $(TXFLAGS) $(GENDEP) -DC_FILE -o $@ $<
 $(UNIT_BIN): $(TOBJS) | $(UNIT_LIB)
-	$(TXX) -o $@ $^ -L$(OUT_DIR) -lwheel $(TLFLAGS)
+	$(TXX) -o $@ $^ -L$(OUT_DIR) -lwheel $(TLFLAGS) -Wl,-rpath,"."
 
 # 运行单元测试，生成代码覆盖率报告
 $(UNIT_RAW): $(UNIT_BIN) $(UNIT_LIB)

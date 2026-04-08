@@ -25,9 +25,9 @@
 #define MMU_ATTRS (MMU_NX | MMU_US | MMU_RW) // 访问权限
 
 // 从虚拟地址拆分出各级页表项的编号
-#define IDX_4K(va)  (int)((va >> 12) & 0x1ff)
-#define IDX_2M(va)  (int)((va >> 21) & 0x1ff)
-#define IDX_1G(va)  (int)((va >> 30) & 0x1ff)
+#define IDX_4K(va)      (int)((va >> 12) & 0x1ff)
+#define IDX_2M(va)      (int)((va >> 21) & 0x1ff)
+#define IDX_1G(va)      (int)((va >> 30) & 0x1ff)
 #define IDX_PML4(va)    (int)((va >> 39) & 0x1ff)
 
 #define SIZE_4K (1UL << 12)
@@ -62,6 +62,18 @@ static uint64_t alloc_table() {
 }
 
 
+
+// 各级页表函数：
+// - XXX_map(tbl, va, end, pa) 操作一张页表及其子表，将最多 [va,end) 映射到 pa，返回新建映射的长度
+// - XXX_unmap(tbl, va, end) 操作一张页表及其子表，将最多 [va,end) 清除映射，返回清除部分的长度
+// 如果虚拟地址范围 [va,end) 超过了页表 tbl 的管理范围，则不操作超出的部分
+//
+// 上一级页表可以递归调用子表的函数
+// 优先使用 2M-page、1G-page 大页
+// map 和 unmap 调用可以不对称，但不建议
+// 我们可以处理拆分大页的情况，但不建议
+
+
 //------------------------------------------------------------------------------
 // page table, 每个表项控制 4K
 //------------------------------------------------------------------------------
@@ -71,6 +83,7 @@ static uint64_t pt_map(uint64_t pt, uint64_t va, uint64_t end, uint64_t pa, uint
     uint64_t *tbl = (uint64_t*)(DIRECT_MAP_ADDR + pt);
     page_t *info = &g_pages[pt >> PAGE_SHIFT];
 
+    uint64_t start = va;
     for (int i = IDX_4K(va); (i < 512) && (va + 0x1000 <= end); ++i) {
         if (0 == (tbl[i] & MMU_P)) {
             ++info->ent_num;
@@ -80,7 +93,7 @@ static uint64_t pt_map(uint64_t pt, uint64_t va, uint64_t end, uint64_t pa, uint
         pa += SIZE_4K;
     }
 
-    return va;
+    return va - start;
 }
 
 
@@ -88,7 +101,8 @@ static uint64_t pt_unmap(uint64_t pt, uint64_t va, uint64_t end) {
     uint64_t *tbl = (uint64_t*)(DIRECT_MAP_ADDR + pt);
     page_t *info = &g_pages[pt >> PAGE_SHIFT];
 
-    for (int i = i = IDX_4K(va); (i < 512) && (va + 0x1000 <= end); ++i) {
+    uint64_t start = va;
+    for (int i = i = IDX_4K(va); (i < 512) && (va + 0x1000 < end); ++i) {
         if (tbl[i] & MMU_P) {
             --info->ent_num;
         }
@@ -96,7 +110,7 @@ static uint64_t pt_unmap(uint64_t pt, uint64_t va, uint64_t end) {
         va += SIZE_4K;
     }
 
-    return va;
+    return va - start;
 }
 
 static void pt_free(uint64_t pt) {
@@ -114,6 +128,7 @@ static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint
     uint64_t *tbl = (uint64_t*)(DIRECT_MAP_ADDR + pd);
     page_t *info = &g_pages[pd >> PAGE_SHIFT];
 
+    uint64_t start = va;
     for (int i = IDX_2M(va); (i < 512) && (va < end); ++i) {
         if (!OFFSET_2M(va | pa) && (va + SIZE_2M <= end)) {
             if (0 == (tbl[i] & MMU_P)) {
@@ -136,17 +151,23 @@ static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint
             ++info->ent_num;
             pt = alloc_table();
         } else if (tbl[i] & MMU_PS) {
-            // 将 2M 表项拆分
-            uint64_t old_va = va - OFFSET_2M(va);
-            uint64_t old_pa = pt;
-            ASSERT(0 == OFFSET_2M(old_pa));
+            // 将现有的 2M-page 拆分，如果头尾还剩 mapping，需要重新映射
+            uint64_t va2m = va - OFFSET_2M(va);
+            uint64_t pa2m = pt;
+            ASSERT(0 == OFFSET_2M(pa2m));
+
+            logk("breaking 2m %x->%x\n", va2m, pa2m);
+            logk("remapping %x~%x->%x\n", va, end, pa);
 
             pt = alloc_table();
-            if (old_va != va) {
-                pt_map(pt, old_va, va, old_pa, tbl[i] & MMU_ATTRS);
+            if (va2m != va) {
+                logk("remap head %x~%x -> %x\n", va2m, va, pa2m);
+                pt_map(pt, va2m, va, pa2m, tbl[i] & MMU_ATTRS);
             }
-            if (end < old_va + SIZE_2M) {
-                pt_map(pt, end, old_va + SIZE_2M, end - old_va + old_pa, tbl[i] & MMU_ATTRS);
+            if (end < va2m + SIZE_2M) {
+                size_t end_pa = pa2m + (end - va2m);
+                logk("remap tail %x~%x -> %x\n", end, va2m + SIZE_2M, end_pa);
+                pt_map(pt, end, va2m + SIZE_2M, end_pa, tbl[i] & MMU_ATTRS);
             }
         }
 
@@ -156,7 +177,7 @@ static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint
         pa += len;
     }
 
-    return va;
+    return va - start;
 }
 
 uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
@@ -168,6 +189,7 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
     uint64_t *tbl = (uint64_t*)(pd + DIRECT_MAP_ADDR);
     page_t *info = &g_pages[pd >> PAGE_SHIFT];
 
+    uint64_t start = va;
     for (int i = (va >> 21) & 0x1ff; (i < 512) && (va < end); ++i) {
         if (0 == (tbl[i] & MMU_P)) {
             va +=   SIZE_2M - 1;
@@ -192,23 +214,22 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
 
         // 原本是 2M 页，unmap 没有完整清除这 2M，还要保留一些
         if (tbl[i] & MMU_PS) {
-            uint64_t old_va = va - OFFSET_2M(va);
-            uint64_t old_pa = pt;
-            ASSERT(0 == OFFSET_2M(old_pa));
+            uint64_t va2m = va - OFFSET_2M(va);
+            uint64_t pa2m = pt;
+            ASSERT(0 == OFFSET_2M(pa2m));
 
             pt = alloc_table();
-
-            if (old_va != va) {
-                pt_map(pt, old_va, va, old_pa, tbl[i] & MMU_ATTRS);
-                va = old_va + SIZE_2M;
+            if (va2m != va) {
+                pt_map(pt, va2m, va, pa2m, tbl[i] & MMU_ATTRS);
+                va = va2m + SIZE_2M;
             }
-            if (end < old_va + SIZE_2M) {
-                pt_map(pt, end, old_va + SIZE_2M, end - old_va + old_pa, tbl[i] & MMU_ATTRS);
+            if (end < va2m + SIZE_2M) {
+                size_t end_pa = pa2m + (end - va2m);
+                pt_map(pt, end, va2m + SIZE_2M, end_pa, tbl[i] & MMU_ATTRS);
                 va = end;
             }
-
             tbl[i] = (pt & MMU_ADDR) | MMU_P | MMU_US | MMU_RW;
-            INVLPG(old_va);
+            INVLPG(va2m);
         } else {
             va = pt_unmap(pt, va, end);
         }
@@ -220,7 +241,7 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
         }
     }
 
-    return va;
+    return va - start;
 }
 
 static void pd_free(uint64_t pd) {
@@ -275,16 +296,18 @@ static uint64_t pdp_map(uint64_t pdp, uint64_t va, uint64_t end, uint64_t pa, ui
             ++info->ent_num;
             pd = alloc_table();
         } else if (tbl[i] & MMU_PS) {
-            uint64_t old_va = va - OFFSET_1G(va);
-            uint64_t old_pa = pd;
-            ASSERT(0 == OFFSET_1G(old_pa));
+            // 将 1G-page 拆分，如果头尾还剩 mapping，需要重新映射
+            uint64_t va1g = va - OFFSET_1G(va);
+            uint64_t pa1g = pd;
+            ASSERT(0 == OFFSET_1G(pa1g));
 
             pd = alloc_table();
-            if (old_va != va) {
-                pd_map(pd, old_va, va, old_pa, tbl[i] & MMU_ATTRS);
+            if (va1g != va) {
+                pd_map(pd, va1g, va, pa1g, tbl[i] & MMU_ATTRS);
             }
-            if (end < old_va + SIZE_1G) {
-                pd_map(pd, end, old_va + SIZE_1G, end - old_va + old_pa, tbl[i] & MMU_ATTRS);
+            if (end < va1g + SIZE_1G) {
+                size_t end_pa = pa1g + (end - va1g);
+                pd_map(pd, end, va1g + SIZE_1G, end_pa, tbl[i] & MMU_ATTRS);
             }
         }
 
@@ -306,6 +329,7 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
     uint64_t *tbl = (uint64_t*)(pdp + DIRECT_MAP_ADDR);
     page_t *info = &g_pages[pdp >> PAGE_SHIFT];
 
+    uint64_t start = va;
     for (int i = IDX_1G(va); (i < 512) && (va < end); ++i) {
         if (0 == (tbl[i] & MMU_P)) {
             va +=   SIZE_1G - 1;
@@ -330,23 +354,23 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
 
         // 原本是 1G 页，unmap 没有完整清除这 1G，还要保留一些
         if (tbl[i] & MMU_PS) {
-            uint64_t old_va = va - OFFSET_1G(va);
-            uint64_t old_pa = pd;
-            ASSERT(0 == OFFSET_1G(old_pa));
+            uint64_t va1g = va - OFFSET_1G(va);
+            uint64_t pa1g = pd;
+            ASSERT(0 == OFFSET_1G(pa1g));
 
             pd = alloc_table();
-
-            if (old_va != va) {
-                pd_map(pd, old_va, va, old_pa, tbl[i] & MMU_ATTRS);
-                va = old_va + SIZE_1G;
+            if (va1g != va) {
+                pd_map(pd, va1g, va, pa1g, tbl[i] & MMU_ATTRS);
+                va = va1g + SIZE_1G;
             }
-            if (end < old_va + SIZE_1G) {
-                pd_map(pd, end, old_va + SIZE_1G, end - old_va + old_pa, tbl[i] & MMU_ATTRS);
+            if (end < va1g + SIZE_1G) {
+                size_t end_pa = pa1g + (end - va1g);
+                pd_map(pd, end, va1g + SIZE_1G, end_pa, tbl[i] & MMU_ATTRS);
                 va = end;
             }
 
             tbl[i] = (pd & MMU_ADDR) | MMU_P | MMU_US | MMU_RW;
-            INVLPG(old_va);
+            INVLPG(va1g);
         } else {
             va = pd_unmap(pd, va, end);
         }
@@ -359,7 +383,7 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
         }
     }
 
-    return va;
+    return va - start;
 }
 
 static void pdp_free(uint64_t pdp) {
@@ -392,7 +416,7 @@ static uint64_t pml4_map(uint64_t pml4, uint64_t va, uint64_t end, uint64_t pa, 
     page_t *info = &g_pages[pml4 >> PAGE_SHIFT];
 
     uint64_t start = va;
-    for (int i = (va >> 39) & 0x1ff; (i < 512) && (va < end); ++i) {
+    for (int i = IDX_PML4(va); (i < 512) && (va < end); ++i) {
         uint64_t pdp = tbl[i] & MMU_ADDR;
 
         if (0 == (tbl[i] & MMU_P)) {
@@ -418,7 +442,8 @@ static uint64_t pml4_unmap(uint64_t pml4, uint64_t va, uint64_t end) {
     uint64_t *tbl = (uint64_t*)(pml4 + DIRECT_MAP_ADDR);
     page_t *info = &g_pages[pml4 >> PAGE_SHIFT];
 
-    for (int i = (va >> 39) & 0x1ff; (i < 512) && (va < end); ++i) {
+    uint64_t start = va;
+    for (int i = IDX_PML4(va); (i < 512) && (va < end); ++i) {
         if (0 == (tbl[i] & MMU_P)) {
             va +=   SIZE_1G * 512 - 1;
             va &= ~(SIZE_1G * 512 - 1);
@@ -438,7 +463,7 @@ static uint64_t pml4_unmap(uint64_t pml4, uint64_t va, uint64_t end) {
         }
     }
 
-    return va;
+    return va - start;
 }
 
 static void pml4_free(uint64_t pml4) {
@@ -539,7 +564,7 @@ void mmu_map(size_t tbl, size_t va, size_t end, size_t pa, mmu_attr_t attrs) {
     ASSERT(0 == OFFSET_4K(end));
     ASSERT(0 == OFFSET_4K(pa));
 
-    uint64_t len = pml4_map(tbl, va, end, pa, attrs_to_bits(attrs));
+    size_t len = pml4_map(tbl, va, end, pa, attrs_to_bits(attrs));
     ASSERT(va + len == end);
     (void)len;
 }

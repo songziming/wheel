@@ -8,12 +8,21 @@ extern log_func_t g_log_func;
 
 void logk(const char *fmt, ...);
 void panic(const char *fmt, ...);
-void assertion_fail(const char *file, int line, const char *func);
 
-#define ASSERT(x) do { \
-    if (!(x)) { \
-        assertion_fail(__FILE__, __LINE__, __func__); \
-    } \
-} while (0)
+#if defined(UNIT_TEST)
+    #include <assert.h>
+    #define ASSERT assert
+    // #include <gtest/gtest.h>
+    // #define ASSERT ASSERT_TRUE
+#elif defined(DEBUG)
+    void assertion_fail(const char *file, int line, const char *func);
+    #define ASSERT(x) do { \
+        if (!(x)) { \
+            assertion_fail(__FILE__, __LINE__, __func__); \
+        } \
+    } while (0)
+#else
+    #define ASSERT(...)
+#endif
 
 #endif // DEBUG_H
