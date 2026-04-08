@@ -26,5 +26,3 @@ make install
 ~~~
 
 生成解决方案，输出文件位于 obj-release，只需把 bochs.exe 一个文件拷贝出来即可。
-
-

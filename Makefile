@@ -93,6 +93,7 @@ LLFLAGS := -shared $(GENCOV) $(ASAN)
 
 # 允许内核库中出现未定义的符号
 ifeq ($(UNAME_S),Darwin)
+#  macos 不支持 asan
 	LLFLAGS += -Wl,-undefined,dynamic_lookup,-flat_namespace
 else ifeq ($(UNAME_S),Linux)
 	LLFLAGS += -Wl,--allow-shlib-undefined -fsanitize=address
@@ -145,11 +146,12 @@ $(UNIT_LIB): $(LOBJS)
 $(OUT_DIR)/%.cc.to: $(KERNEL)/%.cc
 	$(TXX) $(TXFLAGS) $(GENDEP) -DC_FILE -o $@ $<
 $(UNIT_BIN): $(TOBJS) | $(UNIT_LIB)
-	$(TXX) -o $@ $^ -L$(OUT_DIR) -lwheel $(TLFLAGS) -Wl,-rpath,"."
+	$(TXX) -o $@ $^ -L$(OUT_DIR) -lwheel $(TLFLAGS) -Wl,-rpath,".:$(OUT_DIR)"
 
 # 运行单元测试，生成代码覆盖率报告
 $(UNIT_RAW): $(UNIT_BIN) $(UNIT_LIB)
-	LLVM_PROFILE_FILE=$@ LD_LIBRARY_PATH=$(OUT_DIR) $<
+# 	LLVM_PROFILE_FILE=$@ LD_LIBRARY_PATH=$(OUT_DIR) $<
+	LLVM_PROFILE_FILE=$@ $<
 $(UNIT_DAT): $(UNIT_RAW)
 	$(LLVM_PROFDATA) merge -sparse $< -o $@
 cov: $(UNIT_DAT)

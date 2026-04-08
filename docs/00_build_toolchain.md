@@ -1,6 +1,9 @@
 # 准备开发工具
 
-## 编译 llvm
+## 编译 llvm 工具链
+
+选择 clang 作为编译器，因为 clang 本身就是交叉编译器。
+使用包管理器安装的 clang 应该也可以，但自己编译的更保险。
 
 ~~~bash
 git clone --depth=1 https://github.com/llvm/llvm-project.git
@@ -23,7 +26,7 @@ make install
 sudo apt install grub-pc-bin
 ~~~
 
-从源码编译 grub，包括 bios 和 uefi 两个版本：
+从源码编译 grub，需要编译 bios 和 uefi 两个版本：
 
 ~~~bash
 git clone --depth=1 https://git.savannah.gnu.org/git/grub.git
