@@ -4,18 +4,21 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// 需要 arch 实现的函数
 
+//
+// 本文件定义的函数需要各 arch 实现
+//
+
+
+// SMP & percpu-data
 int cpu_count();
 int cpu_index();
-
 void *percpu_ptr(int idx, void *p);
+void *thiscpu_ptr(void *p);
 #define PERCPU(i,x) ((__typeof__(x))percpu_ptr(i,x))
+#define THISCPU(x) ((__typeof__(x))thiscpu_ptr(x))
 
-//
 // 页表操作
-//
-
 typedef enum mmu_attr {
     MMU_NONE    = 0,
     MMU_USER    = 1,    // 用户态可以访问

@@ -42,7 +42,6 @@ enum loapic_reg {
     REG_TIMER_CCR   = 0x39, // timer current count
     REG_TIMER_DIV   = 0x3e, // timer divide configuration
 
-
     REG_SELF_IPI    = 0x3f, // x2APIC only
 };
 

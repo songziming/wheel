@@ -18,13 +18,12 @@
 #define ALIGNED(x)  __attribute__((aligned(x)))
 
 #if defined(UNIT_TEST)
-    #define SECTION(x)
-    #define ASM(...)
     #define ASMV(...)
+    #define SECTION(x)
 #else
-    #define SECTION(x)  __attribute__((section(x)))
-    #define ASM         __asm__
+    // always use volatile for safety
     #define ASMV        __asm__ volatile
+    #define SECTION(x)  __attribute__((section(x)))
 #endif
 
 #define CONST       SECTION(".rodata")

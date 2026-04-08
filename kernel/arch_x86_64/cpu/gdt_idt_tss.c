@@ -112,8 +112,6 @@ INIT_TEXT void idt_set_ist(uint8_t vec, unsigned ist) {
     g_idt[vec].ist = ist & 7;
 }
 
-#if 0
-
 INIT_TEXT void tss_init_load() {
     ASSERT(NULL != g_gdt);
 
@@ -152,5 +150,3 @@ void tss_set_rsp(int ring, uint64_t addr) {
     tss->rsp[ring].lower = addr & 0xffffffff;
     tss->rsp[ring].upper = (addr >> 32) & 0xffffffff;
 }
-
-#endif

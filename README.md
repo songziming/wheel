@@ -6,8 +6,6 @@ Wheel is an operating system, written from scratch.
 
 64-bit higher half kernel, multiprocessor support, preemptive scheduling, ring-0 only, simple kernel shell.
 
-![kernel shell](./docs/kernel_shell_blocks.png)
-
 ## prepare toolchain
 
 Create docker image for compiling kernel and generating bootable image.

@@ -1,5 +1,4 @@
 #include "arch_api.h"
-#include "apic/apic.h"
 #include "mem/mem.h"
 
 
@@ -28,19 +27,6 @@ int arch_unwind_from(size_t *addrs, int max, uint64_t rbp) {
 // 获取当前调用栈，返回深度
 int arch_unwind(size_t *addrs, int max) {
     uint64_t rbp;
-    ASM("movq %%rbp, %0" : "=r"(rbp));
+    ASMV("movq %%rbp, %0" : "=r"(rbp));
     return arch_unwind_from(addrs, max, rbp);
-}
-
-
-//------------------------------------------------------------------------------
-// SMP
-//------------------------------------------------------------------------------
-
-int cpu_count() {
-    return g_loapic_num;
-}
-
-void *percpu_ptr(int idx, void *ptr) {
-    return (uint8_t*)ptr + g_percpu_base + g_percpu_step * idx;
 }

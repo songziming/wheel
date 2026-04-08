@@ -3,8 +3,8 @@ plugin_ctrl: voodoo=false, unmapped=true, biosdev=true, speaker=true, extfpuirq=
 config_interface: win32config
 display_library: win32
 memory: host=512, guest=512
-romimage: file="host_tools\BIOS-bochs-latest", address=0x00000000, options=none
-vgaromimage: file="host_tools\VGABIOS-lgpl-latest"
+romimage: file="host\BIOS-bochs-latest", address=0x00000000, options=none
+vgaromimage: file="host\VGABIOS-lgpl-latest"
 boot: floppy, cdrom, disk
 floppy_bootsig_check: disabled=0
 floppya: type=1_44

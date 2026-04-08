@@ -181,7 +181,8 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     idt_load();
 
     // 初始化内存管理
-    mem_init();
+    mem_init(); // this also init percpu
+    thiscpu_init(0);
 
     // 初始化中断控制器
     loapic_init();
@@ -190,7 +191,7 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     cpu_features_show();
     loapic_show();
 
-    ASM("ud2");
+    ASMV("ud2");
 
 end:
     while (1) {
