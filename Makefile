@@ -7,11 +7,6 @@
 ARCH  ?= x86_64
 DEBUG ?= 1
 
-UBSAN ?= $(DEBUG)
-KASAN ?= 0 #$(DEBUG)
-KTEST ?= $(DEBUG)
-KCOV  ?= 1
-
 # toolchain
 KCC := $(TOOLCHAIN)clang
 KLD := $(TOOLCHAIN)ld.lld
@@ -68,7 +63,7 @@ OBJDEPS := $(patsubst %,%.d,$(ALLOBJS))
 KINC   := $(KDIRS:%=-I$(KERNEL)/%)
 NOSTD  := -ffreestanding -fno-builtin -nostdlib
 ASAN   := -fsanitize=address
-GENCOV := -fprofile-instr-generate -fcoverage-mapping -fdebug-compilation-dir $(KERNEL)
+GENCOV := -fprofile-instr-generate -fcoverage-mapping
 GENDEP  = -MT $@ -MMD -MP -MF $@.d
 
 # 内核编译选项，C & ASM

@@ -174,6 +174,19 @@ void page_free(size_t pa) {
     irq_spin_give(&g_page_spin, key);
 }
 
+uint32_t page_free_count() {
+    int key = irq_spin_take(&g_page_spin);
+    uint32_t npages = 0;
+    for (int rank = 0; rank < RANK_NUM; ++rank) {
+        uint32_t blksize = 1U << rank;
+        for (uint32_t pfn = g_blocks[rank].head; 0 != pfn; pfn = g_pages[pfn].next) {
+            npages += blksize;
+        }
+    }
+    irq_spin_give(&g_page_spin, key);
+    return npages;
+}
+
 
 
 // 分配页描述符数组

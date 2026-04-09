@@ -50,15 +50,21 @@ extern uint64_t g_direct_map_base;
 
 
 // 分配一张页表
-static uint64_t alloc_table() {
+static uint64_t alloc_table(int tag) {
     uint64_t pa = page_alloc(0, PT_PGTBL);
     if (0 == pa) {
         panic("cannot alloc for mmu");
         return 0;
     }
+    // logk("alloc page-tbl %llx (%d)\n", pa >> 12, tag);
     g_pages[pa >> PAGE_SHIFT].ent_num = 0;
     kmemset((char*)pa + DIRECT_MAP_ADDR, 0, PAGE_SIZE);
     return pa;
+}
+
+static void free_table(uint64_t tbl) {
+    // logk("free page-tbl %llx\n", tbl >> 12);
+    page_free(tbl);
 }
 
 
@@ -102,7 +108,7 @@ static uint64_t pt_unmap(uint64_t pt, uint64_t va, uint64_t end) {
     page_t *info = &g_pages[pt >> PAGE_SHIFT];
 
     uint64_t start = va;
-    for (int i = i = IDX_4K(va); (i < 512) && (va + 0x1000 < end); ++i) {
+    for (int i = i = IDX_4K(va); (i < 512) && (va + 0x1000 <= end); ++i) {
         if (tbl[i] & MMU_P) {
             --info->ent_num;
         }
@@ -110,11 +116,12 @@ static uint64_t pt_unmap(uint64_t pt, uint64_t va, uint64_t end) {
         va += SIZE_4K;
     }
 
+    ASSERT(va <= end);
     return va - start;
 }
 
 static void pt_free(uint64_t pt) {
-    page_free(pt);
+    free_table(pt);
 }
 
 
@@ -149,7 +156,7 @@ static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint
 
         if (0 == (tbl[i] & MMU_P)) {
             ++info->ent_num;
-            pt = alloc_table();
+            pt = alloc_table(__LINE__);
         } else if (tbl[i] & MMU_PS) {
             // 将现有的 2M-page 拆分，如果头尾还剩 mapping，需要重新映射
             uint64_t va2m = va - OFFSET_2M(va);
@@ -159,7 +166,7 @@ static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint
             logk("breaking 2m %x->%x\n", va2m, pa2m);
             logk("remapping %x~%x->%x\n", va, end, pa);
 
-            pt = alloc_table();
+            pt = alloc_table(__LINE__);
             if (va2m != va) {
                 logk("remap head %x~%x -> %x\n", va2m, va, pa2m);
                 pt_map(pt, va2m, va, pa2m, tbl[i] & MMU_ATTRS);
@@ -192,7 +199,7 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
     uint64_t start = va;
     for (int i = (va >> 21) & 0x1ff; (i < 512) && (va < end); ++i) {
         if (0 == (tbl[i] & MMU_P)) {
-            va +=   SIZE_2M - 1;
+            va +=   SIZE_2M;
             va &= ~(SIZE_2M - 1);
             continue;
         }
@@ -218,7 +225,7 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
             uint64_t pa2m = pt;
             ASSERT(0 == OFFSET_2M(pa2m));
 
-            pt = alloc_table();
+            pt = alloc_table(__LINE__);
             if (va2m != va) {
                 pt_map(pt, va2m, va, pa2m, tbl[i] & MMU_ATTRS);
                 va = va2m + SIZE_2M;
@@ -231,16 +238,18 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
             tbl[i] = (pt & MMU_ADDR) | MMU_P | MMU_US | MMU_RW;
             INVLPG(va2m);
         } else {
-            va = pt_unmap(pt, va, end);
+            va += pt_unmap(pt, va, end);
         }
 
         // 如果次级页表内容为空，则可以将页表删除
         if (0 == g_pages[pt >> PAGE_SHIFT].ent_num) {
             pt_free(pt);
             tbl[i] = 0;
+            --info->ent_num;
         }
     }
 
+    ASSERT(va <= end);
     return va - start;
 }
 
@@ -254,7 +263,7 @@ static void pd_free(uint64_t pd) {
         }
     }
 
-    page_free(pd);
+    free_table(pd);
 }
 
 
@@ -294,14 +303,14 @@ static uint64_t pdp_map(uint64_t pdp, uint64_t va, uint64_t end, uint64_t pa, ui
 
         if (0 == (tbl[i] & MMU_P)) {
             ++info->ent_num;
-            pd = alloc_table();
+            pd = alloc_table(__LINE__);
         } else if (tbl[i] & MMU_PS) {
             // 将 1G-page 拆分，如果头尾还剩 mapping，需要重新映射
             uint64_t va1g = va - OFFSET_1G(va);
             uint64_t pa1g = pd;
             ASSERT(0 == OFFSET_1G(pa1g));
 
-            pd = alloc_table();
+            pd = alloc_table(__LINE__);
             if (va1g != va) {
                 pd_map(pd, va1g, va, pa1g, tbl[i] & MMU_ATTRS);
             }
@@ -332,7 +341,7 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
     uint64_t start = va;
     for (int i = IDX_1G(va); (i < 512) && (va < end); ++i) {
         if (0 == (tbl[i] & MMU_P)) {
-            va +=   SIZE_1G - 1;
+            va +=   SIZE_1G;
             va &= ~(SIZE_1G - 1);
             continue;
         }
@@ -358,7 +367,7 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
             uint64_t pa1g = pd;
             ASSERT(0 == OFFSET_1G(pa1g));
 
-            pd = alloc_table();
+            pd = alloc_table(__LINE__);
             if (va1g != va) {
                 pd_map(pd, va1g, va, pa1g, tbl[i] & MMU_ATTRS);
                 va = va1g + SIZE_1G;
@@ -372,7 +381,7 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
             tbl[i] = (pd & MMU_ADDR) | MMU_P | MMU_US | MMU_RW;
             INVLPG(va1g);
         } else {
-            va = pd_unmap(pd, va, end);
+            va += pd_unmap(pd, va, end);
         }
 
         // 如果下一级 PD 有效表项为零，则删除
@@ -383,6 +392,7 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
         }
     }
 
+    ASSERT(va <= end);
     return va - start;
 }
 
@@ -396,7 +406,7 @@ static void pdp_free(uint64_t pdp) {
         }
     }
 
-    page_free(pdp);
+    free_table(pdp);
 }
 
 
@@ -421,7 +431,7 @@ static uint64_t pml4_map(uint64_t pml4, uint64_t va, uint64_t end, uint64_t pa, 
 
         if (0 == (tbl[i] & MMU_P)) {
             ++info->ent_num;
-            pdp = alloc_table();
+            pdp = alloc_table(__LINE__);
         }
 
         tbl[i] = (pdp & MMU_ADDR) | MMU_P | MMU_US | MMU_RW;
@@ -445,13 +455,13 @@ static uint64_t pml4_unmap(uint64_t pml4, uint64_t va, uint64_t end) {
     uint64_t start = va;
     for (int i = IDX_PML4(va); (i < 512) && (va < end); ++i) {
         if (0 == (tbl[i] & MMU_P)) {
-            va +=   SIZE_1G * 512 - 1;
+            va +=   SIZE_1G * 512;
             va &= ~(SIZE_1G * 512 - 1);
             continue;
         }
 
         uint64_t pdp = tbl[i] & MMU_ADDR;
-        va = pdp_unmap(pdp, va, end);
+        va += pdp_unmap(pdp, va, end);
 
         // 需要判断这个 PDP 是不是内核地址范围
         // 如果是内核空间的 PDP，即使有效元素为零也不能删除
@@ -463,6 +473,7 @@ static uint64_t pml4_unmap(uint64_t pml4, uint64_t va, uint64_t end) {
         }
     }
 
+    ASSERT(va <= end);
     return va - start;
 }
 
@@ -477,7 +488,7 @@ static void pml4_free(uint64_t pml4) {
         }
     }
 
-    page_free(pml4);
+    free_table(pml4);
 }
 
 
@@ -487,7 +498,7 @@ static void pml4_free(uint64_t pml4) {
 
 // 创建一个全新页表，不包含内核空间
 size_t mmu_create() {
-    return alloc_table();
+    return alloc_table(__LINE__);
 }
 
 void mmu_delete(size_t tbl) {
@@ -574,6 +585,7 @@ void mmu_unmap(size_t tbl, size_t va, size_t end) {
     ASSERT(0 == OFFSET_4K(va));
     ASSERT(0 == OFFSET_4K(end));
 
-    va = pml4_unmap(tbl, va, end);
-    ASSERT(va == end);
+    size_t len = pml4_unmap(tbl, va, end);
+    ASSERT(va + len == end);
+    (void)len;
 }

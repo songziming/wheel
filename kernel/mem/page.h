@@ -39,6 +39,7 @@ extern page_t *g_pages;
 size_t page_alloc_color(uint32_t rank, uint32_t type, uint32_t period, uint32_t phase);
 size_t page_alloc(uint32_t rank, uint32_t type);
 void page_free(size_t pa);
+uint32_t page_free_count();
 
 INIT_TEXT void page_init(size_t pa_start, size_t pa_end);
 INIT_TEXT void pages_add(size_t start, size_t end);
