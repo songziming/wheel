@@ -54,6 +54,8 @@ TEST_F(MmuTest, MapUnmapNormal) {
     size_t pgtbl = mmu_create();
     mmu_attr_t attrs;
 
+    EXPECT_EQ(mmu_translate(pgtbl, 512*G, &attrs), 0);
+
     uint32_t free_num = page_free_count();
 
     // map va [4G,10G) to pa [2G,8G)
@@ -69,7 +71,7 @@ TEST_F(MmuTest, MapUnmapNormal) {
     EXPECT_EQ(mmu_translate(pgtbl, 8*G-4*K, &attrs), 0);
     EXPECT_EQ(mmu_translate(pgtbl, 8*G, &attrs), 6*G);
     // unmap all
-    mmu_unmap(pgtbl, 0, 10*G);
+    mmu_unmap(pgtbl, 0, 4*512*G);
     EXPECT_EQ(free_num, page_free_count());
 
     // map va [4M,14M) to pa [2M,12M)
