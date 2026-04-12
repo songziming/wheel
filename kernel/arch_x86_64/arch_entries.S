@@ -65,7 +65,7 @@ isr_\vec:
 // 中断和异常的统一处理后端
 //------------------------------------------------------------------------------
 
-// 保存异常寄存器（caller-save 寄存器无需保存, rdi 已经保存）
+// rdi 已经在入口点保存，现在 rdi 保存向量号
 #define push_caller_saved_regs  \
     pushq   %rsi;               \
     pushq   %rdx;               \
@@ -86,7 +86,7 @@ isr_\vec:
     popq    %rsi;               \
     popq    %rdi
 
-// 保存中断寄存器（全部都要保存）
+// 只要不切换任务，这些寄存器就无需保存
 #define push_callee_saved_regs  \
     pushq   %rbx;               \
     pushq   %rbp;               \
@@ -94,14 +94,13 @@ isr_\vec:
     pushq   %r13;               \
     pushq   %r14;               \
     pushq   %r15
-
 #define pop_callee_saved_regs   \
-    popq    %r15;       \
-    popq    %r14;       \
-    popq    %r13;       \
-    popq    %r12;       \
-    popq    %rbp;       \
-    popq    %rbx;
+    popq    %r15;               \
+    popq    %r14;               \
+    popq    %r13;               \
+    popq    %r12;               \
+    popq    %rbp;               \
+    popq    %rbx
 
 // 发生中断时的栈结构，向低地址生长，最后的 RDI 是我们压栈的
 // High |    SS    |
@@ -119,14 +118,13 @@ isr_\vec:
 // 异常响应流程，不切换中断栈，不允许重入，不切换任务
 // 异常更像是被动的函数调用，无需保存 callee-save regs，因为调用 C 函数时会自动保存
 exception_stub:
-    push_caller_saved_regs       // 保存寄存器，不含 callee-saved regs
-    subq    $48, %rsp   // 跳过 6 个 callee-saved regs
-    // movq    %rdi, %rdi  // 参数：向量号
-    movq    %rsp, %rsi  // 参数：寄存器文件
-    call    handle_irq  // 调用 C 函数，函数会自己保存 callee-saved regs
-    addq    $48, %rsp   // 跳过 6 个 callee-save regs
-    pop_caller_saved_regs       // 恢复寄存器
-    addq    $8, %rsp    // 跳过错误码
+    push_caller_saved_regs
+    subq    $48, %rsp       // 跳过 6 个 callee-saved regs
+    movq    %rsp, %rsi      // 参数：当前栈顶/寄存器文件
+    call    handle_irq      // 调用 C 函数，函数会自己保存 callee-saved regs
+    addq    $48, %rsp       // 跳过 6 个 callee-save regs
+    pop_caller_saved_regs
+    addq    $8, %rsp        // 跳过错误码
     iretq
 
 // 中断响应流程，需要切换中断栈，允许重入，可能切换任务
@@ -134,10 +132,9 @@ exception_stub:
 interrupt_stub:
     push_caller_saved_regs
     push_callee_saved_regs
-    // movq    %rdi, %rdi  // 参数：向量号
-    movq    %rsp, %rsi  // 参数：当前栈顶
-    call    handle_irq  // 调用 C 函数处理中断
-    pop_callee_saved_regs       // 恢复所有寄存器
+    movq    %rsp, %rsi      // 参数：当前栈顶/寄存器文件
+    call    handle_irq      // 调用 C 函数处理中断
+    pop_callee_saved_regs
     pop_caller_saved_regs
-    addq    $8, %rsp    // 跳过错误码
+    addq    $8, %rsp        // 跳过错误码
     iretq

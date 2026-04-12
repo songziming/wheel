@@ -2,12 +2,15 @@
 #define VMSPACE_H
 
 #include <dllist.h>
+#include <arch_api.h>
 
 // 代表一段虚拟地址范围
 typedef struct vmrange {
     dlnode_t    dl;
     size_t      vaddr;
     size_t      vend;
+    size_t      paddr;
+    mmu_attr_t  attrs;
     const char *desc;
 } vmrange_t;
 

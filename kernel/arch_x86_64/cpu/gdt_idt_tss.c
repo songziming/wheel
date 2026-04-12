@@ -133,20 +133,20 @@ INIT_TEXT void tss_init_load() {
     load_tr(((2 * idx + 6) << 3) | 3);
 }
 
-INIT_TEXT void tss_set_ist(int cpu, int idx, uint64_t addr) {
-    ASSERT(idx > 0);
-    ASSERT(idx < 8);
+INIT_TEXT void tss_set_ist(int cpu, int ist, uint64_t addr) {
+    ASSERT(ist > 0);
+    ASSERT(ist < 8);
 
-    tss_t *tss = percpu_ptr(cpu, &g_tss);
-    tss->ist[idx].lower = addr & 0xffffffff;
-    tss->ist[idx].upper = (addr >> 32) & 0xffffffff;
+    tss_t *tss = PERCPU(cpu, &g_tss);
+    tss->ist[ist].lower = addr & 0xffffffff;
+    tss->ist[ist].upper = (addr >> 32) & 0xffffffff;
 }
 
-void tss_set_rsp(int ring, uint64_t addr) {
+void tss_set_rsp(int cpu, int ring, uint64_t addr) {
     ASSERT(ring >= 0);
     ASSERT(ring < 3);
 
-    tss_t *tss = thiscpu_ptr(&g_tss);
+    tss_t *tss = PERCPU(cpu, &g_tss);
     tss->rsp[ring].lower = addr & 0xffffffff;
     tss->rsp[ring].upper = (addr >> 32) & 0xffffffff;
 }

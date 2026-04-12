@@ -44,6 +44,7 @@ void vmspace_insert(vmspace_t *space, vmrange_t *rng) {
 }
 
 void vmspace_show(vmspace_t *space) {
+    logk("virtual address space:\n");
     for (dlnode_t *i = space->head.next; &space->head != i; i = i->next) {
         vmrange_t *rng = containerof(i, vmrange_t, dl);
         logk("  - vm 0x%016zx~0x%016zx %s\n", rng->vaddr, rng->vend, rng->desc);

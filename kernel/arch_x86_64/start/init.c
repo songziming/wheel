@@ -12,6 +12,7 @@
 #include <acpi/madt.h>
 #include <apic/apic.h>
 #include <mem/mem.h>
+#include <arch_int.h>
 
 #include <debug.h>
 #include <kstring.h>
@@ -184,12 +185,18 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     mem_init(); // this also init percpu
     thiscpu_init(0);
 
-    // 初始化中断控制器
+    // 初始化中断管理（tss 依赖 thiscpu，需要放在 thiscpu_init 之后）
+    tss_init_load();
     loapic_init();
+    int_init();
+
+    // 加载正式页表
+    write_cr3(g_kernel_vm.table);
 
     pmlayout_show();
+    vmspace_show(&g_kernel_vm);
     cpu_features_show();
-    loapic_show();
+    // loapic_show();
 
     ASMV("ud2");
 
