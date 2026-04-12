@@ -198,6 +198,7 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     cpu_features_show();
     // loapic_show();
 
+    ASMV("int $0x80");
     ASMV("ud2");
 
 end:

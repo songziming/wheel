@@ -18,6 +18,10 @@ void handle_irq(int vec, regs_t *f) {
     logk("[cpu-%d] handling interrupt vec 0x%x\n", cpu_index(), vec);
     logk("rip=%zx rsp=%zx frame=%zx\n", f->rip, f->rsp, (size_t)f);
 
+    size_t sp;
+    ASMV("movq %%rsp, %0" : "=r"(sp));
+    logk("current stack pointer %zx\n", sp);
+
     if (++irq_idx < 5) {
         return;
     }
