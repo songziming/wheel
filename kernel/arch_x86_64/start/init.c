@@ -179,7 +179,6 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     gdt_init();
     gdt_load();
     idt_init();
-    idt_load();
 
     // 初始化内存管理
     mem_init(); // this also init percpu
@@ -189,6 +188,7 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     tss_init_load();
     loapic_init();
     int_init();
+    idt_load();
 
     // 加载正式页表
     write_cr3(g_kernel_vm.table);

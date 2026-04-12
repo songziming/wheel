@@ -1,6 +1,9 @@
 // CPU 中断异常入口、系统调用入口、任务切换入口
 
 .global isr_entries
+.extern g_int_depth
+.extern g_int_stack_top
+.extern g_curr_stack
 .extern handle_irq
 
 .altmacro // 需要在 macro 和循环里使用变量
@@ -118,6 +121,11 @@ isr_\vec:
 // 异常响应流程，不切换中断栈，不允许重入，不切换任务
 // 异常更像是被动的函数调用，无需保存 callee-save regs，因为调用 C 函数时会自动保存
 exception_stub:
+    testl   $3, 0x18(%rsp)  // 检查 CS.CPL
+    jz      exp_from_ring0  // 如果 CS.CPL=0，说明来自 ring0
+    swapgs                  // 如果来自用户态，需要交换 gsbase
+exp_from_ring0:
+
     push_caller_saved_regs
     subq    $48, %rsp       // 跳过 6 个 callee-saved regs
     movq    %rsp, %rsi      // 参数：当前栈顶/寄存器文件
@@ -125,16 +133,57 @@ exception_stub:
     addq    $48, %rsp       // 跳过 6 个 callee-save regs
     pop_caller_saved_regs
     addq    $8, %rsp        // 跳过错误码
+
+    testl   $3, 8(%rsp)     // 检查 CS.RPL
+    jz      exp_to_ring0    // 返回到内核态
+    swapgs                  // 返回到用户态
+exp_to_ring0:
     iretq
 
 // 中断响应流程，需要切换中断栈，允许重入，可能切换任务
 // 需要保存全部寄存器（不含浮点寄存器）
 interrupt_stub:
+    testl   $3, 0x18(%rsp)  // 检查 CS.CPL
+    jz      int_from_ring0  // 如果 CS.CPL=0，说明来自 ring0
+    swapgs                  // 如果来自用户态，需要交换 gsbase
+int_from_ring0:
+
     push_caller_saved_regs
     push_callee_saved_regs
     movq    %rsp, %rsi      // 参数：当前栈顶/寄存器文件
-    call    handle_irq      // 调用 C 函数处理中断
+
+    // 所有寄存器已经保存在 regs_t（位于任务内核栈），检查是否需要切换中断栈
+    incl    %gs:(g_int_depth)
+    cmpl    $1, %gs:(g_int_depth)
+    jne     int_enter_nested
+
+    // 不是重入，需要切换到中断栈，把当前栈位置也记录下来
+    movq    %rsp, %gs:(g_curr_stack)
+    movq    %gs:(g_int_stack_top), %rsp
+int_enter_nested:
+
+    // 调用 C 函数处理中断
+    call    handle_irq
+
+    // 判断是否退出最后一层中断，如果是，需要执行任务切换
+    decl    %gs:(g_int_depth)
+    cmpl    $0, %gs:(g_int_depth)
+    jne     int_return_nested
+
+    // 即将推出最后一层中断，在这里执行异步任务
+    // TODO work_q_flush
+
+    // 切换到原来的栈顶
+    // TODO 任务切换也在这里实现，替换成新任务的栈顶地址
+    movq    %gs:(g_curr_stack), %rdi
+int_return_nested:
+
     pop_callee_saved_regs
     pop_caller_saved_regs
     addq    $8, %rsp        // 跳过错误码
+
+    testl   $3, 8(%rsp)     // 检查 CS.RPL
+    jz      int_to_ring0    // 返回到内核态
+    swapgs                  // 返回到用户态
+int_to_ring0:
     iretq

@@ -35,11 +35,11 @@ PERCPU_BSS int g_thiscpu_idx;   // 记录当前 CPU 的编号
 
 // percpu ranges
 static PERCPU_BSS vmrange_t g_percpu_vars; // data + bss
-static PERCPU_BSS vmrange_t g_percpu_int;  // int stack
 static PERCPU_BSS vmrange_t g_percpu_nmi;  // NMI IST
 static PERCPU_BSS vmrange_t g_percpu_df;   // #DF IST
 static PERCPU_BSS vmrange_t g_percpu_pf;   // #PF IST
 static PERCPU_BSS vmrange_t g_percpu_mc;   // #MC IST
+static PERCPU_BSS vmrange_t g_percpu_int;  // int stack
 
 
 
@@ -93,11 +93,11 @@ INIT_TEXT size_t percpu_init(size_t va) {
         kmemcpy((uint8_t*)va, &_percpu_addr, copy_size); // 复制 percpu data
         kmemset((uint8_t*)va + copy_size, 0, zero_size); // percpu bss 清零
         va = percpu_add(i, &g_percpu_vars, va, vars_size,      "smp data");
-        va = percpu_add(i, &g_percpu_int,  va, INT_STACK_SIZE, "smp int stack");
         va = percpu_add(i, &g_percpu_nmi,  va, INT_STACK_SIZE, "smp NMI");
         va = percpu_add(i, &g_percpu_pf,   va, INT_STACK_SIZE, "smp #PF");
         va = percpu_add(i, &g_percpu_df,   va, INT_STACK_SIZE, "smp #DF");
         va = percpu_add(i, &g_percpu_mc,   va, INT_STACK_SIZE, "smp #MC");
+        va = percpu_add(i, &g_percpu_int,  va, INT_STACK_SIZE, "smp int stack");
     }
 
     return va;
@@ -117,11 +117,11 @@ INIT_TEXT void thiscpu_init(int idx) {
 }
 
 
-INIT_TEXT size_t get_int_top(int cpu) { return PERCPU(cpu, &g_percpu_int)->vend; }
 INIT_TEXT size_t get_ist_nmi(int cpu) { return PERCPU(cpu, &g_percpu_nmi)->vend; }
 INIT_TEXT size_t get_ist_df(int cpu) { return PERCPU(cpu, &g_percpu_df)->vend; }
 INIT_TEXT size_t get_ist_pf(int cpu) { return PERCPU(cpu, &g_percpu_pf)->vend; }
 INIT_TEXT size_t get_ist_mc(int cpu) { return PERCPU(cpu, &g_percpu_mc)->vend; }
+INIT_TEXT size_t get_int_top(int cpu) { return PERCPU(cpu, &g_percpu_int)->vend; }
 
 
 //------------------------------------------------------------------------------
