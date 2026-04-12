@@ -99,4 +99,9 @@ MSC-lock 占空间大，因为需要保存一个指针。
 
 同一个线程，如果申请两个 qspinlock，会怎样？
 持有 lock1，需要 waiter1 保留在队列中，尝试获取 lock2，又需要 waiter2。
-
+Linux 的做法是，不允许同一个 context 获取多个 qspin，每个 CPU 最多四种 context：
+- task
+- softirq
+- hardirq
+- nmi
+所以使用 PERCPU 定义四个 struct qnode，作为 waiter 节点

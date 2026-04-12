@@ -50,7 +50,7 @@ extern uint64_t g_direct_map_base;
 
 
 // 分配一张页表
-static uint64_t alloc_table(int tag) {
+static uint64_t alloc_table(int tag UNUSED) {
     uint64_t pa = page_alloc(0, PT_PGTBL);
     if (0 == pa) {
         panic("cannot alloc for mmu");

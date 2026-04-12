@@ -1,7 +1,7 @@
 #! /bin/bash
 
 # 创建虚拟磁盘并安装 grub，硬盘只有一个主分区，起始偏移 1M
-# $1 目标磁盘镜像
+# $1 目标磁盘镜像文件名
 
 if [ "$EUID" -ne 0 ]
     then echo "run this script as root"
