@@ -4,7 +4,7 @@
 .extern g_int_depth
 .extern g_int_stack_top
 .extern g_curr_stack
-.extern handle_irq
+.extern irq_handlers
 
 .altmacro // 需要在 macro 和循环里使用变量
 
@@ -129,7 +129,12 @@ exp_from_ring0:
     push_caller_saved_regs
     subq    $48, %rsp       // 跳过 6 个 callee-saved regs
     movq    %rsp, %rsi      // 参数：当前栈顶/寄存器文件
-    call    handle_irq      // 调用 C 函数，函数会自己保存 callee-saved regs
+
+    // 调用 C 函数，函数会自己保存 callee-saved regs
+    // call    handle_irq
+    movq    irq_handlers(,%edi,8), %rax
+    call    *%rax
+
     addq    $48, %rsp       // 跳过 6 个 callee-save regs
     pop_caller_saved_regs
     addq    $8, %rsp        // 跳过错误码
@@ -163,7 +168,9 @@ int_from_ring0:
 int_enter_nested:
 
     // 调用 C 函数处理中断
-    call    handle_irq
+    // call    handle_irq
+    movq    irq_handlers(,%edi,8), %rax
+    call    *%rax
 
     // 判断是否退出最后一层中断，如果是，需要执行任务切换
     decl    %gs:(g_int_depth)

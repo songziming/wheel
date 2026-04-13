@@ -71,11 +71,6 @@ INIT_TEXT void parse_madt(madt_t *madt) {
     g_loapic_addr = (size_t)madt->loapic_addr;
     logk("local apic base = %zx\n", g_loapic_addr);
 
-    // 如果支持 x2APIC，则使用 MSR 操作 local APIC 寄存器
-    if (g_cpu_features & CPU_FEATURE_X2APIC) {
-        loapic_enable_x2();
-    }
-
     // 统计 local apic、io apic 个数，irq-gsi 映射表长度
     g_loapic_num = 0;
     g_ioapic_num = 0;
@@ -187,10 +182,10 @@ INIT_TEXT void parse_madt(madt_t *madt) {
             // 找出 nmi 连接到哪个 Local APIC 的哪个 LINT 引脚
             madt_loapic_nmi_t *nmi = (madt_loapic_nmi_t*)sub;
             if (0xff == nmi->processor_id) {
-                logk("NMI connects to all cpu, lint %d, flags %x\n",
+                logk("NMI connects to all cpu, LINT-%d, flags %x\n",
                     nmi->lint, nmi->inti_flags);
             } else {
-                logk("NMI connects to cpu %d, lint %d, flags %x\n",
+                logk("NMI connects to cpu-%d, LINT-%d, flags %x\n",
                     nmi->processor_id, nmi->lint, nmi->inti_flags);
             }
             break;
@@ -199,10 +194,10 @@ INIT_TEXT void parse_madt(madt_t *madt) {
             // 同上
             madt_lox2apic_nmi_t *nmi = (madt_lox2apic_nmi_t*)sub;
             if (0xffffffff == nmi->processor_id) {
-                logk("NMI connects to all cpu, lint %d, flags %x\n",
+                logk("x2 NMI connects to all cpu, LINT-%d, flags %x\n",
                     nmi->lint, nmi->inti_flags);
             } else {
-                logk("NMI connects to cpu %d, lint %d, flags %x\n",
+                logk("x2 NMI connects to cpu-%d, LINT-%d, flags %x\n",
                     nmi->processor_id, nmi->lint, nmi->inti_flags);
             }
             break;

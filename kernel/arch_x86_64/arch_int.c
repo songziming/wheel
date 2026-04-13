@@ -12,9 +12,13 @@ PERCPU_BSS size_t g_int_stack_top;
 // 切换中断栈时，在这里保存原来的栈顶
 PERCPU_BSS size_t g_curr_stack;
 
+// 中断处理函数
+int_handler_t irq_handlers[256];
+
+
 static int irq_idx = 0;
 
-void handle_irq(int vec, regs_t *f) {
+static void handle_irq(int vec, regs_t *f) {
     logk("[cpu-%d] handling interrupt vec 0x%x\n", cpu_index(), vec);
     logk("rip=%zx rsp=%zx frame=%zx\n", f->rip, f->rsp, (size_t)f);
 
@@ -35,6 +39,10 @@ void handle_irq(int vec, regs_t *f) {
 // 每个 cpu 都要执行此函数
 // 在 TSS 中设置 IST，在 IDT 里面填入 IST-idx
 INIT_TEXT void int_init() {
+    for (int i = 0; i < 256; ++i) {
+        irq_handlers[i] = handle_irq;
+    }
+
     for (int i = 0; i < cpu_count(); ++i) {
         tss_set_ist(i, 1, get_ist_nmi(i));
         tss_set_ist(i, 2, get_ist_df(i));

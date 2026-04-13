@@ -26,10 +26,9 @@ extern int    g_loapic_num;
 extern size_t g_loapic_addr;
 extern loapic_t *g_loapics;
 
-INIT_TEXT void loapic_enable_x2();
 INIT_TEXT void loapic_parse(loapic_t *dst, const madt_loapic_t *tbl);
 INIT_TEXT void loapic_parse_x2(loapic_t *dst, const madt_lox2apic_t *tbl);
-INIT_TEXT void loapic_init();
+INIT_TEXT void loapic_init(int idx);
 void loapic_show();
 
 // IO APIC

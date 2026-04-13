@@ -4,15 +4,17 @@
 #include "multiboot1.h"
 #include "multiboot2.h"
 
-#include <dev/serial.h>
-#include <dev/console.h>
-#include <dev/framebuf.h>
 #include <cpu/features.h>
 #include <cpu/gdt_idt_tss.h>
 #include <acpi/madt.h>
 #include <apic/apic.h>
 #include <mem/mem.h>
 #include <arch_int.h>
+
+#include <dev/serial.h>
+#include <dev/console.h>
+#include <dev/framebuf.h>
+#include <dev/i8259.h>
 
 #include <debug.h>
 #include <kstring.h>
@@ -179,22 +181,33 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     gdt_init();
     gdt_load();
     idt_init();
+    idt_load();
 
     // 初始化内存管理
     mem_init(); // this also init percpu
     thiscpu_init(0);
 
-    // 初始化中断管理（tss 依赖 thiscpu，需要放在 thiscpu_init 之后）
-    tss_init_load();
-    loapic_init();
-    int_init();
-    idt_load();
+    tss_init_load(); // 依赖 thiscpu，需要放在 thiscpu_init 之后
+    int_init(); // 初始化中断管理机制
+
+    // 中断控制器初始化
+    i8259_disable();
+    // TODO ioapic_init_all();
+    loapic_init(0);
+
+    // 校准系统时钟
+    // TODO calibrate timer
+    // TODO set_periodic(100);
 
     // 加载正式页表
     write_cr3(g_kernel_vm.table);
 
-    pmlayout_show();
-    vmspace_show(&g_kernel_vm);
+    // TODO 初始化任务调度
+
+    // TODO 创建根任务并开始运行
+
+    // pmlayout_show();
+    // vmspace_show(&g_kernel_vm);
     cpu_features_show();
     // loapic_show();
 

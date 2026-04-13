@@ -1,5 +1,6 @@
 #include "apic.h"
 #include <arch_api.h>
+#include <arch_int.h>
 #include <cpu/features.h>
 #include <debug.h>
 
@@ -52,9 +53,8 @@ enum loapic_reg {
 #define LOAPIC_MSR_EXTD     0x00000400  // enable x2APIC mode
 #define LOAPIC_MSR_BSP      0x00000100  // local APIC is bsp
 
-// local APIC vector table bits
-#define LOAPIC_VECTOR       0x000000ff  // vector number mask
-#define LOAPIC_DM_MASK      0x00000700  // delivery mode mask
+// ICR bits
+#define ICR_VECTOR_MASK     0x000000ff  // vector number mask
 #define LOAPIC_DM_FIXED     0x00000000  // delivery mode: fixed
 #define LOAPIC_DM_LOWEST    0x00000100  // delivery mode: lowest
 #define LOAPIC_DM_SMI       0x00000200  // delivery mode: SMI
@@ -62,7 +62,7 @@ enum loapic_reg {
 #define LOAPIC_DM_INIT      0x00000500  // delivery mode: INIT
 #define LOAPIC_DM_STARTUP   0x00000600  // delivery mode: startup
 #define LOAPIC_DM_EXTINT    0x00000700  // delivery mode: ExtINT
-#define LOAPIC_LOGICAL      0x00000800  // logical destination
+#define LOAPIC_LOGICAL      0x00000800  // destination mode: logical
 #define LOAPIC_IDLE         0x00000000  // delivery status: idle
 #define LOAPIC_PENDING      0x00001000  // delivery status: pend
 #define LOAPIC_HIGH         0x00000000  // polarity: High
@@ -135,11 +135,41 @@ static CONST uint32_t (*g_read)     (uint32_t)          = x_read;
 static CONST void     (*g_write)    (uint32_t,uint32_t) = x_write;
 static CONST void     (*g_write_icr)(uint32_t,uint32_t) = x_write_icr;
 
-INIT_TEXT void loapic_enable_x2() {
+static INIT_TEXT void loapic_enable_x2() {
     g_read      = x2_read;
     g_write     = x2_write;
     g_write_icr = x2_write_icr;
 }
+
+
+//------------------------------------------------------------------------------
+// 中断处理函数
+//------------------------------------------------------------------------------
+
+static void on_resched(int vec UNUSED, regs_t *f UNUSED) {
+    g_write(REG_EOI, 0);
+    // 无需任何动作，中断返回过程自然会切换任务
+}
+
+static void on_stopall(int vec UNUSED, regs_t *f UNUSED) {
+    g_write(REG_EOI, 0);
+    panic("cpu-%d stopped\n", cpu_index());
+}
+
+static void on_timer(int vec UNUSED, regs_t *f UNUSED) {
+    g_write(REG_EOI, 0);
+    // TODO 调用 tick_advance
+}
+
+static void on_error(int vec UNUSED, regs_t *f UNUSED) {
+    panic("loapic error\n");
+}
+
+static void on_thermal(int vec UNUSED, regs_t *f UNUSED) {
+    g_write(REG_EOI, 0);
+}
+
+static void on_spurious(int vec UNUSED, regs_t *f UNUSED) {}
 
 
 //------------------------------------------------------------------------------
@@ -158,7 +188,22 @@ INIT_TEXT void loapic_parse_x2(loapic_t *dst, const madt_lox2apic_t *tbl) {
     dst->flags        = tbl->loapic_flags;
 }
 
-INIT_TEXT void loapic_init() {
+INIT_TEXT void loapic_init(int idx) {
+    loapic_t *lo = &g_loapics[idx];
+    if (0 == idx) {
+        if (g_cpu_features & CPU_FEATURE_X2APIC) {
+            // 支持 x2APIC，使用 MSR 读写 local APIC 寄存器
+            loapic_enable_x2();
+        }
+
+        irq_handlers[VEC_IPI_RESCHED] = on_resched;
+        irq_handlers[VEC_IPI_STOPALL] = on_stopall;
+        irq_handlers[VEC_LOAPIC_TIMER] = on_timer;
+        irq_handlers[VEC_LOAPIC_ERROR] = on_error;
+        irq_handlers[VEC_LOAPIC_THERMAL] = on_thermal;
+        irq_handlers[VEC_LOAPIC_SPURIOUS] = on_spurious;
+    }
+
     // 开启 local APIC，进入 xAPIC 模式
     uint64_t msr_base = read_msr(IA32_APIC_BASE);
     if ((msr_base & LOAPIC_MSR_BASE) != g_loapic_addr) {
@@ -166,10 +211,10 @@ INIT_TEXT void loapic_init() {
         msr_base &= ~LOAPIC_MSR_BASE;
         msr_base |= g_loapic_addr & LOAPIC_MSR_BASE;
     }
+    if (0 == idx) {
+        msr_base |= LOAPIC_MSR_BSP;
+    }
     msr_base |= LOAPIC_MSR_EN;
-    // if (1) {
-    //     msr_base |= LOAPIC_MSR_BSP;
-    // }
     write_msr(IA32_APIC_BASE, msr_base);
 
     // 如果 CPU 支持，则启用 x2APIC（必须 enable 之后再启用 x2APIC，不能一步完成）
@@ -181,13 +226,15 @@ INIT_TEXT void loapic_init() {
         write_msr(IA32_APIC_BASE, msr_base);
     }
 
-    // 设置 LDR、DFR，这两个寄存器用于发送 IPI 时指定目标
-    if (g_cpu_features & CPU_FEATURE_X2APIC) {
-        // x2APIC 使用 32-bit apic-ID
-    }
-
     // 屏蔽中断向量号 0~31
     g_write(REG_TPR, 16);
+
+    // 设置 LINT0、LINT1，参考 Intel MultiProcessor Spec 第 5.1 节
+    // LINT0 连接到 8259A，但连接到 8259A 的设备也连接到 IO APIC，可以不设置
+    // LINT1 连接到 NMI，我们只需要 BSP 能够处理 NMI
+    if (0 == idx) {
+        g_write(REG_LVT_LINT1, LOAPIC_LEVEL | LOAPIC_DM_NMI);
+    }
 
     // 设置 LVT 向量号
     g_write(REG_LVT_ERROR, VEC_LOAPIC_ERROR);
@@ -205,5 +252,45 @@ void loapic_show() {
     for (int i = 0; i < g_loapic_num; ++i) {
         logk("  - apic-id: %u, processor-id: %u\n",
             g_loapics[i].apic_id, g_loapics[i].processor_id);
+    }
+}
+
+
+
+
+//------------------------------------------------------------------------------
+// public functions
+//------------------------------------------------------------------------------
+
+// 向目标处理器发送 INIT-IPI
+INIT_TEXT void loapic_send_init(int cpu) {
+    ASSERT(cpu >= 0);
+    ASSERT(cpu < cpu_count());
+
+    uint32_t lo = LOAPIC_DM_INIT | LOAPIC_EDGE | LOAPIC_ASSERT;
+    g_write_icr(g_loapics[cpu].apic_id, lo);
+}
+
+// 向目标处理器发送 startup-IPI
+INIT_TEXT void loapic_send_sipi(int cpu, int vec) {
+    ASSERT(cpu >= 0);
+    ASSERT(cpu < cpu_count());
+    ASSERT((vec >= 0) && (vec < 256));
+    ASSERT((vec < 0xa0) || (vec > 0xbf)); // 向量号 a0~bf 非法
+
+    uint32_t lo = (vec & ICR_VECTOR_MASK) | LOAPIC_DM_STARTUP | LOAPIC_EDGE | LOAPIC_ASSERT;
+    g_write_icr(g_loapics[cpu].apic_id, lo);
+}
+
+// 发送 IPI
+void loapic_send_ipi(int cpu, int vec) {
+    ASSERT(cpu < cpu_count());
+    ASSERT((vec >= 0) && (vec < 256));
+
+    uint32_t lo = (vec & ICR_VECTOR_MASK) | LOAPIC_DM_FIXED | LOAPIC_EDGE | LOAPIC_DEASSERT;
+    if (cpu < 0) {
+        g_write_icr(0xffffffffU, lo); // 广播
+    } else {
+        g_write_icr(g_loapics[cpu].apic_id, lo);
     }
 }

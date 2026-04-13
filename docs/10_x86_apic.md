@@ -9,6 +9,12 @@ local APIC 的作用：
 
 ### 我们的目标
 
+- 可以向任意 cpu 发送 IPI（单播）
+- 可以向所有 cpu 发送 IPI（广播）
+- 不需要支持多播，即向一部分 cpu 发送 IPI。这类需求我们可以通过循环实现。
+
+IO APIC 可以将中断转发给任意 CPU
+
 1. 可以向任意 CPU 发送 IPI，可以向任意的 CPU 组合发送多播 IPI
 类似于 cpuset 位图
 发送 IPI 的时候，可以选择 physical/logical 两种模式
@@ -18,13 +24,23 @@ local APIC 的作用：
 2. IO APIC 可以将中断转发给任意 CPU
 
 x2APIC 只更新了 local apic，没有更新 IO APIC。
-IO APIC 的重定位条目里，只能装下 8-bit APIC-ID，x2APIC 容不下。
+IO APIC 的重定位条目里，只能装下 8-bit APIC-ID，x2APIC-ID 如果超过 8-bit 则容不下。
 因此需要 interrupt-remapper。
 TODO 具体怎样 remap？
 
-### 关于 APIC-ID
+### 发送 IPI
 
-apic-id 可以用作 IPI destination。
+发送 IPI，需要指定目标的。
+physical 模式，指定目标的 apic-id 即可。
+logical 模式，指定的是 logical-id，这个 id 通过 LDR 配置。
+使用何种模式，由 ICR.dest_mode 决定，0 表示 physical，1 表示 logical
+
+logical 模式允许 OS 自己配置每个处理器的 logical-id，可以实现灵活分组。
+借助 logical mode，可以将 IPI 发给一组处理器（称作 cluster），类似多播。
+我们用不到这个功能，所以默认使用 physical mode 发送 IPI。
+如果要配置 logical-id，需要使用 LDR、DFR 两个寄存器。
+
+关于 APIC-ID
 xAPIC 使用 8-bit 表示（早期的 P6 只有 4-bit），IPI.dest 也是 8-bit
 x2APIC 使用 32-bit 表示 apic-ID，IPI.dest 也是 32-bit
 

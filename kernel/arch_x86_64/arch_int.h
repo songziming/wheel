@@ -36,6 +36,9 @@ typedef struct regs {
     uint64_t ss;
 } regs_t;
 
+typedef void (*int_handler_t)(int vec, regs_t *f);
+extern int_handler_t irq_handlers[256];
+
 INIT_TEXT void int_init();
 
 #endif // ARCH_X86_64_ARCH_INT_H

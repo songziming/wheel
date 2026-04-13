@@ -78,7 +78,7 @@ INIT_TEXT void mem_init() {
     // 分配 percpu 空间
     rw_end = percpu_init(rw_end);
 
-    // 记录内核结束位置的物理
+    // 记录内核结束的物理地址
     size_t kend = rw_end - KERNEL_TEXT_ADDR;
 
     // 遍历物理内存，将可用部分逐一添加（跳过内核占用的部分）
@@ -90,9 +90,8 @@ INIT_TEXT void mem_init() {
 
         size_t start = g_pmranges[i].start;
         size_t end   = g_pmranges[i].end;
-
-        // 内核必然完整包含于一段 pmrange
         if ((start <= KERNEL_LOAD_ADDR) && (kend <= end)) {
+            // 内核必然完整包含于一段 pmrange
             pages_add(start, KERNEL_LOAD_ADDR);
             pages_add(kend, end);
         } else {
@@ -101,19 +100,14 @@ INIT_TEXT void mem_init() {
     }
 
     // 内核占据的虚拟内存不是连续的，相邻 range 之间留有 gap，将这些 gap 对应的物理页回收
-    dlnode_t *dl0 = g_kernel_vm.head.next;
-    dlnode_t *dl1 = dl0->next;
-    while (dl1 != &g_kernel_vm.head) {
-        vmrange_t *prev = containerof(dl0, vmrange_t, dl);
-        vmrange_t *curr = containerof(dl1, vmrange_t, dl);
-        size_t gap_addr = prev->vend - KERNEL_TEXT_ADDR;
-        size_t gap_end = curr->vaddr - KERNEL_TEXT_ADDR;
-        // logk("adding gap between `%s` and `%s`, va [%zx,%zx), pa [%zx,%zx)\n",
-        //     prev->desc, curr->desc, prev->vend, curr->vaddr, gap_addr, gap_end);
+    dlnode_t *prev = g_kernel_vm.head.next;
+    dlnode_t *curr = prev->next;
+    while (curr != &g_kernel_vm.head) {
+        size_t gap_addr = containerof(prev, vmrange_t, dl)->vend - KERNEL_TEXT_ADDR;
+        size_t gap_end = containerof(curr, vmrange_t, dl)->vaddr - KERNEL_TEXT_ADDR;
         pages_add(gap_addr, gap_end);
-
-        dl0 = dl1;
-        dl1 = dl1->next;
+        prev = curr;
+        curr = curr->next;
     }
 
     // 把全部物理内存映射到 canonical hole 之后
