@@ -1,5 +1,13 @@
 # 准备开发工具
 
+在全新的 Debian 发行版上执行：
+
+~~~
+sudo apt install clang lld llvm grub-pc-bin xorriso libgtest-dev
+~~~
+
+直接使用系统的包管理器就可以。
+
 ## 编译 llvm 工具链
 
 选择 clang 作为编译器，因为 clang 本身就是交叉编译器。

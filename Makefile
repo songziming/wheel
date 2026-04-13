@@ -1,8 +1,6 @@
 # build wheel kernel and unit test
 
 
-
-
 # build settings
 ARCH  ?= x86_64
 DEBUG ?= 1
@@ -95,11 +93,11 @@ else ifeq ($(UNAME_S),Linux)
 endif
 
 # 单元测试代码的编译选项，C++
-TXFLAGS := -c -std=c++17 -g -DUNIT_TEST $(KINC) $(ASAN)
-TXFLAGS += $(shell pkg-config --cflags gtest)
+TXFLAGS := -c -std=c++17 -g -DUNIT_TEST $(KINC)
+TXFLAGS += -isystem -pthread $(ASAN)
 
 # 单元测试链接选项
-TLFLAGS := $(shell pkg-config --libs gtest gtest_main) $(ASAN)
+TLFLAGS := -lgtest -lgtest_main $(ASAN)
 
 include $(KERNEL)/arch_$(ARCH)/config.mk
 

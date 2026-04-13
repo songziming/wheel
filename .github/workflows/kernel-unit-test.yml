@@ -12,7 +12,7 @@ jobs:
       - name: cheskout repo
         uses: actions/checkout@v4
       - name: build unit test
-        run: make test
+        run: make unit
       - name: run unit test
         run: build/unit
         env:
