@@ -68,6 +68,15 @@ isr_\vec:
 // 中断和异常的统一处理后端
 //------------------------------------------------------------------------------
 
+// 发生中断时的栈结构，向低地址生长，最后的 RDI 是我们压栈的
+// High |    SS    |
+//      |   RSP    |
+//      |  RFLAGS  |
+//      |    CS    | <-- %rsp + 0x18
+//      |   RIP    |
+//      | ERR CODE |
+// Low  |   RDI    | <-- %rsp
+
 // rdi 已经在入口点保存，现在 rdi 保存向量号
 #define push_caller_saved_regs  \
     pushq   %rsi;               \
@@ -105,19 +114,6 @@ isr_\vec:
     popq    %rbp;               \
     popq    %rbx
 
-// 发生中断时的栈结构，向低地址生长，最后的 RDI 是我们压栈的
-// High |    SS    |
-//      |   RSP    |
-//      |  RFLAGS  |
-//      |    CS    | <-- %rsp + 0x18
-//      |   RIP    |
-//      | ERR CODE |
-// Low  |   RDI    | <-- %rsp
-
-// 中断异常处理过程会使用大量栈空间，可能栈溢出，引发 double fault
-// 应该使用 IST 机制，处理 double fault 使用专用栈
-// 这可以保证处理 double fault 不会溢出，不会引发 triple fault
-
 // 异常响应流程，不切换中断栈，不允许重入，不切换任务
 // 异常更像是被动的函数调用，无需保存 callee-save regs，因为调用 C 函数时会自动保存
 exception_stub:
@@ -131,7 +127,6 @@ exp_from_ring0:
     movq    %rsp, %rsi      // 参数：当前栈顶/寄存器文件
 
     // 调用 C 函数，函数会自己保存 callee-saved regs
-    // call    handle_irq
     movq    irq_handlers(,%edi,8), %rax
     call    *%rax
 
@@ -168,7 +163,6 @@ int_from_ring0:
 int_enter_nested:
 
     // 调用 C 函数处理中断
-    // call    handle_irq
     movq    irq_handlers(,%edi,8), %rax
     call    *%rax
 

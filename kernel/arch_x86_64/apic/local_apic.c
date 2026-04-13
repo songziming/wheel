@@ -189,7 +189,7 @@ INIT_TEXT void loapic_parse_x2(loapic_t *dst, const madt_lox2apic_t *tbl) {
 }
 
 INIT_TEXT void loapic_init(int idx) {
-    loapic_t *lo = &g_loapics[idx];
+    // loapic_t *lo = &g_loapics[idx];
     if (0 == idx) {
         if (g_cpu_features & CPU_FEATURE_X2APIC) {
             // 支持 x2APIC，使用 MSR 读写 local APIC 寄存器
@@ -293,4 +293,71 @@ void loapic_send_ipi(int cpu, int vec) {
     } else {
         g_write_icr(g_loapics[cpu].apic_id, lo);
     }
+}
+
+
+//------------------------------------------------------------------------------
+// timer
+//------------------------------------------------------------------------------
+
+// 使用 8254 PIT 校准
+// 8254 标准主频为 105/88 MHz，使用 8254 计时 50ms
+// 统计这段时间前后 apic timer 计数器的取值，计算 timer 频率
+// 同时还计算了 tsc 速度（tsc 可能睿频，导致速度不准）
+
+// 这是 8254 的端口
+#define PIT_CH2 0x42
+#define PIT_CMD 0x43
+
+INIT_TEXT void loapic_timer_calibrate() {
+    uint64_t start_ctr;
+    uint64_t end_ctr;
+
+    // 首先确保 channel 2 处于禁用状态，输入低电平
+    out8(0x61, in8(0x61) & ~1);
+
+    // 将 apic timer 计数器设为最大值，divider=1
+    g_write(REG_TIMER_DIV, 0x0b);
+    g_write(REG_TIMER_ICR, 0xffffffff);
+
+    // 使用 channel 2 mode 3，reload value 设为 65534
+    // mode 3 表示输出方波，每个下降沿计数器减二（所以 reload value 为偶数）
+    out8(PIT_CMD, 0xb6); // 10_11_011_0
+    out8(PIT_CH2, 0xfe);
+    out8(PIT_CH2, 0xff);
+
+    // channel 2 输入信号设为高电平，从 65534 开始计数
+    // 读取 apic timer 计数器，作为开始值
+    out8(0x61, in8(0x61) | 1);
+    start_ctr = g_read(REG_TIMER_CCR);
+
+
+    // 不断读取输出（使用 read-back 模式锁住 status，最高比特表示输出）
+    // 一旦输出变为 0 则退出循环，表示已经过了 32767 个周期（不足 50ms）
+    while (1) {
+        out8(PIT_CMD, 0xe8); // 11_10_100_0
+        if ((in8(PIT_CH2) & 0x80) != 0x80) {
+            break;
+        }
+    }
+
+    // 不断读取 channel 2 计数器，以及 apic timer 计数器，足够 50ms 则退出循环
+    // 50ms 即 1/20 秒，mode 3 每周期计数器减二，则 50ms 计数器减少 119318
+    while (1) {
+        out8(PIT_CMD, 0x80); // latch channel 2 count
+        end_ctr = g_read(REG_TIMER_CCR);
+        uint8_t lo = in8(PIT_CH2);
+        uint8_t hi = in8(PIT_CH2);
+        int pit = ((int)hi << 8) | lo;
+        if (pit <= 2 * 65534 - 119318) {
+            break;
+        }
+    }
+
+    // 禁用 PIT channel 2
+    out8(0x61, in8(0x61) & ~1);
+
+    // TSC 频率可以保存下来，也许有用
+    uint64_t g_timer_freq = (start_ctr - end_ctr) * 20;
+    logk("loapic timer freq %zd\n", g_timer_freq);
 }

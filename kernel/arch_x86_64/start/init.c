@@ -194,6 +194,7 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     i8259_disable();
     // TODO ioapic_init_all();
     loapic_init(0);
+    loapic_timer_calibrate();
 
     // 校准系统时钟
     // TODO calibrate timer

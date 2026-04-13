@@ -30,6 +30,7 @@ INIT_TEXT void loapic_parse(loapic_t *dst, const madt_loapic_t *tbl);
 INIT_TEXT void loapic_parse_x2(loapic_t *dst, const madt_lox2apic_t *tbl);
 INIT_TEXT void loapic_init(int idx);
 void loapic_show();
+INIT_TEXT void loapic_timer_calibrate();
 
 // IO APIC
 extern int       g_ioapic_num;

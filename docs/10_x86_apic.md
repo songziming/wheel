@@ -1,69 +1,39 @@
-# APIC driver
+# APIC
 
-local APIC 用来处理中断，每个 CPU 都有自己的 local APIC。
+IO APIC 接收硬件产生的中断，将它们转发给 Local APIC。
+Local APIC 处理 CPU 自己的中断异常、其他 CPU 发来的 IPI，还能产生时钟中断。
 
-local APIC 的作用：
-- 处理 CPU 自己产生的中断、异常
-- 响应其他 CPU 发送来的中间（IPI）
-- 时钟
+我们需要 IO APIC 实现的功能：
+- 可以将中断转发给任意 CPU
+我们需要 Local APIC 实现的功能：
+- 能够发送IPI，实现单播和广播
+- 以固定周期发送时钟中断，作为系统调度信号
 
-### 我们的目标
+## IO APIC 发送中断给任意 CPU
 
-- 可以向任意 cpu 发送 IPI（单播）
-- 可以向所有 cpu 发送 IPI（广播）
-- 不需要支持多播，即向一部分 cpu 发送 IPI。这类需求我们可以通过循环实现。
+IO APIC 重定位条目类似于路由表，描述了每个中断发送给哪个 CPU。
+然而 x2APIC 不包括 IO APIC，重定位条目中，APIC-ID 只有 8-bit。
+如果处理器的 x2APIC-ID 超过了 8-bit，重定位条目容不下，该怎么做？
+interrupt-remapper？
 
-IO APIC 可以将中断转发给任意 CPU
+## 发送 IPI
 
-1. 可以向任意 CPU 发送 IPI，可以向任意的 CPU 组合发送多播 IPI
-类似于 cpuset 位图
-发送 IPI 的时候，可以选择 physical/logical 两种模式
-如果向一个 CPU 发送 IPI，使用 physical mode，指定目标 apic-id 即可
-如果要向多个 CPU 发送 IPI，可以使用 logical mode，每个 CPU 占据 LDR 一个比特（最多支持 8 个 CPU）
+我们只需要单播和广播，不需要多播（向多个 CPU 发送 IPI）。
+多播可以通过循环实现，我们不要求 IPI 在同一时刻发出去。
 
-2. IO APIC 可以将中断转发给任意 CPU
+physical/logical mode
+physical 模式下，向 ICR 填入目标 CPU 的 apic-id，就可以向某个 CPU 发送 IPI。
+logical 模式下，OS 可以给每个 CPU 指定 cluster-id 和 logical-id，可以向一个 cluster 发送 IPI，实现类似多播的效果。
+我们使用默认的 physical mode 即可。
 
-x2APIC 只更新了 local apic，没有更新 IO APIC。
-IO APIC 的重定位条目里，只能装下 8-bit APIC-ID，x2APIC-ID 如果超过 8-bit 则容不下。
-因此需要 interrupt-remapper。
-TODO 具体怎样 remap？
-
-### 发送 IPI
-
-发送 IPI，需要指定目标的。
-physical 模式，指定目标的 apic-id 即可。
-logical 模式，指定的是 logical-id，这个 id 通过 LDR 配置。
-使用何种模式，由 ICR.dest_mode 决定，0 表示 physical，1 表示 logical
-
-logical 模式允许 OS 自己配置每个处理器的 logical-id，可以实现灵活分组。
-借助 logical mode，可以将 IPI 发给一组处理器（称作 cluster），类似多播。
-我们用不到这个功能，所以默认使用 physical mode 发送 IPI。
-如果要配置 logical-id，需要使用 LDR、DFR 两个寄存器。
-
-关于 APIC-ID
-xAPIC 使用 8-bit 表示（早期的 P6 只有 4-bit），IPI.dest 也是 8-bit
-x2APIC 使用 32-bit 表示 apic-ID，IPI.dest 也是 32-bit
-
-### 发送 IPI 确定目标
-
-发送 IPI 需要指定目标 cpu 的 ID（IPI 还有多播、广播的用法）
-写入 ICR 寄存器（interrupt command register），这个寄存器中，dest 字段只有 8-bit
-也就是说，目标 CPU-ID 必须能用 8-bit 装下
-
-ICR[dest shorthand] 有 4 种选项，可以不用 dest 快速指定 IPI 目标：
+实现广播，可以借助 ICR.dest_shorthand，优先级在 destination 字段之前：
 - no shorthand，使用 dest 确定目标
 - self，发送 IPI 给自己（x2APIC 还有另一种 self IPI 方式）
 - all including self
 - all excluding self
 
+## 配置时钟
 
-如果 ICR.dest_mode == physical, ICR.dest 字段直接表示目标 cpu 的 apic-id
-xAPIC 模式下，ICR.dest 为 8-bit
-x2APIC 模式下，ICR.dest 为 32-bit，始终与 APIC-ID 相匹配
+时钟有 singleshot 和 periodic 两种模式。
 
-如果 ICR.dest_mode == logical，ICR.dest 表示 MDA（message destination address）
-LDR 寄存器可以用来设置 logical-apic-id，相当于 OS 可以自己重新设置目标 ID
-如何比较 MDA 和 LDR，并不是判断两个 uint8 是否相等
-- DFR == flat_model（默认），使用按位与，if (0 != (MDA & LDR)) then send IPI
-- DFR == flat_cluster_model（该模式只用于 P6 和奔腾，我们不用考虑）
-- DFR == hierarchical_cluster_model，将cpu分组，每组最多4个cpu。
+timer 内部有一个计数器寄存器，按固定速度递减。每次减少到0发送一次中断。
