@@ -163,17 +163,12 @@ static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint
             uint64_t pa2m = pt;
             ASSERT(0 == OFFSET_2M(pa2m));
 
-            logk("breaking 2m %x->%x\n", va2m, pa2m);
-            logk("remapping %x~%x->%x\n", va, end, pa);
-
             pt = alloc_table(__LINE__);
             if (va2m != va) {
-                logk("remap head %x~%x -> %x\n", va2m, va, pa2m);
                 pt_map(pt, va2m, va, pa2m, tbl[i] & MMU_ATTRS);
             }
             if (end < va2m + SIZE_2M) {
                 size_t end_pa = pa2m + (end - va2m);
-                logk("remap tail %x~%x -> %x\n", end, va2m + SIZE_2M, end_pa);
                 pt_map(pt, end, va2m + SIZE_2M, end_pa, tbl[i] & MMU_ATTRS);
             }
         }

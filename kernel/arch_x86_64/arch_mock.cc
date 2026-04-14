@@ -17,7 +17,7 @@ void load_tr() {}
 // arch_entries.S
 uint64_t isr_entries[1];
 // void task_entry() {}
-// void syscall_entry() {}
+void syscall_entry() {}
 // void arch_task_switch() {}
 
 } // extern "C"
