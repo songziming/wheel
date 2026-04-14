@@ -6,9 +6,10 @@
 INIT_TEXT void gdt_init();
 INIT_TEXT void gdt_load();
 
-INIT_TEXT void idt_init();
+// INIT_TEXT void idt_init();
+INIT_TEXT void idt_set_isr(uint8_t vec, uint64_t isr, int dpl);
+INIT_TEXT void idt_set_ist(uint8_t vec, int idx);
 INIT_TEXT void idt_load();
-INIT_TEXT void idt_set_ist(uint8_t vec, unsigned idx);
 
 INIT_TEXT void tss_init_load();
 INIT_TEXT void tss_set_ist(int cpu, int ist, uint64_t addr);

@@ -1,6 +1,8 @@
 // CPU 中断异常入口、系统调用入口、任务切换入口
 
 .global isr_entries
+.global syscall_entry
+
 .extern g_int_depth
 .extern g_int_stack_top
 .extern g_curr_stack
@@ -127,7 +129,7 @@ exp_from_ring0:
     movq    %rsp, %rsi      // 参数：当前栈顶/寄存器文件
 
     // 调用 C 函数，函数会自己保存 callee-saved regs
-    movq    irq_handlers(,%edi,8), %rax
+    movq    irq_handlers(,%rdi,8), %rax
     call    *%rax
 
     addq    $48, %rsp       // 跳过 6 个 callee-save regs
@@ -163,7 +165,7 @@ int_from_ring0:
 int_enter_nested:
 
     // 调用 C 函数处理中断
-    movq    irq_handlers(,%edi,8), %rax
+    movq    irq_handlers(,%rdi,8), %rax
     call    *%rax
 
     // 判断是否退出最后一层中断，如果是，需要执行任务切换
@@ -176,7 +178,7 @@ int_enter_nested:
 
     // 切换到原来的栈顶
     // TODO 任务切换也在这里实现，替换成新任务的栈顶地址
-    movq    %gs:(g_curr_stack), %rdi
+    movq    %gs:(g_curr_stack), %rsp
 int_return_nested:
 
     pop_callee_saved_regs
@@ -188,3 +190,9 @@ int_return_nested:
     swapgs                  // 返回到用户态
 int_to_ring0:
     iretq
+
+
+// 系统调用入口，类似
+// 使用 syscall 命令跳转
+syscall_entry:
+    sysret

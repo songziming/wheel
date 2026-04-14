@@ -42,10 +42,6 @@ static CONST        uint64_t *g_gdt = NULL;
 static CONST        idt_ent_t g_idt[256];
 static PERCPU_DATA  tss_t     g_tss = {0};
 
-
-// arch_entries.S
-extern uint64_t isr_entries[256];
-
 // gdt_idt_tss.S
 void load_gdtr(tbl_ptr_t *ptr);
 void load_idtr(tbl_ptr_t *ptr);
@@ -81,20 +77,35 @@ INIT_TEXT void gdt_load() {
 // 中断门和陷阱门有 ist，调用门没有
 // 调用门可以放在 GDT、LDT 内部
 
-INIT_TEXT void idt_init() {
-    for (int i = 0; i < 256; ++i) {
-        g_idt[i].attr        = 0x8e; // dpl=0，type=E，中断门
-        g_idt[i].selector    = 0x08; // 内核代码段
-        g_idt[i].offset_low  =  isr_entries[i]        & 0xffff;
-        g_idt[i].offset_mid  = (isr_entries[i] >> 16) & 0xffff;
-        g_idt[i].offset_high = (isr_entries[i] >> 32) & 0xffffffff;
-    }
+// INIT_TEXT void idt_init() {
+//     for (int i = 0; i < 256; ++i) {
+//         g_idt[i].attr        = 0x8e; // dpl=0，type=E，中断门
+//         g_idt[i].selector    = 0x08; // 内核代码段
+//         g_idt[i].offset_low  =  isr_entries[i]        & 0xffff;
+//         g_idt[i].offset_mid  = (isr_entries[i] >> 16) & 0xffff;
+//         g_idt[i].offset_high = (isr_entries[i] >> 32) & 0xffffffff;
+//     }
 
-    // 留出几个中断号用于系统调用
-    // 通过 int 指令触发的中断才需要检查 dpl
-    // 异常或硬件产生的中断（例如时钟）与 dpl 无关，用户模式下依然可用
-    // TODO 应该允许其他模块修改 idt 条目 dpl
-    g_idt[0x80].attr = 0xee;    // dpl=3 中断门
+//     // 留出几个中断号用于系统调用
+//     // 通过 int 指令触发的中断才需要检查 dpl
+//     // 异常或硬件产生的中断（例如时钟）与 dpl 无关，用户模式下依然可用
+//     // TODO 应该允许其他模块修改 idt 条目 dpl
+//     g_idt[0x80].attr = 0xee;    // dpl=3 中断门
+// }
+
+INIT_TEXT void idt_set_isr(uint8_t vec, uint64_t isr, int dpl) {
+    g_idt[vec].attr        = 0x8e | ((dpl & 3) << 5); // type=E 中断门
+    g_idt[vec].selector    = 0x08; // 内核代码段
+    g_idt[vec].offset_low  =  isr        & 0xffff;
+    g_idt[vec].offset_mid  = (isr >> 16) & 0xffff;
+    g_idt[vec].offset_high = (isr >> 32) & 0xffffffff;
+}
+
+// 一共 7 个 IST
+INIT_TEXT void idt_set_ist(uint8_t vec, int ist) {
+    ASSERT(ist > 0);
+    ASSERT(ist < 8);
+    g_idt[vec].ist = ist & 7;
 }
 
 INIT_TEXT void idt_load() {
@@ -102,14 +113,6 @@ INIT_TEXT void idt_load() {
     idtr.base = (uint64_t)g_idt;
     idtr.limit = sizeof(g_idt) - 1;
     load_idtr(&idtr);
-}
-
-// 一共 7 个 IST
-INIT_TEXT void idt_set_ist(uint8_t vec, unsigned ist) {
-    ASSERT(ist > 0);
-    ASSERT(ist < 8);
-
-    g_idt[vec].ist = ist & 7;
 }
 
 INIT_TEXT void tss_init_load() {

@@ -16,11 +16,18 @@ static CONST uint8_t g_cpu_family;
 
 CONST uint32_t g_cpu_features;
 
+static uint32_t g_core_freq;
+static uint32_t g_tsc_clk[2];
+
+static uint32_t g_base_freq;
+static uint32_t g_max_freq;
+static uint32_t g_bus_freq;
+
 
 // 获取处理器功能开关
 // 参考 linux/arch/x86/boot/cpuflags.c, 函数 get_cpuflags(void)
 INIT_TEXT void cpu_features_detect() {
-    uint32_t a, c, d;
+    uint32_t a, b, c, d;
     uint32_t g_max_eax;
 
     // 获取 vendor string
@@ -54,11 +61,20 @@ INIT_TEXT void cpu_features_detect() {
     g_cpu_features |= (a & (1U <<  2)) ? CPU_FEATURE_ARAT     : 0;
     g_cpu_features |= (a & (1U << 19)) ? CPU_FEATURE_FEEDBACK : 0;
 
-    // // core crystal clock
-    // ASMV("cpuid" : "=a"(a), "=b"(b), "=c"(c) : "a"(0x15) : "edx");
-    // g_core_freq = c;
-    // g_tsc_ratio[0] = b;
-    // g_tsc_ratio[1] = a;
+    // get core crystal's frequency
+    // TSC 频率也是这个
+    ASMV("cpuid" : "=a"(a), "=b"(b), "=c"(c) : "a"(0x15) : "edx");
+    g_core_freq = c; // in Hz
+    g_tsc_clk[0] = b;
+    g_tsc_clk[1] = a;
+    // tsc_freq = g_core_freq * b / a
+
+    // get bus frequency
+    // 486 Local APIC 是外置的，和处理器主频无关，而是和总线频率绑定
+    ASMV("cpuid" : "=a"(a), "=b"(b), "=c"(c) : "a"(0x16) : "edx");
+    g_base_freq = a;
+    g_max_freq = b;
+    g_bus_freq = c; // in MHz
 
     // 获取各级缓存信息，获取方式与 vendor 有关
     if (0 == kmemcmp(g_vendor, VENDOR_INTEL, 12)) {
@@ -106,11 +122,6 @@ INIT_TEXT void cpu_features_enable() {
         efer |= 1UL << 11;  // NXE
     }
     write_msr(MSR_EFER, efer);
-
-    // // 设置系统调用相关 MSR（只允许 64-bit 模式下的系统调用入口）
-    // write_msr(MSR_STAR, 0x001b0008UL << 32);    // STAR
-    // write_msr(MSR_LSTAR, (uint64_t)syscall_entry); // LSTAR
-    // write_msr(MSR_SFMASK, 0UL);                     // SFMASK
 }
 
 void cpu_features_show() {
@@ -145,4 +156,6 @@ void cpu_features_show() {
         }
     }
     logk("\n");
+    logk("  - core-freq: %dHz, tsc/clock=%d/%d, base-freq: %dMHz, max-freq: %dMHz, bus-freq: %dMHz\n",
+        g_core_freq, g_tsc_clk[0], g_tsc_clk[1], g_base_freq, g_max_freq, g_bus_freq);
 }

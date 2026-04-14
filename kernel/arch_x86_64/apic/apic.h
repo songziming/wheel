@@ -22,6 +22,7 @@ typedef struct ioapic {
 
 
 // local APIC
+
 extern int    g_loapic_num;
 extern size_t g_loapic_addr;
 extern loapic_t *g_loapics;
@@ -30,9 +31,13 @@ INIT_TEXT void loapic_parse(loapic_t *dst, const madt_loapic_t *tbl);
 INIT_TEXT void loapic_parse_x2(loapic_t *dst, const madt_lox2apic_t *tbl);
 INIT_TEXT void loapic_init(int idx);
 void loapic_show();
+
 INIT_TEXT void loapic_timer_calibrate();
+void loapic_timer_set_periodic(int freq);
+
 
 // IO APIC
+
 extern int       g_ioapic_num;
 extern ioapic_t *g_ioapics;
 extern uint8_t   g_irq_max;

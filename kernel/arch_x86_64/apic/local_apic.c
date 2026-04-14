@@ -10,6 +10,8 @@ CONST int    g_loapic_num;
 CONST size_t g_loapic_addr;
 CONST loapic_t *g_loapics;
 
+static CONST uint64_t g_timer_freq;
+
 
 //------------------------------------------------------------------------------
 // local apic 寄存器编号
@@ -158,6 +160,7 @@ static void on_stopall(int vec UNUSED, regs_t *f UNUSED) {
 
 static void on_timer(int vec UNUSED, regs_t *f UNUSED) {
     g_write(REG_EOI, 0);
+    logk("*");
     // TODO 调用 tick_advance
 }
 
@@ -189,13 +192,15 @@ INIT_TEXT void loapic_parse_x2(loapic_t *dst, const madt_lox2apic_t *tbl) {
 }
 
 INIT_TEXT void loapic_init(int idx) {
-    // loapic_t *lo = &g_loapics[idx];
     if (0 == idx) {
         if (g_cpu_features & CPU_FEATURE_X2APIC) {
             // 支持 x2APIC，使用 MSR 读写 local APIC 寄存器
             loapic_enable_x2();
         }
 
+        // TODO 有些 local apic handlers 非常简单，直接 iretq 就可以
+        //      完全可以跳过默认中断的寄存器保存恢复
+        //      定义专用的 naked isr function，然后修改 IDT
         irq_handlers[VEC_IPI_RESCHED] = on_resched;
         irq_handlers[VEC_IPI_STOPALL] = on_stopall;
         irq_handlers[VEC_LOAPIC_TIMER] = on_timer;
@@ -237,6 +242,7 @@ INIT_TEXT void loapic_init(int idx) {
     }
 
     // 设置 LVT 向量号
+    g_write(REG_LVT_TIMER, VEC_LOAPIC_TIMER);
     g_write(REG_LVT_ERROR, VEC_LOAPIC_ERROR);
     g_write(REG_LVT_THERMAL, VEC_LOAPIC_THERMAL);
 
@@ -305,12 +311,16 @@ void loapic_send_ipi(int cpu, int vec) {
 // 统计这段时间前后 apic timer 计数器的取值，计算 timer 频率
 // 同时还计算了 tsc 速度（tsc 可能睿频，导致速度不准）
 
+// PIT 主频 1.193182MHz，一秒钟计数 1193182，50ms 计数 59659
+// mode3 每次下降沿计数器减 2，50ms 计数 119318
+
 // 这是 8254 的端口
 #define PIT_CH2 0x42
 #define PIT_CMD 0x43
 
 INIT_TEXT void loapic_timer_calibrate() {
     uint64_t start_ctr;
+    uint64_t mid_ctr;
     uint64_t end_ctr;
 
     // 首先确保 channel 2 处于禁用状态，输入低电平
@@ -331,12 +341,18 @@ INIT_TEXT void loapic_timer_calibrate() {
     out8(0x61, in8(0x61) | 1);
     start_ctr = g_read(REG_TIMER_CCR);
 
+    // 读取 PIT ch2 输出电平（刚开始输出是高电平）
+    uint8_t start_out = in8(0x61) & 0x20;
 
     // 不断读取输出（使用 read-back 模式锁住 status，最高比特表示输出）
     // 一旦输出变为 0 则退出循环，表示已经过了 32767 个周期（不足 50ms）
     while (1) {
-        out8(PIT_CMD, 0xe8); // 11_10_100_0
-        if ((in8(PIT_CH2) & 0x80) != 0x80) {
+        // out8(PIT_CMD, 0xe8); // 11_10_100_0, read hibyte CH2, latch status
+        // if ((in8(PIT_CH2) & 0x80) != 0x80) {
+        //     break;
+        // }
+        if (start_out != (in8(0x61) & 0x20)) {
+            mid_ctr = g_read(REG_TIMER_CCR);
             break;
         }
     }
@@ -358,6 +374,18 @@ INIT_TEXT void loapic_timer_calibrate() {
     out8(0x61, in8(0x61) & ~1);
 
     // TSC 频率可以保存下来，也许有用
-    uint64_t g_timer_freq = (start_ctr - end_ctr) * 20;
+    logk("loapic counter from %u mid %u to %u\n", start_ctr, mid_ctr, end_ctr);
+    logk("starting pit ch2 output %x\n", start_out);
+    g_timer_freq = (start_ctr - end_ctr) * 20;
     logk("loapic timer freq %zd\n", g_timer_freq);
+}
+
+
+void loapic_timer_set_periodic(int freq) {
+    uint64_t delay = g_timer_freq + (freq >> 1);
+    delay /= freq;
+
+    g_write(REG_LVT_TIMER, LOAPIC_DM_FIXED | VEC_LOAPIC_TIMER | LOAPIC_PERIODIC);
+    g_write(REG_TIMER_DIV, 0x0b); // divide by 1
+    g_write(REG_TIMER_ICR, delay);
 }

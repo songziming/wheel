@@ -177,24 +177,28 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     // 内存中的关键数据已备份，可以放开 early-rw 增长限制
     early_rw_unlock();
 
-    // 创建正式的 gdt、idt
+    // 创建正式的 gdt
     gdt_init();
     gdt_load();
-    idt_init();
-    idt_load();
+    // idt_init();
+    // idt_load();
 
     // 初始化内存管理
     mem_init(); // this also init percpu
     thiscpu_init(0);
 
     tss_init_load(); // 依赖 thiscpu，需要放在 thiscpu_init 之后
-    int_init(); // 初始化中断管理机制
+    int_init(); // 初始化中断管理机制，包括 idt
+    idt_load();
 
     // 中断控制器初始化
     i8259_disable();
     // TODO ioapic_init_all();
     loapic_init(0);
+
+    // 校准时钟
     loapic_timer_calibrate();
+    loapic_timer_set_periodic(2);
 
     // 校准系统时钟
     // TODO calibrate timer
@@ -212,8 +216,10 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     cpu_features_show();
     // loapic_show();
 
-    ASMV("int $0x80");
-    ASMV("ud2");
+    // ASMV("int $0x80");
+    // ASMV("ud2");
+
+    ASMV("sti");
 
 end:
     while (1) {
