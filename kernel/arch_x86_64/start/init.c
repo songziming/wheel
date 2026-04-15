@@ -16,10 +16,11 @@
 #include <dev/framebuf.h>
 #include <dev/i8259.h>
 
-#include <debug.h>
-#include <kstring.h>
-#include <pmlayout.h>
 #include <early_alloc.h>
+#include <pmlayout.h>
+#include <task.h>
+#include <kstring.h>
+#include <debug.h>
 
 
 static INIT_DATA uint32_t g_fgcolor;
@@ -208,6 +209,8 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     write_cr3(g_kernel_vm.table);
 
     // TODO 初始化任务调度
+    sched_init();
+    timer_init();
 
     // TODO 创建根任务并开始运行
 
@@ -218,6 +221,11 @@ void sys_init(uint32_t eax, uint32_t ebx) {
 
     // ASMV("int $0x80");
     // ASMV("ud2");
+
+    // task_t dummy;
+    // dummy.name = "dummy task TCB";
+    // THISCPU_SET(g_prev_task, &dummy);
+    // THISCPU_SET(g_next_task, NULL);
 
     ASMV("sti");
 

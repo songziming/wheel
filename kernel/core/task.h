@@ -1,7 +1,7 @@
 #ifndef CORE_TASK_H
 #define CORE_TASK_H
 
-#include <wheel.h>
+#include <arch_api.h>
 #include <dllist.h>
 
 // 代表一个定时任务
@@ -12,11 +12,21 @@ struct timerjob {
     void (*func)(timerjob_t *self);
 };
 
+// 代表一个任务，也是调度的基本单位
+typedef struct task {
+    void       *regs;
+    const char *name;
+} task_t;
+
+// extern task_t *g_prev_task;
+// extern task_t *g_next_task;
+
 INIT_TEXT void timer_init();
-void timer_forward();
+void timer_process();
 void timer_start(timerjob_t *job, int tick);
 void timer_cancel(timerjob_t *job);
 
-void tick_advance();
+INIT_TEXT void sched_init();
+void sched_process();
 
 #endif // CORE_TASK_H

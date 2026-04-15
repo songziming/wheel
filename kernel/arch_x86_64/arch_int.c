@@ -9,15 +9,13 @@
 PERCPU_BSS int g_int_depth;
 PERCPU_BSS size_t g_int_stack_top;
 
-// 切换中断栈时，在这里保存原来的栈顶
-PERCPU_BSS size_t g_curr_stack;
-
 // 中断处理函数
 int_handler_t irq_handlers[256];
 
 // arch_entries.S
 extern uint64_t isr_entries[256];
 extern void syscall_entry();
+
 
 // 默认的中断处理函数
 static void handle_irq(int vec, regs_t *f) {

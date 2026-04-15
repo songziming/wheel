@@ -5,7 +5,8 @@
 
 .extern g_int_depth
 .extern g_int_stack_top
-.extern g_curr_stack
+.extern g_prev_task
+.extern g_next_task
 .extern irq_handlers
 
 .altmacro // 需要在 macro 和循环里使用变量
@@ -160,7 +161,9 @@ int_from_ring0:
     jne     int_enter_nested
 
     // 不是重入，需要切换到中断栈，把当前栈位置也记录下来
-    movq    %rsp, %gs:(g_curr_stack)
+    movq    %gs:(g_prev_task), %rax
+    movq    %rsi, (%rax) // THISCPU(g_prev_task)->regs = %rsp
+    // movq    %rsp, %gs:(g_curr_stack)
     movq    %gs:(g_int_stack_top), %rsp
 int_enter_nested:
 
@@ -178,7 +181,9 @@ int_enter_nested:
 
     // 切换到原来的栈顶
     // TODO 任务切换也在这里实现，替换成新任务的栈顶地址
-    movq    %gs:(g_curr_stack), %rsp
+    movq    %gs:(g_next_task), %rax
+    movq    (%rax), %rsp // rsp = THISCPU(g_next_task)->regs
+    // movq    %gs:(g_curr_stack), %rsp
 int_return_nested:
 
     pop_callee_saved_regs

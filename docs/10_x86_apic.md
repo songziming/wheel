@@ -32,8 +32,44 @@ logical 模式下，OS 可以给每个 CPU 指定 cluster-id 和 logical-id，�
 - all including self
 - all excluding self
 
-## 配置时钟
+## 配置 APIC Timer
 
 时钟有 singleshot 和 periodic 两种模式。
-
 timer 内部有一个计数器寄存器，按固定速度递减。每次减少到0发送一次中断。
+
+每个 CPU 单独配置，彼此没有关联？
+可以校准每个 CPU 的频率和相位
+由统一的时钟（PIT、HPET）向所有 CPU 广播时钟中断，频率是 `sys_clk_freq*ncpu`。
+每个 CPU 接受前面几个中断，用来计算频率（大小核 CPU 会不会频率不同？故每个 CPU 单独计算）
+然后再收到中断时，写入 apic-timer ICR，开始计时。
+每个 CPU 算好自己的相位，在自己的时间点开始计时。
+所有 CPU 都校准完成，由最后一个 CPU 负责关闭外部时钟中断，结束这次校准。
+可以专门划出一个 IRQ 用来校准时钟。
+
+
+## TSC-deadline mode
+
+这是 Local APIC Timer 的一种工作模式。
+这种模式下，CPU 的时间戳寄存器（TSC）就是时钟计数器。
+当时间戳达到或超过 IA32_TSC_DEADLINE MSR 的取值，就产生一个中断。
+
+需要检查 TSC 速度会不会变，TSC 即使停在 hlt 指令也会增长。
+
+CPUID.80000007H:EDX[8] 可以判断 Invariant-TSC，表示 TSC 频率固定不变。
+表示 CPU 处于任何电源状态下（ACPI-P/C/T），TSC 速度都不变。
+
+类似于 singleshot，只产生一次中断。
+需要再次写 IA32_TSC_DEADLINE MSR，重新一个计时周起。
+
+## 如何同步各个 CPU 的 TSC
+
+TSC 可读可写，但 cpu 只能修改自己的 tsc，不容易将所有 CPU 的 tsc 同步。
+
+有两个寄存器：
+- IA32_TIME_STAMP_COUNTER，这个是 tsc 本身，可以用 wrtsc 修改
+- IA32_TSC_ADJUST，这个表示相位
+这两个寄存器是联动的，更新其中一个，另一个自动更新。只是同步的不是值，而是变化量。
+
+tsc 随时间变化，但 tsc_adjust 不随时间变化，二者关系如下：
+tsc(t) = tsc_adjust + t
+所以，调整 tsc_adjust，就可以修改各个 CPU 的 tsc 相位

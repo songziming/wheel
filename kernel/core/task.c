@@ -1,11 +1,10 @@
 #include "task.h"
-#include <arch_api.h>
 #include <spin.h>
 #include <debug.h>
 
 // 任务管理 & 调度 & 定时任务
 
-static int g_tick = 0;
+// static int g_tick = 0;
 
 
 
@@ -14,13 +13,25 @@ static spin_t timer_lock;
 static dlnode_t timer_q;
 
 
+// 任务调度
+PERCPU_BSS task_t *g_prev_task;
+PERCPU_BSS task_t *g_next_task;
+
+static INIT_BSS task_t g_dummy_task;
+static PERCPU_BSS task_t g_idle_task;
+
+
+//------------------------------------------------------------------------------
+// 计时器
+//------------------------------------------------------------------------------
+
 INIT_TEXT void timer_init() {
     spin_init(&timer_lock);
     dl_init_circular(&timer_q);
 }
 
 // 挑出队列开头 delta==0 的节点，执行这些节点中的函数
-void timer_forward() {
+void timer_process() {
     int key = irq_spin_take(&timer_lock);
     if (dl_is_lastone(&timer_q)) {
         irq_spin_give(&timer_lock, key);
@@ -40,11 +51,7 @@ void timer_forward() {
     dlnode_t *oldhead = timer_q.next;
     if (oldhead != newhead) {
         timer_q.next = newhead;
-        if (newhead) {
-            newhead->prev = &timer_q;
-        } else {
-            timer_q.prev = NULL;
-        }
+        newhead->prev = &timer_q;
     }
 
     irq_spin_give(&timer_lock, key);
@@ -94,8 +101,24 @@ void timer_cancel(timerjob_t *job) {
 
 
 
-void tick_advance() {
-    if (0 == cpu_index()) {
-        ++g_tick;
+//------------------------------------------------------------------------------
+// scheduler
+//------------------------------------------------------------------------------
+
+void sched_init() {
+    g_dummy_task.name = "temp-dummy-TCB";
+    THISCPU_SET(g_prev_task, &g_dummy_task);
+
+    // task_t *idle = THISCPU(&g_idle_task);
+    // TODO create task IDLE, put on this ready-queue
+}
+
+void sched_process() {
+    task_t *prev = THISCPU_GET(g_prev_task);
+    task_t *next = THISCPU_GET(g_next_task);
+    if (prev != next) {
+        logk("\n keeping old task %s\n", prev->name);
+        THISCPU_SET(g_next_task, prev);
     }
+    logk("*");
 }

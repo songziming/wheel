@@ -3,21 +3,24 @@
 
 #include <wheel.h>
 
-#define CPU_FEATURE_PCID        0x0001
-#define CPU_FEATURE_X2APIC      0x0002
-#define CPU_FEATURE_TSC         0x0004
-#define CPU_FEATURE_HT          0x0008  // 超线程
-#define CPU_FEATURE_NX          0x0010
-#define CPU_FEATURE_1G          0x0020
-#define CPU_FEATURE_ARAT        0x0040  // APIC Timer 频率固定，与处理器睿频无关（即使处在 deep-C 状态）
-#define CPU_FEATURE_ERMS        0x0080  // enhanced rep movsb/stosb
-#define CPU_FEATURE_FSGSBASE    0x0100  // 支持读写 fsbase、gsbase 的专用指令
-#define CPU_FEATURE_INVPCID     0x0200
-#define CPU_FEATURE_SMEP        0x0400  // 特权模式禁止执行用户页面的指令（防代码注入）
-#define CPU_FEATURE_SMAP        0x0800  // 特权模式禁止访问用户页面的数据（防数据注入）
-#define CPU_FEATURE_FEEDBACK    0x1000  // 大小核架构下，支持硬件调度反馈
-#define CPU_FEATURE_VMX         0x2000  // Intel VMX 虚拟化扩展
-#define CPU_FEATURE_SVM         0x4000  // AMD SVM 虚拟化扩展
+#define CPU_FEATURE_PCID        0x00001
+#define CPU_FEATURE_X2APIC      0x00002
+#define CPU_FEATURE_TSC         0x00004
+#define CPU_FEATURE_HT          0x00008  // 超线程
+#define CPU_FEATURE_NX          0x00010
+#define CPU_FEATURE_1G          0x00020
+#define CPU_FEATURE_ARAT        0x00040  // APIC Timer 频率固定，与处理器睿频无关（即使处在 deep-C 状态）
+#define CPU_FEATURE_ERMS        0x00080  // enhanced rep movsb/stosb
+#define CPU_FEATURE_FSGSBASE    0x00100  // 支持读写 fsbase、gsbase 的专用指令
+#define CPU_FEATURE_INVPCID     0x00200
+#define CPU_FEATURE_SMEP        0x00400  // 特权模式禁止执行用户页面的指令（防代码注入）
+#define CPU_FEATURE_SMAP        0x00800  // 特权模式禁止访问用户页面的数据（防数据注入）
+#define CPU_FEATURE_FEEDBACK    0x01000  // 大小核架构下，支持硬件调度反馈
+#define CPU_FEATURE_VMX         0x02000  // Intel VMX 虚拟化扩展
+#define CPU_FEATURE_SVM         0x04000  // AMD SVM 虚拟化扩展
+#define CPU_FEATURE_TSC_FIXED   0x08000  // TSC 频率固定
+#define CPU_FEATURE_TSC_ADJUST  0x10000  // 支持 TSC-ADJUST 相位控制
+#define CPU_FEATURE_TSC_DDL     0x20000  // APIC Timer 支持 tsc deadline 模式
 
 typedef struct cache_info {
     size_t line_size;

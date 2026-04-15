@@ -2,6 +2,7 @@
 #include <arch_api.h>
 #include <arch_int.h>
 #include <cpu/features.h>
+#include <task.h>
 #include <debug.h>
 
 
@@ -160,8 +161,10 @@ static void on_stopall(int vec UNUSED, regs_t *f UNUSED) {
 
 static void on_timer(int vec UNUSED, regs_t *f UNUSED) {
     g_write(REG_EOI, 0);
-    logk("*");
-    // TODO 调用 tick_advance
+    if (0 == cpu_index()) {
+        timer_process();
+    }
+    sched_process();
 }
 
 static void on_error(int vec UNUSED, regs_t *f UNUSED) {

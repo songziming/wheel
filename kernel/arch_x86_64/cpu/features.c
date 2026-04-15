@@ -42,29 +42,38 @@ INIT_TEXT void cpu_features_detect() {
     // g_cpu_type      = (a >> 12) & 0x03;
     // g_cpu_ex_model  = (a >> 16) & 0x0f;
     // g_cpu_ex_family = (a >> 20) & 0xff;
-    g_cpu_features |= (c & (1U <<  5)) ? CPU_FEATURE_VMX    : 0;
-    g_cpu_features |= (c & (1U << 17)) ? CPU_FEATURE_PCID   : 0;
-    g_cpu_features |= (c & (1U << 21)) ? CPU_FEATURE_X2APIC : 0;
-    g_cpu_features |= (d & (1U <<  4)) ? CPU_FEATURE_TSC    : 0;
-    g_cpu_features |= (d & (1U << 28)) ? CPU_FEATURE_HT     : 0;
+    g_cpu_features |= (c & (1U <<  5)) ? CPU_FEATURE_VMX     : 0;
+    g_cpu_features |= (c & (1U << 17)) ? CPU_FEATURE_PCID    : 0;
+    g_cpu_features |= (c & (1U << 21)) ? CPU_FEATURE_X2APIC  : 0;
+    g_cpu_features |= (c & (1U << 24)) ? CPU_FEATURE_TSC_DDL : 0;
+    g_cpu_features |= (d & (1U <<  4)) ? CPU_FEATURE_TSC     : 0;
+    g_cpu_features |= (d & (1U << 28)) ? CPU_FEATURE_HT      : 0;
     // if (g_cpu_features & CPU_FEATURE_HT) {
     //     g_num_ids = (b >> 16) & 0xff;
     // }
 
-    // extended function
+    // extended signature and feature
     ASMV("cpuid" : "=d"(d) : "a"(0x80000001) : "ebx", "ecx");
     g_cpu_features |= (d & (1U << 20)) ? CPU_FEATURE_NX : 0;
     g_cpu_features |= (d & (1U << 26)) ? CPU_FEATURE_1G : 0;
+
+    // extended info 1
+    ASMV("cpuid" : "=d"(d) : "a"(0x80000001) : "ebx", "ecx");
+    g_cpu_features |= (d & (1U << 8)) ? CPU_FEATURE_TSC_FIXED : 0;
 
     // thermal and power
     ASMV("cpuid" : "=a"(a) : "a"(6) : "ebx", "ecx", "edx");
     g_cpu_features |= (a & (1U <<  2)) ? CPU_FEATURE_ARAT     : 0;
     g_cpu_features |= (a & (1U << 19)) ? CPU_FEATURE_FEEDBACK : 0;
 
+    // structured extended feature, main sub-leaf
+    ASMV("cpuid" : "=b"(b) : "a"(7), "c"(0) : "edx");
+    g_cpu_features |= (b & (1U << 1)) ? CPU_FEATURE_TSC_ADJUST : 0;
+
     // get core crystal's frequency
     // TSC 频率也是这个
     ASMV("cpuid" : "=a"(a), "=b"(b), "=c"(c) : "a"(0x15) : "edx");
-    g_core_freq = c; // in Hz
+    g_core_freq = c; // in Hz (Always Running Timer value, or ART-value)
     g_tsc_clk[0] = b;
     g_tsc_clk[1] = a;
     // tsc_freq = g_core_freq * b / a
@@ -132,20 +141,23 @@ void cpu_features_show() {
         const char *name;
         uint32_t mask;
     } FEATS[] = {
-        { "pcid",     CPU_FEATURE_PCID      },
-        { "x2apic",   CPU_FEATURE_X2APIC    },
-        { "tsc",      CPU_FEATURE_TSC       },
-        { "ht",       CPU_FEATURE_HT        },
-        { "nx",       CPU_FEATURE_NX        },
-        { "pdpe1gb",  CPU_FEATURE_1G        },
-        { "arat",     CPU_FEATURE_ARAT      },
-        { "incpcid",  CPU_FEATURE_INVPCID   },
-        { "smep",     CPU_FEATURE_SMEP      },
-        { "smap",     CPU_FEATURE_SMAP      },
-        { "fsgsbase", CPU_FEATURE_FSGSBASE  },
-        { "feedback", CPU_FEATURE_FEEDBACK  },
-        { "vmx",      CPU_FEATURE_VMX       },
-        { "svm",      CPU_FEATURE_SVM       },
+        { "pcid",       CPU_FEATURE_PCID       },
+        { "x2apic",     CPU_FEATURE_X2APIC     },
+        { "tsc",        CPU_FEATURE_TSC        },
+        { "ht",         CPU_FEATURE_HT         },
+        { "nx",         CPU_FEATURE_NX         },
+        { "pdpe1gb",    CPU_FEATURE_1G         },
+        { "arat",       CPU_FEATURE_ARAT       },
+        { "incpcid",    CPU_FEATURE_INVPCID    },
+        { "smep",       CPU_FEATURE_SMEP       },
+        { "smap",       CPU_FEATURE_SMAP       },
+        { "fsgsbase",   CPU_FEATURE_FSGSBASE   },
+        { "feedback",   CPU_FEATURE_FEEDBACK   },
+        { "vmx",        CPU_FEATURE_VMX        },
+        { "svm",        CPU_FEATURE_SVM        },
+        { "tsc-fixed",  CPU_FEATURE_TSC_FIXED  },
+        { "tsc-adjust", CPU_FEATURE_TSC_ADJUST },
+        { "tsc-ddl",    CPU_FEATURE_TSC_DDL    },
     };
     size_t nfeats = sizeof(FEATS) / sizeof(FEATS[0]);
 
