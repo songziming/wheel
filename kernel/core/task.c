@@ -122,3 +122,14 @@ void sched_process() {
     }
     logk("*");
 }
+
+
+//------------------------------------------------------------------------------
+// task management
+//------------------------------------------------------------------------------
+
+void task_create(task_t *task, const char *name, void *entry, void *stack_stop) {
+    task->name = name;
+    arch_task_init(task, (size_t)entry, (size_t)stack_stop);
+    THISCPU_SET(g_next_task, task);
+}

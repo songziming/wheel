@@ -2,6 +2,7 @@
 
 .global isr_entries
 .global syscall_entry
+.global arch_task_switch
 
 .extern g_int_depth
 .extern g_int_stack_top
@@ -162,8 +163,7 @@ int_from_ring0:
 
     // 不是重入，需要切换到中断栈，把当前栈位置也记录下来
     movq    %gs:(g_prev_task), %rax
-    movq    %rsi, (%rax) // THISCPU(g_prev_task)->regs = %rsp
-    // movq    %rsp, %gs:(g_curr_stack)
+    movq    %rsi, (%rax) // g_prev_task->regs = %rsp
     movq    %gs:(g_int_stack_top), %rsp
 int_enter_nested:
 
@@ -181,9 +181,8 @@ int_enter_nested:
 
     // 切换到原来的栈顶
     // TODO 任务切换也在这里实现，替换成新任务的栈顶地址
-    movq    %gs:(g_next_task), %rax
-    movq    (%rax), %rsp // rsp = THISCPU(g_next_task)->regs
-    // movq    %gs:(g_curr_stack), %rsp
+    movq    %gs:(g_next_task), %rdi
+    movq    (%rdi), %rsp // rsp = g_next_task->regs
 int_return_nested:
 
     pop_callee_saved_regs
@@ -201,3 +200,40 @@ int_to_ring0:
 // 使用 syscall 命令跳转
 syscall_entry:
     sysret
+
+
+// 不执行调度函数，直接从当前任务切换到下一个任务
+// 保存当前任务的上下文，然后执行中断返回流程
+// 当这个函数返回，说明又重新回到了原本的任务
+arch_task_switch:
+    cmpq    $0, %gs:(g_int_depth)   // 如果已处于中断
+    jne     resume                  // 则不必切换任务（中断退出时会自动切换）
+
+    movq    %gs:(g_prev_task), %rsi
+    movq    %gs:(g_next_task), %rdi
+    cmpq    %rsi, %rdi
+    je      resume          // 目标任务相同，不用切换
+
+    pushfq
+    cli                     // 关中断（防止中断干扰任务切换）
+    popq    %rax            // 获取 rflags
+    movq    %rsp, %r8       // 获取 rsp
+    andq    $-16, %rsp      // 栈帧按 16 字节对齐
+
+    // 模仿发生了一次中断
+    pushq   $0x10       // ss
+    pushq   %r8         // rsp
+    pushq   %rax        // rflags
+    pushq   $0x08       // cs
+    pushq   $resume     // rip 从这里恢复
+    pushq   $0          // errcode
+    pushq   $0          // rdi
+    push_caller_saved_regs
+    push_callee_saved_regs
+
+    movq    %rsp, (%rsi)    // g_prev_task->regs = rsp
+    movq    (%rdi), %rsp    // rsp = g_next_task->regs
+    jmp     int_return_nested
+
+resume:
+    ret

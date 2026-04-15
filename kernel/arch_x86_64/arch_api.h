@@ -9,13 +9,6 @@
 #include "mem/thiscpu_rw.h"
 
 
-//------------------------------------------------------------------------------
-// debug helper
-//------------------------------------------------------------------------------
-
-int arch_unwind_from(size_t *addrs, int max, uint64_t rbp);
-int arch_unwind(size_t *addrs, int max);
-
 
 //------------------------------------------------------------------------------
 // inline assembly helpers
@@ -39,5 +32,19 @@ static inline void cpu_int_unlock(int key) {
     }
 }
 
+//------------------------------------------------------------------------------
+// debug helper
+//------------------------------------------------------------------------------
+
+int arch_unwind_from(size_t *addrs, int max, uint64_t rbp);
+int arch_unwind(size_t *addrs, int max);
+
+//------------------------------------------------------------------------------
+// task support
+//------------------------------------------------------------------------------
+
+typedef struct task task_t;
+void arch_task_init(task_t *task, size_t entry, size_t stack_top);
+void arch_task_switch();
 
 #endif // ARCH_X86_64_ARCH_API_H

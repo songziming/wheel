@@ -23,8 +23,11 @@
 #include <debug.h>
 
 
-static INIT_DATA uint32_t g_fgcolor;
-static INIT_DATA size_t   g_rsdp;
+static INIT_BSS uint32_t g_fgcolor;
+static INIT_BSS size_t   g_rsdp;
+
+static INIT_BSS task_t g_root_task;
+static INIT_BSS uint8_t g_root_stack[4096];
 
 
 static INIT_TEXT void mb1_parse_mmap(uint32_t mmap, uint32_t len) {
@@ -133,6 +136,15 @@ static INIT_TEXT void gui_log(const char *s, size_t n) {
     framebuf_puts(s, n);
 }
 
+static INIT_TEXT void root_proc() {
+    logk("hello from root task!\n");
+
+    while (1) {
+        cpu_pause();
+        cpu_halt();
+    }
+}
+
 void sys_init(uint32_t eax, uint32_t ebx) {
     serial_init();
     g_log_func = serial_puts;
@@ -201,33 +213,25 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     loapic_timer_calibrate();
     loapic_timer_set_periodic(2);
 
-    // 校准系统时钟
-    // TODO calibrate timer
-    // TODO set_periodic(100);
-
     // 加载正式页表
     write_cr3(g_kernel_vm.table);
 
     // TODO 初始化任务调度
-    sched_init();
     timer_init();
-
-    // TODO 创建根任务并开始运行
+    sched_init();
 
     // pmlayout_show();
     // vmspace_show(&g_kernel_vm);
     cpu_features_show();
     // loapic_show();
 
-    // ASMV("int $0x80");
-    // ASMV("ud2");
+    // 创建根任务并开始运行
+    // TODO 创建任务不应该修改 next_task
+    //      sched_resume 才应该更新 next_task
+    task_create(&g_root_task, "root", root_proc, g_root_stack + sizeof(g_root_stack));
 
-    // task_t dummy;
-    // dummy.name = "dummy task TCB";
-    // THISCPU_SET(g_prev_task, &dummy);
-    // THISCPU_SET(g_next_task, NULL);
-
-    ASMV("sti");
+    // 切换到根任务，任务默认开启中断
+    arch_task_switch();
 
 end:
     while (1) {

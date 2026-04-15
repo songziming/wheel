@@ -29,4 +29,6 @@ void timer_cancel(timerjob_t *job);
 INIT_TEXT void sched_init();
 void sched_process();
 
+void task_create(task_t *task, const char *name, void *entry, void *stack_stop);
+
 #endif // CORE_TASK_H
