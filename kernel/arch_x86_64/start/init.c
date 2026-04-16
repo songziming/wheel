@@ -145,6 +145,33 @@ static INIT_TEXT void root_proc() {
     }
 }
 
+static uint8_t a_stack[4096];
+static uint8_t b_stack[4096];
+static task_t a_task;
+static task_t b_task;
+
+void a_proc() {
+    int cnt_a;
+    while (1) {
+        logk("A");
+        cnt_a = 0;
+        for (int i = 0; i < 4000000; ++i) {
+            ++cnt_a;
+        }
+    }
+}
+
+void b_proc() {
+    int cnt_b;
+    while (1) {
+        logk("b");
+        cnt_b = 0;
+        for (int i = 0; i < 4000000; ++i) {
+            ++cnt_b;
+        }
+    }
+}
+
 void sys_init(uint32_t eax, uint32_t ebx) {
     serial_init();
     g_log_func = serial_puts;
@@ -228,7 +255,11 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     // 创建根任务并开始运行
     // TODO 创建任务不应该修改 next_task
     //      sched_resume 才应该更新 next_task
-    task_create(&g_root_task, "root", root_proc, g_root_stack + sizeof(g_root_stack));
+    // task_create(&g_root_task, "root", root_proc, g_root_stack + sizeof(g_root_stack));
+    task_create(&a_task, "task-A", a_proc, a_stack + sizeof(a_stack));
+    task_create(&b_task, "task-B", b_proc, b_stack + sizeof(b_stack));
+    sched_resume(&a_task);
+    sched_resume(&b_task);
 
     // 切换到根任务，任务默认开启中断
     arch_task_switch();

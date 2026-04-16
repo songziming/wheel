@@ -16,6 +16,7 @@ struct timerjob {
 typedef struct task {
     void       *regs;
     const char *name;
+    dlnode_t    dl;
 } task_t;
 
 // extern task_t *g_prev_task;
@@ -28,6 +29,7 @@ void timer_cancel(timerjob_t *job);
 
 INIT_TEXT void sched_init();
 void sched_process();
+void sched_resume(task_t *task);
 
 void task_create(task_t *task, const char *name, void *entry, void *stack_stop);
 

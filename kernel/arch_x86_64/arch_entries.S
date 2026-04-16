@@ -184,7 +184,7 @@ int_enter_nested:
     movq    %gs:(g_next_task), %rdi
     movq    (%rdi), %rsp // rsp = g_next_task->regs
 int_return_nested:
-
+    movq    %rdi, %gs:(g_prev_task) // prev_task = next_task
     pop_callee_saved_regs
     pop_caller_saved_regs
     addq    $8, %rsp        // 跳过错误码
@@ -226,13 +226,11 @@ arch_task_switch:
     pushq   %rax        // rflags
     pushq   $0x08       // cs
     pushq   $resume     // rip 从这里恢复
-    pushq   $0          // errcode
-    pushq   $0          // rdi
-    push_caller_saved_regs
+    subq    $80, %rsp   // errcode, rdi, and other 8 caller-saved regs
     push_callee_saved_regs
 
-    movq    %rsp, (%rsi)    // g_prev_task->regs = rsp
-    movq    (%rdi), %rsp    // rsp = g_next_task->regs
+    movq    %rsp, (%rsi)    // prev_task->regs = rsp
+    movq    (%rdi), %rsp    // rsp = next_task->regs
     jmp     int_return_nested
 
 resume:

@@ -34,6 +34,13 @@ static void handle_irq(int vec, regs_t *f) {
     //     return;
     // }
 
+    size_t frames[32];
+    int depth = arch_unwind_from(frames, 32, f->rbp);
+    logk("backtrace (%d):\n", depth);
+    for (int i = 0; i < depth; ++i) {
+        logk(" - frame[%02d] 0x%zx\n", i, frames[i]);
+    }
+
     while (1) {
         cpu_pause();
         cpu_halt();
@@ -63,12 +70,8 @@ INIT_TEXT void int_init() {
     idt_set_ist(14, 3); // #PF
     idt_set_ist(18, 4); // #MC
 
-
     // 设置系统调用相关 MSR（只允许 64-bit 模式下的系统调用入口）
     write_msr(MSR_STAR, 0x001b0008UL << 32);    // STAR
     write_msr(MSR_LSTAR, (uint64_t)syscall_entry); // LSTAR
     write_msr(MSR_SFMASK, 0UL);                     // SFMASK
-
-    // 测试用，#UD 也使用 NMI 的异常栈
-    // idt_set_ist(6, 1);
 }

@@ -18,7 +18,14 @@ PERCPU_BSS task_t *g_prev_task;
 PERCPU_BSS task_t *g_next_task;
 
 static INIT_BSS task_t g_dummy_task;
-static PERCPU_BSS task_t g_idle_task;
+
+// 就绪任务队列
+static PERCPU_BSS spin_t g_sched_lock;
+static PERCPU_BSS int    g_queue_size;
+static PERCPU_BSS task_t g_idle_task; // 这也是 ready-q 的头节点
+static PERCPU_BSS uint8_t g_idle_stack[4096];
+
+static atomic_int g_lowest_priority_cpu = 0;
 
 
 //------------------------------------------------------------------------------
@@ -105,22 +112,65 @@ void timer_cancel(timerjob_t *job) {
 // scheduler
 //------------------------------------------------------------------------------
 
-void sched_init() {
-    g_dummy_task.name = "temp-dummy-TCB";
-    THISCPU_SET(g_prev_task, &g_dummy_task);
 
-    // task_t *idle = THISCPU(&g_idle_task);
-    // TODO create task IDLE, put on this ready-queue
+static NORETURN void idle_proc(task_t *self UNUSED) {
+    while (1) {
+        cpu_pause();
+        cpu_halt();
+    }
 }
 
+void sched_init() {
+    g_dummy_task.name = "temp-dummy-TCB";
+
+    spin_init(THISCPU(&g_sched_lock));
+    THISCPU_SET(g_queue_size, 1);
+
+    task_t *idle = THISCPU(&g_idle_task);
+    // task_t *idle2 = NULL;
+    // ASMV("leaq %%gs:%1,%0" : "=r"(idle2) : "m"(g_idle_task));
+    // logk("idle=%p, idle2=%p\n", idle, idle2);
+
+    uint8_t *top = THISCPU(g_idle_stack + sizeof(g_idle_stack));
+    task_create(idle, "idle", idle_proc, top);
+    dl_init_circular(&idle->dl);
+
+    THISCPU_SET(g_prev_task, &g_dummy_task);
+    THISCPU_SET(g_next_task, idle);
+}
+
+// run in ISR
+// 在同一个优先级的任务之间轮转
 void sched_process() {
-    task_t *prev = THISCPU_GET(g_prev_task);
+    // spin_t *lock = THISCPU(&g_sched_lock);
+    spin_t *lock = THISCPU(&g_sched_lock);
+    raw_spin_take(lock);
+
     task_t *next = THISCPU_GET(g_next_task);
-    if (prev != next) {
-        logk("\n keeping old task %s\n", prev->name);
-        THISCPU_SET(g_next_task, prev);
+    next = containerof(next->dl.next, task_t, dl);
+    if (THISCPU(&g_idle_task) == next) {
+        next = containerof(next->dl.next, task_t, dl);
     }
+    THISCPU_SET(g_next_task, next);
+    raw_spin_give(lock);
+
     logk("*");
+}
+
+void sched_resume(task_t *task) {
+    int cpu = atomic_load(&g_lowest_priority_cpu);
+    logk("resuming task %s on cpu-%d\n", task->name, cpu);
+
+    spin_t *lock = PERCPU(cpu, &g_sched_lock);
+    task_t *idle = PERCPU(cpu, &g_idle_task);
+
+    int key = irq_spin_take(lock);
+    // TODO 不必放在队列最后，根据优先级找到合适的位置
+    dl_insert_before(&task->dl, &idle->dl);
+    irq_spin_give(lock, key);
+
+    // WIP always run newly created task
+    *PERCPU(cpu, &g_next_task) = task;
 }
 
 
@@ -128,8 +178,21 @@ void sched_process() {
 // task management
 //------------------------------------------------------------------------------
 
+// // 新任务的默认执行入口，该函数不能返回
+// static NORETURN void task_entry(task_t *self) {
+//     logk("starting task %s\n", self->name);
+//     // TODO 在这里调用
+//     self->entry();
+//     logk("stopping task %s\n", self->name);
+
+//     while (1) {
+//         cpu_pause();
+//         cpu_halt();
+//     }
+// }
+
 void task_create(task_t *task, const char *name, void *entry, void *stack_stop) {
     task->name = name;
+    // task->entry = entry;
     arch_task_init(task, (size_t)entry, (size_t)stack_stop);
-    THISCPU_SET(g_next_task, task);
 }
