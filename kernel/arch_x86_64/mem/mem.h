@@ -3,9 +3,6 @@
 
 #include <vmspace.h>
 
-// typedef struct vmrange vmrange_t;
-extern vmspace_t g_kernel_vm;
-
 INIT_TEXT void kspace_add(vmrange_t *rng, size_t va, size_t end, const char *desc, mmu_attr_t attrs);
 
 INIT_TEXT size_t percpu_init(size_t va);

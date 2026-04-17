@@ -27,7 +27,7 @@ static INIT_BSS uint32_t g_fgcolor;
 static INIT_BSS size_t   g_rsdp;
 
 static INIT_BSS task_t g_root_task;
-static INIT_BSS uint8_t g_root_stack[4096];
+// static INIT_BSS uint8_t g_root_stack[4096];
 
 
 static INIT_TEXT void mb1_parse_mmap(uint32_t mmap, uint32_t len) {
@@ -145,13 +145,18 @@ static INIT_TEXT void root_proc() {
     }
 }
 
-static uint8_t a_stack[4096];
-static uint8_t b_stack[4096];
+// static uint8_t a_stack[4096];
+// static uint8_t b_stack[4096];
 static task_t a_task;
 static task_t b_task;
 
 void a_proc() {
     int cnt_a;
+
+    size_t sp;
+    ASMV("movq %%rsp, %0" : "=r"(sp));
+    logk("task-A: current stack pointer %zx\n", sp);
+
     while (1) {
         logk("A");
         cnt_a = 0;
@@ -163,6 +168,11 @@ void a_proc() {
 
 void b_proc() {
     int cnt_b;
+
+    size_t sp;
+    ASMV("movq %%rsp, %0" : "=r"(sp));
+    logk("task-B: current stack pointer %zx\n", sp);
+
     while (1) {
         logk("b");
         cnt_b = 0;
@@ -247,19 +257,19 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     timer_init();
     sched_init();
 
-    // pmlayout_show();
-    // vmspace_show(&g_kernel_vm);
-    cpu_features_show();
-    // loapic_show();
-
     // 创建根任务并开始运行
     // TODO 创建任务不应该修改 next_task
     //      sched_resume 才应该更新 next_task
-    // task_create(&g_root_task, "root", root_proc, g_root_stack + sizeof(g_root_stack));
-    task_create(&a_task, "task-A", a_proc, a_stack + sizeof(a_stack));
-    task_create(&b_task, "task-B", b_proc, b_stack + sizeof(b_stack));
+    // task_create(&g_root_task, "root", 0, root_proc);
+    task_create(&a_task, "task-A", 0, a_proc);
+    task_create(&b_task, "task-B", 0, b_proc);
     sched_resume(&a_task);
     sched_resume(&b_task);
+
+    // pmlayout_show();
+    vmspace_show(&g_kernel_vm);
+    // cpu_features_show();
+    // loapic_show();
 
     // 切换到根任务，任务默认开启中断
     arch_task_switch();

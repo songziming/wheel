@@ -9,6 +9,7 @@ enum {
     PT_FREE    = 1,
     PT_KERNEL  = 2,
     PT_PGTBL   = 3,
+    PT_STACK   = 4,
 };
 
 // 使用 uint32 表示页号，最多支持 4G-1 个物理页
@@ -43,6 +44,5 @@ uint32_t page_free_count();
 
 INIT_TEXT void page_init(size_t pa_start, size_t pa_end);
 INIT_TEXT void pages_add(size_t start, size_t end);
-
 
 #endif // PAGE_H

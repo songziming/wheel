@@ -14,9 +14,6 @@ extern char _text_end;
 extern char _rodata_addr;
 extern char _data_addr;
 
-// 内核地址空间布局
-vmspace_t g_kernel_vm;
-
 // 内核段
 static vmrange_t g_kernel_init;
 static vmrange_t g_kernel_text;
