@@ -116,13 +116,13 @@ void sched_process() {
     // raw_spin_take(lock);
 
     task_t *task = THISCPU_GET(g_next_task);
-    task = containerof(task->dl.next, task_t, dl);
-    if (31 == task->priority) {
+    task_t *next = containerof(task->dl.next, task_t, dl);
+    if (31 == next->priority) {
         // TODO steal task from other cpu
         //      只能找到 idle task，说明当前 readyq 为空
         //      从其他 CPU 寻找 ready task，迁移到这个 CPU
     }
-    THISCPU_SET(g_next_task, task);
+    THISCPU_SET(g_next_task, next);
 
     // raw_spin_give(lock);
     logk("*");
@@ -154,7 +154,8 @@ void sched_cont(task_t *task, uint32_t bits) {
 
     rdyq_t *q = THISCPU(&g_rdy_queue);
     rdyq_insert(q, &task->dl, task->priority);
-    THISCPU_SET(g_next_task, rdyq_head(q));
+    task_t *next = containerof(rdyq_head(q), task_t, dl);
+    THISCPU_SET(g_next_task, next);
     arch_task_switch();
 }
 
