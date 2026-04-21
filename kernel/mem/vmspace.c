@@ -84,7 +84,7 @@ size_t vmspace_alloc(vmspace_t *space, vmrange_t *rng, size_t start, size_t end,
         return 0;
     }
 
-    rng->paddr = page_alloc(rank, type);
+    rng->paddr = PAGE_ALLOC(rank, type);
     if (0 == rng->paddr) {
         // TODO 如果连续内存分配失败，尝试分配不连续的物理页
         //      拆分成更小的块，组成 pglist

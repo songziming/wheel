@@ -12,8 +12,6 @@ void panic(const char *fmt, ...);
 #if defined(UNIT_TEST)
     #include <assert.h>
     #define ASSERT assert
-    // #include <gtest/gtest.h>
-    // #define ASSERT ASSERT_TRUE
 #elif defined(DEBUG)
     void assertion_fail(const char *file, int line, const char *func);
     #define ASSERT(x) do { \

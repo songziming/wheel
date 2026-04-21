@@ -76,12 +76,12 @@ TEST_F(PageTest, Alloc) {
     pages_add(1 << PAGE_SHIFT, 11 << PAGE_SHIFT);
 
     for (int i = 0; i < 10; ++i) {
-        size_t pa = page_alloc(0, PT_KERNEL);
+        size_t pa = PAGE_ALLOC(0, PT_KERNEL);
         EXPECT_NE(pa, 0);
     }
 
     // 第 11 次分配应该失败
-    EXPECT_EQ(page_alloc(0, PT_KERNEL), 0);
+    EXPECT_EQ(PAGE_ALLOC(0, PT_KERNEL), 0);
 
     for (size_t i = 1; i < 11; ++i) {
         CHECK_BLOCK(i, 0);
@@ -95,7 +95,7 @@ TEST_F(PageTest, AllocColor) {
 
     // 满足要求的页面总共有 4 个
     for (int i = 0; i < 4; ++i) {
-        size_t pa = page_alloc_color(0, PT_KERNEL, 0x10, 7);
+        size_t pa = page_alloc_color(0, PT_KERNEL, 0x10, 7, __FILE__, __LINE__);
         EXPECT_NE(pa, 0);
     }
 }

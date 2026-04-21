@@ -5,7 +5,7 @@
 #include <stdarg.h>
 #include <limits.h>
 #include <stdint.h>
-#include <stdbool.h>
+// #include <stdbool.h>
 #include <stdatomic.h>
 
 #define UNUSED      __attribute__((unused))

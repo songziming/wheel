@@ -17,13 +17,15 @@ typedef struct page {
     uint32_t prev;
     uint32_t next;
 
-    uint32_t head : 1;   // 是不是块中第一个页
-    uint32_t rank : 4;   // 所在块的大小，head==1 才有效
-    uint32_t type : 4;   // 所在块的类型，head==1 才有效
+    uint32_t head : 1;  // 是不是块中第一个页
+    uint32_t rank : 4;  // 所在块的大小，head==1 才有效
+    uint32_t type : 4;  // 所在块的类型，head==1 才有效
+    uint32_t ent_num : 16; // page table 有效条目数量（仅对 PT_PGTBL 类型）
 
-    union {
-        uint16_t    ent_num;    // page table 有效条目数量
-    };
+#if DEBUG
+    const char *file;
+    int         line;
+#endif
 } page_t;
 
 // 相同类型的块可以组成链表（双向不循环链表）
@@ -37,10 +39,12 @@ extern uint32_t g_page_end;
 extern page_t *g_pages;
 
 
-size_t page_alloc_color(uint32_t rank, uint32_t type, uint32_t period, uint32_t phase);
-size_t page_alloc(uint32_t rank, uint32_t type);
+size_t page_alloc_color(uint32_t rank, uint32_t type, uint32_t period, uint32_t phase, const char *file, int line);
+size_t page_alloc(uint32_t rank, uint32_t type, const char *file, int line);
 void page_free(size_t pa);
 uint32_t page_free_count();
+
+#define PAGE_ALLOC(rank, type) page_alloc(rank, type, __FILE__, __LINE__)
 
 INIT_TEXT void page_init(size_t pa_start, size_t pa_end);
 INIT_TEXT void pages_add(size_t start, size_t end);

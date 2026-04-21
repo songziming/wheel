@@ -157,20 +157,37 @@ found:
 // public functions
 //------------------------------------------------------------------------------
 
-size_t page_alloc_color(uint32_t rank, uint32_t type, uint32_t period, uint32_t phase) {
+size_t page_alloc_color(uint32_t rank, uint32_t type,
+        uint32_t period, uint32_t phase,
+        const char *file UNUSED, int line UNUSED) {
     int key = irq_spin_take(&g_page_spin);
     uint32_t blk = block_alloc_nolock(rank, period, phase, type);
+#if DEBUG
+    if (0 != blk) {
+        ASSERT(NULL == g_pages[blk].file);
+        ASSERT(-1 == g_pages[blk].line);
+        g_pages[blk].file = file;
+        g_pages[blk].line = line;
+    }
+#endif
     irq_spin_give(&g_page_spin, key);
     return (size_t)blk << PAGE_SHIFT;
 }
 
-size_t page_alloc(uint32_t rank, uint32_t type) {
-    return page_alloc_color(rank, type, 1, 0);
+size_t page_alloc(uint32_t rank, uint32_t type, const char *file, int line) {
+    return page_alloc_color(rank, type, 1, 0, file, line);
 }
 
 void page_free(size_t pa) {
     int key = irq_spin_take(&g_page_spin);
-    block_free_nolock((uint32_t)(pa >> PAGE_SHIFT));
+    uint32_t blk = (uint32_t)(pa >> PAGE_SHIFT);
+#if DEBUG
+    ASSERT(NULL != g_pages[blk].file);
+    ASSERT(0 != g_pages[blk].line);
+    g_pages[blk].file = NULL;
+    g_pages[blk].line = -1;
+#endif
+    block_free_nolock(blk);
     irq_spin_give(&g_page_spin, key);
 }
 
@@ -236,6 +253,14 @@ INIT_TEXT void pages_add(size_t start, size_t end) {
 
     int key = irq_spin_take(&g_page_spin);
 
+#if DEBUG
+    for (uint32_t pfn = start; pfn < end; ++pfn) {
+        ASSERT(NULL == g_pages[pfn].file);
+        ASSERT(0 == g_pages[pfn].line);
+        g_pages[pfn].line = -1;
+    }
+#endif
+
     // 这一段内存不一定是按块对齐的，尽可能使用更大的块
     while (start < end) {
         int rank = __builtin_ctz(start);
@@ -243,15 +268,17 @@ INIT_TEXT void pages_add(size_t start, size_t end) {
             rank = RANK_NUM - 1;
         }
 
-        while (start + (1U << rank) > end) {
-            --rank;
+        uint32_t size = 1U << rank;
+        while (start + size > end) {
+            size >>= 1;
+            rank--;
         }
 
         // 创建一个块，并将其回收
         g_pages[start].head = 1;
         g_pages[start].rank = rank;
         block_free_nolock(start);
-        start += 1U << rank;
+        start += size;
     }
 
     irq_spin_give(&g_page_spin, key);

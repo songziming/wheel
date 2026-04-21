@@ -79,7 +79,8 @@ KLFLAGS := -T $(KERNEL)/arch_$(ARCH)/layout.ld -Map=$(OUT_MAP)
 KLFLAGS += -nostdlib --gc-sections --no-warnings
 
 # 内核库编译选项，生成单元测试用到的动态库，C & ASM
-LCFLAGS := -c -std=c11 -g -fPIC -DUNIT_TEST $(KINC) $(NOSTD) $(GENCOV) $(ASAN)
+LCFLAGS := -c -std=c11 -g -fPIC -DDEBUG -DUNIT_TEST
+LCFLAGS += $(KINC) $(NOSTD) $(GENCOV) $(ASAN)
 
 # 内核库链接选项
 LLFLAGS := -shared $(GENCOV) $(ASAN)
@@ -93,7 +94,7 @@ else ifeq ($(UNAME_S),Linux)
 endif
 
 # 单元测试代码的编译选项，C++
-TXFLAGS := -c -std=c++17 -g -DUNIT_TEST $(KINC)
+TXFLAGS := -c -std=c++17 -g -DDEBUG -DUNIT_TEST $(KINC)
 TXFLAGS += -isystem -pthread $(ASAN)
 
 # 单元测试链接选项
