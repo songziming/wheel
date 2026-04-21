@@ -3,10 +3,10 @@
 #include <kstring.h>
 #include <debug.h>
 
-// 任务管理 & 调度 & 定时任务
+// 定时任务、调度
 
-// static int g_tick = 0;
-
+// 任务管理控制任务的生命周期，状态切换
+// 调度管理 ready 状态的任务
 
 // 任务调度
 PERCPU_BSS task_t *g_prev_task;
@@ -17,11 +17,16 @@ static PERCPU_BSS uint8_t g_idle_stack[1024]; // TODO percpu 负责划分
 
 
 // 就绪任务队列
-static PERCPU_BSS spin_t g_sched_lock;
-static PERCPU_BSS int    g_queue_size;
 static PERCPU_BSS rdyq_t g_rdy_queue;
+// static PERCPU_BSS spin_t g_sched_lock;
+// static PERCPU_BSS int    g_queue_size;
 
-static atomic_int g_lowest_priority_cpu = 0;
+// 记录哪个 CPU 负载最高最低
+// 用于创建任务时选择一个目标 CPU
+// 用于 idle 时从其他 CPU 迁移任务
+static spin_t g_load_lock;
+static int g_lowest_load_cpu = 0;
+static int g_highest_load_cpu = 0;
 
 
 
@@ -48,11 +53,14 @@ void rdyq_insert(rdyq_t *q, dlnode_t *dl, int prio) {
 
 void rdyq_remove(rdyq_t *q, dlnode_t *dl, int prio) {
     if (dl_is_lastone(dl)) {
+        ASSERT(q->heads[prio] == dl);
         q->heads[prio] = NULL;
         q->priorities &= ~(1U << prio);
     } else {
         if (dl == q->heads[prio]) {
             q->heads[prio] = dl->next;
+        } else {
+            ASSERT(dl_contains(q->heads[prio], dl));
         }
         dl_remove(dl);
     }
@@ -84,10 +92,9 @@ static NORETURN void idle_proc(task_t *self UNUSED) {
 
 void sched_init() {
     g_dummy_task.name = "temp-dummy-TCB";
-    // g_dummy_task.priority = 31;
 
-    spin_init(THISCPU(&g_sched_lock));
-    THISCPU_SET(g_queue_size, 1);
+    // spin_init(THISCPU(&g_sched_lock));
+    // THISCPU_SET(g_queue_size, 1);
 
     task_t *idle = THISCPU(&g_idle_task);
     uint8_t *top = THISCPU(g_idle_stack + sizeof(g_idle_stack));
@@ -110,38 +117,45 @@ void sched_process() {
 
     task_t *task = THISCPU_GET(g_next_task);
     task = containerof(task->dl.next, task_t, dl);
+    if (31 == task->priority) {
+        // TODO steal task from other cpu
+        //      只能找到 idle task，说明当前 readyq 为空
+        //      从其他 CPU 寻找 ready task，迁移到这个 CPU
+    }
     THISCPU_SET(g_next_task, task);
 
     // raw_spin_give(lock);
     logk("*");
 }
 
-void sched_stop(task_t *task, task_state_t bits) {
-    if (TS_READY == task->state) {
-        // TODO remove from ready-queue
+// 停止的任务必须位于当前 CPU，要么
+void sched_stop(task_t *task, uint32_t bits) {
+    if (TS_READY != task->state) {
+        task->state |= bits;
+        return;
     }
 
+    // remove from ready-queue
+    rdyq_t *q = THISCPU(&g_rdy_queue);
+    rdyq_remove(q, &task->dl, task->priority);
     task->state |= bits;
+
+    THISCPU_SET(g_next_task, rdyq_head(q));
+    arch_task_switch();
 }
 
-void sched_resume_at(task_t *task, int cpu) {
-    spin_t *lock = PERCPU(cpu, &g_sched_lock);
-    rdyq_t *q = PERCPU(cpu, &g_rdy_queue);
-
-    int key = irq_spin_take(lock);
-    rdyq_insert(q, &task->dl, task->priority);
-    irq_spin_give(lock, key);
-
-    // 判断能否抢占
-    task_t *next = *PERCPU(cpu, &g_next_task);
-    if (task->priority < next->priority) {
-        *PERCPU(cpu, &g_next_task) = task;
+// 在当前 CPU 恢复运行这个 task
+void sched_cont(task_t *task, uint32_t bits) {
+    ASSERT(TS_READY != task->state);
+    task->state &= ~bits;
+    if (TS_READY != task->state) {
+        return; // still no ready
     }
-}
 
-void sched_resume(task_t *task) {
-    int cpu = atomic_load(&g_lowest_priority_cpu);
-    sched_resume_at(task, cpu);
+    rdyq_t *q = THISCPU(&g_rdy_queue);
+    rdyq_insert(q, &task->dl, task->priority);
+    THISCPU_SET(g_next_task, rdyq_head(q));
+    arch_task_switch();
 }
 
 
@@ -174,4 +188,8 @@ void task_create(task_t *task, const char *name, int priority, void *entry) {
     size_t stack_va = vmspace_alloc_stack(&g_kernel_vm, &task->stack, 0);
     size_t stack_top = stack_va + PAGE_SIZE;
     task_create_ex(task, name, priority, stack_top, entry);
+}
+
+void task_start(task_t *task) {
+    sched_cont(task, TS_STOPPED);
 }

@@ -94,14 +94,6 @@ void rb_init_root(rbnode_t *node) {
 }
 
 
-// 红黑树需要满足的性质：
-//  1. 节点要么是红色，要么是黑色
-//  2. 根节点是黑色
-//  3. 叶节点（NULL）是黑色
-//  4. 红节点的两个子节点都是黑色（父子节点不能都红）
-//  5. 黑高度相同
-
-
 
 // 添加新节点后执行，保持红黑树性质（node 已经添加到红黑树）
 static void rb_insert_fixup(rbtree_t *tree, rbnode_t *node) {

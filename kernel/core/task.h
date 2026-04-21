@@ -14,21 +14,21 @@ typedef struct rdyq {
 
 
 // 任务状态掩码
-typedef enum task_state {
+enum task_state {
     TS_READY   = 0,
     TS_STOPPED = 1,
     TS_PENDING = 2, // dl 位于某个阻塞队列中
-} task_state_t;
+};
 
 
 // 代表一个任务，也是调度的基本单位
 typedef struct task {
-    void           *regs;
-    const char     *name;
-    dlnode_t        dl;
-    int             priority;
-    task_state_t    state;
-    vmrange_t       stack;
+    void       *regs;
+    const char *name;
+    dlnode_t    dl;
+    int         priority;   // TODO 可以用 bitfield 压缩
+    uint32_t    state;      // TODO 可以用 bitfield 压缩
+    vmrange_t   stack;
 } task_t;
 
 
@@ -40,11 +40,11 @@ dlnode_t *rdyq_rotate(rdyq_t *q, dlnode_t *dl);
 
 INIT_TEXT void sched_init();
 void sched_process();
-void sched_stop(task_t *task, task_state_t bits);
-void sched_resume_at(task_t *task, int cpu);
-void sched_resume(task_t *task);
+void sched_stop(task_t *task, uint32_t bits);
+void sched_cont(task_t *task, uint32_t bits);
 
 void task_create_ex(task_t *task, const char *name, int priority, size_t stack_top, void *entry);
 void task_create(task_t *task, const char *name, int priority, void *entry);
+void task_start(task_t *task);
 
 #endif // CORE_TASK_H

@@ -32,6 +32,12 @@ logical 模式下，OS 可以给每个 CPU 指定 cluster-id 和 logical-id，�
 - all including self
 - all excluding self
 
+## 发送 IPI 附带参数
+
+IPI 可能需要附带参数，例如通知其他 CPU 恢复运行一个 task，需要传递 TID。
+通知另一个 CPU 停止当前正在运行的 任务，也需要传递目标 TID。
+Local APIC 应该没有这个功能，只能通过共享变量传参。
+
 ## 配置 APIC Timer
 
 时钟有 singleshot 和 periodic 两种模式。

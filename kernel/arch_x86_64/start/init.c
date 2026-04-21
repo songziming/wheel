@@ -230,16 +230,17 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     // 创建正式的 gdt
     gdt_init();
     gdt_load();
-    // idt_init();
-    // idt_load();
+    idt_init();
+    idt_load();
 
     // 初始化内存管理
     mem_init(); // this also init percpu
     thiscpu_init(0);
 
-    tss_init_load(); // 依赖 thiscpu，需要放在 thiscpu_init 之后
-    int_init(); // 初始化中断管理机制，包括 idt
-    idt_load();
+    thistss_init_load(); // 依赖 thiscpu，需要放在 thiscpu_init 之后
+    int_init(); // 初始化中断管理机制
+    thiscpu_int_init();
+    // idt_load();
 
     // 中断控制器初始化
     i8259_disable();
@@ -258,13 +259,11 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     sched_init();
 
     // 创建根任务并开始运行
-    // TODO 创建任务不应该修改 next_task
-    //      sched_resume 才应该更新 next_task
     // task_create(&g_root_task, "root", 0, root_proc);
     task_create(&a_task, "task-A", 0, a_proc);
     task_create(&b_task, "task-B", 0, b_proc);
-    sched_resume(&a_task);
-    sched_resume(&b_task);
+    task_start(&a_task);
+    task_start(&b_task);
 
     // pmlayout_show();
     vmspace_show(&g_kernel_vm);

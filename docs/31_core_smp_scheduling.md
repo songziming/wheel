@@ -41,6 +41,10 @@ RTOS 适合这种，因为完全按优先级调度，无需轮转。
 tickless 不代表完全没有时钟中断，只是间隔不固定。
 scheduler 动态计算下一个任务的时间片，动态设置一个 deadline
 
+tickless 并不是没有时间片，而是直接按分配的时间片设定下次时钟中断的时间。
+tick-based-scheduler 只能按 tick 为基本单位分配时间片，粒度大。tickless 则实现了无级调节。
+非常适合 APIC timer tsc-deadline mode，按指令周期计算时间片。
+
 ### 全局队列？本地队列？
 
 ready-queue 用来记录 ready tasks，有 global/percpu 两种方案。

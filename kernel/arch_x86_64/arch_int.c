@@ -19,8 +19,8 @@ extern void syscall_entry();
 
 // 默认的中断处理函数
 static void handle_irq(int vec, regs_t *f) {
-    logk("[cpu-%d] handling interrupt vec #%d\n", cpu_index(), vec);
-    logk("rip=%zx rsp=%zx frame=%zx\n", f->rip, f->rsp, (size_t)f);
+    logk("[cpu-%d] interrupt vec #%d\n", cpu_index(), vec);
+    logk("rip=%zx rsp=%zx frame=%p\n", f->rip, f->rsp, f);
 
     if (14 == vec) {
         logk("cr2 = %zx\n", read_cr2());
@@ -55,23 +55,33 @@ INIT_TEXT void int_init() {
         irq_handlers[i] = handle_irq;
     }
 
-    for (int i = 0; i < cpu_count(); ++i) {
-        tss_set_ist(i, 1, get_ist_nmi(i));
-        tss_set_ist(i, 2, get_ist_df(i));
-        tss_set_ist(i, 3, get_ist_pf(i));
-        tss_set_ist(i, 4, get_ist_mc(i));
-
-        *PERCPU(i, &g_int_depth) = 0;
-        *PERCPU(i, &g_int_stack_top) = get_int_top(i);
-    }
+    // for (int i = 0; i < cpu_count(); ++i) {
+    //     thistss_set_ist(i, 1, thiscpu_ist_nmi(i));
+    //     thistss_set_ist(i, 2, thiscpu_ist_df(i));
+    //     thistss_set_ist(i, 3, thiscpu_ist_pf(i));
+    //     thistss_set_ist(i, 4, thiscpu_ist_mc(i));
+    //     *PERCPU(i, &g_int_depth) = 0;
+    //     *PERCPU(i, &g_int_stack_top) = thiscpu_int_stack(i);
+    // }
 
     idt_set_ist(2,  1); // NMI
     idt_set_ist(8,  2); // #DF
     idt_set_ist(14, 3); // #PF
     idt_set_ist(18, 4); // #MC
+}
+
+INIT_TEXT void thiscpu_int_init() {
+    // 需要和 IDT 使用的 IST 编号匹配
+    thistss_set_ist(1, thiscpu_nmi_stack());
+    thistss_set_ist(2, thiscpu_df_stack());
+    thistss_set_ist(3, thiscpu_pf_stack());
+    thistss_set_ist(4, thiscpu_mc_stack());
+
+    THISCPU_SET(g_int_depth, 0);
+    THISCPU_SET(g_int_stack_top, thiscpu_int_stack());
 
     // 设置系统调用相关 MSR（只允许 64-bit 模式下的系统调用入口）
     write_msr(MSR_STAR, 0x001b0008UL << 32);    // STAR
     write_msr(MSR_LSTAR, (uint64_t)syscall_entry); // LSTAR
-    write_msr(MSR_SFMASK, 0UL);                     // SFMASK
+    write_msr(MSR_SFMASK, 0UL);
 }

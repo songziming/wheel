@@ -30,7 +30,7 @@ extern char _percpu_bss_end;
 
 static CONST size_t g_percpu_base = 0; // 首个 percpu 区域的偏移量，跳过 gap
 static CONST size_t g_percpu_step = 0; // 相邻两个 percpu 的起始地址的距离
-PERCPU_BSS int g_thiscpu_idx;   // 记录当前 CPU 的编号
+static PERCPU_BSS int g_thiscpu_idx;   // 记录当前 CPU 的编号
 
 
 // percpu ranges
@@ -118,11 +118,11 @@ INIT_TEXT void thiscpu_init(int idx) {
 }
 
 
-INIT_TEXT size_t get_ist_nmi(int cpu) { return PERCPU(cpu, &g_percpu_nmi)->vend; }
-INIT_TEXT size_t get_ist_df(int cpu) { return PERCPU(cpu, &g_percpu_df)->vend; }
-INIT_TEXT size_t get_ist_pf(int cpu) { return PERCPU(cpu, &g_percpu_pf)->vend; }
-INIT_TEXT size_t get_ist_mc(int cpu) { return PERCPU(cpu, &g_percpu_mc)->vend; }
-INIT_TEXT size_t get_int_top(int cpu) { return PERCPU(cpu, &g_percpu_int)->vend; }
+INIT_TEXT size_t thiscpu_nmi_stack() { return THISCPU_GET(g_percpu_nmi.vend); }
+INIT_TEXT size_t thiscpu_df_stack() { return THISCPU_GET(g_percpu_df.vend); }
+INIT_TEXT size_t thiscpu_pf_stack() { return THISCPU_GET(g_percpu_pf.vend); }
+INIT_TEXT size_t thiscpu_mc_stack() { return THISCPU_GET(g_percpu_mc.vend); }
+INIT_TEXT size_t thiscpu_int_stack() { return THISCPU_GET(g_percpu_int.vend); }
 
 
 //------------------------------------------------------------------------------
@@ -134,8 +134,8 @@ inline int cpu_count() {
 }
 
 inline int cpu_index() {
-    int idx;
-    ASMV("movl %%gs:(g_thiscpu_idx),%0" : "=r"(idx));
+    int idx = THISCPU_GET(g_thiscpu_idx);
+    // ASMV("movl %%gs:(g_thiscpu_idx),%0" : "=r"(idx));
     ASSERT(read_gsbase() == g_percpu_base + g_percpu_step * idx);
     return idx;
 }

@@ -1,8 +1,9 @@
 #include "gdt_idt_tss.h"
 #include "arch_api.h"
 
-#include <debug.h>
 #include <early_alloc.h>
+#include <kstring.h>
+#include <debug.h>
 
 
 typedef struct idt_ent {
@@ -72,26 +73,16 @@ INIT_TEXT void gdt_load() {
     load_gdtr(&gdtr);
 }
 
+INIT_TEXT void idt_init() {
+    kmemset(g_idt, 0, sizeof(g_idt));
+}
 
-// 64-bit IDT 只允许中断门和陷阱门，没有调用门
-// 中断门和陷阱门有 ist，调用门没有
-// 调用门可以放在 GDT、LDT 内部
-
-// INIT_TEXT void idt_init() {
-//     for (int i = 0; i < 256; ++i) {
-//         g_idt[i].attr        = 0x8e; // dpl=0，type=E，中断门
-//         g_idt[i].selector    = 0x08; // 内核代码段
-//         g_idt[i].offset_low  =  isr_entries[i]        & 0xffff;
-//         g_idt[i].offset_mid  = (isr_entries[i] >> 16) & 0xffff;
-//         g_idt[i].offset_high = (isr_entries[i] >> 32) & 0xffffffff;
-//     }
-
-//     // 留出几个中断号用于系统调用
-//     // 通过 int 指令触发的中断才需要检查 dpl
-//     // 异常或硬件产生的中断（例如时钟）与 dpl 无关，用户模式下依然可用
-//     // TODO 应该允许其他模块修改 idt 条目 dpl
-//     g_idt[0x80].attr = 0xee;    // dpl=3 中断门
-// }
+INIT_TEXT void idt_load() {
+    tbl_ptr_t idtr;
+    idtr.base = (uint64_t)g_idt;
+    idtr.limit = sizeof(g_idt) - 1;
+    load_idtr(&idtr);
+}
 
 INIT_TEXT void idt_set_isr(uint8_t vec, uint64_t isr, int dpl) {
     g_idt[vec].attr        = 0x8e | ((dpl & 3) << 5); // type=E 中断门
@@ -108,14 +99,7 @@ INIT_TEXT void idt_set_ist(uint8_t vec, int ist) {
     g_idt[vec].ist = ist & 7;
 }
 
-INIT_TEXT void idt_load() {
-    tbl_ptr_t idtr;
-    idtr.base = (uint64_t)g_idt;
-    idtr.limit = sizeof(g_idt) - 1;
-    load_idtr(&idtr);
-}
-
-INIT_TEXT void tss_init_load() {
+INIT_TEXT void thistss_init_load() {
     ASSERT(NULL != g_gdt);
 
     uint64_t addr = (uint64_t)thiscpu_ptr(&g_tss);
@@ -136,20 +120,27 @@ INIT_TEXT void tss_init_load() {
     load_tr(((2 * idx + 6) << 3) | 3);
 }
 
-INIT_TEXT void tss_set_ist(int cpu, int ist, uint64_t addr) {
+// 某些中断需要使用确定的栈，amd64 提供了 7 个 IST
+INIT_TEXT void thistss_set_ist(int ist, uint64_t addr) {
     ASSERT(ist > 0);
     ASSERT(ist < 8);
 
-    tss_t *tss = PERCPU(cpu, &g_tss);
-    tss->ist[ist].lower = addr & 0xffffffff;
-    tss->ist[ist].upper = (addr >> 32) & 0xffffffff;
+    // tss_t *tss = PERCPU(cpu, &g_tss);
+    // tss->ist[ist].lower = addr & 0xffffffff;
+    // tss->ist[ist].upper = (addr >> 32) & 0xffffffff;
+    THISCPU_SET(g_tss.ist[ist].lower, (uint32_t)addr & 0xffffffff);
+    THISCPU_SET(g_tss.ist[ist].upper, (uint32_t)(addr >> 32) & 0xffffffff);
 }
 
-void tss_set_rsp(int cpu, int ring, uint64_t addr) {
+// 跨优先级中断时，自动切换到哪个栈
+// 一般设为当前进程的内核栈顶
+void thistss_set_rsp(int ring, uint64_t addr) {
     ASSERT(ring >= 0);
     ASSERT(ring < 3);
 
-    tss_t *tss = PERCPU(cpu, &g_tss);
-    tss->rsp[ring].lower = addr & 0xffffffff;
-    tss->rsp[ring].upper = (addr >> 32) & 0xffffffff;
+    // tss_t *tss = PERCPU(cpu, &g_tss);
+    // tss->rsp[ring].lower = addr & 0xffffffff;
+    // tss->rsp[ring].upper = (addr >> 32) & 0xffffffff;
+    THISCPU_SET(g_tss.rsp[ring].lower, (uint32_t)addr & 0xffffffff);
+    THISCPU_SET(g_tss.rsp[ring].upper, (uint32_t)(addr >> 32) & 0xffffffff);
 }

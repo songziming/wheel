@@ -70,7 +70,7 @@ KCFLAGS += -ffunction-sections -fdata-sections -fvisibility=hidden -flto
 KCFLAGS += -Wall -Wextra -Wshadow -Werror=implicit
 ifeq ($(DEBUG),1)
 	KCFLAGS += -DDEBUG -g -fno-omit-frame-pointer -fstack-protector-strong
-	KCFLAGS += -fsanitize=undefined -fno-sanitize=function
+# 	KCFLAGS += -fsanitize=undefined -fno-sanitize=function
 # 	KCFLAGS += -fsanitize=cfi
 else
 	KCFLAGS += -DNDEBUG -O2

@@ -28,8 +28,6 @@ class MmuTest : public ::testing::Test {
 
 protected:
     void SetUp() override {
-        // g_log_func = mock_logk;
-
         int prot = PROT_READ|PROT_WRITE;
         int flags = MAP_PRIVATE|MAP_ANONYMOUS;
         va_ = mmap(nullptr, npages << PAGE_SHIFT, prot, flags, -1, 0);
