@@ -16,10 +16,10 @@ extern "C" {
 
 uint64_t g_direct_map_base;
 
-static void mock_logk(const char *s, size_t n) {
-    std::string_view sv(s);
-    std::cerr << sv.substr(0, n);
-}
+// static void mock_logk(const char *s, size_t n) {
+//     std::string_view sv(s);
+//     std::cerr << sv.substr(0, n);
+// }
 
 // 使用 mmap 申请一段内存，模拟物理内存
 class MmuTest : public ::testing::Test {
@@ -28,7 +28,7 @@ class MmuTest : public ::testing::Test {
 
 protected:
     void SetUp() override {
-        g_log_func = mock_logk;
+        // g_log_func = mock_logk;
 
         int prot = PROT_READ|PROT_WRITE;
         int flags = MAP_PRIVATE|MAP_ANONYMOUS;

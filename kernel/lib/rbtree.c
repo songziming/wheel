@@ -1,23 +1,25 @@
 #include "rbtree.h"
-#include "debug.h"
+#include <debug.h>
 
 
-// 红黑树，参考了 Linux Kernel 和算法导论
+// 红黑树，参考算法导论和 Linux kernel
 
-#define RB_RED      0
-#define RB_BLACK    1
-// #define get_color(node)  ((size_t)   ((node)->parent_color &  1UL))
-// #define get_parent(node) ((rbnode_t*)((node)->parent_color & ~1UL))
+/*
+# 形象地理解红黑树
+完全平衡的二叉树是满二叉树，高度 h，节点数 2^h-1
+在满二叉树插入一些虚节点，破坏了平衡性
+父子结点不能都是虚节点，这样不平衡度也能接受，最长路径就是 2h
+这样的树就是红黑树，来自满二叉树的节点就是黑节点，额外插入的虚节点就是红节点
+原来满二叉树的高度就是黑高度，因此红黑树要求黑高度相同
 
+# 严谨地定义红黑树
+1. 根节点是黑的，叶节点是黑的
+2. 红节点的子节点必黑（路径上两个红节点不能相邻）
+3. 黑高度相同
+*/
 
-static inline size_t get_color(rbnode_t *node) {
-    return node->parent_color & 1UL;
-}
 static inline void set_color(rbnode_t *node, size_t color) {
     node->parent_color = (color & 1UL) | (node->parent_color & ~1UL);
-}
-static inline rbnode_t *get_parent(rbnode_t *node) {
-    return (rbnode_t*)(node->parent_color & ~1UL);
 }
 static inline void set_parent(rbnode_t *node, rbnode_t *parent) {
     node->parent_color = (node->parent_color & 1UL) | ((size_t)parent & ~1UL);
@@ -36,7 +38,7 @@ static inline void set_parent(rbnode_t *node, rbnode_t *parent) {
 static void rb_rotate_left(rbtree_t *tree, rbnode_t *node) {
     rbnode_t *X = node;
     rbnode_t *Y = X->right;
-    rbnode_t *P = get_parent(X);
+    rbnode_t *P = RB_PARENT(X);
 
     if (NULL != (X->right = Y->left)) { // X->right  = b
         set_parent(Y->left, X);         // b->parent = X
@@ -66,7 +68,7 @@ static void rb_rotate_left(rbtree_t *tree, rbnode_t *node) {
 static void rb_rotate_right(rbtree_t *tree, rbnode_t *node) {
     rbnode_t *X = node;
     rbnode_t *Y = X->left;
-    rbnode_t *P = get_parent(X);
+    rbnode_t *P = RB_PARENT(X);
 
     if (NULL != (X->left = Y->right)) { // X->left   = b
         set_parent(Y->right, X);        // b->parent = X
@@ -110,17 +112,17 @@ static void rb_insert_fixup(rbtree_t *tree, rbnode_t *node) {
 
     set_color(X, RB_RED); // 新节点染红，不改变黑高度
 
-    while ((P = get_parent(X)) && (RB_RED == get_color(P))) {
+    while ((P = RB_PARENT(X)) && (RB_RED == RB_COLOR(P))) {
         // P 红，说明 G 黑
         // P、X 都红，违反红黑树性质 4
-        G = get_parent(P);
+        G = RB_PARENT(P);
         if (P == G->left) {
             U = G->right;
         } else {
             U = G->left;
         }
 
-        if ((NULL != U) && (RB_RED == get_color(U))) {
+        if ((NULL != U) && (RB_RED == RB_COLOR(U))) {
             // P、U 都是红节点
             // 那么 P、U 染黑，G 染红，保持黑高度不变
             // 之后继续检查 G
@@ -215,9 +217,9 @@ static void rb_remove_fixup(rbtree_t *tree, rbnode_t *child) {
     // X 子树黑高度少一，如果 X 是红色，将其染黑即可
     // 如果 X 是黑色，就需要旋转并沿树上移，直到遇到红节点
 
-    while ((X != tree->root) && (RB_BLACK == get_color(X))) {
+    while ((X != tree->root) && (RB_BLACK == RB_COLOR(X))) {
         // X 不是根节点，父节点一定非空
-        rbnode_t *P = get_parent(X);
+        rbnode_t *P = RB_PARENT(X);
 
         if (X == P->left) {
             // X 是父节点的左子节点，兄弟节点在右
@@ -225,7 +227,7 @@ static void rb_remove_fixup(rbtree_t *tree, rbnode_t *child) {
             // 说明兄弟节点一定非空，两个侄节点也一定非空
             S = P->right;
 
-            if (RB_RED == get_color(S)) {
+            if (RB_RED == RB_COLOR(S)) {
                 // 父节点黑色，否则违反性质 4
                 // 兄弟节点染黑，然后左旋，黑高度均不变
                 // 这样得到黑色的兄弟节点
@@ -244,7 +246,7 @@ static void rb_remove_fixup(rbtree_t *tree, rbnode_t *child) {
             L = S->left;
             R = S->right;
 
-            if ((RB_BLACK == get_color(L)) && (RB_BLACK == get_color(R))) {
+            if ((RB_BLACK == RB_COLOR(L)) && (RB_BLACK == RB_COLOR(R))) {
                 // 兄弟节点黑色，且两个侄节点均为黑色
                 // 这样兄弟节点可以染红，黑高度也减一
                 // 黑高度少一的子树便上升了一层
@@ -256,7 +258,7 @@ static void rb_remove_fixup(rbtree_t *tree, rbnode_t *child) {
                 set_color(S, RB_RED);
                 X = P;
             } else {
-                if (RB_BLACK == get_color(R)) {
+                if (RB_BLACK == RB_COLOR(R)) {
                     // 右侄节点黑色，重新染色并旋转，使右侄节点为红色
                     //    P             P       .
                     //   / \           / \      .
@@ -277,7 +279,7 @@ static void rb_remove_fixup(rbtree_t *tree, rbnode_t *child) {
                 //   [X] [S]  -->  [P] [R]  .
                 //       / \       / \      .
                 //      L  (R)   [X]  L     .
-                set_color(S, get_color(P));
+                set_color(S, RB_COLOR(P));
                 set_color(P, RB_BLACK);
                 set_color(R, RB_BLACK);
                 rb_rotate_left(tree, P);
@@ -289,7 +291,7 @@ static void rb_remove_fixup(rbtree_t *tree, rbnode_t *child) {
             // 与左子节点情况完全对称，因此不再说明
             S = P->left;
 
-            if (RB_RED == get_color(S)) {
+            if (RB_RED == RB_COLOR(S)) {
                 set_color(S, RB_BLACK);
                 set_color(P, RB_RED);
                 rb_rotate_right(tree, P);
@@ -299,11 +301,11 @@ static void rb_remove_fixup(rbtree_t *tree, rbnode_t *child) {
             L = S->left;
             R = S->right;
 
-            if ((RB_BLACK == get_color(L)) && (RB_BLACK == get_color(R))) {
+            if ((RB_BLACK == RB_COLOR(L)) && (RB_BLACK == RB_COLOR(R))) {
                 set_color(S, RB_RED);
                 X = P;
             } else {
-                if (RB_BLACK == get_color(L)) {
+                if (RB_BLACK == RB_COLOR(L)) {
                     set_color(R, RB_BLACK);
                     set_color(S, RB_RED);
                     rb_rotate_left(tree, S);
@@ -312,7 +314,7 @@ static void rb_remove_fixup(rbtree_t *tree, rbnode_t *child) {
                     R = S->right;
                 }
 
-                set_color(S, get_color(P));
+                set_color(S, RB_COLOR(P));
                 set_color(P, RB_BLACK);
                 set_color(L, RB_BLACK);
                 rb_rotate_right(tree, P);
@@ -351,7 +353,7 @@ void rb_remove(rbtree_t *tree, rbnode_t *node) {
         C = X->right;
     }
 
-    rbnode_t *P = get_parent(X);
+    rbnode_t *P = RB_PARENT(X);
     if (NULL == P) {
         tree->root = C;
     } else if (P->left == X) {
@@ -363,7 +365,7 @@ void rb_remove(rbtree_t *tree, rbnode_t *node) {
         set_parent(C, P);
     }
 
-    size_t color = get_color(X);
+    size_t color = RB_COLOR(X);
 
     if (X != node) {
         // 使用 X 顶替 node 在红黑树中的位置
@@ -389,7 +391,7 @@ void rb_replace(rbtree_t *tree, rbnode_t *victim, rbnode_t *node) {
     ASSERT(NULL != victim);
     ASSERT(NULL != node);
 
-    rbnode_t *parent = get_parent(victim);
+    rbnode_t *parent = RB_PARENT(victim);
     if (NULL == parent) {
         tree->root = node;
     } else if (victim == parent->left) {

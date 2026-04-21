@@ -21,7 +21,7 @@ void logk(const char *fmt, ...) {
 }
 
 
-static void log_stacktrace() {
+void log_stacktrace() {
     size_t frames[32];
     int depth = arch_unwind(frames, 32);
     for (int i = 0; i < depth; ++i) {
@@ -51,24 +51,12 @@ NORETURN void panic(const char *fmt, ...) {
 // 错误处理
 //------------------------------------------------------------------------------
 
+#ifndef UNIT_TEST
+
 // 断言失败
 void assertion_fail(const char *file, int line, const char *func) {
     logk("Assertion fail: %s:%d func:%s\n", file, line, func);
     log_stacktrace();
 }
 
-
-//------------------------------------------------------------------------------
-// 栈溢出保护，编译选项 -fstack-protector
-//------------------------------------------------------------------------------
-
-#ifndef UNIT_TEST
-
-const uintptr_t __stack_chk_guard = 0x595e9fbd94fda766ULL;
-
-void __stack_chk_fail() {
-    logk("fatal: stack smashing detected\n");
-    log_stacktrace();
-}
-
-#endif // UNIT_TEST
+#endif

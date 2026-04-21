@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
 extern "C" {
-    #include "task.h"
+    #include "ktimer.h"
 }
 
 
@@ -9,7 +9,7 @@ class TimerTest;
 
 
 struct MyTimer {
-    timerjob_t base;
+    ktimer_t   base;
     TimerTest *test;
     int        id;
     int        fire_at;
@@ -25,7 +25,7 @@ struct TimerTest : public ::testing::Test {
     void start(int id, int tick);
     void cancel(int id);
     void forward();
-    static void timer_fire(timerjob_t *self);
+    static void timer_fire(ktimer_t *self);
 };
 
 void TimerTest::SetUp() {
@@ -53,9 +53,9 @@ void TimerTest::forward() {
     timer_process();
 }
 
-void TimerTest::timer_fire(timerjob_t *self) {
+void TimerTest::timer_fire(ktimer_t *self) {
     MyTimer *timer = (MyTimer*)self;
-    std::cout << "timer-" << timer->id << " fires at tick-" << timer->test->current_tick << std::endl;
+    // std::cout << "timer-" << timer->id << " fires at tick-" << timer->test->current_tick << std::endl;
     timer->fire_at = timer->test->current_tick;
 }
 

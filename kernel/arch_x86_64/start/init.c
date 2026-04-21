@@ -19,6 +19,7 @@
 #include <early_alloc.h>
 #include <pmlayout.h>
 #include <task.h>
+#include <ktimer.h>
 #include <kstring.h>
 #include <debug.h>
 
@@ -27,7 +28,6 @@ static INIT_BSS uint32_t g_fgcolor;
 static INIT_BSS size_t   g_rsdp;
 
 static INIT_BSS task_t g_root_task;
-// static INIT_BSS uint8_t g_root_stack[4096];
 
 
 static INIT_TEXT void mb1_parse_mmap(uint32_t mmap, uint32_t len) {

@@ -7,6 +7,7 @@ typedef void (*log_func_t)(const char *, size_t);
 extern log_func_t g_log_func;
 
 void logk(const char *fmt, ...);
+void log_stacktrace();
 void panic(const char *fmt, ...);
 
 #if defined(UNIT_TEST)

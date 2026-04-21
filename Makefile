@@ -40,7 +40,7 @@ UNIT_COV := $(OUT_DIR)/coverage
 
 # source files and objects
 KERNEL := kernel
-KDIRS  := arch_$(ARCH) core lib mem
+KDIRS  := arch_$(ARCH) core debug lib mem
 AFILES := $(shell find $(KDIRS:%=$(KERNEL)/%) -name "*.S")
 CFILES := $(shell find $(KDIRS:%=$(KERNEL)/%) -name "*.c")
 XFILES := $(shell find $(KDIRS:%=$(KERNEL)/%) -name "*.cc")
@@ -66,10 +66,12 @@ GENDEP  = -MT $@ -MMD -MP -MF $@.d
 
 # 内核编译选项，C & ASM
 KCFLAGS := -c -std=c11 -target $(ARCH)-none-elf $(KINC) $(NOSTD)
-KCFLAGS += -ffunction-sections -fdata-sections -fstack-protector-strong
+KCFLAGS += -ffunction-sections -fdata-sections -fvisibility=hidden -flto
 KCFLAGS += -Wall -Wextra -Wshadow -Werror=implicit
 ifeq ($(DEBUG),1)
-	KCFLAGS += -DDEBUG -g -fno-omit-frame-pointer
+	KCFLAGS += -DDEBUG -g -fno-omit-frame-pointer -fstack-protector-strong
+	KCFLAGS += -fsanitize=undefined -fno-sanitize=function
+# 	KCFLAGS += -fsanitize=cfi
 else
 	KCFLAGS += -DNDEBUG -O2
 endif

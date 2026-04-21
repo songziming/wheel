@@ -2,6 +2,7 @@
 #include <arch_api.h>
 #include <arch_int.h>
 #include <cpu/features.h>
+#include <ktimer.h>
 #include <task.h>
 #include <debug.h>
 
