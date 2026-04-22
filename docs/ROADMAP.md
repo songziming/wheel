@@ -7,7 +7,7 @@
 - 页面类型，
 - 任务优先级，不同优先级有不同的调度策略
 
-# 开发过程
+# 开发过程跟踪
 
 - [x] 引导：使用 multiboot 1&2 引导，进入 64-bit mode，跳转到 higher-half
 - [x] 输出：格式化字符串，打印调试输出
@@ -50,9 +50,16 @@
 
 并发与调度
 - [ ] 使用更好的自旋锁方案（MCS-lock、qspin），降低 cache-bouncing
+- [ ] 实现读写锁，允许多个 reader 同时执行。调度器使用 read-lock，负载均衡使用 write-lock
 - [ ] 识别处理器拓扑结构，改进调度算法
 
 时钟相关
 - [ ] 将 8264 PIT 制作成独立模块，用来校准 local apic timer；实现 HPET 支持，也用来校准 Local APIC timer
 - [ ] 模仿 android VSYNC 校准机制，使用软件模拟锁相环。PIT 或 Local APIC timer 一直产生硬件中断，软件可以选择屏蔽或开启，防止产生累计误差
 - [ ] 研究 TSC-deadline 模式，使用 tsc-adjust 调整每个 CPU 的 tsc 相位，让不同 CPU 的时钟中断错位开
+
+代码风格
+- [ ] 初始化阶段哪些函数需要在 BSP 运行，哪些需要在每个 CPU 运行，应该从函数名体现出来
+
+调试
+- [ ] 生成 trace，可以使用 perfetto 检查执行细节

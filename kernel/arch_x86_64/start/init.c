@@ -15,6 +15,7 @@
 #include <dev/console.h>
 #include <dev/framebuf.h>
 #include <dev/i8259.h>
+#include <dev/hpet.h>
 
 #include <early_alloc.h>
 #include <pmlayout.h>
@@ -216,6 +217,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     int_init(); // 初始化中断管理机制
     thiscpu_int_init();
 
+    hpet_init();
+
     // 中断控制器初始化
     i8259_disable();
     // TODO ioapic_init_all();
@@ -263,7 +266,6 @@ static INIT_TEXT void root_proc() {
     kmemcpy(to, from, &_real_end - from);
     logk("copy trampoline code from %p to %p\n", from, to);
 
-#if 1
     spin_init(&g_smp_lock);
     raw_spin_take(&g_smp_lock);
 
@@ -283,7 +285,6 @@ static INIT_TEXT void root_proc() {
         // 前一个 CPU 初始化完成才能初始化下一个
         raw_spin_take(&g_smp_lock);
     }
-#endif
 
     while (1) {
         cpu_pause();
@@ -315,8 +316,10 @@ static INIT_TEXT NORETURN void ap_init(int idx) {
     write_cr3(g_kernel_vm.table);   // 加载正式页表
 
     // 开始运行 idle task
+    // TODO 切换任务之前就告诉 BSP 启动结束，这有一定风险，此时还在使用临时栈
+    //      可以注册一个 defer-work，在中断返回流程里执行，在那个函数中通知 BSP
     sched_init();
-    // raw_spin_give(&g_smp_lock); // 通知 BSP 启动结束
+    raw_spin_give(&g_smp_lock); // 通知 BSP 启动结束
     arch_task_switch();
 
     while (1) {
