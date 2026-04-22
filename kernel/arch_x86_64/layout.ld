@@ -7,6 +7,7 @@ ENTRY(sys_boot)
 PHDRS {
     boot        PT_LOAD;
     percpu      PT_LOAD;
+    real        PT_LOAD;
     init        PT_LOAD;
     text        PT_LOAD;
     rodata      PT_LOAD;
@@ -33,6 +34,12 @@ SECTIONS {
     _percpu_data_end = .;
     .percpu.bss (NOLOAD) : AT(ADDR(.percpu.bss) - TEXT_ADDR) { *(.percpu.bss) } : percpu
     _percpu_bss_end = .;
+
+    /* 实模式启动代码模板，会被复制到 1M 以下，用于启动其他 CPU */
+    _real_addr = .;
+    .real REAL_ADDR : AT(_real_addr - TEXT_ADDR) { KEEP(*(.real)) } : real = 0x90
+    _real_end = _real_addr + SIZEOF(.real);
+    . = _real_end;
 
     /* 初始化阶段的代码和数据 */
     .init.text : AT(ADDR(.init.text) - TEXT_ADDR) { *(.init.text) } : init = 0x90

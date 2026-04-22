@@ -71,6 +71,39 @@ TEST_F(PageTest, BuildBuddy) {
     CHECK_BLOCK(0x10000, 15);
 }
 
+// max-rank=15，第一个超大块是 2^16 个页，即 0x10000 个页
+// 如果遇到这种大的连续内存，rank 不能过界
+TEST_F(PageTest, BuddyTooLarge) {
+    page_init(0x10000 << PAGE_SHIFT, 0x20000 << PAGE_SHIFT);
+
+    pages_add(0x10000 << PAGE_SHIFT, 0x10100 << PAGE_SHIFT);
+    pages_add(0x10100 << PAGE_SHIFT, 0x10200 << PAGE_SHIFT);
+    pages_add(0x10200 << PAGE_SHIFT, 0x10300 << PAGE_SHIFT);
+    pages_add(0x10300 << PAGE_SHIFT, 0x10400 << PAGE_SHIFT);
+    CHECK_BLOCK(0x10000, 10); // 0x10000~0x10400, rank 10
+
+    pages_add(0x10400 << PAGE_SHIFT, 0x10800 << PAGE_SHIFT);
+    pages_add(0x10800 << PAGE_SHIFT, 0x10c00 << PAGE_SHIFT);
+    pages_add(0x10c00 << PAGE_SHIFT, 0x11000 << PAGE_SHIFT);
+    CHECK_BLOCK(0x10000, 12); // 0x10000~0x11000, rank 12
+
+    pages_add(0x11000 << PAGE_SHIFT, 0x12000 << PAGE_SHIFT);
+    pages_add(0x12000 << PAGE_SHIFT, 0x13000 << PAGE_SHIFT);
+    pages_add(0x13000 << PAGE_SHIFT, 0x14000 << PAGE_SHIFT);
+    pages_add(0x14000 << PAGE_SHIFT, 0x15000 << PAGE_SHIFT);
+    pages_add(0x15000 << PAGE_SHIFT, 0x16000 << PAGE_SHIFT);
+    pages_add(0x16000 << PAGE_SHIFT, 0x17000 << PAGE_SHIFT);
+    pages_add(0x17000 << PAGE_SHIFT, 0x18000 << PAGE_SHIFT);
+    CHECK_BLOCK(0x10000, 15); // 0x10000~0x18000, rank 15
+
+    pages_add(0x18000 << PAGE_SHIFT, 0x1a000 << PAGE_SHIFT);
+    pages_add(0x1a000 << PAGE_SHIFT, 0x1c000 << PAGE_SHIFT);
+    pages_add(0x1c000 << PAGE_SHIFT, 0x1e000 << PAGE_SHIFT);
+    pages_add(0x1e000 << PAGE_SHIFT, 0x20000 << PAGE_SHIFT);
+    CHECK_BLOCK(0x10000, 15); // 0x10000~0x18000, rank 15
+    CHECK_BLOCK(0x18000, 15); // 0x18000~0x20000, rank 15
+}
+
 TEST_F(PageTest, Alloc) {
     page_init(1 << PAGE_SHIFT, 11 << PAGE_SHIFT);
     pages_add(1 << PAGE_SHIFT, 11 << PAGE_SHIFT);

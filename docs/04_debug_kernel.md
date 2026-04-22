@@ -1,5 +1,11 @@
 # 内核调试手段
 
+## 根据内存地址查询代码行号
+
+~~~bash
+llvm-addr2line -e build/wheel.elf 0xdeadbeef
+~~~
+
 ## 使用 gdb 调试在 QEMU 中运行的内核
 
 运行 QEMU 时传入参数 `-gdb tcp::4444`（run_iso 的默认行为）
@@ -37,8 +43,6 @@ nm build/wheel.elf | awk '{ print $1" "$3 }' > build/wheel.sym
 ldsym global "build/wheel.sym"
 ~~~
 
-## 根据内存地址查询代码行号
+## Bochs 建议配置
 
-~~~bash
-llvm-addr2line -e build/wheel.elf 0xdeadbeef
-~~~
+`reset_on_triple_fault 0`，如果发生 triple-fault，不要重置，保留场景便于调试

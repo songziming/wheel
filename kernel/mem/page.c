@@ -80,7 +80,7 @@ static void block_free_nolock(uint32_t blk) {
 
     // 不断检查伙伴块，如果也是 free，则不断合并为更大的块
     uint32_t rank = g_pages[blk].rank;
-    for (; rank < RANK_NUM; ++rank) {
+    for (; rank < RANK_NUM - 1; ++rank) {
         uint32_t sib = blk ^ (1U << rank); // 伙伴块地址
 
         // 检查能否合并

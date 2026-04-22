@@ -13,7 +13,7 @@ PERCPU_BSS task_t *g_prev_task;
 PERCPU_BSS task_t *g_next_task;
 static INIT_BSS task_t g_dummy_task;
 static PERCPU_BSS task_t g_idle_task; // 这也是 ready-q 的头节点
-static PERCPU_BSS uint8_t g_idle_stack[1024]; // TODO percpu 负责划分
+// static PERCPU_BSS uint8_t g_idle_stack[1024]; // TODO percpu 负责划分
 
 
 // 就绪任务队列
@@ -27,6 +27,10 @@ static PERCPU_BSS rdyq_t g_rdy_queue;
 static spin_t g_load_lock;
 static int g_lowest_load_cpu = 0;
 static int g_highest_load_cpu = 0;
+
+// TODO 负载均衡锁需要支持 read-write lock
+// 每个 cpu 执行 reschedule 时，获取 read-lock，多个 reader 可以共存
+// 某个 cpu 执行到 idle，获取 writer-lock，独占临界区，检查其他 cpu 的就绪队列
 
 
 
@@ -84,6 +88,7 @@ dlnode_t *rdyq_rotate(rdyq_t *q UNUSED, dlnode_t *dl) {
 // 管理就绪队列
 
 static NORETURN void idle_proc(task_t *self UNUSED) {
+    logk("%s task running on cpu-%d...\n", self->name, cpu_index());
     while (1) {
         cpu_pause();
         cpu_halt();
@@ -97,8 +102,8 @@ void sched_init() {
     // THISCPU_SET(g_queue_size, 1);
 
     task_t *idle = THISCPU(&g_idle_task);
-    uint8_t *top = THISCPU(g_idle_stack + sizeof(g_idle_stack));
-    task_create_ex(idle, "idle", 31, (size_t)top, idle_proc);
+    // uint8_t *top = THISCPU(g_idle_stack + sizeof(g_idle_stack));
+    task_create(idle, "idle", 31, idle_proc);
     dl_init_circular(&idle->dl);
 
     rdyq_t *q = THISCPU(&g_rdy_queue);
@@ -107,6 +112,8 @@ void sched_init() {
 
     THISCPU_SET(g_prev_task, &g_dummy_task);
     THISCPU_SET(g_next_task, idle);
+
+    logk("cpu-%d setting next to %s\n", cpu_index(), THISCPU_GET(g_next_task)->name);
 }
 
 // run in ISR
@@ -185,6 +192,8 @@ void task_create_ex(task_t *task, const char *name, int priority, size_t stack_t
 }
 
 void task_create(task_t *task, const char *name, int priority, void *entry) {
+    // 必须分配足够大的栈，如果执行 logk，对栈的使用很大
+    // TODO 不应该允许用户自己指定栈顶地址，必须动态分配页，动态映射，这样越界容易发现
     task->stack.desc = name;
     size_t stack_va = vmspace_alloc_stack(&g_kernel_vm, &task->stack, 0);
     size_t stack_top = stack_va + PAGE_SIZE;

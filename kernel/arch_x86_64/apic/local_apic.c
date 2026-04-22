@@ -235,6 +235,10 @@ INIT_TEXT void loapic_init(int idx) {
         write_msr(IA32_APIC_BASE, msr_base);
     }
 
+    // 需要验证当前 CPU 的编号正确
+    ASSERT(idx == cpu_index());
+    ASSERT(g_read(REG_ID) == g_loapics[idx].apic_id);
+
     // 屏蔽中断向量号 0~31
     g_write(REG_TPR, 16);
 
@@ -384,6 +388,36 @@ INIT_TEXT void loapic_timer_calibrate() {
     logk("loapic timer freq %zd\n", g_timer_freq);
 }
 
+INIT_TEXT void loapic_timer_busywait(int us) {
+    ASSERT(0 != g_timer_freq);
+
+    uint32_t start  = g_read(REG_TIMER_CCR);
+    uint32_t period = g_read(REG_TIMER_ICR);
+    uint64_t delay  = (g_timer_freq * us + 500000) / 1000000;
+
+    // 如果等待时间大于一个完整周期
+    while (delay > period) {
+        while (g_read(REG_TIMER_CCR) <= start) {
+            cpu_pause();
+        }
+        while (g_read(REG_TIMER_CCR) >= start) {
+            cpu_pause();
+        }
+        delay -= period;
+    }
+
+    uint64_t end = start - delay;
+    if (delay > start) {
+        while (g_read(REG_TIMER_CCR) <= start) {
+            cpu_pause();
+        }
+        end = start + period - delay;
+    }
+
+    while (g_read(REG_TIMER_CCR) >= end) {
+        cpu_pause();
+    }
+}
 
 void loapic_timer_set_periodic(int freq) {
     uint64_t delay = g_timer_freq + (freq >> 1);

@@ -225,7 +225,7 @@ arch_task_switch:
     pushq   %r8         // rsp
     pushq   %rax        // rflags
     pushq   $0x08       // cs
-    pushq   $resume     // rip 从这里恢复
+    pushq   $resume     // rip 从这里恢复（这是 32bit 立即数！）
     subq    $80, %rsp   // errcode, rdi, and other 8 caller-saved regs
     push_callee_saved_regs
 

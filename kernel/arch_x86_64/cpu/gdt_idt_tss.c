@@ -99,7 +99,7 @@ INIT_TEXT void idt_set_ist(uint8_t vec, int ist) {
     g_idt[vec].ist = ist & 7;
 }
 
-INIT_TEXT void thistss_init_load() {
+INIT_TEXT void thistss_init_load(int cpu) {
     ASSERT(NULL != g_gdt);
 
     uint64_t addr = (uint64_t)thiscpu_ptr(&g_tss);
@@ -114,10 +114,10 @@ INIT_TEXT void thistss_init_load() {
     lower |=                0x0000e90000000000UL;   // present 64bit ring3
     upper  = (addr >> 32) & 0x00000000ffffffffUL;   // base  [63:32]
 
-    int idx = cpu_index();
-    g_gdt[2 * idx + 6] = lower;
-    g_gdt[2 * idx + 7] = upper;
-    load_tr(((2 * idx + 6) << 3) | 3);
+    // int cpu = cpu_index();
+    g_gdt[2 * cpu + 6] = lower;
+    g_gdt[2 * cpu + 7] = upper;
+    load_tr(((2 * cpu + 6) << 3) | 3);
 }
 
 // 某些中断需要使用确定的栈，amd64 提供了 7 个 IST

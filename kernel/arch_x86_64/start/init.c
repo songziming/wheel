@@ -21,14 +21,24 @@
 #include <task.h>
 #include <ktimer.h>
 #include <kstring.h>
+#include <spin.h>
 #include <debug.h>
 
+
+// layout.ld
+char _real_addr;
+char _real_end;
 
 static INIT_BSS uint32_t g_fgcolor;
 static INIT_BSS size_t   g_rsdp;
 
 static INIT_BSS task_t g_root_task;
 static INIT_TEXT void root_proc();
+
+
+static INIT_DATA int g_cpu_started = 1;
+static INIT_BSS spin_t g_smp_lock;
+static INIT_TEXT NORETURN void ap_init(int idx);
 
 
 static INIT_TEXT void mb1_parse_mmap(uint32_t mmap, uint32_t len) {
@@ -137,7 +147,11 @@ static INIT_TEXT void gui_log(const char *s, size_t n) {
     framebuf_puts(s, n);
 }
 
-void sys_init(uint32_t eax, uint32_t ebx) {
+INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
+    if (0 == eax) {
+        ap_init(g_cpu_started++);
+    }
+
     serial_init();
     g_log_func = serial_puts;
 
@@ -161,6 +175,12 @@ void sys_init(uint32_t eax, uint32_t ebx) {
 
     logk("Wheel Operating System (%s %s)\n", __DATE__, __TIME__);
 
+#if 1
+    idt_init();
+    idt_load();
+    int_init();
+#endif
+
     // parse ACPI tables
     if (0 == g_rsdp) {
         g_rsdp = acpi_rsdp_probe();
@@ -182,7 +202,7 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     // 内存中的关键数据已备份，可以放开 early-rw 增长限制
     early_rw_unlock();
 
-    // 创建正式的 gdt
+    // 创建正式的 gdt、idt
     gdt_init();
     gdt_load();
     idt_init();
@@ -192,7 +212,7 @@ void sys_init(uint32_t eax, uint32_t ebx) {
     mem_init(); // this also init percpu
     thiscpu_init(0);
 
-    thistss_init_load(); // 依赖 thiscpu，需要放在 thiscpu_init 之后
+    thistss_init_load(0); // 依赖 thiscpu，需要放在 thiscpu_init 之后
     int_init(); // 初始化中断管理机制
     thiscpu_int_init();
 
@@ -224,8 +244,7 @@ end:
     }
 }
 
-
-// 第一个运行的任务
+// 第一个运行的任务，运行在 BSP
 static INIT_TEXT void root_proc() {
     logk("hello from root task!\n");
 
@@ -234,9 +253,71 @@ static INIT_TEXT void root_proc() {
     logk("current stack pointer 0x%zx\n", sp);
 
     // pmlayout_show();
-    vmspace_show(&g_kernel_vm);
+    // vmspace_show(&g_kernel_vm);
     // cpu_features_show();
     // loapic_show();
+
+    // 将实模式代码复制到 1M 以下
+    char *from = &_real_addr;
+    char *to = (char*)KERNEL_REAL_ADDR + DIRECT_MAP_ADDR;
+    kmemcpy(to, from, &_real_end - from);
+    logk("copy trampoline code from %p to %p\n", from, to);
+
+#if 1
+    spin_init(&g_smp_lock);
+    raw_spin_take(&g_smp_lock);
+
+    // 启动代码地址页号就是 startup-IPI 的向量号
+    int vec = KERNEL_REAL_ADDR >> 12;
+    for (int i = 1; i < cpu_count(); ++i) {
+        logk("(BSP) starting cpu %d...", i);
+
+        loapic_send_init(i);            // 发送 INIT
+        loapic_timer_busywait(10000);   // 等待 10ms
+        loapic_send_sipi(i, vec);       // 发送 startup-IPI
+        loapic_timer_busywait(200);     // 等待 200us
+        loapic_send_sipi(i, vec);       // 再次发送 startup-IPI
+        loapic_timer_busywait(200);     // 等待 200us
+
+        // 当 CPU 开始运行 task，说明初始化已经结束，不再使用 init stack
+        // 前一个 CPU 初始化完成才能初始化下一个
+        raw_spin_take(&g_smp_lock);
+    }
+#endif
+
+    while (1) {
+        cpu_pause();
+        cpu_halt();
+    }
+}
+
+// AP 启动流程，使用 init-stack
+// 多个 CPU 不能同时执行此函数，因为共用同一个栈
+static INIT_TEXT NORETURN void ap_init(int idx) {
+    logk("AP-%d started\n", idx);
+
+    size_t sp;
+    ASMV("movq %%rsp, %0" : "=r"(sp));
+    logk("AP-%d current stack pointer 0x%zx\n", idx, sp);
+
+    cpu_features_enable();
+    gdt_load();
+    idt_load();
+
+    thiscpu_init(idx);
+    thistss_init_load(idx);
+    thiscpu_int_init();
+
+    ASSERT(cpu_index() == idx);
+
+    loapic_init(idx);
+    loapic_timer_set_periodic(2);
+    write_cr3(g_kernel_vm.table);   // 加载正式页表
+
+    // 开始运行 idle task
+    sched_init();
+    // raw_spin_give(&g_smp_lock); // 通知 BSP 启动结束
+    arch_task_switch();
 
     while (1) {
         cpu_pause();
