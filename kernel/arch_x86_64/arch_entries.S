@@ -204,6 +204,7 @@ syscall_entry:
 
 
 // 不执行调度函数，直接从当前任务切换到下一个任务
+// 但是中途需要切换到中断栈，执行 work_flush 清空异步任务
 // 保存当前任务的上下文，然后执行中断返回流程
 // 当这个函数返回，说明又重新回到了原本的任务
 arch_task_switch:
@@ -232,6 +233,7 @@ arch_task_switch:
 
     movq    %rsp, (%rsi)    // prev_task->regs = rsp
     // movq    (%rdi), %rsp    // rsp = next_task->regs
+    movq    %gs:(g_int_stack_top), %rsp // 切换到中断栈，因为要执行 work_flush
     jmp     int_return_to_task
 
 resume:

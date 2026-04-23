@@ -2,12 +2,10 @@
 #define ARCH_X86_64_ARCH_API_H
 
 #include <wheel.h>
-#include <arch_config.h>
 #include <arch_api_common.h>
-
+#include "arch_config.h"
 #include "cpu/rw.h"
 #include "mem/thiscpu_rw.h"
-
 
 
 //------------------------------------------------------------------------------

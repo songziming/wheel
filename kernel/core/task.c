@@ -88,7 +88,7 @@ dlnode_t *rdyq_rotate(rdyq_t *q UNUSED, dlnode_t *dl) {
 // 管理就绪队列
 
 static NORETURN void idle_proc(task_t *self UNUSED) {
-    logk("%s task running on cpu-%d...\n", self->name, cpu_index());
+    // logk("%s task running on cpu-%d...\n", self->name, cpu_index());
     while (1) {
         cpu_pause();
         cpu_halt();
@@ -112,8 +112,6 @@ void sched_init() {
 
     THISCPU_SET(g_prev_task, &g_dummy_task);
     THISCPU_SET(g_next_task, idle);
-
-    logk("cpu-%d setting next to %s\n", cpu_index(), THISCPU_GET(g_next_task)->name);
 }
 
 // run in ISR
@@ -132,7 +130,6 @@ void sched_process() {
     THISCPU_SET(g_next_task, next);
 
     // raw_spin_give(lock);
-    logk("*");
 }
 
 // 停止的任务必须位于当前 CPU，要么

@@ -259,7 +259,7 @@ static INIT_TEXT void root_proc() {
     logk("current stack pointer 0x%zx\n", sp);
 
     // pmlayout_show();
-    // vmspace_show(&g_kernel_vm);
+    vmspace_show(&g_kernel_vm);
     // cpu_features_show();
     // loapic_show();
 
@@ -295,7 +295,13 @@ static INIT_TEXT void root_proc() {
     }
 }
 
+// 通知 BSP，又一个 AP 初始化完成，开始运行 task，不再使用 init-stack
+// BSP 可以启动下一个 AP，或者将 init-stack 回收
 static INIT_TEXT void notify_ap_started(work_t *work UNUSED) {
+    size_t sp;
+    ASMV("movq %%rsp, %0" : "=r"(sp));
+    logk("work-%d using stack pointer 0x%zx\n", cpu_index(), sp);
+
     logk("notifying ap-started from cpu-%d\n", cpu_index());
     raw_spin_give(&g_smp_lock);
 }
@@ -323,13 +329,11 @@ static INIT_TEXT NORETURN void ap_init(int idx) {
     loapic_timer_set_periodic(2);
     write_cr3(g_kernel_vm.table);   // 加载正式页表
 
-    // 开始运行 idle task
-    // TODO 切换任务之前就告诉 BSP 启动结束，这有一定风险，此时还在使用临时栈
-    //      可以注册一个 defer-work，在中断返回流程里执行，在那个函数中通知 BSP
     work_init_this();
     sched_init();
 
-    // g_smp_notifier
+    // 注册一个 work，在切换任务时执行（使用中断栈）
+    // 只有不再使用这个 init-stack，才能安全地启动另一个 CPU
     work_defer(&g_smp_notifier, notify_ap_started);
     arch_task_switch();
 
