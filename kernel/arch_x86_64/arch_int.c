@@ -17,6 +17,24 @@ extern uint64_t isr_entries[256];
 extern void syscall_entry();
 
 
+
+inline int cpu_int_depth() {
+    return THISCPU_GET(g_int_depth);
+}
+
+inline int cpu_int_lock() {
+    uint64_t key;
+    ASMV("pushfq; cli; popq %0" : "=r"(key));
+    return (key & 0x200) ? 1 : 0;
+}
+
+inline void cpu_int_unlock(int key) {
+    if (key) {
+        ASMV("sti");
+    }
+}
+
+
 // 默认的中断处理函数
 static void handle_irq(int vec, regs_t *f) {
     logk("[cpu-%d] interrupt vec #%d\n", cpu_index(), vec);

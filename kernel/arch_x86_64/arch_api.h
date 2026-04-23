@@ -20,18 +20,6 @@ static inline void cpu_rfence() { ASMV("lfence" ::: "memory"); }
 static inline void cpu_wfence() { ASMV("sfence" ::: "memory"); }
 static inline void cpu_rwfence() { ASMV("mfence" ::: "memory"); }
 
-static inline int cpu_int_lock() {
-    uint64_t key;
-    ASMV("pushfq; cli; popq %0" : "=r"(key));
-    return (key & 0x200) ? 1 : 0;
-}
-
-static inline void cpu_int_unlock(int key) {
-    if (key) {
-        ASMV("sti");
-    }
-}
-
 //------------------------------------------------------------------------------
 // debug helper
 //------------------------------------------------------------------------------
@@ -45,6 +33,6 @@ int arch_unwind(size_t *addrs, int max);
 
 typedef struct task task_t;
 void arch_task_init(task_t *task, size_t entry, size_t stack_top);
-void arch_task_switch();
+void arch_task_switch(); // also flush workq
 
 #endif // ARCH_X86_64_ARCH_API_H

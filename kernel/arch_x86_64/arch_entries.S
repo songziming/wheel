@@ -9,6 +9,7 @@
 .extern g_prev_task
 .extern g_next_task
 .extern irq_handlers
+.extern work_flush
 
 .altmacro // 需要在 macro 和循环里使用变量
 
@@ -175,9 +176,9 @@ int_enter_nested:
     decl    %gs:(g_int_depth)
     cmpl    $0, %gs:(g_int_depth)
     jne     int_return_nested
-
+int_return_to_task:
     // 即将推出最后一层中断，在这里执行异步任务
-    // TODO work_q_flush
+    call    work_flush
 
     // 切换到原来的栈顶
     // TODO 任务切换也在这里实现，替换成新任务的栈顶地址
@@ -230,8 +231,8 @@ arch_task_switch:
     push_callee_saved_regs
 
     movq    %rsp, (%rsi)    // prev_task->regs = rsp
-    movq    (%rdi), %rsp    // rsp = next_task->regs
-    jmp     int_return_nested
+    // movq    (%rdi), %rsp    // rsp = next_task->regs
+    jmp     int_return_to_task
 
 resume:
     ret

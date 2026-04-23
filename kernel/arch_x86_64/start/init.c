@@ -20,6 +20,7 @@
 #include <early_alloc.h>
 #include <pmlayout.h>
 #include <task.h>
+#include <work.h>
 #include <ktimer.h>
 #include <kstring.h>
 #include <spin.h>
@@ -39,6 +40,7 @@ static INIT_TEXT void root_proc();
 
 static INIT_DATA int g_cpu_started = 1;
 static INIT_BSS spin_t g_smp_lock;
+static INIT_BSS work_t g_smp_notifier;
 static INIT_TEXT NORETURN void ap_init(int idx);
 
 
@@ -232,6 +234,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     write_cr3(g_kernel_vm.table);
 
     // 初始化任务调度
+    work_init_this();
     timer_init();
     sched_init();
 
@@ -292,6 +295,11 @@ static INIT_TEXT void root_proc() {
     }
 }
 
+static INIT_TEXT void notify_ap_started(work_t *work UNUSED) {
+    logk("notifying ap-started from cpu-%d\n", cpu_index());
+    raw_spin_give(&g_smp_lock);
+}
+
 // AP 启动流程，使用 init-stack
 // 多个 CPU 不能同时执行此函数，因为共用同一个栈
 static INIT_TEXT NORETURN void ap_init(int idx) {
@@ -318,8 +326,11 @@ static INIT_TEXT NORETURN void ap_init(int idx) {
     // 开始运行 idle task
     // TODO 切换任务之前就告诉 BSP 启动结束，这有一定风险，此时还在使用临时栈
     //      可以注册一个 defer-work，在中断返回流程里执行，在那个函数中通知 BSP
+    work_init_this();
     sched_init();
-    raw_spin_give(&g_smp_lock); // 通知 BSP 启动结束
+
+    // g_smp_notifier
+    work_defer(&g_smp_notifier, notify_ap_started);
     arch_task_switch();
 
     while (1) {

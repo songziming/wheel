@@ -18,6 +18,11 @@ void *thiscpu_ptr(void *p);
 #define PERCPU(i,x) ((__typeof__(x))percpu_ptr(i,x))
 #define THISCPU(x) ((__typeof__(x))thiscpu_ptr(x))
 
+// 中断
+int cpu_int_depth();
+int cpu_int_lock();
+void cpu_int_unlock(int key);
+
 // 页表操作
 typedef enum mmu_attr {
     MMU_NONE    = 0,
