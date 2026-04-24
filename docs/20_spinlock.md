@@ -82,6 +82,12 @@ mcs_lock_t 记录链表的尾节点，这样新的线程无需遍历就能找到
 
 MCS-lock 也有缺点，锁节点占用空间太大。page desc 这类数据结构对空间很敏感。
 
+## K42 lock
+
+对 MCS-lock 的简单改进。
+MCS-lock 的问题在于更改了 API，代码仓库中无法直接替换，所有用到自旋锁的地方都要修改。
+K42 lock 则不需要传入 lock_waiter 节点，而是直接在栈上创建。
+
 ## qspinlock
 
 qspinlock 可以将 MCS-lock 的功能放进 32-bit 字段。

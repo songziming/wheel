@@ -32,7 +32,6 @@ void work_defer(work_t *wk, void *func) {
     int key = cpu_int_lock();
     dl_insert_before(&wk->dl, THISCPU(&g_work_q));
     cpu_int_unlock(key);
-
 }
 
 // 在中断返回过程中执行，只有最外层中断返回时执行
