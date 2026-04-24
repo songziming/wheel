@@ -44,9 +44,9 @@ static void handle_irq(int vec, regs_t *f) {
         logk("cr2 = %zx\n", read_cr2());
     }
 
-    // size_t sp;
-    // ASMV("movq %%rsp, %0" : "=r"(sp));
-    // logk("current stack pointer %zx\n", sp);
+    size_t sp;
+    ASMV("movq %%rsp, %0" : "=r"(sp));
+    logk("current stack pointer %zx\n", sp);
 
     // if (++irq_idx < 5) {
     //     return;

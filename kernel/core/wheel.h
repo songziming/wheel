@@ -41,4 +41,9 @@
 #define containerof(p,t,m) ((t*)((size_t)(p) - __builtin_offsetof(t,m)))
 #endif
 
+// 等待时间
+// tick=0 表示下一次时钟中断立即运行
+#define NOWAIT  -1
+#define FOREVER -2
+
 #endif // WHEEL_H

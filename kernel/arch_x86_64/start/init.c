@@ -25,6 +25,7 @@
 #include <kstring.h>
 #include <spin.h>
 #include <debug.h>
+#include <bench.h>
 
 
 // layout.ld
@@ -238,9 +239,10 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     timer_init();
     sched_init();
 
-    // 创建根任务并开始运行
-    task_create(&g_root_task, "root", 0, root_proc);
+    // 创建根任务并开始运行，优先级 30，仅高于 idle
+    task_create(&g_root_task, "root", 30, root_proc);
     task_start(&g_root_task);
+    arch_task_switch();
     // 之后的代码不再运行
 
 end:
@@ -259,7 +261,7 @@ static INIT_TEXT void root_proc() {
     logk("current stack pointer 0x%zx\n", sp);
 
     // pmlayout_show();
-    vmspace_show(&g_kernel_vm);
+    // vmspace_show(&g_kernel_vm);
     // cpu_features_show();
     // loapic_show();
 
@@ -289,6 +291,12 @@ static INIT_TEXT void root_proc() {
         raw_spin_take(&g_smp_lock);
     }
 
+    logk("all cpu start finish\n");
+    loapic_send_ipi(-1, VEC_IPI_RESCHED);
+
+    logk("running benchmark\n");
+    bench_semaphore();
+
     while (1) {
         cpu_pause();
         cpu_halt();
@@ -298,11 +306,10 @@ static INIT_TEXT void root_proc() {
 // 通知 BSP，又一个 AP 初始化完成，开始运行 task，不再使用 init-stack
 // BSP 可以启动下一个 AP，或者将 init-stack 回收
 static INIT_TEXT void notify_ap_started(work_t *work UNUSED) {
-    size_t sp;
-    ASMV("movq %%rsp, %0" : "=r"(sp));
-    logk("work-%d using stack pointer 0x%zx\n", cpu_index(), sp);
-
-    logk("notifying ap-started from cpu-%d\n", cpu_index());
+    // size_t sp;
+    // ASMV("movq %%rsp, %0" : "=r"(sp));
+    // logk("work-%d using stack pointer 0x%zx\n", cpu_index(), sp);
+    // logk("notifying ap-started from cpu-%d\n", cpu_index());
     raw_spin_give(&g_smp_lock);
 }
 
@@ -311,9 +318,9 @@ static INIT_TEXT void notify_ap_started(work_t *work UNUSED) {
 static INIT_TEXT NORETURN void ap_init(int idx) {
     logk("AP-%d started\n", idx);
 
-    size_t sp;
-    ASMV("movq %%rsp, %0" : "=r"(sp));
-    logk("AP-%d current stack pointer 0x%zx\n", idx, sp);
+    // size_t sp;
+    // ASMV("movq %%rsp, %0" : "=r"(sp));
+    // logk("AP-%d current stack pointer 0x%zx\n", idx, sp);
 
     cpu_features_enable();
     gdt_load();

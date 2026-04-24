@@ -36,11 +36,12 @@ INIT_TEXT void rdyq_init(rdyq_t *q);
 void rdyq_insert(rdyq_t *q, dlnode_t *dl, int prio);
 void rdyq_remove(rdyq_t *q, dlnode_t *dl, int prio);
 dlnode_t *rdyq_head(rdyq_t *q);
-dlnode_t *rdyq_rotate(rdyq_t *q, dlnode_t *dl);
+// dlnode_t *rdyq_rotate(rdyq_t *q, dlnode_t *dl);
 
 INIT_TEXT void sched_init();
 void sched_process();
 void sched_stop(task_t *task, uint32_t bits);
+task_t *sched_stop_self(uint32_t bits);
 void sched_cont(task_t *task, uint32_t bits);
 
 void task_create_ex(task_t *task, const char *name, int priority, size_t stack_top, void *entry);

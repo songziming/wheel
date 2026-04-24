@@ -75,9 +75,9 @@ dlnode_t *rdyq_head(rdyq_t *q) {
     return q->heads[prio];
 }
 
-dlnode_t *rdyq_rotate(rdyq_t *q UNUSED, dlnode_t *dl) {
-    return dl->next;
-}
+// dlnode_t *rdyq_rotate(rdyq_t *q UNUSED, dlnode_t *dl) {
+//     return dl->next;
+// }
 
 
 //------------------------------------------------------------------------------
@@ -144,11 +144,29 @@ void sched_stop(task_t *task, uint32_t bits) {
     rdyq_remove(q, &task->dl, task->priority);
     task->state |= bits;
 
-    THISCPU_SET(g_next_task, rdyq_head(q));
-    arch_task_switch();
+    dlnode_t *head = rdyq_head(q);
+    task_t *next = containerof(head, task_t, dl);
+    THISCPU_SET(g_next_task, next);
+}
+
+// 不能在 ISR 里面执行
+task_t *sched_stop_self(uint32_t bits) {
+    ASSERT(cpu_int_depth() == 0);
+
+    task_t *self = THISCPU_GET(g_prev_task);
+    rdyq_t *q = THISCPU(&g_rdy_queue);
+    rdyq_remove(q, &self->dl, self->priority);
+    self->state |= bits;
+
+    dlnode_t *head = rdyq_head(q);
+    task_t *next = containerof(head, task_t, dl);
+    THISCPU_SET(g_next_task, next);
+
+    return self;
 }
 
 // 在当前 CPU 恢复运行这个 task
+// 但不要立即触发 task-switch
 void sched_cont(task_t *task, uint32_t bits) {
     ASSERT(TS_READY != task->state);
     task->state &= ~bits;
@@ -160,7 +178,6 @@ void sched_cont(task_t *task, uint32_t bits) {
     rdyq_insert(q, &task->dl, task->priority);
     task_t *next = containerof(rdyq_head(q), task_t, dl);
     THISCPU_SET(g_next_task, next);
-    arch_task_switch();
 }
 
 
@@ -193,6 +210,7 @@ void task_create(task_t *task, const char *name, int priority, void *entry) {
     // TODO 不应该允许用户自己指定栈顶地址，必须动态分配页，动态映射，这样越界容易发现
     task->stack.desc = name;
     size_t stack_va = vmspace_alloc_stack(&g_kernel_vm, &task->stack, 0);
+    // logk("alloc stack for %s, va %zx, pa %zx\n", name, stack_va, task->stack.paddr);
     size_t stack_top = stack_va + PAGE_SIZE;
     task_create_ex(task, name, priority, stack_top, entry);
 }

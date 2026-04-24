@@ -24,10 +24,15 @@ void timer_process() {
     // 找出队列开头所有 delta==0 的元素，停在第一个 delta!=0 的元素
     dlnode_t *newhead = timer_q.next;
     ktimer_t *tmr = containerof(newhead, ktimer_t, dl);
-    tmr->delta--;
-    while ((&timer_q != newhead) && (0 == tmr->delta)) {
+    while ((&timer_q != newhead) && (tmr->delta <= 0)) {
         newhead = newhead->next;
         tmr = containerof(newhead, ktimer_t, dl);
+    }
+
+    // 停在第一个 delta!=0 的元素
+    if (&timer_q != newhead) {
+        ASSERT(tmr->delta > 0);
+        tmr->delta--;
     }
 
     // 将 delta==0 的子链表去掉
@@ -46,7 +51,7 @@ void timer_process() {
     }
 }
 
-void timer_start(ktimer_t *tmr, int tick) {
+void timer_start(ktimer_t *tmr, timer_func_t func, int tick) {
     int key = irq_spin_take(&timer_lock);
     ASSERT(!dl_contains(&timer_q, &tmr->dl));
 
@@ -61,6 +66,7 @@ void timer_start(ktimer_t *tmr, int tick) {
     }
 
     tmr->delta = tick;
+    tmr->func = func;
     dl_insert_before(&tmr->dl, dl);
     irq_spin_give(&timer_lock, key);
 }
