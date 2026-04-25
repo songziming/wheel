@@ -4,12 +4,12 @@
 
 
 // 定时任务队列
-static spin_t timer_lock;
+static spin_t timer_lock = SPIN_INIT;
 static dlnode_t timer_q;
 
 
 INIT_TEXT void timer_init() {
-    spin_init(&timer_lock);
+    // spin_init(&timer_lock);
     dl_init_circular(&timer_q);
 }
 

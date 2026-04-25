@@ -27,7 +27,7 @@ static CONST uint8_t *g_back = NULL; // 离屏缓冲区
 
 CONST uint32_t g_framebuf_color = 0xffffffff;   // 像素颜色
 
-static spin_t g_framebuf_lock;
+static spin_t g_framebuf_lock = SPIN_INIT;
 
 
 static void put_char_at(char ch, uint32_t fg, int r, int c) {
@@ -67,7 +67,7 @@ static void framebuf_draw_caret(int fg, int r, int c) {
 }
 
 INIT_TEXT void framebuf_init(uint32_t rows, uint32_t cols, uint32_t pitch, uint32_t addr) {
-    spin_init(&g_framebuf_lock);
+    // spin_init(&g_framebuf_lock);
 
     g_rows = rows;
     g_cols = cols;

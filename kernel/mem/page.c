@@ -14,7 +14,7 @@ CONST page_t *g_pages;
 #define RANK_NUM 16
 static pglist_t g_blocks[RANK_NUM];
 
-static spin_t g_page_spin;
+static spin_t g_page_spin = SPIN_INIT;
 
 
 
@@ -224,7 +224,7 @@ INIT_TEXT void page_init(size_t pa_start, size_t pa_end) {
         return;
     }
 
-    spin_init(&g_page_spin);
+    // spin_init(&g_page_spin);
 
     g_page_start = (uint32_t)pa_start;
     g_page_end = (uint32_t)pa_end;

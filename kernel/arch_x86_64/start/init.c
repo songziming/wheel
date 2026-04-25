@@ -40,7 +40,7 @@ static INIT_TEXT void root_proc();
 
 
 static INIT_DATA int g_cpu_started = 1;
-static INIT_BSS spin_t g_smp_lock;
+static INIT_BSS spin_t g_smp_lock = SPIN_INIT;
 static INIT_BSS work_t g_smp_notifier;
 static INIT_TEXT NORETURN void ap_init(int idx);
 
@@ -271,7 +271,7 @@ static INIT_TEXT void root_proc() {
     kmemcpy(to, from, &_real_end - from);
     logk("copy trampoline code from %p to %p\n", from, to);
 
-    spin_init(&g_smp_lock);
+    // spin_init(&g_smp_lock);
     raw_spin_take(&g_smp_lock);
 
     // 启动代码地址页号就是 startup-IPI 的向量号

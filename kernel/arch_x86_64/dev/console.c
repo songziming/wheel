@@ -12,7 +12,7 @@
 #define ROWS 25
 #define COLS 80
 
-static spin_t g_console_spin;
+static spin_t g_console_spin = SPIN_INIT;
 
 // 显存读取速度很慢，因此内存中预留离屏缓冲区
 static uint16_t g_vbuf[ROWS * COLS];
@@ -25,7 +25,7 @@ static unsigned g_start_row;    // g_vram 首行在 g_vbuf 中的行号
 
 
 INIT_TEXT void console_init() {
-    spin_init(&g_console_spin);
+    // spin_init(&g_console_spin);
 
     g_text_color = 0x0f; // 黑底白字
     g_caret_row = 0;

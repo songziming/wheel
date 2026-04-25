@@ -12,7 +12,8 @@ typedef struct pender {
 } pender_t;
 
 void semaphore_init(semaphore_t *sem, int initial, int max) {
-    spin_init(&sem->lock);
+    // spin_init(&sem->lock);
+    sem->lock = SPIN_INIT;
     sem->limit = max;
     sem->value = initial;
     dl_init_circular(&sem->penders);

@@ -2,9 +2,10 @@
 #include <arch_api.h>
 #include <kstring.h>
 
-void spin_init(spin_t *spin) {
-    kmemset(spin, 0, sizeof(spin_t));
-}
+
+// void spin_init(spin_t *spin) {
+//     kmemset(spin, 0, sizeof(spin_t));
+// }
 
 void raw_spin_take(spin_t *spin) {
     atomic_uint ticket = atomic_fetch_add(&spin->ticket_counter, 1);
@@ -34,66 +35,105 @@ void irq_spin_give(spin_t *spin, int key) {
 }
 
 
+
+// 紧凑型自旋锁
+typedef union minispin {
+    _Atomic uint32_t u;
+    struct {
+        _Atomic uint16_t ticket;
+        _Atomic uint16_t service;
+    };
+} minispin_t;
+void minispin_take(minispin_t *spin) {
+    uint16_t ticket = atomic_fetch_add(&spin->ticket, 1);
+    while (atomic_load(&spin->service) != ticket) {
+        cpu_pause();
+    }
+}
+void minispin_give(minispin_t *spin) {
+    atomic_fetch_add(&spin->service, 1);
+}
+int minispin_islocked(minispin_t *spin) {
+    uint32_t ticket_service = atomic_load(&spin->u);
+    uint32_t ticket  = ticket_service & 0xffff;
+    uint32_t service = ticket_service >> 16;
+    return (ticket == service) ? 1 : 0;
+}
+
+
 //------------------------------------------------------------------------------
 // reader-writer spinlock
 //------------------------------------------------------------------------------
 
-// 允许多个 reader，只允许一个 writer
-// 也是基于 ticket、service
-// 先来先得？还是无条件偏向 writer？
-
-typedef struct rwspin {
-    atomic_uint lock; // 最低 bit 表示有 writer，其他 bit 表示 reader 数量
-} rwspin_t;
-
-void rwspin_take_reader(rwspin_t *rw) {
-    // while (1) {
-    //     unsigned old = atomic_load(&rw->lock);
-    //     if (old & 1) {
-    //         cpu_pause(); // 等待 writer 退出
-    //         continue;
-    //     }
-    //     if (atomic_compare_exchange_strong(&rw->lock, old, old + 2)) {
-    //         break;
-    //     }
-    // }
-
-    // reader 仍在等待，就给 counter+=2，可能让后面的 writer 无法抢占
-    unsigned old = atomic_fetch_add(&rw->lock, 2);
-    while (old & 1) {
-        cpu_pause();
-        old = atomic_load(&rw->lock);
-    }
-}
-
-void rwspin_give_reader(rwspin_t *rw) {
-    atomic_fetch_sub(&rw->lock, 2);
-}
+// void rwspin_init(rwspin_t *rw) {
+//     spin_init(&rw->spin);
+//     rw->reader_num = 0;
+// }
 
 void rwspin_take_writer(rwspin_t *rw) {
-    // while (1) {
-    //     unsigned old = atomic_load(&rw->lock);
-    //     if (old) {
-    //         cpu_pause(); // 仍有 reader 没有退出，或存在其他 writer
-    //         continue;
-    //     }
-    //     if (atomic_compare_exchange_strong(&rw->lock, 0, 1)) {
-    //         break;
-    //     }
-    // }
-
-    while (1) {
-        unsigned old = atomic_fetch_or(&rw->lock, 1);
-        if (0 == old) {
-            break;
-        }
+    raw_spin_take(&rw->spin);   // 获取写权限
+    while (0 != atomic_load(&rw->reader_num)) { // 等待所有 reader 结束
         cpu_pause();
     }
 }
 
 void rwspin_give_writer(rwspin_t *rw) {
-    atomic_fetch_and(&rw->lock, ~1UL);
+    raw_spin_give(&rw->spin);
 }
+
+void rwspin_take_reader(rwspin_t *rw) {
+    raw_spin_take(&rw->spin); // 临时获取唯一锁
+
+    // 如果成功得到了读锁，说明此时没有 writer
+    // 可以给 reader 计数器加一，释放读锁
+    atomic_fetch_add(&rw->reader_num, 1);
+    raw_spin_give(&rw->spin);
+}
+
+void rwspin_give_reader(rwspin_t *rw) {
+    atomic_fetch_sub(&rw->reader_num, 1);
+}
+
+
+// 获取读写锁同时关闭中断
+int irqrw_take_writer(rwspin_t *rw) {
+    int key = irq_spin_take(&rw->spin);
+    while (0 != atomic_load(&rw->reader_num)) { // 等待所有 reader 结束
+        cpu_pause();
+    }
+    return key;
+}
+int irqrw_take_reader(rwspin_t *rw) {
+    int key = irq_spin_take(&rw->spin);
+    atomic_fetch_add(&rw->reader_num, 1);
+    raw_spin_give(&rw->spin);
+    return key;
+}
+void irqrw_give_writer(rwspin_t *rw, int key) {
+    irq_spin_give(&rw->spin, key);
+}
+void irqrw_give_reader(rwspin_t *rw, int key) {
+    atomic_fetch_sub(&rw->reader_num, 1);
+    cpu_int_unlock(key);
+}
+
+
+//------------------------------------------------------------------------------
+// slim read-write locks
+//------------------------------------------------------------------------------
+
+// 这是 Windows 提供的读写锁，实现参考 ReactOS
+// 类似 MCS-lock，每个线程都有自己的局部变量
+typedef struct srwlock {
+    uintptr_t   p;
+} srwlock_t;
+
+typedef struct srw_waiter srw_waiter_t;
+struct srw_waiter {
+    uintptr_t spin;
+    srw_waiter_t *next;
+};
+
 
 
 

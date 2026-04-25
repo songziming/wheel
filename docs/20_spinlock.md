@@ -88,6 +88,8 @@ MCS-lock 也有缺点，锁节点占用空间太大。page desc 这类数据结�
 MCS-lock 的问题在于更改了 API，代码仓库中无法直接替换，所有用到自旋锁的地方都要修改。
 K42 lock 则不需要传入 lock_waiter 节点，而是直接在栈上创建。
 
+K42-lock 算法专利属于 IBM，不能直接使用。
+
 ## qspinlock
 
 qspinlock 可以将 MCS-lock 的功能放进 32-bit 字段。
@@ -111,3 +113,18 @@ Linux 的做法是，不允许同一个 context 获取多个 qspin，每个 CPU 
 - hardirq
 - nmi
 所以使用 PERCPU 定义四个 struct qnode，作为 waiter 节点
+
+---
+
+## 读写锁
+
+允许多个 reader 线程，只允许一个 writer 线程，reader 和 writer 不能共存。
+
+最简单的方法，就是先获取普通自旋锁
+- 如果自己是 reader，则给 nreaders 计数器加一再释放自旋锁
+- 如果自己是 writer，则一直持有自旋锁
+这样保证获取锁的过程严格有序，reader 持有锁的时间段可以重合。
+
+## Slim-Read-Write (SRW) lock
+
+这是 Windows 默认的读写锁算法，ReactOS 用的也是这个。
