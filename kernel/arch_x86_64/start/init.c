@@ -292,7 +292,7 @@ static INIT_TEXT void root_proc() {
     }
 
     logk("all cpu start finish\n");
-    loapic_send_ipi(-1, VEC_IPI_RESCHED);
+    arch_send_ipi(-1, VEC_IPI_RESCHED);
 
     logk("running benchmark\n");
     bench_semaphore();

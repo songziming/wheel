@@ -15,7 +15,7 @@ static semaphore_t g_sema;
 
 static void proc_a() {
     while (1) {
-        logk("(a-waiting)");
+        logk("(a-waiting-%d)", cpu_index());
         int got = semaphore_take(&g_sema, 3, FOREVER);
         logk("(a-got-%d)", got);
     }
@@ -23,7 +23,7 @@ static void proc_a() {
 
 static void proc_b() {
     while (1) {
-        logk("(b-waiting)");
+        logk("(b-waiting-%d)", cpu_index());
         int got = semaphore_take(&g_sema, 2, FOREVER);
         logk("(b-got-%d)", got);
     }
@@ -31,7 +31,7 @@ static void proc_b() {
 
 static void proc_c() {
     while (1) {
-        logk("(c-waiting)");
+        logk("(c-waiting-%d)", cpu_index());
         int got = semaphore_take(&g_sema, 1, FOREVER);
         logk("(c-got-%d)", got);
     }

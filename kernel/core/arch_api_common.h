@@ -22,6 +22,7 @@ void *thiscpu_ptr(void *p);
 int cpu_int_depth();
 int cpu_int_lock();
 void cpu_int_unlock(int key);
+void arch_send_ipi(int cpu, int vec);
 
 // 页表操作
 typedef enum mmu_attr {

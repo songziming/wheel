@@ -10,7 +10,7 @@
 
 // 任务调度
 PERCPU_BSS task_t *g_prev_task;
-PERCPU_BSS task_t *g_next_task;
+PERCPU_BSS task_t *g_next_task; // guarded by rdyq lock
 static INIT_BSS task_t g_dummy_task;
 static PERCPU_BSS task_t g_idle_task; // 这也是 ready-q 的头节点
 // static PERCPU_BSS uint8_t g_idle_stack[1024]; // TODO percpu 负责划分
@@ -21,12 +21,13 @@ static PERCPU_BSS rdyq_t g_rdy_queue;
 // static PERCPU_BSS spin_t g_sched_lock;
 // static PERCPU_BSS int    g_queue_size;
 
+// 记录哪个 CPU 空闲
+// 新任务优先放在空闲的 CPU
+static _Atomic uint64_t g_idle_mask;
+
 // 记录哪个 CPU 负载最高最低
 // 用于创建任务时选择一个目标 CPU
 // 用于 idle 时从其他 CPU 迁移任务
-static spin_t g_load_lock;
-static int g_lowest_load_cpu = 0;
-static int g_highest_load_cpu = 0;
 
 // TODO 负载均衡锁需要支持 read-write lock
 // 每个 cpu 执行 reschedule 时，获取 read-lock，多个 reader 可以共存
@@ -42,6 +43,7 @@ static int g_highest_load_cpu = 0;
 // 就绪队列只关心队列，不管自旋锁
 
 INIT_TEXT void rdyq_init(rdyq_t *q) {
+    q->lock = SPIN_INIT;
     kmemset(q, 0, sizeof(rdyq_t));
 }
 
@@ -110,6 +112,8 @@ void sched_init() {
     rdyq_init(q);
     rdyq_insert(q, &idle->dl, 31);
 
+    atomic_fetch_or(&g_idle_mask, 1U << cpu_index());
+
     THISCPU_SET(g_prev_task, &g_dummy_task);
     THISCPU_SET(g_next_task, idle);
 }
@@ -117,8 +121,9 @@ void sched_init() {
 // run in ISR
 // 在同一个优先级的任务之间轮转
 void sched_process() {
-    // spin_t *lock = THISCPU(&g_sched_lock);
-    // raw_spin_take(lock);
+    // 需要锁住当前就绪队列
+    spin_t *lock = THISCPU(&g_rdy_queue.lock);
+    int key = irq_spin_take(lock);
 
     task_t *task = THISCPU_GET(g_next_task);
     task_t *next = containerof(task->dl.next, task_t, dl);
@@ -129,38 +134,45 @@ void sched_process() {
     }
     THISCPU_SET(g_next_task, next);
 
-    // raw_spin_give(lock);
+    irq_spin_give(lock, key);
 }
 
-// 停止的任务必须位于当前 CPU，要么
-void sched_stop(task_t *task, uint32_t bits) {
-    if (TS_READY != task->state) {
-        task->state |= bits;
-        return;
-    }
+// // 停止的任务必须位于当前 CPU，要么
+// void sched_stop(task_t *task, uint32_t bits) {
+//     if (TS_READY != task->state) {
+//         task->state |= bits;
+//         return;
+//     }
 
-    // remove from ready-queue
-    rdyq_t *q = THISCPU(&g_rdy_queue);
-    rdyq_remove(q, &task->dl, task->priority);
-    task->state |= bits;
+//     // remove from ready-queue
+//     rdyq_t *q = THISCPU(&g_rdy_queue);
+//     rdyq_remove(q, &task->dl, task->priority);
+//     task->state |= bits;
 
-    dlnode_t *head = rdyq_head(q);
-    task_t *next = containerof(head, task_t, dl);
-    THISCPU_SET(g_next_task, next);
-}
+//     dlnode_t *head = rdyq_head(q);
+//     task_t *next = containerof(head, task_t, dl);
+//     THISCPU_SET(g_next_task, next);
+// }
 
 // 不能在 ISR 里面执行
 task_t *sched_stop_self(uint32_t bits) {
     ASSERT(cpu_int_depth() == 0);
 
-    task_t *self = THISCPU_GET(g_prev_task);
     rdyq_t *q = THISCPU(&g_rdy_queue);
+    int key = irq_spin_take(&q->lock);
+
+    task_t *self = THISCPU_GET(g_prev_task);
     rdyq_remove(q, &self->dl, self->priority);
     self->state |= bits;
 
     dlnode_t *head = rdyq_head(q);
     task_t *next = containerof(head, task_t, dl);
+    if (THISCPU(&g_idle_task) == next) {
+        atomic_fetch_or(&g_idle_mask, 1U << cpu_index());
+    }
+
     THISCPU_SET(g_next_task, next);
+    irq_spin_give(&q->lock, key);
 
     return self;
 }
@@ -175,11 +187,38 @@ void sched_cont(task_t *task, uint32_t bits) {
     }
 
     rdyq_t *q = THISCPU(&g_rdy_queue);
+    int key = irq_spin_take(&q->lock);
+
     rdyq_insert(q, &task->dl, task->priority);
     task_t *next = containerof(rdyq_head(q), task_t, dl);
+    if (THISCPU_GET(g_next_task) == THISCPU(&g_idle_task)) {
+        atomic_fetch_and(&g_idle_mask, ~(1U << cpu_index()));
+    }
+
     THISCPU_SET(g_next_task, next);
+    irq_spin_give(&q->lock, key);
 }
 
+
+// 在另一个 cpu 上启动运行任务
+void sched_cont_on(task_t *task, uint32_t bits, int cpu) {
+    task->state &= ~bits;
+    if (TS_READY != task->state) {
+        return; // still no ready
+    }
+
+    rdyq_t *q = PERCPU(cpu, &g_rdy_queue);
+    int key = irq_spin_take(&q->lock);
+
+    rdyq_insert(q, &task->dl, task->priority);
+    task_t *next = containerof(rdyq_head(q), task_t, dl);
+    if (*PERCPU(cpu, &g_next_task) == PERCPU(cpu, &g_idle_task)) {
+        atomic_fetch_and(&g_idle_mask, ~(1U << cpu));
+    }
+
+    *PERCPU(cpu, &g_next_task) = next;
+    irq_spin_give(&q->lock, key);
+}
 
 //------------------------------------------------------------------------------
 // task management
@@ -216,5 +255,18 @@ void task_create(task_t *task, const char *name, int priority, void *entry) {
 }
 
 void task_start(task_t *task) {
-    sched_cont(task, TS_STOPPED);
+    // 挑选一个CPU
+    uint64_t idle_mask = atomic_load(&g_idle_mask);
+    uint64_t this_mask = 1ULL << cpu_index();
+    if ((0 == idle_mask) || (idle_mask & this_mask)) {
+        // 没有 idle cpu，或者当前 CPU 也 idle，则直接在当前 cpu 运行任务
+        sched_cont(task, TS_STOPPED);
+        // 自身 cpu，不执行 task_switch
+        return;
+    }
+
+    // 在另一个 cpu 上运行任务
+    int cpu = __builtin_ctzll(idle_mask);
+    sched_cont_on(task, TS_STOPPED, cpu);
+    arch_send_ipi(cpu, VEC_IPI_RESCHED); // 立即唤醒
 }

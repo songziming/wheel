@@ -34,7 +34,7 @@ void loapic_show();
 
 INIT_TEXT void loapic_send_init(int cpu);
 INIT_TEXT void loapic_send_sipi(int cpu, int vec);
-void loapic_send_ipi(int cpu, int vec);
+// void arch_send_ipi(int cpu, int vec);
 
 INIT_TEXT void loapic_timer_calibrate();
 INIT_TEXT void loapic_timer_busywait(int us);

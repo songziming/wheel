@@ -299,7 +299,7 @@ INIT_TEXT void loapic_send_sipi(int cpu, int vec) {
 }
 
 // 发送 IPI
-void loapic_send_ipi(int cpu, int vec) {
+void arch_send_ipi(int cpu, int vec) {
     ASSERT(cpu < cpu_count());
     ASSERT((vec >= 0) && (vec < 256));
 

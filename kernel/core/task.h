@@ -4,10 +4,12 @@
 #include <arch_api.h>
 #include <vmspace.h>
 #include <dllist.h>
+#include <spin.h>
 
 
 // 就绪队列（也可以作为阻塞队列？）
 typedef struct rdyq {
+    spin_t      lock;
     uint32_t    priorities; // mask
     dlnode_t   *heads[32];
 } rdyq_t;
@@ -40,7 +42,7 @@ dlnode_t *rdyq_head(rdyq_t *q);
 
 INIT_TEXT void sched_init();
 void sched_process();
-void sched_stop(task_t *task, uint32_t bits);
+// void sched_stop(task_t *task, uint32_t bits);
 task_t *sched_stop_self(uint32_t bits);
 void sched_cont(task_t *task, uint32_t bits);
 
