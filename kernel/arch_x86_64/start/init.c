@@ -239,6 +239,9 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     timer_init();
     sched_init();
 
+    // logk("bsp init\n");
+    // log_stacktrace();
+
     // 创建根任务并开始运行，优先级 30，仅高于 idle
     task_create(&g_root_task, "root", 30, root_proc);
     task_start(&g_root_task);
@@ -259,6 +262,9 @@ static INIT_TEXT void root_proc() {
     size_t sp;
     ASMV("movq %%rsp, %0" : "=r"(sp));
     logk("current stack pointer 0x%zx\n", sp);
+
+    // logk("root task\n");
+    // log_stacktrace();
 
     // pmlayout_show();
     // vmspace_show(&g_kernel_vm);
@@ -306,10 +312,9 @@ static INIT_TEXT void root_proc() {
 // 通知 BSP，又一个 AP 初始化完成，开始运行 task，不再使用 init-stack
 // BSP 可以启动下一个 AP，或者将 init-stack 回收
 static INIT_TEXT void notify_ap_started(work_t *work UNUSED) {
-    // size_t sp;
-    // ASMV("movq %%rsp, %0" : "=r"(sp));
-    // logk("work-%d using stack pointer 0x%zx\n", cpu_index(), sp);
-    // logk("notifying ap-started from cpu-%d\n", cpu_index());
+    ASSERT(cpu_int_depth() > 0);
+    // logk("work func\n");
+    // log_stacktrace();
     raw_spin_give(&g_smp_lock);
 }
 

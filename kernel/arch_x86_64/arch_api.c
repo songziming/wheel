@@ -40,6 +40,10 @@ int arch_unwind(size_t *addrs, int max) {
 void arch_task_init(task_t *task, size_t entry, size_t stack_top) {
     stack_top &= ~15UL;  // 栈顶按 16 字节对齐
 
+    // 写入 return addr，防止任务中 backtrace 越界
+    stack_top -= 16;
+    *(uint64_t*)stack_top = 0ULL;
+
     regs_t *regs = (regs_t*)(stack_top - sizeof(regs_t));
     kmemset(regs, 0, sizeof(regs_t));
 

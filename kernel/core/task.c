@@ -3,26 +3,23 @@
 #include <kstring.h>
 #include <debug.h>
 
-// 定时任务、调度
-
 // 任务管理控制任务的生命周期，状态切换
 // 调度管理 ready 状态的任务
 
-// 任务调度
-PERCPU_BSS task_t *g_prev_task;
-PERCPU_BSS task_t *g_next_task; // guarded by rdyq lock
-static INIT_BSS task_t g_dummy_task;
-static PERCPU_BSS task_t g_idle_task; // 这也是 ready-q 的头节点
-// static PERCPU_BSS uint8_t g_idle_stack[1024]; // TODO percpu 负责划分
 
+static INIT_DATA task_t g_dummy_task = { .name = "dummy-TCB" };
+static PERCPU_BSS task_t g_idle_task;
 
 // 就绪任务队列
-static PERCPU_BSS rdyq_t g_rdy_queue;
-// static PERCPU_BSS spin_t g_sched_lock;
-// static PERCPU_BSS int    g_queue_size;
+// static PERCPU_DATA spin_t g_sched_lock;
+static PERCPU_BSS rdyq_t g_rdy_queue; // ready-queue
+PERCPU_BSS task_t *g_prev_task;
+PERCPU_BSS task_t *g_next_task; // also guarded by rdyq->lock
 
-// 记录哪个 CPU 空闲
-// 新任务优先放在空闲的 CPU
+
+// 负载均衡，寻找负载最低的 cpu
+// 所有 cpu 都需要使用这个信息，需要使用锁
+static rwspin_t g_balance_lock;
 static _Atomic uint64_t g_idle_mask;
 
 // 记录哪个 CPU 负载最高最低
@@ -98,22 +95,14 @@ static NORETURN void idle_proc(task_t *self UNUSED) {
 }
 
 void sched_init() {
-    g_dummy_task.name = "temp-dummy-TCB";
-
-    // spin_init(THISCPU(&g_sched_lock));
-    // THISCPU_SET(g_queue_size, 1);
-
-    task_t *idle = THISCPU(&g_idle_task);
-    // uint8_t *top = THISCPU(g_idle_stack + sizeof(g_idle_stack));
-    task_create(idle, "idle", 31, idle_proc);
-    dl_init_circular(&idle->dl);
-
     rdyq_t *q = THISCPU(&g_rdy_queue);
     rdyq_init(q);
+
+    task_t *idle = THISCPU(&g_idle_task);
+    task_create(idle, "idle", 31, idle_proc);
     rdyq_insert(q, &idle->dl, 31);
 
     atomic_fetch_or(&g_idle_mask, 1U << cpu_index());
-
     THISCPU_SET(g_prev_task, &g_dummy_task);
     THISCPU_SET(g_next_task, idle);
 }
@@ -121,20 +110,31 @@ void sched_init() {
 // run in ISR
 // 在同一个优先级的任务之间轮转
 void sched_process() {
+    ASSERT(cpu_int_depth() > 0);
+
     // 需要锁住当前就绪队列
-    spin_t *lock = THISCPU(&g_rdy_queue.lock);
-    int key = irq_spin_take(lock);
+    rdyq_t *q = THISCPU(&g_rdy_queue);
+    int key = irq_spin_take(&q->lock);
 
-    task_t *task = THISCPU_GET(g_next_task);
-    task_t *next = containerof(task->dl.next, task_t, dl);
-    if (31 == next->priority) {
-        // TODO steal task from other cpu
-        //      只能找到 idle task，说明当前 readyq 为空
-        //      从其他 CPU 寻找 ready task，迁移到这个 CPU
+    task_t *task = THISCPU_GET(g_prev_task);
+    if (TS_READY == task->state) {
+        task->tick--;
+        if (0 != task->tick) {
+            irq_spin_give(&q->lock, key);
+            return;
+        }
+        task->tick = task->tick_reload;
+        task = containerof(task->dl.next, task_t, dl);
+    } else {
+        task = containerof(rdyq_head(q), task_t, dl);
+        if (31 == task->priority) {
+            // TODO 从其他 CPU 迁移任务
+            atomic_fetch_or(&g_idle_mask, 1U << cpu_index());
+        }
     }
-    THISCPU_SET(g_next_task, next);
 
-    irq_spin_give(lock, key);
+    THISCPU_SET(g_next_task, task);
+    irq_spin_give(&q->lock, key);
 }
 
 // // 停止的任务必须位于当前 CPU，要么
@@ -181,10 +181,12 @@ task_t *sched_stop_self(uint32_t bits) {
 // 但不要立即触发 task-switch
 void sched_cont(task_t *task, uint32_t bits) {
     ASSERT(TS_READY != task->state);
+
     task->state &= ~bits;
     if (TS_READY != task->state) {
         return; // still no ready
     }
+    task->tick = task->tick_reload;
 
     rdyq_t *q = THISCPU(&g_rdy_queue);
     int key = irq_spin_take(&q->lock);
@@ -202,10 +204,13 @@ void sched_cont(task_t *task, uint32_t bits) {
 
 // 在另一个 cpu 上启动运行任务
 void sched_cont_on(task_t *task, uint32_t bits, int cpu) {
+    ASSERT(cpu_index() != cpu);
+
     task->state &= ~bits;
     if (TS_READY != task->state) {
         return; // still no ready
     }
+    task->tick = task->tick_reload;
 
     rdyq_t *q = PERCPU(cpu, &g_rdy_queue);
     int key = irq_spin_take(&q->lock);
@@ -237,21 +242,19 @@ void sched_cont_on(task_t *task, uint32_t bits, int cpu) {
 //     }
 // }
 
-void task_create_ex(task_t *task, const char *name, int priority, size_t stack_top, void *entry) {
+void task_create(task_t *task, const char *name, int priority, void *entry) {
+    // 必须分配足够大的栈，如果执行 logk，对栈的使用很大
+    // 不应该允许用户自己指定栈顶地址，必须动态分配页，动态映射，这样越界容易发现
+    size_t stack_va = vmspace_alloc_stack(&g_kernel_vm, &task->stack, 0);
+    size_t stack_top = stack_va + PAGE_SIZE;
+    task->stack.desc = name;
+
     task->name = name;
     task->priority = priority;
     task->state = TS_STOPPED;
+    task->tick = 10;
+    task->tick_reload = 10;
     arch_task_init(task, (size_t)entry, (size_t)stack_top);
-}
-
-void task_create(task_t *task, const char *name, int priority, void *entry) {
-    // 必须分配足够大的栈，如果执行 logk，对栈的使用很大
-    // TODO 不应该允许用户自己指定栈顶地址，必须动态分配页，动态映射，这样越界容易发现
-    task->stack.desc = name;
-    size_t stack_va = vmspace_alloc_stack(&g_kernel_vm, &task->stack, 0);
-    // logk("alloc stack for %s, va %zx, pa %zx\n", name, stack_va, task->stack.paddr);
-    size_t stack_top = stack_va + PAGE_SIZE;
-    task_create_ex(task, name, priority, stack_top, entry);
 }
 
 void task_start(task_t *task) {

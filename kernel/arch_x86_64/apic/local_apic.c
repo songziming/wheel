@@ -153,8 +153,6 @@ static INIT_TEXT void loapic_enable_x2() {
 static void on_resched(int vec UNUSED, regs_t *f UNUSED) {
     g_write(REG_EOI, 0);
     // 无需任何动作，中断返回过程自然会切换任务
-
-    logk("CPU-%d got #%d, IPI resched\n", cpu_index(), vec);
 }
 
 static void on_stopall(int vec UNUSED, regs_t *f UNUSED) {

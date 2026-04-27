@@ -27,5 +27,9 @@ void rwspin_take_writer(rwspin_t *rw);
 void rwspin_give_writer(rwspin_t *rw);
 void rwspin_take_reader(rwspin_t *rw);
 void rwspin_give_reader(rwspin_t *rw);
+int  irqrw_take_writer(rwspin_t *rw);
+int  irqrw_take_reader(rwspin_t *rw);
+void irqrw_give_writer(rwspin_t *rw, int key);
+void irqrw_give_reader(rwspin_t *rw, int key);
 
 #endif // LIB_SPIN_H

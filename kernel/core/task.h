@@ -31,6 +31,8 @@ typedef struct task {
     int         priority;   // TODO 可以用 bitfield 压缩
     uint32_t    state;      // TODO 可以用 bitfield 压缩
     vmrange_t   stack;
+    int         tick;
+    int         tick_reload;
 } task_t;
 
 
@@ -46,7 +48,6 @@ void sched_process();
 task_t *sched_stop_self(uint32_t bits);
 void sched_cont(task_t *task, uint32_t bits);
 
-void task_create_ex(task_t *task, const char *name, int priority, size_t stack_top, void *entry);
 void task_create(task_t *task, const char *name, int priority, void *entry);
 void task_start(task_t *task);
 

@@ -166,6 +166,11 @@ int_from_ring0:
     movq    %gs:(g_prev_task), %rax
     movq    %rsi, (%rax) // g_prev_task->regs = %rsp
     movq    %gs:(g_int_stack_top), %rsp
+
+    // TODO 需要伪造一个 stack-frame，防止 stack trace 越界
+    pushq   $0
+    pushq   %rbp
+    movq    %rsp, %rbp
 int_enter_nested:
 
     // 调用 C 函数处理中断
@@ -173,18 +178,17 @@ int_enter_nested:
     call    *%rax
 
     // 判断是否退出最后一层中断，如果是，需要执行任务切换
-    decl    %gs:(g_int_depth)
-    cmpl    $0, %gs:(g_int_depth)
+    cmpl    $1, %gs:(g_int_depth)
     jne     int_return_nested
 int_return_to_task:
-    // 即将推出最后一层中断，在这里执行异步任务
+    // 即将退出最后一层中断，在这里执行异步任务
     call    work_flush
 
-    // 切换到原来的栈顶
-    // TODO 任务切换也在这里实现，替换成新任务的栈顶地址
+    // 切换到新任务的栈顶（也可能是同一个任务）
     movq    %gs:(g_next_task), %rdi
     movq    (%rdi), %rsp // rsp = g_next_task->regs
 int_return_nested:
+    decl    %gs:(g_int_depth)
     movq    %rdi, %gs:(g_prev_task) // prev_task = next_task
     pop_callee_saved_regs
     pop_caller_saved_regs
@@ -234,6 +238,7 @@ arch_task_switch:
     movq    %rsp, (%rsi)    // prev_task->regs = rsp
     // movq    (%rdi), %rsp    // rsp = next_task->regs
     movq    %gs:(g_int_stack_top), %rsp // 切换到中断栈，因为要执行 work_flush
+    incl    %gs:(g_int_depth)
     jmp     int_return_to_task
 
 resume:
