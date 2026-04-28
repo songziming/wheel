@@ -225,7 +225,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // 中断控制器初始化
     i8259_disable();
     // TODO ioapic_init_all();
-    loapic_init(0);
+    loapic_init();
+    loapic_init_local();
 
     // 校准时钟
     loapic_timer_calibrate();
@@ -259,25 +260,12 @@ end:
 static INIT_TEXT void root_proc() {
     logk("hello from root task!\n");
 
-    size_t sp;
-    ASMV("movq %%rsp, %0" : "=r"(sp));
-    logk("current stack pointer 0x%zx\n", sp);
-
-    // logk("root task\n");
-    // log_stacktrace();
-
-    // pmlayout_show();
-    // vmspace_show(&g_kernel_vm);
-    // cpu_features_show();
-    // loapic_show();
-
     // 将实模式代码复制到 1M 以下
     char *from = &_real_addr;
     char *to = (char*)KERNEL_REAL_ADDR + DIRECT_MAP_ADDR;
     kmemcpy(to, from, &_real_end - from);
     logk("copy trampoline code from %p to %p\n", from, to);
 
-    // spin_init(&g_smp_lock);
     raw_spin_take(&g_smp_lock);
 
     // 启动代码地址页号就是 startup-IPI 的向量号
@@ -297,7 +285,7 @@ static INIT_TEXT void root_proc() {
         raw_spin_take(&g_smp_lock);
     }
 
-    logk("all cpu start finish\n");
+    logk("all CPU running\n");
     arch_send_ipi(-1, VEC_IPI_RESCHED);
 
     logk("running benchmark\n");
@@ -313,15 +301,13 @@ static INIT_TEXT void root_proc() {
 // BSP 可以启动下一个 AP，或者将 init-stack 回收
 static INIT_TEXT void notify_ap_started(work_t *work UNUSED) {
     ASSERT(cpu_int_depth() > 0);
-    // logk("work func\n");
-    // log_stacktrace();
     raw_spin_give(&g_smp_lock);
 }
 
 // AP 启动流程，使用 init-stack
 // 多个 CPU 不能同时执行此函数，因为共用同一个栈
 static INIT_TEXT NORETURN void ap_init(int idx) {
-    logk("AP-%d started\n", idx);
+    logk("CPU-%d started\n", idx);
 
     // size_t sp;
     // ASMV("movq %%rsp, %0" : "=r"(sp));
@@ -337,7 +323,7 @@ static INIT_TEXT NORETURN void ap_init(int idx) {
 
     ASSERT(cpu_index() == idx);
 
-    loapic_init(idx);
+    loapic_init_local();
     loapic_timer_set_periodic(2);
     write_cr3(g_kernel_vm.table);   // 加载正式页表
 

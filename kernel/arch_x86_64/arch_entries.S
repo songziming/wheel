@@ -227,18 +227,17 @@ arch_task_switch:
     andq    $-16, %rsp      // 栈帧按 16 字节对齐
 
     // 模仿发生了一次中断
-    pushq   $0x10       // ss
-    pushq   %r8         // rsp
-    pushq   %rax        // rflags
-    pushq   $0x08       // cs
-    pushq   $resume     // rip 从这里恢复（这是 32bit 立即数！）
-    subq    $80, %rsp   // errcode, rdi, and other 8 caller-saved regs
+    pushq   $0x10           // ss
+    pushq   %r8             // rsp
+    pushq   %rax            // rflags
+    pushq   $0x08           // cs
+    pushq   $resume         // rip 从这里恢复（这是 32bit 立即数！）
+    subq    $80, %rsp       // errcode, rdi, and other 8 caller-saved regs
     push_callee_saved_regs
-
     movq    %rsp, (%rsi)    // prev_task->regs = rsp
-    // movq    (%rdi), %rsp    // rsp = next_task->regs
-    movq    %gs:(g_int_stack_top), %rsp // 切换到中断栈，因为要执行 work_flush
+
     incl    %gs:(g_int_depth)
+    movq    %gs:(g_int_stack_top), %rsp // 切换到中断栈，因为要执行 work_flush
     jmp     int_return_to_task
 
 resume:

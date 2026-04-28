@@ -3,6 +3,9 @@
 #include <arch_config.h>
 #include <debug.h>
 
+// 用于系统启动早期的内存分配，只分配不释放
+// 需要 arch 链接脚本的支持，放在 rodata 和 data 的末尾
+
 #define ALIGNMENT 16
 
 static SECTION(".rotail") uint8_t g_ro_data[EARLY_RO_SIZE] ALIGNED(ALIGNMENT);
@@ -62,11 +65,11 @@ INIT_TEXT void early_rw_unlock() {
     g_rw_buff.end = (uint8_t*)pmr->end + KERNEL_TEXT_ADDR;
 }
 
-// 禁用临时内存分配
+// 禁用早期内存分配
 INIT_TEXT void early_alloc_disable() {
 #ifdef DEBUG
-    logk("early-ro used 0x%zx, ptr=%p, end=%p\n", (size_t)(g_ro_buff.ptr - g_ro_data), g_ro_buff.ptr, g_ro_buff.end);
-    logk("early-rw used 0x%zx, ptr=%p, end=%p\n", (size_t)(g_rw_buff.ptr - g_rw_data), g_rw_buff.ptr, g_rw_buff.end);
+    logk("(mem) early-ro used 0x%zx, ptr=%p, end=%p\n", (size_t)(g_ro_buff.ptr - g_ro_data), g_ro_buff.ptr, g_ro_buff.end);
+    logk("(mem) early-rw used 0x%zx, ptr=%p, end=%p\n", (size_t)(g_rw_buff.ptr - g_rw_data), g_rw_buff.ptr, g_rw_buff.end);
 #endif
 
     g_ro_buff.end = g_ro_buff.ptr;

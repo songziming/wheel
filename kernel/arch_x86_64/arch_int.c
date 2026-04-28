@@ -37,20 +37,12 @@ inline void cpu_int_unlock(int key) {
 
 // 默认的中断处理函数
 static void handle_irq(int vec, regs_t *f) {
-    logk("[cpu-%d] interrupt vec #%d\n", cpu_index(), vec);
+    logk("[cpu-%d] interrupt vec #%d err=%zx\n", cpu_index(), vec, f->errcode);
     logk("rip=%zx rsp=%zx frame=%p\n", f->rip, f->rsp, f);
 
     if (14 == vec) {
-        logk("cr2 = %zx\n", read_cr2());
+        logk("cr2=%zx\n", read_cr2());
     }
-
-    size_t sp;
-    ASMV("movq %%rsp, %0" : "=r"(sp));
-    logk("current stack pointer %zx\n", sp);
-
-    // if (++irq_idx < 5) {
-    //     return;
-    // }
 
     size_t frames[32];
     int depth = arch_unwind_from(frames, 32, f->rbp);

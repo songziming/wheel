@@ -3,13 +3,14 @@
 
 #include <acpi/madt.h>
 
-
 typedef struct loapic {
     uint32_t apic_id;
     uint32_t processor_id;
     uint32_t flags;
     uint16_t cluster_id;
     uint16_t logical_id;
+    int16_t  nmi_lint;  // NMI 连接到这个 Local APIC 的哪个 lint
+    uint16_t nmi_flags;
 } loapic_t;
 
 typedef struct ioapic {
@@ -21,28 +22,12 @@ typedef struct ioapic {
 } ioapic_t;
 
 
-// local APIC
-
+// local APIC data
 extern int    g_loapic_num;
 extern size_t g_loapic_addr;
 extern loapic_t *g_loapics;
 
-INIT_TEXT void loapic_parse(loapic_t *dst, const madt_loapic_t *tbl);
-INIT_TEXT void loapic_parse_x2(loapic_t *dst, const madt_lox2apic_t *tbl);
-INIT_TEXT void loapic_init(int idx);
-void loapic_show();
-
-INIT_TEXT void loapic_send_init(int cpu);
-INIT_TEXT void loapic_send_sipi(int cpu, int vec);
-// void arch_send_ipi(int cpu, int vec);
-
-INIT_TEXT void loapic_timer_calibrate();
-INIT_TEXT void loapic_timer_busywait(int us);
-void loapic_timer_set_periodic(int freq);
-
-
-// IO APIC
-
+// IO APIC data
 extern int       g_ioapic_num;
 extern ioapic_t *g_ioapics;
 extern uint8_t   g_irq_max;
@@ -53,9 +38,24 @@ extern uint8_t  *g_gsi_modes; // 记录该中断的 polarity、trigger level
 #define GSI_MODE_EDGE 1 // edge-triggered
 #define GSI_MODE_HIGH 2 // active-high
 
-INIT_TEXT void ioapic_parse(ioapic_t *dst, const madt_ioapic_t *tbl);
-
-// init func
+// top func
 INIT_TEXT void parse_madt(madt_t *madt);
+INIT_TEXT int need_int_remap();
+
+// local apic func
+INIT_TEXT void loapic_init();
+INIT_TEXT void loapic_init_local();
+void loapic_show();
+INIT_TEXT void loapic_send_init(int cpu);
+INIT_TEXT void loapic_send_sipi(int cpu, int vec);
+
+// local apic timer func
+INIT_TEXT void loapic_timer_calibrate();
+INIT_TEXT void loapic_timer_busywait(int us);
+void loapic_timer_set_periodic(int freq);
+
+// IO apic func
+void ioapic_mask_gsi(uint32_t gsi);
+void ioapic_unmask_gsi(uint32_t gsi);
 
 #endif // ARCH_X86_64_APIC_APIC_H

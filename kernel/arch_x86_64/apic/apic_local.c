@@ -8,10 +8,6 @@
 
 
 
-CONST int    g_loapic_num;
-CONST size_t g_loapic_addr;
-CONST loapic_t *g_loapics;
-
 static CONST uint64_t g_timer_freq;
 
 
@@ -183,35 +179,26 @@ static void on_spurious(int vec UNUSED, regs_t *f UNUSED) {}
 // 初始化
 //------------------------------------------------------------------------------
 
-INIT_TEXT void loapic_parse(loapic_t *dst, const madt_loapic_t *tbl) {
-    dst->apic_id      = tbl->id;
-    dst->processor_id = tbl->processor_id;
-    dst->flags        = tbl->loapic_flags;
-}
-
-INIT_TEXT void loapic_parse_x2(loapic_t *dst, const madt_lox2apic_t *tbl) {
-    dst->apic_id      = tbl->id;
-    dst->processor_id = tbl->processor_id;
-    dst->flags        = tbl->loapic_flags;
-}
-
-INIT_TEXT void loapic_init(int idx) {
-    if (0 == idx) {
-        if (g_cpu_features & CPU_FEATURE_X2APIC) {
-            // 支持 x2APIC，使用 MSR 读写 local APIC 寄存器
-            loapic_enable_x2();
-        }
-
-        // TODO 有些 local apic handlers 非常简单，直接 iretq 就可以
-        //      完全可以跳过默认中断的寄存器保存恢复
-        //      定义专用的 naked isr function，然后修改 IDT
-        irq_handlers[VEC_IPI_RESCHED] = on_resched;
-        irq_handlers[VEC_IPI_STOPALL] = on_stopall;
-        irq_handlers[VEC_LOAPIC_TIMER] = on_timer;
-        irq_handlers[VEC_LOAPIC_ERROR] = on_error;
-        irq_handlers[VEC_LOAPIC_THERMAL] = on_thermal;
-        irq_handlers[VEC_LOAPIC_SPURIOUS] = on_spurious;
+INIT_TEXT void loapic_init() {
+    if (g_cpu_features & CPU_FEATURE_X2APIC) {
+        // 支持 x2APIC，使用 MSR 读写 local APIC 寄存器
+        logk("supports x2APIC\n");
+        loapic_enable_x2();
     }
+
+    // TODO 有些 local apic handlers 非常简单，直接 iretq 就可以
+    //      完全可以跳过默认中断的寄存器保存恢复
+    //      定义专用的 naked isr function，然后修改 IDT
+    irq_handlers[VEC_IPI_RESCHED] = on_resched;
+    irq_handlers[VEC_IPI_STOPALL] = on_stopall;
+    irq_handlers[VEC_LOAPIC_TIMER] = on_timer;
+    irq_handlers[VEC_LOAPIC_ERROR] = on_error;
+    irq_handlers[VEC_LOAPIC_THERMAL] = on_thermal;
+    irq_handlers[VEC_LOAPIC_SPURIOUS] = on_spurious;
+}
+
+INIT_TEXT void loapic_init_local() {
+    loapic_t *lo = &g_loapics[cpu_index()];
 
     // 开启 local APIC，进入 xAPIC 模式
     uint64_t msr_base = read_msr(IA32_APIC_BASE);
@@ -220,7 +207,7 @@ INIT_TEXT void loapic_init(int idx) {
         msr_base &= ~LOAPIC_MSR_BASE;
         msr_base |= g_loapic_addr & LOAPIC_MSR_BASE;
     }
-    if (0 == idx) {
+    if (0 == cpu_index()) {
         msr_base |= LOAPIC_MSR_BSP;
     }
     msr_base |= LOAPIC_MSR_EN;
@@ -235,17 +222,19 @@ INIT_TEXT void loapic_init(int idx) {
         write_msr(IA32_APIC_BASE, msr_base);
     }
 
-    // 需要验证当前 CPU 的编号正确
-    ASSERT(idx == cpu_index());
-    ASSERT(g_read(REG_ID) == g_loapics[idx].apic_id);
+    // 检查编号和 ID（启用之后才能读写寄存器）
+    ASSERT(g_read(REG_ID) == lo->apic_id);
 
     // 屏蔽中断向量号 0~31
     g_write(REG_TPR, 16);
 
     // 设置 LINT0、LINT1，参考 Intel MultiProcessor Spec 第 5.1 节
-    // LINT0 连接到 8259A，但连接到 8259A 的设备也连接到 IO APIC，可以不设置
-    // LINT1 连接到 NMI，我们只需要 BSP 能够处理 NMI
-    if (0 == idx) {
+    // LINT0 通常连接到 8259A，但连接到 8259A 的设备也连接到 IO APIC，可以不设置
+    // LINT1 通常连接到 NMI，具体信息以 MADT 为准
+    // TODO 根据 inti_flags 配置触发方式
+    if (0 == lo->nmi_lint) {
+        g_write(REG_LVT_LINT0, LOAPIC_LEVEL | LOAPIC_DM_NMI);
+    } else if (1 == lo->nmi_lint) {
         g_write(REG_LVT_LINT1, LOAPIC_LEVEL | LOAPIC_DM_NMI);
     }
 

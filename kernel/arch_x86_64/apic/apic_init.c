@@ -5,50 +5,44 @@
 
 
 
+CONST int       g_loapic_num;
+CONST size_t    g_loapic_addr;
+CONST loapic_t *g_loapics;
+
+CONST int       g_ioapic_num;
+CONST ioapic_t *g_ioapics;
+
+// GSI<->IRQ 双向映射表
+CONST uint8_t   g_irq_max = 0;
+CONST uint32_t  g_gsi_max = 0;
+CONST uint32_t *g_irq_to_gsi = NULL;
+CONST uint8_t  *g_gsi_to_irq = NULL;
+CONST uint8_t  *g_gsi_modes = NULL; // 记录该中断的 polarity、trigger level
 
 
-// 判断是否需要配置 interrupt remapper
-// 如果 local apic-id 超过了 8-bit，则无法在 IO APIC redirect entry 里表示
-// 要么只让 apic-id 小于 8-bit 的 CPU 处理外部中断，要么必须使用 interrupt remapper
-INIT_TEXT int need_int_remap() {
-    uint32_t max_apicid = 0;
-    char not_physical = 0;  // 无法使用 physical 模式定位每个 CPU
-    char not_logical = 0;   // 无法使用 logical 模式定位每个 CPU
-    for (int i = 0; i < g_loapic_num; ++i) {
-        uint32_t apicid = g_loapics[i].apic_id;
-        if (max_apicid < apicid) {
-            max_apicid = apicid;
-        }
-        if (apicid >= 16) {
-            not_physical = 1;
-        }
-        uint16_t cluster = apicid >> 4;
-        uint16_t logical = 1 << (apicid & 15);
-        if ((cluster >= 15) || (logical >= 16)) {
-            not_logical = 1;
-        }
-    }
 
-    // apic-id 超过了 255，无法使用 8-bit 表示
-    // 某些 cpu 无法作为 IPI 目标，必然需要 remap
-    if (max_apicid >= 255) {
-        return 1;
-    }
 
-    // TODO 根据 CPU 数量，决定 IO APIC 使用 physical 还是 logical
-    // TODO 可以增加一个函数，输入 CPU 编号，返回 8-bit dest 内容
 
-    // 两种模式都无法表示，才说明必须 remap interrupts
-    return not_physical & not_logical;
+
+static INIT_TEXT void add_io_apic(ioapic_t *dst, const madt_ioapic_t *tbl) {
+    dst->apic_id  = tbl->id;
+    dst->gsi_base = tbl->gsi_base;
+    dst->address  = tbl->address;
 }
 
+static INIT_TEXT void add_local_apic(loapic_t *dst, const madt_loapic_t *tbl) {
+    dst->apic_id      = tbl->id;
+    dst->processor_id = tbl->processor_id;
+    dst->flags        = tbl->loapic_flags;
+}
 
+static INIT_TEXT void add_local_x2apic(loapic_t *dst, const madt_lox2apic_t *tbl) {
+    dst->apic_id      = tbl->id;
+    dst->processor_id = tbl->processor_id;
+    dst->flags        = tbl->loapic_flags;
+}
 
-// 作用属于 io apic
-INIT_TEXT void override_int(madt_int_override_t *tbl) {
-    // ASSERT(g_irq_num > 0);
-    // ASSERT(g_gsi_num > 0);
-
+static INIT_TEXT void override_int(madt_int_override_t *tbl) {
     g_irq_to_gsi[tbl->source] = tbl->gsi;
     g_gsi_to_irq[tbl->gsi] = tbl->source;
 
@@ -65,11 +59,27 @@ INIT_TEXT void override_int(madt_int_override_t *tbl) {
     }
 }
 
+static INIT_TEXT void connect_nmi(uint32_t processor_id, uint8_t lint, uint16_t flags) {
+    if (0xffffffffU == processor_id) {
+        for (int i = 0; i < g_loapic_num; ++i) {
+            g_loapics[i].nmi_lint = lint;
+            g_loapics[i].nmi_flags = flags;
+        }
+        return;
+    }
+
+    for (int i = 0; i < g_loapic_num; ++i) {
+        if (g_loapics[i].processor_id == processor_id) {
+            g_loapics[i].nmi_lint = lint;
+            g_loapics[i].nmi_flags = flags;
+            break;
+        }
+    }
+}
 
 // 解析 MADT，获取 apic 信息
 INIT_TEXT void parse_madt(madt_t *madt) {
     g_loapic_addr = (size_t)madt->loapic_addr;
-    logk("local apic base = %zx\n", g_loapic_addr);
 
     // 统计 local apic、io apic 个数，irq-gsi 映射表长度
     g_loapic_num = 0;
@@ -121,6 +131,11 @@ INIT_TEXT void parse_madt(madt_t *madt) {
     g_gsi_to_irq = early_alloc_ro((g_gsi_max + 1) * sizeof(uint8_t));
     g_gsi_modes  = early_alloc_ro((g_gsi_max + 1) * sizeof(uint8_t));
 
+    // 初始化
+    for (int i = 0; i < g_loapic_num; ++i) {
+        g_loapics[i].nmi_lint = -1; // 默认不连接到 NMI
+    }
+
     // 默认情况下，8259 IRQ 0~15 与 GSI 0~15 一一对应
     for (uint8_t i = 0; i < g_irq_max; ++i) {
         g_irq_to_gsi[i] = i;
@@ -143,16 +158,16 @@ INIT_TEXT void parse_madt(madt_t *madt) {
         switch (sub->type)  {
         case MADT_TYPE_LOCAL_APIC:
             if (((madt_loapic_t*)sub)->loapic_flags & 1) {
-                loapic_parse(&g_loapics[lo_idx++], (madt_loapic_t*)sub);
+                add_local_apic(&g_loapics[lo_idx++], (madt_loapic_t*)sub);
             }
             break;
         case MADT_TYPE_LOCAL_X2APIC:
             if (((madt_lox2apic_t*)sub)->loapic_flags & 1) {
-                loapic_parse_x2(&g_loapics[lo_idx++], (madt_lox2apic_t*)sub);
+                add_local_x2apic(&g_loapics[lo_idx++], (madt_lox2apic_t*)sub);
             }
             break;
         case MADT_TYPE_IO_APIC:
-            ioapic_parse(&g_ioapics[io_idx++], (madt_ioapic_t*)sub);
+            add_io_apic(&g_ioapics[io_idx++], (madt_ioapic_t*)sub);
             break;
         case MADT_TYPE_INTERRUPT_OVERRIDE:
             override_int((madt_int_override_t*)sub);
@@ -174,6 +189,7 @@ INIT_TEXT void parse_madt(madt_t *madt) {
         switch (sub->type) {
         case MADT_TYPE_NMI_SOURCE: {
             // 找出 nmi 连接到哪个 IO Apic，连接到哪个引脚
+            // TODO 在 IO APIC 里面标记 NMI
             madt_nmi_t *nmi = (madt_nmi_t*)sub;
             logk("NMI connects to GSI %d\n", nmi->gsi);
             break;
@@ -181,29 +197,55 @@ INIT_TEXT void parse_madt(madt_t *madt) {
         case MADT_TYPE_LOCAL_APIC_NMI: {
             // 找出 nmi 连接到哪个 Local APIC 的哪个 LINT 引脚
             madt_loapic_nmi_t *nmi = (madt_loapic_nmi_t*)sub;
-            if (0xff == nmi->processor_id) {
-                logk("NMI connects to all cpu, LINT-%d, flags %x\n",
-                    nmi->lint, nmi->inti_flags);
-            } else {
-                logk("NMI connects to cpu-%d, LINT-%d, flags %x\n",
-                    nmi->processor_id, nmi->lint, nmi->inti_flags);
-            }
+            uint32_t dst = (uint32_t)nmi->processor_id;
+            if (0xff == dst) { dst = 0xffffffffU; }
+            connect_nmi(dst, nmi->lint, nmi->inti_flags);
             break;
         }
         case MADT_TYPE_LOCAL_X2APIC_NMI: {
             // 同上
             madt_lox2apic_nmi_t *nmi = (madt_lox2apic_nmi_t*)sub;
-            if (0xffffffff == nmi->processor_id) {
-                logk("x2 NMI connects to all cpu, LINT-%d, flags %x\n",
-                    nmi->lint, nmi->inti_flags);
-            } else {
-                logk("x2 NMI connects to cpu-%d, LINT-%d, flags %x\n",
-                    nmi->processor_id, nmi->lint, nmi->inti_flags);
-            }
+            connect_nmi(nmi->processor_id, nmi->lint, nmi->inti_flags);
             break;
         }
         default:
             break;
         }
     }
+}
+
+// 判断是否需要配置 interrupt remapper
+// IO APIC 重定位条目中，只有 8-bit 用于目标 CPU 的 APIC-ID
+// 然而 x2APIC 使用 32-bit ID，有可能重定位条目装不下
+// 要么只能将中断派发给 APIC-ID 小于 8-bit 的 CPU，要么就需要 interrupt-remapper
+INIT_TEXT int need_int_remap() {
+    uint32_t max_apicid = 0;
+    char not_physical = 0;  // 无法使用 physical 模式定位每个 CPU
+    char not_logical = 0;   // 无法使用 logical 模式定位每个 CPU
+    for (int i = 0; i < g_loapic_num; ++i) {
+        uint32_t apicid = g_loapics[i].apic_id;
+        if (max_apicid < apicid) {
+            max_apicid = apicid;
+        }
+        if (apicid >= 16) {
+            not_physical = 1;
+        }
+        uint16_t cluster = apicid >> 4;
+        uint16_t logical = 1 << (apicid & 15);
+        if ((cluster >= 15) || (logical >= 16)) {
+            not_logical = 1;
+        }
+    }
+
+    // apic-id 超过了 255，无法使用 8-bit 表示
+    // 某些 cpu 无法作为 IPI 目标，必然需要 remap
+    if (max_apicid >= 255) {
+        return 1;
+    }
+
+    // TODO 根据 CPU 数量，决定 IO APIC 使用 physical 还是 logical
+    // TODO 可以增加一个函数，输入 CPU 编号，返回 8-bit dest 内容
+
+    // 两种模式都无法表示，才说明必须 remap interrupts
+    return not_physical & not_logical;
 }
