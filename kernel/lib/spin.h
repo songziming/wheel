@@ -1,5 +1,5 @@
-#ifndef LIB_SPIN_H
-#define LIB_SPIN_H
+#ifndef SPIN_H
+#define SPIN_H
 
 #include <wheel.h>
 
@@ -32,4 +32,4 @@ int  irqrw_take_reader(rwspin_t *rw);
 void irqrw_give_writer(rwspin_t *rw, int key);
 void irqrw_give_reader(rwspin_t *rw, int key);
 
-#endif // LIB_SPIN_H
+#endif // SPIN_H
