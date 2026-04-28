@@ -65,22 +65,13 @@ INIT_TEXT void int_init() {
         irq_handlers[i] = handle_irq;
     }
 
-    // for (int i = 0; i < cpu_count(); ++i) {
-    //     thistss_set_ist(i, 1, thiscpu_ist_nmi(i));
-    //     thistss_set_ist(i, 2, thiscpu_ist_df(i));
-    //     thistss_set_ist(i, 3, thiscpu_ist_pf(i));
-    //     thistss_set_ist(i, 4, thiscpu_ist_mc(i));
-    //     *PERCPU(i, &g_int_depth) = 0;
-    //     *PERCPU(i, &g_int_stack_top) = thiscpu_int_stack(i);
-    // }
-
     idt_set_ist(2,  1); // NMI
     idt_set_ist(8,  2); // #DF
     idt_set_ist(14, 3); // #PF
     idt_set_ist(18, 4); // #MC
 }
 
-INIT_TEXT void thiscpu_int_init() {
+INIT_TEXT void int_init_local() {
     // 需要和 IDT 使用的 IST 编号匹配
     thistss_set_ist(1, thiscpu_nmi_stack());
     thistss_set_ist(2, thiscpu_df_stack());

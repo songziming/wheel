@@ -153,7 +153,11 @@ static void on_resched(int vec UNUSED, regs_t *f UNUSED) {
 
 static void on_stopall(int vec UNUSED, regs_t *f UNUSED) {
     g_write(REG_EOI, 0);
-    panic("cpu-%d stopped\n", cpu_index());
+    logk("[CPU-%d stopped]\n", cpu_index());
+    while (1) {
+        cpu_pause();
+        cpu_halt();
+    }
 }
 
 static void on_timer(int vec UNUSED, regs_t *f UNUSED) {

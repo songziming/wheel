@@ -16,15 +16,15 @@ typedef struct loapic {
 typedef struct ioapic {
     uint32_t apic_id;
     uint32_t gsi_base;
-    size_t   address;   // mmio 物理地址
+    size_t   addr;   // mmio 物理地址
     uint8_t  ver;
     int      red_num;   // 重定位条目数量
 } ioapic_t;
 
 
 // local APIC data
-extern int    g_loapic_num;
-extern size_t g_loapic_addr;
+extern int       g_loapic_num;
+extern size_t    g_loapic_addr;
 extern loapic_t *g_loapics;
 
 // IO APIC data
@@ -55,7 +55,10 @@ INIT_TEXT void loapic_timer_busywait(int us);
 void loapic_timer_set_periodic(int freq);
 
 // IO apic func
+INIT_TEXT void ioapic_init();
 void ioapic_mask_gsi(uint32_t gsi);
 void ioapic_unmask_gsi(uint32_t gsi);
+void ioapic_route_gsi(uint32_t gsi, int cpu, uint8_t vec);
+void ioapic_send_eoi(int vec);
 
 #endif // ARCH_X86_64_APIC_APIC_H

@@ -27,7 +27,7 @@ CONST uint8_t  *g_gsi_modes = NULL; // 记录该中断的 polarity、trigger lev
 static INIT_TEXT void add_io_apic(ioapic_t *dst, const madt_ioapic_t *tbl) {
     dst->apic_id  = tbl->id;
     dst->gsi_base = tbl->gsi_base;
-    dst->address  = tbl->address;
+    dst->addr     = tbl->address;
 }
 
 static INIT_TEXT void add_local_apic(loapic_t *dst, const madt_loapic_t *tbl) {

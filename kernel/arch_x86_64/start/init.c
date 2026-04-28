@@ -176,14 +176,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         console_init();
         g_log_func = text_log;
     }
-
     logk("Wheel Operating System (%s %s)\n", __DATE__, __TIME__);
-
-#if 1
-    idt_init();
-    idt_load();
-    int_init();
-#endif
 
     // parse ACPI tables
     if (0 == g_rsdp) {
@@ -215,16 +208,17 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // 初始化内存管理
     mem_init(); // this also init percpu
     thiscpu_init(0);
+    ASSERT(cpu_index() == 0);
 
     thistss_init_load(0); // 依赖 thiscpu，需要放在 thiscpu_init 之后
     int_init(); // 初始化中断管理机制
-    thiscpu_int_init();
+    int_init_local();
 
     hpet_init();
 
     // 中断控制器初始化
     i8259_disable();
-    // TODO ioapic_init_all();
+    ioapic_init();
     loapic_init();
     loapic_init_local();
 
@@ -239,9 +233,6 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     work_init_this();
     timer_init();
     sched_init();
-
-    // logk("bsp init\n");
-    // log_stacktrace();
 
     // 创建根任务并开始运行，优先级 30，仅高于 idle
     task_create(&g_root_task, "root", 30, root_proc);
@@ -291,6 +282,9 @@ static INIT_TEXT void root_proc() {
     logk("running benchmark\n");
     bench_semaphore();
 
+    logk("stop system\n");
+    arch_send_ipi(-1, VEC_IPI_STOPALL);
+
     while (1) {
         cpu_pause();
         cpu_halt();
@@ -318,10 +312,10 @@ static INIT_TEXT NORETURN void ap_init(int idx) {
     idt_load();
 
     thiscpu_init(idx);
-    thistss_init_load(idx);
-    thiscpu_int_init();
-
     ASSERT(cpu_index() == idx);
+
+    thistss_init_load(idx);
+    int_init_local();
 
     loapic_init_local();
     loapic_timer_set_periodic(2);
