@@ -3,8 +3,13 @@
 #include <kstring.h>
 #include <debug.h>
 
-#define POOL_ZONE_START 0xffffa00000000000UL
-#define POOL_ZONE_END   0xffffb00000000000UL
+typedef struct pool_slab {
+    dlnode_t    dl;         // 链接到 pool 的 partial 或 full 链表
+    vmrange_t   vm;         // 虚拟地址范围（纳入 g_kernel_vm 管理）
+    void       *freelist;   // 第一个空闲对象
+    uint32_t    capacity;   // 本 slab 中对象总数
+    uint32_t    inuse;      // 当前已分配对象数
+} pool_slab_t;
 
 // 按 align 向上取整
 static inline PURE size_t align_up(size_t x, size_t align) {

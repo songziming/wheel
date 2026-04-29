@@ -10,14 +10,6 @@
 // 每个池管理一种固定大小、固定对齐的对象
 // 对象在 slab 内部通过嵌入式的 freelist 管理，零碎片化
 
-typedef struct pool_slab {
-    dlnode_t    dl;         // 链接到 pool 的 partial 或 full 链表
-    vmrange_t   vm;         // 虚拟地址范围（纳入 g_kernel_vm 管理）
-    void       *freelist;   // 第一个空闲对象
-    uint32_t    capacity;   // 本 slab 中对象总数
-    uint32_t    inuse;      // 当前已分配对象数
-} pool_slab_t;
-
 typedef struct pool {
     spin_t      lock;
     dlnode_t    partial;    // 部分满 slab 的循环链表头

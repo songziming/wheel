@@ -10,7 +10,11 @@ enum {
     PT_KERNEL  = 2,
     PT_PGTBL   = 3,
     PT_STACK   = 4,
+    PT_POOL    = 5,
 };
+
+// rank 合法取值 0~15
+#define RANK_NUM 16
 
 // 使用 uint32 表示页号，最多支持 4G-1 个物理页
 typedef struct page {
@@ -20,7 +24,13 @@ typedef struct page {
     uint32_t head : 1;  // 是不是块中第一个页
     uint32_t rank : 4;  // 所在块的大小，head==1 才有效
     uint32_t type : 4;  // 所在块的类型，head==1 才有效
-    uint32_t ent_num : 16; // page table 有效条目数量（仅对 PT_PGTBL 类型）
+
+    // 对于 PT_PGTBL，表示页表中有效条目数量
+    // 对于 PT_POOL，表示已使用的 object 数量（inuse）
+    uint32_t ent_num : 16;
+
+    // 对于 PT_POOL，表示 freelist 头（slab 内对象偏移，0xFFFF 表示空）
+    uint32_t objects : 16;
 
 #if DEBUG
     const char *file;
@@ -34,15 +44,15 @@ typedef struct pglist {
     uint32_t tail;
 } pglist_t;
 
-// pglist 操作
-void pglist_push_tail(pglist_t *pl, uint32_t blk);
-void pglist_push_head(pglist_t *pl, uint32_t blk);
-void pglist_remove(pglist_t *pl, uint32_t blk);
-
 extern uint32_t g_page_start;
 extern uint32_t g_page_end;
 extern page_t *g_pages;
 
+
+// 页链表操作
+void pglist_push_tail(pglist_t *pl, uint32_t blk);
+void pglist_push_head(pglist_t *pl, uint32_t blk);
+void pglist_remove(pglist_t *pl, uint32_t blk);
 
 size_t page_alloc_color(uint32_t rank, uint32_t type, uint32_t period, uint32_t phase, const char *file, int line);
 size_t page_alloc(uint32_t rank, uint32_t type, const char *file, int line);

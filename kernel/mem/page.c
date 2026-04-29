@@ -10,11 +10,8 @@ CONST uint32_t g_page_start;
 CONST uint32_t g_page_end;
 CONST page_t *g_pages;
 
-// 伙伴块一共有 16 个大小级别
-#define RANK_NUM 16
-static pglist_t g_blocks[RANK_NUM];
-
 static spin_t g_page_spin = SPIN_INIT;
+static pglist_t g_blocks[RANK_NUM];
 
 
 

@@ -12,9 +12,13 @@
 #define KERNEL_TEXT_ADDR    0xffffffff80000000UL // -2G
 #define DIRECT_MAP_ADDR     0xffff800000000000UL // 物理内存映射地址（共 16TB）
 
-// 动态分配的内存区域
-#define STACK_ZONE_START    0xffff900000000000UL // 内核栈（16TB）
+// 内核栈的映射区域（16TB）
+#define STACK_ZONE_START    0xffff900000000000UL
 #define STACK_ZONE_END      0xffffa00000000000UL
+
+// 内存池映射的区域（16TB）
+#define POOL_ZONE_START     0xffffa00000000000UL
+#define POOL_ZONE_END       0xffffb00000000000UL
 
 
 // 预留空间大小

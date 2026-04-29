@@ -26,7 +26,6 @@
 #include <spin.h>
 #include <debug.h>
 #include <bench.h>
-#include <pool.h>
 
 
 // layout.ld
@@ -279,38 +278,6 @@ static INIT_TEXT void root_proc() {
 
     logk("all CPU running\n");
     arch_send_ipi(-1, VEC_IPI_RESCHED);
-
-    // --- 内存池功能测试 ---
-    {
-        pool_t test_pool;
-        pool_init(&test_pool, "test", 128, 16);
-        logk("pool \"%s\": obj_size=%zu, objs_per_slab=%u, order=%u\n",
-            test_pool.name, test_pool.obj_size, test_pool.objs_per_slab, test_pool.slab_order);
-
-        enum { N = 5 };
-        void *objs[N];
-        for (int i = 0; i < N; ++i) {
-            objs[i] = pool_alloc(&test_pool);
-            kmemset(objs[i], 0xcc, test_pool.obj_size);
-        }
-        logk("pool: %d allocs, allocs=%llu\n", N, test_pool.allocs);
-
-        for (int i = 0; i < N; ++i) {
-            pool_free(&test_pool, objs[i]);
-        }
-        logk("pool: %d frees, frees=%llu\n", N, test_pool.frees);
-
-        // 重新分配，验证 freelist 复用
-        void *x = pool_alloc(&test_pool);
-        void *y = pool_alloc(&test_pool);
-        logk("pool: re-alloc first two objects at %p, %p\n", x, y);
-        pool_free(&test_pool, x);
-        pool_free(&test_pool, y);
-
-        pool_destroy(&test_pool);
-        logk("pool: destroy OK\n");
-    }
-    // --- end pool test ---
 
     logk("running benchmark\n");
     bench_semaphore();
