@@ -34,6 +34,11 @@ typedef struct pglist {
     uint32_t tail;
 } pglist_t;
 
+// pglist 操作
+void pglist_push_tail(pglist_t *pl, uint32_t blk);
+void pglist_push_head(pglist_t *pl, uint32_t blk);
+void pglist_remove(pglist_t *pl, uint32_t blk);
+
 extern uint32_t g_page_start;
 extern uint32_t g_page_end;
 extern page_t *g_pages;

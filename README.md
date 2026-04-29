@@ -11,10 +11,10 @@ Wheel is an operating system, written from scratch.
 Wheel is build using LLVM under Linux, ses [how to build toolchain](./docs/00_build_toolchain.md).
 
 ```bash
-gmake        # build kernel elf image build/wheel.elf
-gmake iso    # create bootable iso image build/wheel.iso
-gmake unit   # build unit test binary build/unit
-gmake cov    # run unit test and generate coverage report in build/coverage
+make        # build kernel elf image build/wheel.elf
+make iso    # create bootable iso image build/wheel.iso
+make unit   # build unit test binary build/unit
+make cov    # run unit test and generate coverage report in build/coverage
 ```
 
 Launch QEMU using `./run_iso.sh` (or `run_iso.bat` under Windows).

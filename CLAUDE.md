@@ -7,11 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Wheel is built with LLVM (clang + ld.lld) using GNU Make. The `TOOLCHAIN` env var should point to the cross-compiler prefix.
 
 ```bash
-gmake              # build kernel ELF (build/wheel.elf)
-gmake iso          # create bootable ISO (build/cd.iso)
-gmake unit         # build unit test binary (build/unit)
-gmake cov          # run unit tests and generate HTML coverage report in build/coverage
-gmake clean        # remove build/ directory
+make              # build kernel ELF (build/wheel.elf)
+make iso          # create bootable ISO (build/cd.iso)
+make unit         # build unit test binary (build/unit)
+make cov          # run unit tests and generate HTML coverage report in build/coverage
+make clean        # remove build/ directory
 ```
 
 `DEBUG=1` is the default; pass `DEBUG=0` for optimized builds (`-O2 -DNDEBUG`). `ARCH` defaults to `x86_64`.
