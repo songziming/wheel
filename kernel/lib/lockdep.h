@@ -36,12 +36,12 @@ void lockdep_enable();
 void lockdep_acquire(void *lock, lockdep_instance_t *dep);
 void lockdep_release(void *lock, lockdep_instance_t *dep);
 
-#else
+#else // defined(LOCKDEP)
 
 #define lockdep_enable()               ((void)0)
 #define lockdep_acquire(lock, dep)     ((void)(lock), (void)(dep))
 #define lockdep_release(lock, dep)     ((void)(lock), (void)(dep))
 
-#endif // LOCKDEP
+#endif // defined(LOCKDEP)
 
 #endif // LOCKDEP_H

@@ -39,8 +39,8 @@ static _Atomic uint64_t g_idle_mask;
 // 就绪队列只关心队列，不管自旋锁
 
 INIT_TEXT void rdyq_init(rdyq_t *q) {
+    kmemset(q, 0, sizeof(*q));
     q->lock = SPIN_INIT;
-    kmemset(q, 0, sizeof(rdyq_t));
 }
 
 void rdyq_insert(rdyq_t *q, dlnode_t *dl, int prio) {
@@ -99,6 +99,7 @@ void sched_init() {
 
     task_t *idle = THISCPU(&g_idle_task);
     task_create(idle, "idle", 31, idle_proc);
+    idle->affinity = cpu_index();
     rdyq_insert(q, &idle->dl, 31);
 
     atomic_fetch_or(&g_idle_mask, 1U << cpu_index());
@@ -180,6 +181,7 @@ task_t *sched_stop_self(uint32_t bits) {
 // 但不要立即触发 task-switch
 void sched_cont(task_t *task, uint32_t bits) {
     ASSERT(TS_READY != task->state);
+    ASSERT(task->affinity < 0 || task->affinity == cpu_index());
 
     task->state &= ~bits;
     if (TS_READY != task->state) {
@@ -204,6 +206,7 @@ void sched_cont(task_t *task, uint32_t bits) {
 // 在另一个 cpu 上启动运行任务
 void sched_cont_on(task_t *task, uint32_t bits, int cpu) {
     ASSERT(cpu_index() != cpu);
+    ASSERT(task->affinity < 0 || task->affinity == cpu);
 
     task->state &= ~bits;
     if (TS_READY != task->state) {
@@ -253,10 +256,21 @@ void task_create(task_t *task, const char *name, int priority, void *entry) {
     task->state = TS_STOPPED;
     task->tick = 10;
     task->tick_reload = 10;
+    task->affinity = -1;
     arch_task_init(task, (size_t)entry, (size_t)stack_top);
 }
 
 void task_start(task_t *task) {
+    if (task->affinity >= 0) {
+        if (task->affinity == cpu_index()) {
+            sched_cont(task, TS_STOPPED);
+        } else {
+            sched_cont_on(task, TS_STOPPED, task->affinity);
+            arch_send_ipi(task->affinity, VEC_IPI_RESCHED);
+        }
+        return;
+    }
+
     // 挑选一个CPU
     uint64_t idle_mask = atomic_load(&g_idle_mask);
     uint64_t this_mask = 1ULL << cpu_index();

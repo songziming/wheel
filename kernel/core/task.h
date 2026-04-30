@@ -33,13 +33,14 @@ typedef struct task {
     vmrange_t   stack;
     int         tick;
     int         tick_reload;
+    int         affinity;   // -1 = any CPU, >=0 = pinned to that CPU
 #if defined(LOCKDEP)
     lockdep_task_t lockdep;
 #endif
 } task_t;
 
-extern PERCPU_BSS task_t *g_prev_task;
-extern PERCPU_BSS task_t *g_next_task;
+extern task_t *g_prev_task;
+extern task_t *g_next_task;
 
 
 INIT_TEXT void rdyq_init(rdyq_t *q);
@@ -53,6 +54,7 @@ void sched_process();
 // void sched_stop(task_t *task, uint32_t bits);
 task_t *sched_stop_self(uint32_t bits);
 void sched_cont(task_t *task, uint32_t bits);
+void sched_cont_on(task_t *task, uint32_t bits, int cpu);
 
 void task_create(task_t *task, const char *name, int priority, void *entry);
 void task_start(task_t *task);

@@ -6,11 +6,18 @@
 #include <arch_api.h>
 #include <debug.h>
 
+
+// lockdep 限制了 take/give 必须成对出现
+// 然而锁还可以用于线程同步，生产者只有 give，消费者只有 take，lockdep 会报错
+
+// TODO 使用 panic 报错有风险
+// 打印函数也会用到锁，如果发现锁异常，应该直接让 bochs 中断
+
+
 static CONST int g_lockdep_ready;
 
+// 得到锁之后执行
 INIT_TEXT void lockdep_enable() { g_lockdep_ready = 1; }
-
-// TODO 打印函数也会用到锁，如果发现锁异常，应该直接让 bochs 中断
 void lockdep_acquire(void *lock, lockdep_instance_t *dep) {
     if (!g_lockdep_ready) { return; }
     if (NULL == dep->file) { return; }
@@ -35,6 +42,7 @@ void lockdep_acquire(void *lock, lockdep_instance_t *dep) {
     task->lockdep.depth++;
 }
 
+// 释放锁之前执行
 void lockdep_release(void *lock, lockdep_instance_t *dep) {
     if (!g_lockdep_ready) { return; }
     if (NULL == dep->file) { return; }
