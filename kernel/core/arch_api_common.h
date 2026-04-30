@@ -10,6 +10,8 @@
 //
 
 
+size_t arch_cacheline_size();
+
 // SMP & percpu-data
 int cpu_count();
 int cpu_index();

@@ -6,12 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Wheel is built with LLVM (clang + ld.lld) using GNU Make. The `TOOLCHAIN` env var should point to the cross-compiler prefix.
 
+On Windows, all build commands must run inside WSL:
+
 ```bash
-make              # build kernel ELF (build/wheel.elf)
-make iso          # create bootable ISO (build/cd.iso)
-make unit         # build unit test binary (build/unit)
-make cov          # run unit tests and generate HTML coverage report in build/coverage
-make clean        # remove build/ directory
+wsl make              # build kernel ELF (build/wheel.elf)
+wsl make iso          # create bootable ISO (build/cd.iso)
+wsl make unit         # build unit test binary (build/unit)
+wsl make cov          # run unit tests and generate HTML coverage report in build/coverage
+wsl make clean        # remove build/ directory
 ```
 
 `DEBUG=1` is the default; pass `DEBUG=0` for optimized builds (`-O2 -DNDEBUG`). `ARCH` defaults to `x86_64`.

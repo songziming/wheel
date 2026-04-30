@@ -29,6 +29,10 @@ extern uint64_t g_direct_map_base;
 // 链表以维持这个顺序。empty 和 full 链表不分顺序。
 
 
+// SLUB 元数据保存在 page_t，容不下复杂的信息
+// 所以只能直接映射在 direct-map 区域，无法动态分配虚拟地址，也无法实现 guard page
+
+
 #define NO_OBJ          0xFFFFU
 
 static inline size_t align_up(size_t x, size_t align) {
@@ -41,12 +45,6 @@ static inline void *pfn_to_virt(uint32_t pfn) {
 
 static inline uint32_t virt_to_pfn(void *va) {
     return (uint32_t)(((size_t)va - DIRECT_MAP_ADDR) >> PAGE_SHIFT);
-}
-
-// 从任意 pfn 向上找到所在 block 的头页
-static uint32_t block_head(uint32_t pfn) {
-    while (!g_pages[pfn].head) --pfn;
-    return pfn;
 }
 
 //------------------------------------------------------------------------------
@@ -108,16 +106,16 @@ static void slab_obj_free(uint32_t slab, void *obj) {
 //------------------------------------------------------------------------------
 
 void slub_init(slub_t *slub, size_t obj_size) {
-    obj_size = align_up(obj_size, sizeof(void *));
+    obj_size = align_up(obj_size, arch_cacheline_size());
 
     // 寻找能容纳至少 8 个对象的最小 slab 阶数
     uint32_t order = 0;
-    for (; order < RANK_NUM; ++order) {
+    for (; order < PAGE_BLOCK_RANK_NUM; ++order) {
         if ((8 * obj_size) <= (PAGE_SIZE << order)) {
             break;
         }
     }
-    ASSERT(order < RANK_NUM);
+    ASSERT(order < PAGE_BLOCK_RANK_NUM);
 
     slub->lock       = SPIN_INIT;
     slub->obj_size   = (uint16_t)obj_size;
@@ -200,7 +198,7 @@ void *slub_alloc(slub_t *slub) {
 void slub_free(slub_t *slub, void *obj) {
     raw_spin_take(&slub->lock);
 
-    uint32_t pfn = block_head(virt_to_pfn(obj));
+    uint32_t pfn = page_block_head(virt_to_pfn(obj));
     uint32_t was_full = (NO_OBJ == g_pages[pfn].objects);
     slab_obj_free(pfn, obj);
     uint32_t inuse = g_pages[pfn].ent_num;

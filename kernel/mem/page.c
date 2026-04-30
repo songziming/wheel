@@ -11,7 +11,7 @@ CONST uint32_t g_page_end;
 CONST page_t *g_pages;
 
 static spin_t g_page_spin = SPIN_INIT;
-static pglist_t g_blocks[RANK_NUM];
+static pglist_t g_blocks[PAGE_BLOCK_RANK_NUM];
 
 
 
@@ -19,6 +19,12 @@ static pglist_t g_blocks[RANK_NUM];
 //------------------------------------------------------------------------------
 // 页块链表
 //------------------------------------------------------------------------------
+
+// 从任意 pfn 向上找到所在 block 的头页
+uint32_t page_block_head(uint32_t pfn) {
+    while (!g_pages[pfn].head) --pfn;
+    return pfn;
+}
 
 void pglist_push_tail(pglist_t *pl, uint32_t blk) {
     uint32_t tail = pl->tail;
@@ -77,7 +83,7 @@ static void block_free_nolock(uint32_t blk) {
 
     // 不断检查伙伴块，如果也是 free，则不断合并为更大的块
     uint32_t rank = g_pages[blk].rank;
-    for (; rank < RANK_NUM - 1; ++rank) {
+    for (; rank < PAGE_BLOCK_RANK_NUM - 1; ++rank) {
         uint32_t sib = blk ^ (1U << rank); // 伙伴块地址
 
         // 检查能否合并
@@ -111,7 +117,7 @@ static uint32_t block_alloc_nolock(uint32_t rank, uint32_t period, uint32_t phas
     // 不断寻找大小足够的块，将更大的块拆分
     uint32_t blk_rank;
     uint32_t blk;
-    for (blk_rank = rank; blk_rank < RANK_NUM; ++blk_rank) {
+    for (blk_rank = rank; blk_rank < PAGE_BLOCK_RANK_NUM; ++blk_rank) {
         uint32_t color = phase & (0U - (1U << blk_rank));   // 相对于这个级别 block 的偏移
 
         // 遍历本层的 free blocks，寻找起始地址符合要求的块
@@ -191,7 +197,7 @@ void page_free(size_t pa) {
 uint32_t page_free_count() {
     int key = irq_spin_take(&g_page_spin);
     uint32_t npages = 0;
-    for (int rank = 0; rank < RANK_NUM; ++rank) {
+    for (int rank = 0; rank < PAGE_BLOCK_RANK_NUM; ++rank) {
         uint32_t blksize = 1U << rank;
         for (uint32_t pfn = g_blocks[rank].head; 0 != pfn; pfn = g_pages[pfn].next) {
             npages += blksize;
@@ -261,8 +267,8 @@ INIT_TEXT void pages_add(size_t start, size_t end) {
     // 这一段内存不一定是按块对齐的，尽可能使用更大的块
     while (start < end) {
         int rank = __builtin_ctz(start);
-        if (rank >= RANK_NUM) {
-            rank = RANK_NUM - 1;
+        if (rank >= PAGE_BLOCK_RANK_NUM) {
+            rank = PAGE_BLOCK_RANK_NUM - 1;
         }
 
         uint32_t size = 1U << rank;

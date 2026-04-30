@@ -251,6 +251,8 @@ end:
 static INIT_TEXT void root_proc() {
     logk("hello from root task!\n");
 
+    cpu_features_show();
+
     // 将实模式代码复制到 1M 以下
     char *from = &_real_addr;
     char *to = (char*)KERNEL_REAL_ADDR + DIRECT_MAP_ADDR;

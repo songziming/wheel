@@ -14,7 +14,7 @@ enum {
 };
 
 // rank 合法取值 0~15
-#define RANK_NUM 16
+#define PAGE_BLOCK_RANK_NUM 16
 
 // 使用 uint32 表示页号，最多支持 4G-1 个物理页
 typedef struct page {
@@ -50,6 +50,7 @@ extern page_t *g_pages;
 
 
 // 页链表操作
+uint32_t page_block_head(uint32_t pfn);
 void pglist_push_tail(pglist_t *pl, uint32_t blk);
 void pglist_push_head(pglist_t *pl, uint32_t blk);
 void pglist_remove(pglist_t *pl, uint32_t blk);

@@ -21,6 +21,7 @@
 #define CPU_FEATURE_TSC_FIXED   0x08000  // TSC 频率固定
 #define CPU_FEATURE_TSC_ADJUST  0x10000  // 支持 TSC-ADJUST 相位控制
 #define CPU_FEATURE_TSC_DDL     0x20000  // APIC Timer 支持 tsc deadline 模式
+#define CPU_FEATURE_VTD         0x40000  // Intel VT-d I/O 虚拟化（DMAR 表存在）
 
 typedef struct cache_info {
     size_t line_size;

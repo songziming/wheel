@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include <sys/mman.h>
+#include "page.mock.h"
 #include <early_alloc.mock.h>
 
 extern "C" {
@@ -7,31 +7,11 @@ extern "C" {
     #include <arch_config.h>
 }
 
-extern uint64_t g_direct_map_base;
 
-
-// SLUB 依赖物理内存分配，使用 mmap 申请一段内存模拟物理内存
-// TODO SLUB 不像 mmu 依赖明确的物理地址，完全可以通过 malloc 申请一个 slab
-class SlubTest : public ::testing::Test {
-    const size_t npages = 256;
-    void *va_ = nullptr;
-
+// SLUB 单元测试，使用 PageMock 提供模拟物理内存
+class SlubTest : public PageMock {
 protected:
-    void SetUp() override {
-        int prot = PROT_READ | PROT_WRITE;
-        int flags = MAP_PRIVATE | MAP_ANONYMOUS;
-        va_ = mmap(nullptr, npages << PAGE_SHIFT, prot, flags, -1, 0);
-        ASSERT_NE(va_, MAP_FAILED);
-        g_direct_map_base = (uint64_t)va_ - PAGE_SIZE;
-
-        page_init(PAGE_SIZE, (npages + 1) << PAGE_SHIFT);
-        pages_add(PAGE_SIZE, (npages + 1) << PAGE_SHIFT);
-    }
-
-    void TearDown() override {
-        munmap(va_, npages << PAGE_SHIFT);
-        clear_early_chunks();
-    }
+    SlubTest() : PageMock(256) {}
 };
 
 TEST_F(SlubTest, AllocAndFree) {

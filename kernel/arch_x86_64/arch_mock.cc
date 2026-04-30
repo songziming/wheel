@@ -2,6 +2,8 @@
 
 extern "C" {
 
+#include <arch_api.h>
+
 // layout.ld
 char _init_end;
 char _text_addr, _text_end;
@@ -19,5 +21,9 @@ uint64_t isr_entries[1];
 // void task_entry() {}
 void syscall_entry() {}
 void arch_task_switch() {}
+
+size_t arch_cacheline_size() {
+    return 64;
+}
 
 } // extern "C"

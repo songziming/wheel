@@ -214,10 +214,26 @@ INIT_TEXT void parse_madt(madt_t *madt) {
     }
 }
 
-// 判断是否需要配置 interrupt remapper
-// IO APIC 重定位条目中，只有 8-bit 用于目标 CPU 的 APIC-ID
-// 然而 x2APIC 使用 32-bit ID，有可能重定位条目装不下
-// 要么只能将中断派发给 APIC-ID 小于 8-bit 的 CPU，要么就需要 interrupt-remapper
+
+//------------------------------------------------------------------------------
+
+// x2APIC 使用 32-bit ID，可是 IO APIC redirection entry 使用 8-bit dest
+// 从 82093AA 开始，重定位表格式就没改变过
+// 如果遇到超过 256 的 Local APIC ID，IO APIC 就无法将中断发给这个 CPU
+// （我们只是 hobby OS，其实无需担心）
+
+// 解决方案一：使用 logical dest mode
+//  能处理 x2APIC-ID 超过 256 的情况，但 CPU 总数超过 256 仍然解决不了
+
+// 解决方案二：Interrupt Remapping（主流）
+//  使用 Intel VT-d 或 AMD-Vi IOMMU
+//  IO APIC 发送的中断首先经过 IOMMU，由 remapping table 翻译成 32-bit x2APIC-ID
+
+// 解决方案三：绕过 IO APIC（首选）
+//  使用 MSI/MSI-X，让 PCI 设备直接写 Local APIC，直接向 CPU 发送中断
+//  绕过 IO APIC，还能减少一跳，中断延迟更低
+//  对于 ISA/LPC 遗留中断（必须走 IO APIC），则只能发送给小于 256 的低号 CPU
+
 INIT_TEXT int need_int_remap() {
     uint32_t max_apicid = 0;
     char not_physical = 0;  // 无法使用 physical 模式定位每个 CPU
