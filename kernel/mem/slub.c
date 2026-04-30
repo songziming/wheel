@@ -111,7 +111,7 @@ void slub_init(slub_t *slub, size_t obj_size) {
     // 寻找能容纳至少 8 个对象的最小 slab 阶数
     uint32_t order = 0;
     for (; order < PAGE_BLOCK_RANK_NUM; ++order) {
-        if ((8 * obj_size) <= (PAGE_SIZE << order)) {
+        if ((8 * obj_size) <= ((size_t)PAGE_SIZE << order)) {
             break;
         }
     }

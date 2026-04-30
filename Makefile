@@ -69,7 +69,7 @@ KCFLAGS := -c -std=c11 -target $(ARCH)-none-elf $(KINC) $(NOSTD)
 KCFLAGS += -ffunction-sections -fdata-sections -fvisibility=hidden -flto
 KCFLAGS += -Wall -Wextra -Wshadow -Werror=implicit
 ifeq ($(DEBUG),1)
-	KCFLAGS += -DDEBUG -g -fno-omit-frame-pointer -fstack-protector-strong
+	KCFLAGS += -DDEBUG -DLOCKDEP -g -fno-omit-frame-pointer -fstack-protector-strong
 # 	KCFLAGS += -fsanitize=undefined -fno-sanitize=function
 # 	KCFLAGS += -fsanitize=cfi
 else

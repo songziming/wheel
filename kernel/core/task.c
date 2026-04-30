@@ -11,24 +11,23 @@ static INIT_DATA task_t g_dummy_task = { .name = "dummy-TCB" };
 static PERCPU_BSS task_t g_idle_task;
 
 // 就绪任务队列
-// static PERCPU_DATA spin_t g_sched_lock;
 static PERCPU_BSS rdyq_t g_rdy_queue; // ready-queue
-PERCPU_BSS task_t *g_prev_task;
+PERCPU_DATA task_t *g_prev_task = NULL;
 PERCPU_BSS task_t *g_next_task; // also guarded by rdyq->lock
 
 
-// 负载均衡，寻找负载最低的 cpu
-// 所有 cpu 都需要使用这个信息，需要使用锁
-static rwspin_t g_balance_lock;
+// 标记空载状态，新任务优先放在空载 CPU 上
 static _Atomic uint64_t g_idle_mask;
 
-// 记录哪个 CPU 负载最高最低
-// 用于创建任务时选择一个目标 CPU
-// 用于 idle 时从其他 CPU 迁移任务
+
+// TODO 负载均衡，记录哪个 CPU 负载最高最低
+// 任务就绪时，选择负载最低的 CPU
+// 某个 CPU 变为空载时，从负载最高的 CPU 迁移任务
 
 // TODO 负载均衡锁需要支持 read-write lock
 // 每个 cpu 执行 reschedule 时，获取 read-lock，多个 reader 可以共存
 // 某个 cpu 执行到 idle，获取 writer-lock，独占临界区，检查其他 cpu 的就绪队列
+// static rwspin_t g_balance_lock;
 
 
 

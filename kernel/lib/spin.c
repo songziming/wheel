@@ -8,28 +8,32 @@
 // }
 
 void raw_spin_take(spin_t *spin) {
-    atomic_uint ticket = atomic_fetch_add(&spin->ticket_counter, 1);
+    uint32_t ticket = atomic_fetch_add(&spin->ticket_counter, 1);
     while (atomic_load(&spin->service_counter) != ticket) {
         cpu_pause();
     }
+    lockdep_acquire(spin, &spin->dep);
 }
 
 void raw_spin_give(spin_t *spin) {
+    lockdep_release(spin, &spin->dep);
     atomic_fetch_add(&spin->service_counter, 1);
 }
 
 int irq_spin_take(spin_t *spin) {
     int key = cpu_int_lock();
-    atomic_uint tickket = atomic_fetch_add(&spin->ticket_counter, 1);
+    uint32_t tickket = atomic_fetch_add(&spin->ticket_counter, 1);
     while (atomic_load(&spin->service_counter) != tickket) {
         cpu_int_unlock(key);
         cpu_pause();
         key = cpu_int_lock();
     }
+    lockdep_acquire(spin, &spin->dep);
     return key;
 }
 
 void irq_spin_give(spin_t *spin, int key) {
+    lockdep_release(spin, &spin->dep);
     atomic_fetch_add(&spin->service_counter, 1);
     cpu_int_unlock(key);
 }
@@ -71,6 +75,7 @@ int minispin_islocked(minispin_t *spin) {
 // }
 
 void rwspin_take_writer(rwspin_t *rw) {
+    lockdep_acquire(rw, &rw->dep);
     raw_spin_take(&rw->spin);   // 获取写权限
     while (0 != atomic_load(&rw->reader_num)) { // 等待所有 reader 结束
         cpu_pause();
@@ -79,9 +84,11 @@ void rwspin_take_writer(rwspin_t *rw) {
 
 void rwspin_give_writer(rwspin_t *rw) {
     raw_spin_give(&rw->spin);
+    lockdep_release(rw, &rw->dep);
 }
 
 void rwspin_take_reader(rwspin_t *rw) {
+    lockdep_acquire(rw, &rw->dep);
     raw_spin_take(&rw->spin); // 临时获取唯一锁
 
     // 如果成功得到了读锁，说明此时没有 writer
@@ -92,11 +99,13 @@ void rwspin_take_reader(rwspin_t *rw) {
 
 void rwspin_give_reader(rwspin_t *rw) {
     atomic_fetch_sub(&rw->reader_num, 1);
+    lockdep_release(rw, &rw->dep);
 }
 
 
 // 获取读写锁同时关闭中断
 int irqrw_take_writer(rwspin_t *rw) {
+    lockdep_acquire(rw, &rw->dep);
     int key = irq_spin_take(&rw->spin);
     while (0 != atomic_load(&rw->reader_num)) { // 等待所有 reader 结束
         cpu_pause();
@@ -104,6 +113,7 @@ int irqrw_take_writer(rwspin_t *rw) {
     return key;
 }
 int irqrw_take_reader(rwspin_t *rw) {
+    lockdep_acquire(rw, &rw->dep);
     int key = irq_spin_take(&rw->spin);
     atomic_fetch_add(&rw->reader_num, 1);
     raw_spin_give(&rw->spin);
@@ -111,9 +121,11 @@ int irqrw_take_reader(rwspin_t *rw) {
 }
 void irqrw_give_writer(rwspin_t *rw, int key) {
     irq_spin_give(&rw->spin, key);
+    lockdep_release(rw, &rw->dep);
 }
 void irqrw_give_reader(rwspin_t *rw, int key) {
     atomic_fetch_sub(&rw->reader_num, 1);
+    lockdep_release(rw, &rw->dep);
     cpu_int_unlock(key);
 }
 

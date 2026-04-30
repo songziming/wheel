@@ -94,4 +94,17 @@ make cov                                         # build + run + HTML coverage
 - `PERCPU_DATA` / `PERCPU_BSS` macros mark per-CPU variables
 - `UNUSED`, `PACKED`, `NORETURN`, `PRINTF(s,a)` are defined in `core/wheel.h`
 - Comments and identifiers are in Chinese (functions/variables: English snake_case; file names: English)
+- Include guard names omit the directory: `SPIN_H` not `LIB_SPIN_H`, `TASK_H` not `CORE_TASK_H`
 - Host tools live in `host/` (PSF font parser, BIOS roms, disk image helper)
+
+### `CONST` and `INIT_*` section macros
+
+`CONST` places a variable in `.rodata`, which becomes read-only after the kernel's final page tables are loaded. During early boot (before `write_cr3(g_kernel_vm.table)`), all memory is writable, so `CONST` variables can still be modified by init code. Use this for "write once during boot, read-only forever after" data.
+
+`INIT_TEXT` / `INIT_DATA` / `INIT_BSS` place code or data in `.init.*` sections that are freed (reclaimed as free pages) after boot completes. Use `INIT_TEXT` for functions only called during startup, `INIT_DATA`/`INIT_BSS` for their associated data.
+
+Common pattern — a flag set once during init, read-only thereafter:
+```c
+static CONST int g_ready;
+INIT_TEXT void init_complete() { g_ready = 1; }
+```

@@ -1,4 +1,4 @@
-#include "bench.h"
+#include "ktest.h"
 #include <task.h>
 #include <semaphore.h>
 #include <debug.h>
@@ -38,7 +38,7 @@ static void proc_c() {
 }
 
 // 当前任务是生产者，三个高优先级任务是消费者
-void bench_semaphore() {
+void test_semaphore() {
     task_t ta;
     task_t tb;
     task_t tc;
@@ -67,3 +67,5 @@ void bench_semaphore() {
 //------------------------------------------------------------------------------
 // 测试内存池分配器
 //------------------------------------------------------------------------------
+
+// TBD

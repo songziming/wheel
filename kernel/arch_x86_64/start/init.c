@@ -25,7 +25,7 @@
 #include <kstring.h>
 #include <spin.h>
 #include <debug.h>
-#include <bench.h>
+#include <ktest.h>
 
 
 // layout.ld
@@ -210,6 +210,9 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     thiscpu_init(0);
     ASSERT(cpu_index() == 0);
 
+    // 死锁检查，依赖 pthiscpu
+    lockdep_enable();
+
     thistss_init_load(0); // 依赖 thiscpu，需要放在 thiscpu_init 之后
     int_init(); // 初始化中断管理机制
     int_init_local();
@@ -226,7 +229,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     loapic_timer_calibrate();
     loapic_timer_set_periodic(2);
 
-    // 加载正式页表
+    // 加载正式页表，此后 CONST 变为只读
     write_cr3(g_kernel_vm.table);
 
     // 初始化任务调度
@@ -281,8 +284,8 @@ static INIT_TEXT void root_proc() {
     logk("all CPU running\n");
     arch_send_ipi(-1, VEC_IPI_RESCHED);
 
-    logk("running benchmark\n");
-    bench_semaphore();
+    logk("running in-kernel-tests\n");
+    test_semaphore();
 
     logk("stop system\n");
     arch_send_ipi(-1, VEC_IPI_STOPALL);

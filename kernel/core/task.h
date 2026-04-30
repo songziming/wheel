@@ -33,7 +33,13 @@ typedef struct task {
     vmrange_t   stack;
     int         tick;
     int         tick_reload;
+#if defined(LOCKDEP)
+    lockdep_task_t lockdep;
+#endif
 } task_t;
+
+extern PERCPU_BSS task_t *g_prev_task;
+extern PERCPU_BSS task_t *g_next_task;
 
 
 INIT_TEXT void rdyq_init(rdyq_t *q);
