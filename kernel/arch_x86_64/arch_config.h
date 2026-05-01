@@ -10,7 +10,8 @@
 #define KERNEL_REAL_ADDR    0x8000               // 32K，实模式启动代码位置
 #define KERNEL_LOAD_ADDR    0x0000000000100000UL //  1M
 #define KERNEL_TEXT_ADDR    0xffffffff80000000UL // -2G
-#define DIRECT_MAP_ADDR     0xffff800000000000UL // 物理内存映射地址（共 16TB）
+#define DIRECT_MAP_ADDR     0xffff800000000000UL // 物理内存映射地址（共 16TB - 4GB）
+#define MMIO_WC_BASE        0xffff8FFF00000000UL // WC 映射区域（4GB），位于 direct map 之后
 
 // 内核栈的映射区域（16TB）
 #define STACK_ZONE_START    0xffff900000000000UL

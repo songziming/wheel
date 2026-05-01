@@ -20,9 +20,11 @@
 #define MMU_RW      0x0000000000000002UL    // (R/W) Read Write
 #define MMU_P       0x0000000000000001UL    // (P)   Present
 #define MMU_PAT_4K  0x0000000000000080UL    // (PAT) for 4K PTE
-#define MMU_PAT_2M  0x0000000000001000UL    // (PAT) for 2M PDE
+#define MMU_PAT_2M  0x0000000000001000UL    // (PAT) for 2M PDE / 1G PDPE
 
-#define MMU_ATTRS (MMU_NX | MMU_US | MMU_RW) // 访问权限
+// 各级页表通用的属性位（NX, US, RW, PCD, PWT 位置一致）
+// PAT 位在各级别位置不同（4K: bit 7, 2M/1G: bit 12），由各级函数各自处理
+#define MMU_ATTRS (MMU_NX | MMU_US | MMU_RW | MMU_PCD | MMU_PWT)
 
 // 从虚拟地址拆分出各级页表项的编号
 #define IDX_4K(va)      (int)((va >> 12) & 0x1ff)
@@ -56,38 +58,35 @@ static uint64_t alloc_table(int tag UNUSED) {
         panic("cannot alloc for mmu");
         return 0;
     }
-    // logk("alloc page-tbl %llx (%d)\n", pa >> 12, tag);
     g_pages[pa >> PAGE_SHIFT].ent_num = 0;
     kmemset((char*)pa + DIRECT_MAP_ADDR, 0, PAGE_SIZE);
     return pa;
 }
 
 static void free_table(uint64_t tbl) {
-    // logk("free page-tbl %llx\n", tbl >> 12);
     page_free(tbl);
 }
 
 
 
 // 各级页表函数：
-// - XXX_map(tbl, va, end, pa) 操作一张页表及其子表，将最多 [va,end) 映射到 pa，返回新建映射的长度
-// - XXX_unmap(tbl, va, end) 操作一张页表及其子表，将最多 [va,end) 清除映射，返回清除部分的长度
-// 如果虚拟地址范围 [va,end) 超过了页表 tbl 的管理范围，则不操作超出的部分
-//
-// 上一级页表可以递归调用子表的函数
-// 优先使用 2M-page、1G-page 大页
-// map 和 unmap 调用可以不对称，但不建议
-// 我们可以处理拆分大页的情况，但不建议
+// - XXX_map(tbl, va, end, pa, bits, pat) 将 [va,end) 映射到 pa，返回新建映射的长度
+// - XXX_unmap(tbl, va, end) 清除 [va,end) 的映射，返回清除的长度
+// bits 包含各级通用的属性位（NX/US/RW/PCD/PWT），pat 为 PAT 标志，
+// 各层级自行将 PAT 位置于正确的 bit（4K: bit 7, 2M/1G: bit 12）
 
 
 //------------------------------------------------------------------------------
 // page table, 每个表项控制 4K
 //------------------------------------------------------------------------------
 
-// 返回映射结束的虚拟地址
-static uint64_t pt_map(uint64_t pt, uint64_t va, uint64_t end, uint64_t pa, uint64_t bits) {
+static uint64_t pt_map(uint64_t pt, uint64_t va, uint64_t end, uint64_t pa, uint64_t bits, int pat) {
     uint64_t *tbl = (uint64_t*)(DIRECT_MAP_ADDR + pt);
     page_t *info = &g_pages[pt >> PAGE_SHIFT];
+
+    if (pat) {
+        bits |= MMU_PAT_4K;
+    }
 
     uint64_t start = va;
     for (int i = IDX_4K(va); (i < 512) && (va + 0x1000 <= end); ++i) {
@@ -129,7 +128,7 @@ static void pt_free(uint64_t pt) {
 // page directory，表项可以指向 PT，也可以直接映射 2M
 //------------------------------------------------------------------------------
 
-static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint64_t bits) {
+static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint64_t bits, int pat) {
     ASSERT(0 == OFFSET_4K(pd));
 
     uint64_t *tbl = (uint64_t*)(DIRECT_MAP_ADDR + pd);
@@ -141,11 +140,14 @@ static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint
             if (0 == (tbl[i] & MMU_P)) {
                 ++info->ent_num;
             } else if (0 == (tbl[i] & MMU_PS)) {
-                // 将下一级页表回收，改为 2M 条目，总条目数量不变
                 pt_free(tbl[i] & MMU_ADDR);
             }
 
-            tbl[i] = (pa & MMU_ADDR) | MMU_P | MMU_PS | bits;
+            uint64_t pde = (pa & MMU_ADDR) | MMU_P | MMU_PS | bits;
+            if (pat) {
+                pde |= MMU_PAT_2M;
+            }
+            tbl[i] = pde;
             va += SIZE_2M;
             pa += SIZE_2M;
             continue;
@@ -164,17 +166,19 @@ static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint
             ASSERT(0 == OFFSET_2M(pa2m));
 
             pt = alloc_table(__LINE__);
+            uint64_t split_bits = tbl[i] & MMU_ATTRS;
+            int      split_pat  = (tbl[i] & MMU_PAT_2M) != 0;
             if (va2m != va) {
-                pt_map(pt, va2m, va, pa2m, tbl[i] & MMU_ATTRS);
+                pt_map(pt, va2m, va, pa2m, split_bits, split_pat);
             }
             if (end < va2m + SIZE_2M) {
                 size_t end_pa = pa2m + (end - va2m);
-                pt_map(pt, end, va2m + SIZE_2M, end_pa, tbl[i] & MMU_ATTRS);
+                pt_map(pt, end, va2m + SIZE_2M, end_pa, split_bits, split_pat);
             }
         }
 
-        tbl[i] = (pt & MMU_ADDR) | MMU_P | MMU_RW | MMU_US; // 不是末级表项，使用最宽松的权限
-        uint64_t len = pt_map(pt, va, end, pa, bits);
+        tbl[i] = (pt & MMU_ADDR) | MMU_P | MMU_RW | MMU_US;
+        uint64_t len = pt_map(pt, va, end, pa, bits, pat);
         va += len;
         pa += len;
     }
@@ -221,13 +225,15 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
             ASSERT(0 == OFFSET_2M(pa2m));
 
             pt = alloc_table(__LINE__);
+            uint64_t split_bits = tbl[i] & MMU_ATTRS;
+            int      split_pat  = (tbl[i] & MMU_PAT_2M) != 0;
             if (va2m != va) {
-                pt_map(pt, va2m, va, pa2m, tbl[i] & MMU_ATTRS);
+                pt_map(pt, va2m, va, pa2m, split_bits, split_pat);
                 va = va2m + SIZE_2M;
             }
             if (end < va2m + SIZE_2M) {
                 size_t end_pa = pa2m + (end - va2m);
-                pt_map(pt, end, va2m + SIZE_2M, end_pa, tbl[i] & MMU_ATTRS);
+                pt_map(pt, end, va2m + SIZE_2M, end_pa, split_bits, split_pat);
                 va = end;
             }
             tbl[i] = (pt & MMU_ADDR) | MMU_P | MMU_US | MMU_RW;
@@ -266,7 +272,7 @@ static void pd_free(uint64_t pd) {
 // page directory pointer，表项可以指向 PD，也可以直接映射 1G
 //------------------------------------------------------------------------------
 
-static uint64_t pdp_map(uint64_t pdp, uint64_t va, uint64_t end, uint64_t pa, uint64_t bits) {
+static uint64_t pdp_map(uint64_t pdp, uint64_t va, uint64_t end, uint64_t pa, uint64_t bits, int pat) {
     ASSERT(0 == OFFSET_4K(pdp));
     ASSERT(0 == OFFSET_4K(va));
     ASSERT(0 == OFFSET_4K(end));
@@ -287,7 +293,11 @@ static uint64_t pdp_map(uint64_t pdp, uint64_t va, uint64_t end, uint64_t pa, ui
                 pd_free(tbl[i] & MMU_ADDR);
             }
 
-            tbl[i] = (pa & MMU_ADDR) | MMU_P | MMU_PS | bits;
+            uint64_t pdpe = (pa & MMU_ADDR) | MMU_P | MMU_PS | bits;
+            if (pat) {
+                pdpe |= MMU_PAT_2M;
+            }
+            tbl[i] = pdpe;
             va += SIZE_1G;
             pa += SIZE_1G;
             continue;
@@ -300,23 +310,25 @@ static uint64_t pdp_map(uint64_t pdp, uint64_t va, uint64_t end, uint64_t pa, ui
             ++info->ent_num;
             pd = alloc_table(__LINE__);
         } else if (tbl[i] & MMU_PS) {
-            // 将 1G-page 拆分，如果头尾还剩 mapping，需要重新映射
+            // 将 1G-page 拆分
             uint64_t va1g = va - OFFSET_1G(va);
             uint64_t pa1g = pd;
             ASSERT(0 == OFFSET_1G(pa1g));
 
             pd = alloc_table(__LINE__);
+            uint64_t split_bits = tbl[i] & MMU_ATTRS;
+            int      split_pat  = (tbl[i] & MMU_PAT_2M) != 0;
             if (va1g != va) {
-                pd_map(pd, va1g, va, pa1g, tbl[i] & MMU_ATTRS);
+                pd_map(pd, va1g, va, pa1g, split_bits, split_pat);
             }
             if (end < va1g + SIZE_1G) {
                 size_t end_pa = pa1g + (end - va1g);
-                pd_map(pd, end, va1g + SIZE_1G, end_pa, tbl[i] & MMU_ATTRS);
+                pd_map(pd, end, va1g + SIZE_1G, end_pa, split_bits, split_pat);
             }
         }
 
-        tbl[i] = (pd & MMU_ADDR) | MMU_P | MMU_RW | MMU_US; // 不是末级表项，使用最宽松的权限
-        uint64_t len = pd_map(pd, va, end, pa, bits);
+        tbl[i] = (pd & MMU_ADDR) | MMU_P | MMU_RW | MMU_US;
+        uint64_t len = pd_map(pd, va, end, pa, bits, pat);
         va += len;
         pa += len;
     }
@@ -363,13 +375,15 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
             ASSERT(0 == OFFSET_1G(pa1g));
 
             pd = alloc_table(__LINE__);
+            uint64_t split_bits = tbl[i] & MMU_ATTRS;
+            int      split_pat  = (tbl[i] & MMU_PAT_2M) != 0;
             if (va1g != va) {
-                pd_map(pd, va1g, va, pa1g, tbl[i] & MMU_ATTRS);
+                pd_map(pd, va1g, va, pa1g, split_bits, split_pat);
                 va = va1g + SIZE_1G;
             }
             if (end < va1g + SIZE_1G) {
                 size_t end_pa = pa1g + (end - va1g);
-                pd_map(pd, end, va1g + SIZE_1G, end_pa, tbl[i] & MMU_ATTRS);
+                pd_map(pd, end, va1g + SIZE_1G, end_pa, split_bits, split_pat);
                 va = end;
             }
 
@@ -409,7 +423,7 @@ static void pdp_free(uint64_t pdp) {
 // PML4
 //------------------------------------------------------------------------------
 
-static uint64_t pml4_map(uint64_t pml4, uint64_t va, uint64_t end, uint64_t pa, uint64_t bits) {
+static uint64_t pml4_map(uint64_t pml4, uint64_t va, uint64_t end, uint64_t pa, uint64_t bits, int pat) {
     ASSERT(0 == OFFSET_4K(pml4));
     ASSERT(0 == OFFSET_4K(va));
     ASSERT(0 == OFFSET_4K(end));
@@ -430,7 +444,7 @@ static uint64_t pml4_map(uint64_t pml4, uint64_t va, uint64_t end, uint64_t pa, 
         }
 
         tbl[i] = (pdp & MMU_ADDR) | MMU_P | MMU_US | MMU_RW;
-        uint64_t len = pdp_map(pdp, va, end, pa, bits);
+        uint64_t len = pdp_map(pdp, va, end, pa, bits, pat);
         va += len;
         pa += len;
     }
@@ -500,21 +514,20 @@ void mmu_delete(size_t tbl) {
     pml4_free(tbl);
 }
 
-// 对外公开的分页属性和 amd64 页属性不同
-static mmu_attr_t bits_to_attrs(uint64_t bits) {
+static mmu_attr_t bits_to_attrs(uint64_t bits, int pat) {
     mmu_attr_t attrs = MMU_NONE;
     attrs |= (MMU_RW & bits) ? MMU_WRITE : 0;
     attrs |= (MMU_NX & bits) ? 0 : MMU_EXEC;
     attrs |= (MMU_US & bits) ? MMU_USER : 0;
-    return attrs;
-}
 
-static uint64_t attrs_to_bits(mmu_attr_t attrs) {
-    uint64_t bits = 0;
-    bits |= (attrs & MMU_USER) ? MMU_US : 0;
-    bits |= (attrs & MMU_WRITE) ? MMU_RW : 0;
-    bits |= (attrs & MMU_EXEC) && (g_cpu_features & CPU_FEATURE_NX) ? 0 : MMU_NX;
-    return bits;
+    int pat_idx = (pat ? 4 : 0) | ((bits & MMU_PCD) ? 2 : 0) | ((bits & MMU_PWT) ? 1 : 0);
+    switch (pat_idx) {
+    case 0:                     break;  // WB
+    case 1: attrs |= MMU_WT;    break;  // WT
+    case 3: attrs |= MMU_UC;    break;  // UC
+    case 4: attrs |= MMU_WC;    break;  // WC
+    }
+    return attrs;
 }
 
 // 模拟硬件的地址转换流程，获取 va 映射的 pa
@@ -537,7 +550,7 @@ size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs) {
     // 如果是 1G 大页
     uint64_t mmu_bits = pml4e & pdpe;
     if ((g_cpu_features & CPU_FEATURE_1G) && (pdpe & MMU_PS)) {
-        *attrs = bits_to_attrs(mmu_bits);
+        *attrs = bits_to_attrs(mmu_bits & MMU_ATTRS, 0 != (pdpe & MMU_PAT_2M));
         return (pdpe & MMU_ADDR) | OFFSET_1G(va);
     }
 
@@ -550,7 +563,7 @@ size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs) {
     // 如果是 2M 大页
     mmu_bits &= pde;
     if (pde & MMU_PS) {
-        *attrs = bits_to_attrs(mmu_bits);
+        *attrs = bits_to_attrs(mmu_bits & MMU_ATTRS, 0 != (pde & MMU_PAT_2M));
         return (pde & MMU_ADDR) | OFFSET_2M(va);
     }
 
@@ -560,7 +573,7 @@ size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs) {
         return 0;
     }
 
-    *attrs = bits_to_attrs(mmu_bits & pte);
+    *attrs = bits_to_attrs((mmu_bits & pte) & MMU_ATTRS, 0 != (pte & MMU_PAT_4K));
     return (pte & MMU_ADDR) | OFFSET_4K(va);
 }
 
@@ -570,7 +583,19 @@ void mmu_map(size_t tbl, size_t va, size_t end, size_t pa, mmu_attr_t attrs) {
     ASSERT(0 == OFFSET_4K(end));
     ASSERT(0 == OFFSET_4K(pa));
 
-    size_t len = pml4_map(tbl, va, end, pa, attrs_to_bits(attrs));
+    uint64_t bits = 0;
+    bits |= (attrs & MMU_USER) ? MMU_US : 0;
+    bits |= (attrs & MMU_WRITE) ? MMU_RW : 0;
+    bits |= (attrs & MMU_EXEC) && (g_cpu_features & CPU_FEATURE_NX) ? 0 : MMU_NX;
+
+    int pat = 0;
+    switch (attrs & 0x300) {
+    case MMU_WC: pat = 1;                    break;
+    case MMU_WT: bits |= MMU_PWT;            break;
+    case MMU_UC: bits |= MMU_PCD | MMU_PWT;  break;
+    }
+
+    size_t len = pml4_map(tbl, va, end, pa, bits, pat);
     ASSERT(va + len == end);
     (void)len;
 }

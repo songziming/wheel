@@ -32,6 +32,11 @@ typedef enum mmu_attr {
     MMU_USER    = 1,    // 用户态可以访问
     MMU_WRITE   = 2,    // 可写
     MMU_EXEC    = 4,    // 可执行
+
+    // 缓存类型（互斥，默认 WB，无需设置）
+    MMU_WC      = 0x100,    // Write-Combining
+    MMU_WT      = 0x200,    // Write-Through
+    MMU_UC      = 0x300,    // Uncacheable
 } mmu_attr_t;
 size_t mmu_create();
 void   mmu_delete(size_t tbl);

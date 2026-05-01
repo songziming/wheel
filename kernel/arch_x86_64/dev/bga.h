@@ -62,7 +62,7 @@ typedef struct bga_info {
 INIT_TEXT int bga_init(bga_info_t *info, uint32_t width, uint32_t height,
                        uint32_t bpp, uint32_t virt_height);
 
-// 获取 framebuffer 虚拟地址（通过 direct map）。
+// 获取 framebuffer 虚拟地址（通过 direct map，仅 bga_enable_wc 调用前有效）。
 static inline uint8_t *bga_fb_ptr(bga_info_t *info) {
     return (uint8_t*)(DIRECT_MAP_ADDR + info->fb_pa);
 }
@@ -71,9 +71,9 @@ static inline uint8_t *bga_fb_ptr(bga_info_t *info) {
 // y 不超过 virt_height - yres。
 void bga_set_offset(uint16_t x, uint16_t y);
 
-// 将 framebuffer 对应的 direct map 区域设为 WC (Write-Combining)，
-// 使显存写入能合并为突发传输，大幅提升绘图性能。
-// 必须在 write_cr3(g_kernel_vm.table) 后调用（mem_init 完成之后）。
-INIT_TEXT void bga_enable_wc(bga_info_t *info);
+// 先 unmap direct map 中的 framebuffer 范围，再在 MMIO_WC_BASE
+// 区域以 WC 属性重新映射。必须在 write_cr3(g_kernel_vm.table) 后调用。
+// 返回新的虚拟地址，后续绘图应使用此地址。
+INIT_TEXT uint8_t *bga_enable_wc(bga_info_t *info);
 
 #endif // ARCH_X86_64_DEV_BGA_H

@@ -27,15 +27,16 @@
 //   滚屏时调用（在 framebuf 滚屏逻辑中）：
 //       bga_set_offset(0, y_offset);  // 无需 memcpy！
 //
-// 另外，mem_init() 完成后调用 bga_enable_wc() 可以启用 WC 写合并，加速绘图。
+// mem_init() 完成后调用 bga_enable_wc() 返回新 VA，替换 direct map 地址。
+// 内部使用 mmu_unmap + mmu_map 将 framebuffer 从 direct map (WB) 移至
+// MMIO_WC_BASE (WC)，消除双映射冲突且获得写合并性能。
 
 #include "bga.h"
 
 #include <cpu/rw.h>
 #include <arch_config.h>
 #include <debug.h>
-#include <page.h>
-#include <kstring.h>
+#include <arch_api.h>
 #include <vmspace.h>
 
 
@@ -47,19 +48,9 @@
 #define IA32_PAT  0x0277
 
 // PA4 位于 PAT MSR 的 bit 16-18，{PAT, PCD, PWT} = {1,0,0} = 4
-// 将 PA4 设为 WC(0x01) 后，在 PDE 中设置 PAT 位即可获得 WC 属性
+// 将 PA4 设为 WC(0x01) 后，在 PTE/PDE 中设置 PAT 位即可获得 WC 属性
 #define PAT_PA4_SHIFT  16ULL
 #define PAT_WC          0x01ULL
-
-// 页表项位标志（硬件定义，与 mmu.c 保持一致）
-#define PT_NX       0x8000000000000000ULL
-#define PT_ADDR     0x000ffffffffff000ULL
-#define PT_PS       0x0000000000000080ULL
-#define PT_P        0x0000000000000001ULL
-#define PT_PAT_2M   0x0000000000001000ULL  // PAT for 2M PDE / 1G PDPE
-
-#define SZ_2M  (1ULL << 21)
-#define SZ_4K  (1ULL << 12)
 
 static CONST int g_pat_ready = 0;
 
@@ -173,64 +164,22 @@ void bga_set_offset(uint16_t x, uint16_t y) {
 // WC (Write-Combining) 映射
 //-----------------------------------------------------------------------------
 
-// 将 direct map 中覆盖 [va, end) 的 2M PDE 的 PAT 位打开，启用 WC 写合并。
-// 如果 direct map 使用 1G 大页，会先拆分成 2M 页再设置 PAT 位。
-INIT_TEXT void bga_enable_wc(bga_info_t *info) {
+// 从 direct map 中 unmap framebuffer 范围，再在 MMIO_WC_BASE 区域新建 WC 映射。
+// 必须在 write_cr3(g_kernel_vm.table) 之后调用。返回新的虚拟地址。
+INIT_TEXT uint8_t *bga_enable_wc(bga_info_t *info) {
     bga_enable_pat();
 
     uint64_t fb_va  = DIRECT_MAP_ADDR + info->fb_pa;
-    uint64_t fb_end = DIRECT_MAP_ADDR + info->fb_pa + info->fb_size;
+    uint64_t fb_end = fb_va + info->fb_size;
 
-    // 对齐到 2M 边界
-    uint64_t va  = fb_va & ~(SZ_2M - 1);
-    uint64_t end = (fb_end + SZ_2M - 1) & ~(SZ_2M - 1);
+    // 从 direct map 中移除
+    mmu_unmap(g_kernel_vm.table, fb_va, fb_end);
 
-    uint64_t pml4_pa = g_kernel_vm.table;
-    uint64_t *pml4 = (uint64_t*)(DIRECT_MAP_ADDR + pml4_pa);
+    // 在 MMIO_WC_BASE 区域用 WC 属性重新映射
+    uint8_t *wc_va = (uint8_t*)MMIO_WC_BASE;
+    mmu_map(g_kernel_vm.table, (size_t)wc_va, (size_t)wc_va + info->fb_size,
+            info->fb_pa, MMU_WRITE | MMU_WC);
 
-    for (; va < end; va += SZ_2M) {
-        int pml4_idx = (va >> 39) & 0x1ff;
-        if (!(pml4[pml4_idx] & PT_P)) {
-            logk("bga: PML4[%d] not present, cannot set WC\n", pml4_idx);
-            return;
-        }
-
-        uint64_t *pdp = (uint64_t*)(DIRECT_MAP_ADDR + (pml4[pml4_idx] & PT_ADDR));
-        int pdp_idx = (va >> 30) & 0x1ff;
-        if (!(pdp[pdp_idx] & PT_P)) {
-            logk("bga: PDP[%d] not present, cannot set WC\n", pdp_idx);
-            return;
-        }
-
-        // 如果 direct map 此处是 1G 大页，先拆成 2M 页
-        if (pdp[pdp_idx] & PT_PS) {
-            uint64_t pa_1g = pdp[pdp_idx] & PT_ADDR;
-            uint64_t attrs = pdp[pdp_idx] & ~(PT_ADDR | PT_PS);
-
-            uint64_t new_pd = PAGE_ALLOC(0, PT_PGTBL);
-            if (!new_pd) {
-                logk("bga: failed to alloc PD for 1G split\n");
-                return;
-            }
-            kmemset((void*)(DIRECT_MAP_ADDR + new_pd), 0, SZ_4K);
-
-            uint64_t *pd = (uint64_t*)(DIRECT_MAP_ADDR + new_pd);
-            for (int i = 0; i < 512; ++i) {
-                pd[i] = (pa_1g + i * SZ_2M) | PT_P | PT_PS | attrs;
-            }
-
-            // 将 PDPE 改为指向 PD 的非叶条目
-            pdp[pdp_idx] = new_pd | PT_P | 0x6;  // US+RW，权限由末级 PDE 决定
-        }
-
-        uint64_t *pd = (uint64_t*)(DIRECT_MAP_ADDR + (pdp[pdp_idx] & PT_ADDR));
-        int pd_idx = (va >> 21) & 0x1ff;
-
-        if (pd[pd_idx] & PT_P) {
-            pd[pd_idx] |= PT_PAT_2M;
-            ASMV("invlpg (%0)" :: "r"(va) : "memory");
-        }
-    }
-
-    logk("bga: WC enabled for fb [0x%llx, 0x%llx)\n", fb_va, fb_end);
+    logk("bga: WC mapped [%p, %p) -> PA 0x%llx\n", wc_va, wc_va + info->fb_size, info->fb_pa);
+    return wc_va;
 }
