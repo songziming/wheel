@@ -408,6 +408,8 @@ INIT_TEXT void cpu_features_detect() {
     g_cpu_features |= (c & (1U << 21)) ? CPU_FEATURE_X2APIC  : 0;
     g_cpu_features |= (c & (1U << 24)) ? CPU_FEATURE_TSC_DDL : 0;
     g_cpu_features |= (d & (1U <<  4)) ? CPU_FEATURE_TSC     : 0;
+    // g_cpu_features |= (d & (1U << 13)) ? CPU_FEATURE_PGE     : 0;
+    // g_cpu_features |= (d & (1U << 16)) ? CPU_FEATURE_PAT     : 0;
     g_cpu_features |= (d & (1U << 28)) ? CPU_FEATURE_HT      : 0;
     // if (g_cpu_features & CPU_FEATURE_HT) {
     //     g_num_ids = (b >> 16) & 0xff;
@@ -520,7 +522,9 @@ void cpu_features_show() {
         { "tsc",        CPU_FEATURE_TSC        },
         { "ht",         CPU_FEATURE_HT         },
         { "nx",         CPU_FEATURE_NX         },
-        { "pdpe1gb",    CPU_FEATURE_1G         },
+        { "1g",         CPU_FEATURE_1G         },
+        // { "pg",         CPU_FEATURE_PGE        },
+        // { "pat",        CPU_FEATURE_PAT        },
         { "arat",       CPU_FEATURE_ARAT       },
         { "incpcid",    CPU_FEATURE_INVPCID    },
         { "smep",       CPU_FEATURE_SMEP       },

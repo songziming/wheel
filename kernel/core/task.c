@@ -15,19 +15,16 @@ static PERCPU_BSS rdyq_t g_rdy_queue; // ready-queue
 PERCPU_DATA task_t *g_prev_task = NULL;
 PERCPU_BSS task_t *g_next_task; // also guarded by rdyq->lock
 
-
 // 标记空载状态，新任务优先放在空载 CPU 上
 static _Atomic uint64_t g_idle_mask;
 
+// 每个 CPU 就绪队列中非 idle 任务的数量，在 rdyq lock 内修改
+static PERCPU_BSS int g_rdy_count;
 
-// TODO 负载均衡，记录哪个 CPU 负载最高最低
-// 任务就绪时，选择负载最低的 CPU
-// 某个 CPU 变为空载时，从负载最高的 CPU 迁移任务
+// 收到 IPI_MIGRATE 的 CPU 应将一个任务迁移到此目标 CPU，-1 表示没有请求
+static PERCPU_BSS int g_migrate_target;
 
-// TODO 负载均衡锁需要支持 read-write lock
-// 每个 cpu 执行 reschedule 时，获取 read-lock，多个 reader 可以共存
-// 某个 cpu 执行到 idle，获取 writer-lock，独占临界区，检查其他 cpu 的就绪队列
-// static rwspin_t g_balance_lock;
+static void sched_request_migrate();
 
 
 
@@ -105,6 +102,7 @@ void sched_init() {
     atomic_fetch_or(&g_idle_mask, 1U << cpu_index());
     THISCPU_SET(g_prev_task, &g_dummy_task);
     THISCPU_SET(g_next_task, idle);
+    THISCPU_SET(g_migrate_target, -1);
 }
 
 // run in ISR
@@ -128,13 +126,16 @@ void sched_process() {
     } else {
         task = containerof(rdyq_head(q), task_t, dl);
         if (31 == task->priority) {
-            // TODO 从其他 CPU 迁移任务
             atomic_fetch_or(&g_idle_mask, 1U << cpu_index());
         }
     }
 
     THISCPU_SET(g_next_task, task);
     irq_spin_give(&q->lock, key);
+
+    if (31 == task->priority) {
+        sched_request_migrate();
+    }
 }
 
 // // 停止的任务必须位于当前 CPU，要么
@@ -164,6 +165,7 @@ task_t *sched_stop_self(uint32_t bits) {
     task_t *self = THISCPU_GET(g_prev_task);
     rdyq_remove(q, &self->dl, self->priority);
     self->state |= bits;
+    (*THISCPU(&g_rdy_count))--;
 
     dlnode_t *head = rdyq_head(q);
     task_t *next = containerof(head, task_t, dl);
@@ -175,6 +177,96 @@ task_t *sched_stop_self(uint32_t bits) {
     irq_spin_give(&q->lock, key);
 
     return self;
+}
+
+//------------------------------------------------------------------------------
+// migration
+//------------------------------------------------------------------------------
+
+// 挑选负载最高的 CPU（就绪任务数量最多），发送迁移请求
+// 在 sched_process() 选到 idle 后调用，不持有 rdyq lock
+static void sched_request_migrate() {
+    int me = cpu_index();
+    int victim = -1;
+    int max_count = 0;
+
+    for (int i = 0; i < cpu_count(); i++) {
+        if (i == me) continue;
+        int cnt = *PERCPU(i, &g_rdy_count);
+        if (cnt > max_count) {
+            max_count = cnt;
+            victim = i;
+        }
+    }
+
+    if (victim < 0) return;
+
+    *PERCPU(victim, &g_migrate_target) = me;
+    arch_send_ipi(victim, VEC_IPI_MIGRATE);
+}
+
+// 响应 VEC_IPI_MIGRATE：从自己的就绪队列中选一个任务捐给请求方
+// 在请求方 CPU 的 ISR 上下文中执行
+void sched_try_migrate() {
+    int me = cpu_index();
+    int target = *THISCPU(&g_migrate_target);
+    *THISCPU(&g_migrate_target) = -1;
+
+    if (target < 0 || target >= cpu_count() || target == me) return;
+
+    rdyq_t *myq = THISCPU(&g_rdy_queue);
+    int key = irq_spin_take(&myq->lock);
+
+    task_t *prev = THISCPU_GET(g_prev_task);
+    task_t *dntd = NULL;  // donated
+
+    // 从低优先级找可迁移任务：无 affinity、非 g_prev_task、非 idle
+    for (int prio = 30; prio >= 0; prio--) {
+        if (NULL == myq->heads[prio]) continue;
+        dlnode_t *dl = myq->heads[prio];
+        dlnode_t *start = dl;
+        do {
+            task_t *t = containerof(dl, task_t, dl);
+            if (t != prev && t->affinity < 0) {
+                dntd = t;
+                break;
+            }
+            dl = dl->next;
+        } while (dl != start);
+        if (dntd) {
+            rdyq_remove(myq, &dntd->dl, prio);
+            break;
+        }
+    }
+
+    if (dntd) {
+        (*THISCPU(&g_rdy_count))--;
+        if (dntd == THISCPU_GET(g_next_task)) {
+            dlnode_t *head = rdyq_head(myq);
+            THISCPU_SET(g_next_task, containerof(head, task_t, dl));
+        }
+    }
+
+    irq_spin_give(&myq->lock, key);
+
+    if (NULL == dntd) return;
+
+    // 插入目标 CPU 的就绪队列
+    rdyq_t *tq = PERCPU(target, &g_rdy_queue);
+    key = irq_spin_take(&tq->lock);
+
+    rdyq_insert(tq, &dntd->dl, dntd->priority);
+    (*PERCPU(target, &g_rdy_count))++;
+
+    task_t *tgt_idle = PERCPU(target, &g_idle_task);
+    if (*PERCPU(target, &g_next_task) == tgt_idle) {
+        atomic_fetch_and(&g_idle_mask, ~(1ULL << target));
+    }
+    *PERCPU(target, &g_next_task) = containerof(rdyq_head(tq), task_t, dl);
+
+    irq_spin_give(&tq->lock, key);
+
+    arch_send_ipi(target, VEC_IPI_RESCHED);
 }
 
 // 在当前 CPU 恢复运行这个 task
@@ -193,6 +285,7 @@ void sched_cont(task_t *task, uint32_t bits) {
     int key = irq_spin_take(&q->lock);
 
     rdyq_insert(q, &task->dl, task->priority);
+    (*THISCPU(&g_rdy_count))++;
     task_t *next = containerof(rdyq_head(q), task_t, dl);
     if (THISCPU_GET(g_next_task) == THISCPU(&g_idle_task)) {
         atomic_fetch_and(&g_idle_mask, ~(1U << cpu_index()));
@@ -218,6 +311,7 @@ void sched_cont_on(task_t *task, uint32_t bits, int cpu) {
     int key = irq_spin_take(&q->lock);
 
     rdyq_insert(q, &task->dl, task->priority);
+    (*PERCPU(cpu, &g_rdy_count))++;
     task_t *next = containerof(rdyq_head(q), task_t, dl);
     if (*PERCPU(cpu, &g_next_task) == PERCPU(cpu, &g_idle_task)) {
         atomic_fetch_and(&g_idle_mask, ~(1U << cpu));

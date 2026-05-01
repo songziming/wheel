@@ -151,6 +151,11 @@ static void on_resched(int vec UNUSED, regs_t *f UNUSED) {
     // 无需任何动作，中断返回过程自然会切换任务
 }
 
+static void on_migrate(int vec UNUSED, regs_t *f UNUSED) {
+    g_write(REG_EOI, 0);
+    sched_try_migrate();
+}
+
 static void on_stopall(int vec UNUSED, regs_t *f UNUSED) {
     g_write(REG_EOI, 0);
     logk("[CPU-%d stopped]\n", cpu_index());
@@ -195,6 +200,7 @@ INIT_TEXT void loapic_init() {
     //      定义专用的 naked isr function，然后修改 IDT
     irq_handlers[VEC_IPI_RESCHED] = on_resched;
     irq_handlers[VEC_IPI_STOPALL] = on_stopall;
+    irq_handlers[VEC_IPI_MIGRATE] = on_migrate;
     irq_handlers[VEC_LOAPIC_TIMER] = on_timer;
     irq_handlers[VEC_LOAPIC_ERROR] = on_error;
     irq_handlers[VEC_LOAPIC_THERMAL] = on_thermal;
