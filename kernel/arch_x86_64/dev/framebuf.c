@@ -1,4 +1,5 @@
 #include "framebuf.h"
+#include "bga.h"
 
 #include <arch_config.h>
 #include <kstring.h>
@@ -21,7 +22,6 @@ static CONST uint32_t g_cols  = 0;  // 屏幕宽度（单位：像素）
 static CONST uint64_t g_pitch = 0;  // 一行多少字节，可能不是整数个像素
 
 // TODO framebuf 的页表映射应该使用 WC (Write-Combining)
-
 static CONST uint8_t *g_addr = NULL; // framebuffer 映射的虚拟地址
 static CONST uint8_t *g_back = NULL; // 离屏缓冲区
 
@@ -68,6 +68,19 @@ static void framebuf_draw_caret(int fg, int r, int c) {
 
 INIT_TEXT void framebuf_init(uint32_t rows, uint32_t cols, uint32_t pitch, uint32_t addr) {
     // spin_init(&g_framebuf_lock);
+
+    // 虚拟环境下，调用 BGA 设置虚拟缓冲区，利用硬件滚屏功能
+    if (bga_check()) {
+        // 虚拟机，有 BGA 支持，我们可以自己选择宽高 1280x960
+        // 分成三个虚拟屏，
+        if (bga_config(1280, 960, 32, 1280, 2*960)) {
+            //
+            rows = 960;
+            cols = 1280;
+        } else {
+            bga_disable();
+        }
+    }
 
     g_rows = rows;
     g_cols = cols;

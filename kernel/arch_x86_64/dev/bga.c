@@ -44,15 +44,41 @@
 #define BGA_PORT_INDEX  0x01CE  // 索引寄存器（选择要操作的寄存器号）
 #define BGA_PORT_DATA   0x01CF  // 数据寄存器（读写由索引寄存器选中的寄存器）
 
-// PAT (Page Attribute Table) MSR — 用于配置 WC (Write-Combining)
-#define IA32_PAT  0x0277
+// BGA 寄存器索引（通过 0x01CE/0x01CF 端口访问）
+#define BGA_INDEX_ID            0
+#define BGA_INDEX_XRES          1
+#define BGA_INDEX_YRES          2
+#define BGA_INDEX_BPP           3
+#define BGA_INDEX_ENABLE        4
+#define BGA_INDEX_BANK          5
+#define BGA_INDEX_VIRT_WIDTH    6
+#define BGA_INDEX_VIRT_HEIGHT   7
+#define BGA_INDEX_X_OFFSET      8
+#define BGA_INDEX_Y_OFFSET      9
 
-// PA4 位于 PAT MSR 的 bit 16-18，{PAT, PCD, PWT} = {1,0,0} = 4
-// 将 PA4 设为 WC(0x01) 后，在 PTE/PDE 中设置 PAT 位即可获得 WC 属性
-#define PAT_PA4_SHIFT  16ULL
-#define PAT_WC          0x01ULL
+// BGA 版本 ID（从 VBE_INDEX_ID 寄存器读出）
+#define BGA_ID0  0xB0C0
+#define BGA_ID1  0xB0C1
+#define BGA_ID2  0xB0C2
+#define BGA_ID3  0xB0C3
+#define BGA_ID4  0xB0C4
+#define BGA_ID5  0xB0C5
 
-static CONST int g_pat_ready = 0;
+// BGA BPP 寄存器值
+#define BGA_BPP_4   0x04
+#define BGA_BPP_8   0x08
+#define BGA_BPP_15  0x0F
+#define BGA_BPP_16  0x10
+#define BGA_BPP_24  0x18
+#define BGA_BPP_32  0x20
+
+// BGA ENABLE 寄存器 flags
+#define BGA_DISABLED      0x00
+#define BGA_ENABLED       0x01
+#define BGA_LFB_ENABLED   0x40
+#define BGA_NOCLEARMEM    0x80
+
+
 
 //-----------------------------------------------------------------------------
 // BGA 寄存器 IO
@@ -72,6 +98,17 @@ static uint16_t bga_read(uint16_t index) {
 // PAT 配置 — 为 WC 映射做准备
 //-----------------------------------------------------------------------------
 
+// PAT (Page Attribute Table) MSR — 用于配置 WC (Write-Combining)
+#define IA32_PAT  0x0277
+
+// PA4 位于 PAT MSR 的 bit 16-18，{PAT, PCD, PWT} = {1,0,0} = 4
+// 将 PA4 设为 WC(0x01) 后，在 PTE/PDE 中设置 PAT 位即可获得 WC 属性
+#define PAT_PA4_SHIFT  16ULL
+#define PAT_WC          0x01ULL
+
+static CONST int g_pat_ready = 0;
+
+// 将 ID=4 的 PAT entry 设为 Write-Combined
 static void bga_enable_pat() {
     if (g_pat_ready) {
         return;
@@ -86,6 +123,42 @@ static void bga_enable_pat() {
 //-----------------------------------------------------------------------------
 // 初始化
 //-----------------------------------------------------------------------------
+
+// 读取 BGA ID 确认硬件存在，返回 1 表示存在
+INIT_TEXT int bga_check() {
+    uint16_t id = bga_read(BGA_INDEX_ID);
+    if (BGA_ID0 <= id || id <= BGA_ID5) {
+        logk("found BGA, version 0x%x\n", id);
+        return 1;
+    }
+    return 0;
+}
+
+// 配置显示模式，返回 1 表示成功
+INIT_TEXT int bga_config(uint32_t w, uint32_t h, uint32_t bpp, uint32_t vw, uint32_t vh) {
+    // 检查参数，总大小不能超过 16MB
+    if ((vw * vh * bpp / 8) > BGA_FB_SIZE) {
+        return 0;
+    }
+
+    bga_write(BGA_INDEX_ENABLE, 0);  // 先禁用 VBE 扩展
+
+    bga_write(BGA_INDEX_XRES, w);
+    bga_write(BGA_INDEX_YRES, h);
+    bga_write(BGA_INDEX_BPP, bpp);
+
+    // 虚拟分辨率：期望大于物理分辨率，用于硬件滚屏（横纵都能滚动）
+    bga_write(BGA_INDEX_VIRT_WIDTH, vw);
+    bga_write(BGA_INDEX_VIRT_HEIGHT, vh);
+    bga_write(BGA_INDEX_X_OFFSET, 0);
+    bga_write(BGA_INDEX_Y_OFFSET, 0);
+
+    bga_write(BGA_INDEX_ENABLE, BGA_ENABLED | BGA_LFB_ENABLED); // 重新打开 VBE
+}
+
+INIT_TEXT void bga_disable() {
+    bga_write(BGA_INDEX_ENABLE, 0);
+}
 
 INIT_TEXT int bga_init(bga_info_t *info, uint32_t width, uint32_t height,
                        uint32_t bpp, uint32_t virt_height) {
@@ -108,8 +181,8 @@ INIT_TEXT int bga_init(bga_info_t *info, uint32_t width, uint32_t height,
     info->bpp  = bga_read(BGA_INDEX_BPP);
 
     // QEMU/Bochs 默认 framebuffer 物理地址（即 PCI BAR0 的值）
-    info->fb_pa   = BGA_DEFAULT_FB_ADDR;
-    info->fb_size = BGA_VIDEO_MEMORY_BYTES;
+    info->fb_pa   = BGA_FB_ADDR;
+    info->fb_size = BGA_FB_SIZE;
 
     // 如果指定了新分辨率，切换显示模式
     if (width && height && bpp) {

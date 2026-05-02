@@ -4,44 +4,9 @@
 #include <wheel.h>
 #include <arch_config.h>
 
-// BGA 寄存器索引（通过 0x01CE/0x01CF 端口访问）
-#define BGA_INDEX_ID            0
-#define BGA_INDEX_XRES          1
-#define BGA_INDEX_YRES          2
-#define BGA_INDEX_BPP           3
-#define BGA_INDEX_ENABLE        4
-#define BGA_INDEX_BANK          5
-#define BGA_INDEX_VIRT_WIDTH    6
-#define BGA_INDEX_VIRT_HEIGHT   7
-#define BGA_INDEX_X_OFFSET      8
-#define BGA_INDEX_Y_OFFSET      9
-
-// BGA 版本 ID（从 VBE_INDEX_ID 寄存器读出）
-#define BGA_ID0  0xB0C0
-#define BGA_ID1  0xB0C1
-#define BGA_ID2  0xB0C2
-#define BGA_ID3  0xB0C3
-#define BGA_ID4  0xB0C4
-#define BGA_ID5  0xB0C5
-
-// BGA BPP 寄存器值
-#define BGA_BPP_4   0x04
-#define BGA_BPP_8   0x08
-#define BGA_BPP_15  0x0F
-#define BGA_BPP_16  0x10
-#define BGA_BPP_24  0x18
-#define BGA_BPP_32  0x20
-
-// BGA ENABLE 寄存器 flags
-#define BGA_DISABLED      0x00
-#define BGA_ENABLED       0x01
-#define BGA_LFB_ENABLED   0x40
-#define BGA_NOCLEARMEM    0x80
-
 // BGA 默认 framebuffer 物理地址（QEMU/Bochs 默认值，PCI BAR0 也指向此处）
-#define BGA_DEFAULT_FB_ADDR      0xE0000000
-#define BGA_VIDEO_MEMORY_MB      16
-#define BGA_VIDEO_MEMORY_BYTES   (BGA_VIDEO_MEMORY_MB * 1024 * 1024)
+#define BGA_FB_ADDR     0xe0000000
+#define BGA_FB_SIZE     (16U << 20)
 
 typedef struct bga_info {
     uint16_t id;          // BGA 版本 ID（BGA_ID0 ~ BGA_ID5）
@@ -53,6 +18,11 @@ typedef struct bga_info {
     uint64_t fb_pa;       // framebuffer 物理地址
     uint64_t fb_size;     // framebuffer 大小（字节）
 } bga_info_t;
+
+
+INIT_TEXT int bga_check();  // 探测 BGA
+INIT_TEXT int bga_config(uint32_t w, uint32_t h, uint32_t bpp, uint32_t vw, uint32_t vh);
+INIT_TEXT void bga_disable();
 
 // 探测 BGA 并设置显示模式。
 // virt_height 为虚拟高度（像素），设为大于 height 的值可启用硬件滚屏。
