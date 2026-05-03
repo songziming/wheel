@@ -12,6 +12,7 @@ typedef struct fbfont {
 } fbfont_t;
 
 INIT_TEXT void framebuf_init(uint32_t rows, uint32_t cols, uint32_t pitch, uint32_t addr);
+INIT_TEXT void framebuf_remap_wc();
 void framebuf_setfg(uint32_t fg);
 void framebuf_puts(const char *s, size_t n);
 

@@ -127,7 +127,7 @@ static void bga_enable_pat() {
 // 读取 BGA ID 确认硬件存在，返回 1 表示存在
 INIT_TEXT int bga_check() {
     uint16_t id = bga_read(BGA_INDEX_ID);
-    if (BGA_ID0 <= id || id <= BGA_ID5) {
+    if ((BGA_ID0 <= id) && (id <= BGA_ID5)) {
         logk("found BGA, version 0x%x\n", id);
         return 1;
     }
@@ -154,11 +154,48 @@ INIT_TEXT int bga_config(uint32_t w, uint32_t h, uint32_t bpp, uint32_t vw, uint
     bga_write(BGA_INDEX_Y_OFFSET, 0);
 
     bga_write(BGA_INDEX_ENABLE, BGA_ENABLED | BGA_LFB_ENABLED); // 重新打开 VBE
+    return 1;
 }
 
 INIT_TEXT void bga_disable() {
     bga_write(BGA_INDEX_ENABLE, 0);
 }
+
+//-----------------------------------------------------------------------------
+// 硬件滚屏
+//-----------------------------------------------------------------------------
+
+// 设置显示窗口在虚拟 framebuffer 中的偏移。
+// 改变后硬件立即从新的起始位置扫描输出，无需 memcpy。
+void bga_set_offset(uint16_t x, uint16_t y) {
+    bga_write(BGA_INDEX_X_OFFSET, x);
+    bga_write(BGA_INDEX_Y_OFFSET, y);
+}
+
+
+
+
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+
+typedef struct bga_info {
+    uint16_t id;          // BGA 版本 ID（BGA_ID0 ~ BGA_ID5）
+    uint32_t xres;        // 水平分辨率（物理可见）
+    uint32_t yres;        // 垂直分辨率（物理可见）
+    uint32_t bpp;         // 每像素位数（BGA_BPP_*）
+    uint32_t pitch;       // 一行字节数（= xres * bpp/8）
+    uint32_t virt_height; // 虚拟高度（像素），>= yres，用于硬件滚屏（0 表示 = yres）
+    uint64_t fb_pa;       // framebuffer 物理地址
+    uint64_t fb_size;     // framebuffer 大小（字节）
+} bga_info_t;
+
+// 获取 framebuffer 虚拟地址（通过 direct map，仅 bga_enable_wc 调用前有效）。
+static inline uint8_t *bga_fb_ptr(bga_info_t *info) {
+    return (uint8_t*)(DIRECT_MAP_ADDR + info->fb_pa);
+}
+
 
 INIT_TEXT int bga_init(bga_info_t *info, uint32_t width, uint32_t height,
                        uint32_t bpp, uint32_t virt_height) {
@@ -220,17 +257,6 @@ INIT_TEXT int bga_init(bga_info_t *info, uint32_t width, uint32_t height,
          info->fb_pa);
 
     return 0;
-}
-
-//-----------------------------------------------------------------------------
-// 硬件滚屏
-//-----------------------------------------------------------------------------
-
-// 设置显示窗口在虚拟 framebuffer 中的偏移。
-// 改变后硬件立即从新的起始位置扫描输出，无需 memcpy。
-void bga_set_offset(uint16_t x, uint16_t y) {
-    bga_write(BGA_INDEX_X_OFFSET, x);
-    bga_write(BGA_INDEX_Y_OFFSET, y);
 }
 
 //-----------------------------------------------------------------------------

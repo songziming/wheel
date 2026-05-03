@@ -289,6 +289,11 @@ static INIT_TEXT void root_proc() {
     logk("running in-kernel-tests\n");
     test_semaphore();
 
+    for (int r = 0; r < 90; ++r) {
+        logk("testing line #%d\n", r);
+        loapic_timer_busywait(100000);
+    }
+
     logk("stop system\n");
     arch_send_ipi(-1, VEC_IPI_STOPALL);
 
