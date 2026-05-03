@@ -5,39 +5,25 @@
 // 最大显存大小 16MB（映射的 framebuffer 大小）
 // BPP 允许的取值：4, 8, 15, 16, 24, 32
 
-// 严格来说，应该通说 PCI 读取 bar0，获得 framebuffer 映射地址
-// 但我们知道 Bochs/QEMU 映射地址必然是 0xE0000000，所以硬编码
-//
-//
+// qemu 可以通过 PCI BAR0 获取 framebuffer 物理地址
+// Bochs 则没有 pci 设备，使用固定地址
+
 // 支持硬件滚屏：设置 virt_height > height 可启用，之后通过 bga_set_offset()
 // 改变显示起始行，无需 memcpy 即可滚屏。
-//
-// 使用示例（在 sys_init() 中 framebuffer 解析失败时调用）：
-//
-//   #include <dev/bga.h>
-//   #include <dev/framebuf.h>
-//
-//   bga_info_t bga;
-//   // virt_height = 768 * 2，即可容纳两个屏幕的内容，实现硬件滚屏
-//   if (!g_fgcolor && !bga_init(&bga, 1024, 768, BGA_BPP_32, 768 * 2)) {
-//       g_fgcolor = 0x00ffffff;
-//       framebuf_init(bga.yres, bga.xres, bga.pitch, (uint32_t)bga.fb_pa);
-//   }
-//
-//   滚屏时调用（在 framebuf 滚屏逻辑中）：
-//       bga_set_offset(0, y_offset);  // 无需 memcpy！
-//
-// mem_init() 完成后调用 bga_enable_wc() 返回新 VA，替换 direct map 地址。
-// 内部使用 mmu_unmap + mmu_map 将 framebuffer 从 direct map (WB) 移至
-// MMIO_WC_BASE (WC)，消除双映射冲突且获得写合并性能。
+
 
 #include "bga.h"
+#include "pci.h"
 
 #include <cpu/rw.h>
 #include <arch_config.h>
 #include <debug.h>
 #include <arch_api.h>
 #include <vmspace.h>
+
+// BGA PCI 设备标识
+#define BGA_PCI_VENDOR  0x1234
+#define BGA_PCI_DEVICE  0x1111
 
 
 // BGA 通过两个 16-bit IO 端口通信
@@ -121,6 +107,10 @@ static void bga_enable_pat() {
 }
 
 //-----------------------------------------------------------------------------
+// PCI 配置空间 — 读取 BAR0 获取 framebuffer 物理地址
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
 // 初始化
 //-----------------------------------------------------------------------------
 
@@ -132,6 +122,24 @@ INIT_TEXT int bga_check() {
         return 1;
     }
     return 0;
+}
+
+// 扫描 bus 0 寻找 BGA 设备，读取 BAR0 返回 framebuffer 物理地址。
+// 未找到返回 0，调用方应回退到 BGA_FB_FALLBACK。
+INIT_TEXT uint32_t bga_get_address() {
+    for (int dev = 0; dev < 32; dev++) {
+        uint32_t id = pci_read(0, dev, 0, 0x00);
+        uint16_t vendor = id & 0xffff;
+        uint16_t device = id >> 16;
+        logk("pci-dev vnd=%x dev=%x\n", vendor, device);
+        if (vendor == BGA_PCI_VENDOR && device == BGA_PCI_DEVICE) {
+            uint32_t bar0 = pci_read(0, dev, 0, 0x10);
+            logk("bga: found at 00:%02x.0, BAR0=0x%x\n", dev, bar0);
+            return bar0 & ~0xfULL;
+        }
+    }
+    logk("not found bga in PCI\n");
+    return BGA_FB_FALLBACK;
 }
 
 // 配置显示模式，返回 1 表示成功
@@ -192,9 +200,9 @@ typedef struct bga_info {
 } bga_info_t;
 
 // 获取 framebuffer 虚拟地址（通过 direct map，仅 bga_enable_wc 调用前有效）。
-static inline uint8_t *bga_fb_ptr(bga_info_t *info) {
-    return (uint8_t*)(DIRECT_MAP_ADDR + info->fb_pa);
-}
+// static inline uint8_t *bga_fb_ptr(bga_info_t *info) {
+//     return (uint8_t*)(DIRECT_MAP_ADDR + info->fb_pa);
+// }
 
 
 INIT_TEXT int bga_init(bga_info_t *info, uint32_t width, uint32_t height,
@@ -217,8 +225,11 @@ INIT_TEXT int bga_init(bga_info_t *info, uint32_t width, uint32_t height,
     info->yres = bga_read(BGA_INDEX_YRES);
     info->bpp  = bga_read(BGA_INDEX_BPP);
 
-    // QEMU/Bochs 默认 framebuffer 物理地址（即 PCI BAR0 的值）
-    info->fb_pa   = BGA_FB_ADDR;
+    // 从 PCI BAR0 读取 framebuffer 物理地址，失败则回退
+    info->fb_pa = bga_get_address();
+    if (!info->fb_pa) {
+        info->fb_pa = BGA_FB_FALLBACK;
+    }
     info->fb_size = BGA_FB_SIZE;
 
     // 如果指定了新分辨率，切换显示模式

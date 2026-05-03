@@ -7,6 +7,8 @@
 qemu-system-x86_64 -cpu max -smp 4 -m 256 ^
     %HARD_DRIVE% -cdrom build/cd.iso -boot d ^
     -device isa-debug-exit,iobase=0xf4,iosize=0x04 ^
-    -vga vmware -gdb tcp::4444 -serial stdio
+    -vga std -gdb tcp::4444 -serial stdio
+
+REM -vga vmware 可以使用 vmware-svga
 
 @ endlocal

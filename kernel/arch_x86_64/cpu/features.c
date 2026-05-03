@@ -364,9 +364,10 @@ static INIT_TEXT void intel_detect_vtd() {
     }
 
     // VT-d 由 ACPI DMAR 表宣告，存在 DMAR 表即表示支持
-    if (acpi_table_find("DMAR", 0)) {
-        g_cpu_features |= CPU_FEATURE_VTD;
-    }
+    // TODO 运行此代码时，acpi 尚未解析，暂时不能获取 DMAR 表
+    // if (acpi_table_find("DMAR", 0)) {
+    //     g_cpu_features |= CPU_FEATURE_VTD;
+    // }
 }
 
 

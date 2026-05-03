@@ -193,7 +193,7 @@ INIT_TEXT void framebuf_init(uint32_t rows, uint32_t cols, uint32_t pitch, uint3
             rows = 960;
             cols = 1280;
             pitch = 1280 * 4;    // 32-bit
-            addr = BGA_FB_ADDR;
+            addr = bga_get_address();
             has_bga = 1;
         } else {
             bga_disable();

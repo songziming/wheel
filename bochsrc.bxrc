@@ -36,11 +36,11 @@ cpuid: vmx=1
 print_timestamps: enabled=0
 debugger_log: -
 magic_break: enabled=1
-port_e9_hack: enabled=0
+port_e9_hack: enabled=1
 private_colormap: enabled=0
 clock: sync=none, time0=local, rtc_sync=0
 # no cmosimage
-log: -
+log: build/bochs.log
 logprefix: %t%e%d
 debug: action=ignore
 info: action=report

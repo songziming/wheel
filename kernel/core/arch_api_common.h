@@ -44,8 +44,8 @@ size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs);
 void   mmu_map(size_t tbl, size_t va, size_t end, size_t pa, mmu_attr_t attrs);
 void   mmu_unmap(size_t tbl, size_t va, size_t end);
 
-// device
-uint32_t pci_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg);
-void pci_write(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg, uint32_t data);
+// // device
+// uint32_t pci_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg);
+// void pci_write(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg, uint32_t data);
 
 #endif // ARCH_API_COMMON_H
