@@ -40,6 +40,8 @@ int arch_unwind(size_t *addrs, int max) {
 }
 
 
+void arch_task_entry(); // defined in arch_entries.S
+
 // 填写栈顶的寄存器
 void arch_task_init(task_t *task, size_t entry, size_t stack_top) {
     stack_top &= ~15UL;  // 栈顶按 16 字节对齐
@@ -55,8 +57,10 @@ void arch_task_init(task_t *task, size_t entry, size_t stack_top) {
     regs->ss = 0x10;
     regs->rflags = 0x0200UL;    // 开启中断
     regs->rsp = stack_top;
+    // regs->rip = (uint64_t)arch_task_entry;
     regs->rip = (uint64_t)entry;
     regs->rdi = (uint64_t)task;
+    // regs->rsi = (uint64_t)entry;
 
     task->regs = regs;
 }

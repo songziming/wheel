@@ -59,5 +59,6 @@ void sched_cont_on(task_t *task, uint32_t bits, int cpu);
 
 void task_create(task_t *task, const char *name, int priority, void *entry);
 void task_start(task_t *task);
+NORETURN void task_exit();
 
 #endif // CORE_TASK_H

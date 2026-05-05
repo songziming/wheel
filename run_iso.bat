@@ -9,6 +9,6 @@ qemu-system-x86_64 -cpu max -smp 4 -m 256 ^
     -device isa-debug-exit,iobase=0xf4,iosize=0x04 ^
     -vga std -gdb tcp::4444 -serial stdio
 
-REM -vga vmware 可以使用 vmware-svga
+@REM -vga vmware 可以使用 vmware-svga
 
 @ endlocal

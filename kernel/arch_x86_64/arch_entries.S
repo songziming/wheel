@@ -3,6 +3,7 @@
 .global isr_entries
 .global syscall_entry
 .global arch_task_switch
+.global arch_task_entry
 
 .extern g_int_depth
 .extern g_int_stack_top
@@ -10,6 +11,7 @@
 .extern g_next_task
 .extern irq_handlers
 .extern work_flush
+.extern task_exit
 
 .altmacro // 需要在 macro 和循环里使用变量
 
@@ -242,3 +244,8 @@ arch_task_switch:
 
 resume:
     ret
+
+
+arch_task_entry:
+    call    *%rsi
+    call    task_exit

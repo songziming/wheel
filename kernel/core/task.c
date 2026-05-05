@@ -1,5 +1,6 @@
 #include "task.h"
 #include <spin.h>
+#include <work.h>
 #include <kstring.h>
 #include <debug.h>
 
@@ -24,7 +25,13 @@ static PERCPU_BSS int g_rdy_count;
 // 收到 IPI_MIGRATE 的 CPU 应将一个任务迁移到此目标 CPU，-1 表示没有请求
 static PERCPU_BSS int g_migrate_target;
 
+// 僵尸任务链表，等待回收栈和 TCB
+static spin_t g_zombie_lock = SPIN_INIT;
+static dlnode_t g_zombie_list;
+static PERCPU_BSS work_t g_reap_work;
+
 static void sched_request_migrate();
+static void reap_work_func(work_t *wk UNUSED);
 
 
 
@@ -98,6 +105,10 @@ void sched_init() {
     task_create(idle, "idle", 31, idle_proc);
     idle->affinity = cpu_index();
     rdyq_insert(q, &idle->dl, 31);
+
+    if (0 == cpu_index()) {
+        dl_init_circular(&g_zombie_list);
+    }
 
     atomic_fetch_or(&g_idle_mask, 1U << cpu_index());
     THISCPU_SET(g_prev_task, &g_dummy_task);
@@ -298,8 +309,12 @@ void sched_cont(task_t *task, uint32_t bits) {
 
 // 在另一个 cpu 上启动运行任务
 void sched_cont_on(task_t *task, uint32_t bits, int cpu) {
-    ASSERT(cpu_index() != cpu);
+    ASSERT(TS_READY != task->state);
     ASSERT(task->affinity < 0 || task->affinity == cpu);
+    if (cpu_index() == cpu) {
+        sched_cont(task, bits);
+        return;
+    }
 
     task->state &= ~bits;
     if (TS_READY != task->state) {
@@ -355,10 +370,16 @@ void task_create(task_t *task, const char *name, int priority, void *entry) {
 }
 
 void task_start(task_t *task) {
+    // int cpu = task->affinity;
+    // if (cpu < 0) {
+    //     uint64_t idle_mask = atomic_load(&g_idle_mask);
+    //     uint64_t this_mask = 1ULL << cpu_index();
+    // }
     if (task->affinity >= 0) {
         if (task->affinity == cpu_index()) {
             sched_cont(task, TS_STOPPED);
         } else {
+            // logk("2 starting task %s on %d\n", task->name, task->affinity);
             sched_cont_on(task, TS_STOPPED, task->affinity);
             arch_send_ipi(task->affinity, VEC_IPI_RESCHED);
         }
@@ -377,6 +398,56 @@ void task_start(task_t *task) {
 
     // 在另一个 cpu 上运行任务
     int cpu = __builtin_ctzll(idle_mask);
+    // logk("3 starting task %s on %d\n", task->name, cpu);
     sched_cont_on(task, TS_STOPPED, cpu);
     arch_send_ipi(cpu, VEC_IPI_RESCHED); // 立即唤醒
+}
+
+//------------------------------------------------------------------------------
+// task exit & cleanup
+//------------------------------------------------------------------------------
+
+// 回收已退出任务的资源，必须在中断栈或非当前任务的上下文中调用
+static void task_free(task_t *task) {
+    vmspace_remove(&g_kernel_vm, &task->stack);
+
+    // TODO: 回收 TCB（当 TCB 动态分配时）
+    // task_t 目前是静态分配的，以后若改用 slab 或动态分配，
+    // 在此处将 task 归还给分配器。
+}
+
+// work 回调：收割僵尸链表上所有等待回收的任务
+// 运行在中断栈上，因此可以安全地释放 task 的栈
+static void reap_work_func(work_t *wk UNUSED) {
+    int key = irq_spin_take(&g_zombie_lock);
+    while (g_zombie_list.next != &g_zombie_list) {
+        dlnode_t *dl = g_zombie_list.next;
+        dl_remove(dl);
+        irq_spin_give(&g_zombie_lock, key);
+
+        task_free(containerof(dl, task_t, dl));
+
+        key = irq_spin_take(&g_zombie_lock);
+    }
+    irq_spin_give(&g_zombie_lock, key);
+}
+
+// 退出当前任务。将自身放入僵尸链表，注册 work 在下一次中断返回
+// 流程中回收资源（此时已在中断栈上），然后切换走，永不返回。
+NORETURN void task_exit() {
+    task_t *self = sched_stop_self(TS_STOPPED);
+
+    int key = irq_spin_take(&g_zombie_lock);
+    dl_insert_before(&self->dl, &g_zombie_list);
+    irq_spin_give(&g_zombie_lock, key);
+
+    // work 在 arch_task_switch → int_return_to_task → work_flush 中执行
+    // 此时已离开当前栈，运行在中断栈上，可以安全释放栈内存
+    work_defer(THISCPU(&g_reap_work), reap_work_func, "delete task");
+
+    arch_task_switch();
+
+    while (1) {
+        cpu_halt();
+    }
 }

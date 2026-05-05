@@ -131,7 +131,7 @@ INIT_TEXT uint32_t bga_get_address() {
         uint32_t id = pci_read(0, dev, 0, 0x00);
         uint16_t vendor = id & 0xffff;
         uint16_t device = id >> 16;
-        logk("pci-dev vnd=%x dev=%x\n", vendor, device);
+        // logk("pci-dev vnd=%x dev=%x\n", vendor, device);
         if (vendor == BGA_PCI_VENDOR && device == BGA_PCI_DEVICE) {
             uint32_t bar0 = pci_read(0, dev, 0, 0x10);
             logk("bga: found at 00:%02x.0, BAR0=0x%x\n", dev, bar0);

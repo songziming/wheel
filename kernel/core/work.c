@@ -1,6 +1,7 @@
 #include "work.h"
 #include <arch_api.h>
 #include <spin.h>
+#include <debug.h>
 
 // 类似于 ktimer，也是异步执行函数，也是在中断返回流程里执行
 // 但 workq 不关心时间，只需保证在 ISR 上下文运行
@@ -25,11 +26,13 @@ INIT_TEXT void work_init_this() {
 // 注册一个异步任务，放在队列中
 // TODO workq 严格 percpu，只有任务和ISR两个上下文
 //      不需要自旋锁，禁用中断就可以保证安全
-void work_defer(work_t *wk, void *func) {
-    dl_init_circular(&wk->dl);
+void work_defer(work_t *wk, void *func, const char *desc) {
+    // dl_init_circular(&wk->dl);
     wk->func = func;
+    wk->desc = desc;
 
     int key = cpu_int_lock();
+    ASSERT(!dl_contains(THISCPU(&g_work_q), &wk->dl));
     dl_insert_before(&wk->dl, THISCPU(&g_work_q));
     cpu_int_unlock(key);
 }
@@ -42,6 +45,7 @@ void work_flush() {
     dl_init_circular(head); // 首先把队列清空，work 里面还可以注册下一个 work
     for (; node != head; node = node->next) {
         work_t *work = containerof(node, work_t, dl);
+        logk("running work func %s\n", work->desc);
         work->func(work);
     }
 }

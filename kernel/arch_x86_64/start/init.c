@@ -286,8 +286,15 @@ static INIT_TEXT void root_proc() {
     logk("all CPU running\n");
     arch_send_ipi(-1, VEC_IPI_RESCHED);
 
-    logk("running in-kernel-tests\n");
+    logk("testing semaphore\n");
     test_semaphore();
+    // vmspace_show(&g_kernel_vm);
+    logk("testing round-robin\n");
+    test_round_robin();
+    logk("testing priority\n");
+    test_priority();
+    logk("stress scheduler\n");
+    test_sched_stress();
 
     for (int r = 0; r < 90; ++r) {
         logk("testing line #%d\n", r);
@@ -338,7 +345,7 @@ static INIT_TEXT NORETURN void ap_init(int idx) {
 
     // 注册一个 work，在切换任务时执行（使用中断栈）
     // 只有不再使用这个 init-stack，才能安全地启动另一个 CPU
-    work_defer(&g_smp_notifier, notify_ap_started);
+    work_defer(&g_smp_notifier, notify_ap_started, "notify ap start");
     arch_task_switch();
 
     while (1) {

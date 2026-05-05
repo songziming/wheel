@@ -7,11 +7,12 @@ typedef struct work work_t;
 
 struct work {
     dlnode_t dl;
+    const char *desc;
     void (*func)(work_t *self);
 };
 
 INIT_TEXT void work_init_this();
-void work_defer(work_t *wk, void *func);
+void work_defer(work_t *wk, void *func, const char *desc);
 void work_flush();
 
 #endif // WORK_H
