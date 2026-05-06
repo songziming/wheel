@@ -25,6 +25,9 @@ static PERCPU_BSS int g_rdy_count;
 // 收到 IPI_MIGRATE 的 CPU 应将一个任务迁移到此目标 CPU，-1 表示没有请求
 static PERCPU_BSS int g_migrate_target;
 
+// 抢占禁用深度，> 0 时中断返回不切换任务
+PERCPU_BSS int g_preempt_depth;
+
 // 僵尸任务链表，等待回收栈和 TCB
 static spin_t g_zombie_lock = SPIN_INIT;
 static dlnode_t g_zombie_list;
@@ -352,6 +355,14 @@ void sched_cont_on(task_t *task, uint32_t bits, int cpu) {
 //         cpu_halt();
 //     }
 // }
+
+void preempt_disable() {
+    THISCPU_SET(g_preempt_depth, THISCPU_GET(g_preempt_depth) + 1);
+}
+
+void preempt_enable() {
+    THISCPU_SET(g_preempt_depth, THISCPU_GET(g_preempt_depth) - 1);
+}
 
 void task_create(task_t *task, const char *name, int priority, void *entry) {
     // 必须分配足够大的栈，如果执行 logk，对栈的使用很大

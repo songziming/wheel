@@ -41,6 +41,10 @@ typedef struct task {
 
 extern task_t *g_prev_task;
 extern task_t *g_next_task;
+extern PERCPU_BSS int g_preempt_depth;
+
+void preempt_disable();
+void preempt_enable();
 
 
 INIT_TEXT void rdyq_init(rdyq_t *q);

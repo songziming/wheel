@@ -90,6 +90,7 @@ make cov                                         # build + run + HTML coverage
 ## Source conventions
 
 - `.c` files in `kernel/` are kernel code; `.cc` files are unit tests or mocks
+- Indent using 4 spaces
 - `INIT_TEXT` / `INIT_DATA` macros place code/data in init sections that are freed after boot
 - `PERCPU_DATA` / `PERCPU_BSS` macros mark per-CPU variables
 - `UNUSED`, `PACKED`, `NORETURN`, `PRINTF(s,a)` are defined in `core/wheel.h`

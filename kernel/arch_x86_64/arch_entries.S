@@ -186,6 +186,11 @@ int_return_to_task:
     // 即将退出最后一层中断，在这里执行异步任务
     call    work_flush
 
+    // 如果抢占被禁用，跳过任务切换
+    cmpl    $0, %gs:(g_preempt_depth)
+    cmovne  %gs:(g_prev_task), %rdi
+    jne     int_return_nested
+
     // 切换到新任务的栈顶（也可能是同一个任务）
     movq    %gs:(g_next_task), %rdi
     movq    (%rdi), %rsp // rsp = g_next_task->regs
@@ -240,6 +245,7 @@ arch_task_switch:
 
     incl    %gs:(g_int_depth)
     movq    %gs:(g_int_stack_top), %rsp // 切换到中断栈，因为要执行 work_flush
+    movl    $0, %gs:(g_preempt_depth) // arch_task_switch开抢占
     jmp     int_return_to_task
 
 resume:
@@ -247,5 +253,5 @@ resume:
 
 
 arch_task_entry:
-    call    *%rsi
+    callq   *%rsi
     call    task_exit

@@ -20,27 +20,33 @@ static task_t tc;
 static semaphore_t g_sema;
 
 static void proc_a() {
-    while (1) {
+    for (int i = 0; i < 10; ++i) {
         logk("(a-waiting-%d)", cpu_index());
         int got = semaphore_take(&g_sema, 3, FOREVER);
         logk("(a-got-%d)", got);
     }
+    logk("sema-a exit\n");
+    task_exit();
 }
 
 static void proc_b() {
-    while (1) {
+    for (int i = 0; i < 10; ++i) {
         logk("(b-waiting-%d)", cpu_index());
         int got = semaphore_take(&g_sema, 2, FOREVER);
         logk("(b-got-%d)", got);
     }
+    logk("sema-b exit\n");
+    task_exit();
 }
 
 static void proc_c() {
-    while (1) {
+    for (int i = 0; i < 10; ++i) {
         logk("(c-waiting-%d)", cpu_index());
         int got = semaphore_take(&g_sema, 1, FOREVER);
         logk("(c-got-%d)", got);
     }
+    logk("sema-c exit\n");
+    task_exit();
 }
 
 // 当前任务是生产者，三个高优先级任务是消费者
@@ -49,14 +55,13 @@ void test_semaphore() {
     task_create(&tb, "sema-B", 10, proc_b);
     task_create(&tc, "sema-C", 10, proc_c);
 
-    semaphore_init(&g_sema, 0, 10);
+    semaphore_init(&g_sema, 0, 1000);
 
     // 启动三个消费者，开始不断获取资源
-    int key = cpu_int_lock();
+    preempt_disable();
     task_start(&ta);
     task_start(&tb);
     task_start(&tc);
-    cpu_int_unlock(key);
     arch_task_switch();
 
     logk("(root-giving-2)");
@@ -67,6 +72,7 @@ void test_semaphore() {
 
     logk("\nNow back to root proc\n");
     // TODO 需要将三个 task_t 释放
+    semaphore_give(&g_sema, 1000);
 }
 
 
@@ -107,11 +113,10 @@ void test_round_robin() {
         g_rr_tasks[i].affinity = 0;
     }
 
-    int key = cpu_int_lock();
+    preempt_disable();
     for (int i = 0; i < RR_COUNT; i++) {
         task_start(&g_rr_tasks[i]);
     }
-    cpu_int_unlock(key);
 
     // rr-tasks 优先级高于 root task，需要在 work 里面启动
     // 否则第一个任务就会切换过去
@@ -148,12 +153,11 @@ void test_priority() {
     task_create(&g_prio_tasks[1], "prio-10", 10, prio_worker);
     task_create(&g_prio_tasks[2], "prio-15", 15, prio_worker);
 
-    int key = cpu_int_lock();
+    preempt_disable();
     for (int i = 0; i < 3; i++) {
         g_prio_tasks[i].affinity = 0;
         task_start(&g_prio_tasks[i]);
     }
-    cpu_int_unlock(key);
     logk("(root yield)");
     arch_task_switch();
     logk("(root back)");
@@ -206,6 +210,7 @@ void test_sched_stress() {
         int prio = 10 + (i % 5);
         task_create(&g_stress_tasks[i], "stress", prio, stress_worker);
     }
+    preempt_disable();
     for (int i = 0; i < STRESS_COUNT; i++) {
         task_start(&g_stress_tasks[i]);
     }
