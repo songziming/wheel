@@ -398,6 +398,7 @@ void task_start(task_t *task) {
 
     // 在另一个 cpu 上运行任务
     int cpu = __builtin_ctzll(idle_mask);
+    ASSERT(cpu_index() != cpu);
     // logk("3 starting task %s on %d\n", task->name, cpu);
     sched_cont_on(task, TS_STOPPED, cpu);
     arch_send_ipi(cpu, VEC_IPI_RESCHED); // 立即唤醒

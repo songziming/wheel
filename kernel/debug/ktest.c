@@ -52,9 +52,11 @@ void test_semaphore() {
     semaphore_init(&g_sema, 0, 10);
 
     // 启动三个消费者，开始不断获取资源
+    int key = cpu_int_lock();
     task_start(&ta);
     task_start(&tb);
     task_start(&tc);
+    cpu_int_unlock(key);
     arch_task_switch();
 
     logk("(root-giving-2)");
@@ -97,13 +99,6 @@ static void rr_worker() {
     arch_task_switch();
 }
 
-static void start_rr_tasks() {
-    logk("starting worker in work\n");
-    for (int i = 0; i < RR_COUNT; i++) {
-        task_start(&g_rr_tasks[i]);
-    }
-}
-
 void test_round_robin() {
     kmemset(g_rr_tasks, 0, sizeof(g_rr_tasks));
 
@@ -111,17 +106,20 @@ void test_round_robin() {
         task_create(&g_rr_tasks[i], "rr", 10, rr_worker);
         g_rr_tasks[i].affinity = 0;
     }
-    // for (int i = 0; i < RR_COUNT; i++) {
-    //     task_start(&g_rr_tasks[i]);
-    // }
+
+    int key = cpu_int_lock();
+    for (int i = 0; i < RR_COUNT; i++) {
+        task_start(&g_rr_tasks[i]);
+    }
+    cpu_int_unlock(key);
 
     // rr-tasks 优先级高于 root task，需要在 work 里面启动
     // 否则第一个任务就会切换过去
     // ktimer_t start_rr;
     // timer_start(&start_rr, start_rr_tasks, 0);
-    work_t start_rr;
-    work_defer(&start_rr, start_rr_tasks, "start rr tasks");
-    // logk("(root yielding to rr-tasks)");
+    // work_t start_rr;
+    // work_defer(&start_rr, start_rr_tasks, "start rr tasks");
+    logk("(root yielding to rr-tasks)");
     arch_task_switch();
     logk("(root back from rr)\n");
 }
@@ -150,10 +148,12 @@ void test_priority() {
     task_create(&g_prio_tasks[1], "prio-10", 10, prio_worker);
     task_create(&g_prio_tasks[2], "prio-15", 15, prio_worker);
 
+    int key = cpu_int_lock();
     for (int i = 0; i < 3; i++) {
         g_prio_tasks[i].affinity = 0;
         task_start(&g_prio_tasks[i]);
     }
+    cpu_int_unlock(key);
     logk("(root yield)");
     arch_task_switch();
     logk("(root back)");

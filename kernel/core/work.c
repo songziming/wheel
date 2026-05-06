@@ -13,39 +13,44 @@
 // work-q 严格 percpu，不会跨 cpu 访问，只有任务和 ISR 两个上下文
 // 不需要自旋锁，禁用中断就可以保证安全
 
-// static PERCPU_BSS spin_t g_work_lock;
+// static PERCPU_DATA spin_t g_work_lock = SPIN_INIT;
 static PERCPU_BSS dlnode_t g_work_q;
 
 INIT_TEXT void work_init_this() {
-    // spin_t *lock = THISCPU(&g_work_lock);
     dlnode_t *head = THISCPU(&g_work_q);
-    // spin_init(lock);
     dl_init_circular(head);
 }
 
 // 注册一个异步任务，放在队列中
-// TODO workq 严格 percpu，只有任务和ISR两个上下文
-//      不需要自旋锁，禁用中断就可以保证安全
 void work_defer(work_t *wk, void *func, const char *desc) {
-    // dl_init_circular(&wk->dl);
     wk->func = func;
     wk->desc = desc;
 
     int key = cpu_int_lock();
+    // spin_t *lock = THISCPU(&g_work_lock);
+    // int key = irq_spin_take(lock);
+
     ASSERT(!dl_contains(THISCPU(&g_work_q), &wk->dl));
     dl_insert_before(&wk->dl, THISCPU(&g_work_q));
+
     cpu_int_unlock(key);
+    // irq_spin_give(lock, key);
 }
 
 // 在中断返回过程中执行，只有最外层中断返回时执行
 // 此时中断仍禁用，无需获取锁
 void work_flush() {
+    // spin_t *lock = THISCPU(&g_work_lock);
+    // int key = irq_spin_take(lock);
+
     dlnode_t *head = THISCPU(&g_work_q);
     dlnode_t *node = head->next;
     dl_init_circular(head); // 首先把队列清空，work 里面还可以注册下一个 work
     for (; node != head; node = node->next) {
         work_t *work = containerof(node, work_t, dl);
-        logk("running work func %s\n", work->desc);
+        logk("running work %p name %s\n", work, work->desc);
         work->func(work);
     }
+
+    // irq_spin_give(lock, key);
 }

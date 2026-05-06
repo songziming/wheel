@@ -288,18 +288,12 @@ static INIT_TEXT void root_proc() {
 
     logk("testing semaphore\n");
     test_semaphore();
-    // vmspace_show(&g_kernel_vm);
     logk("testing round-robin\n");
     test_round_robin();
     logk("testing priority\n");
     test_priority();
     logk("stress scheduler\n");
     test_sched_stress();
-
-    for (int r = 0; r < 90; ++r) {
-        logk("testing line #%d\n", r);
-        loapic_timer_busywait(100000);
-    }
 
     logk("stop system\n");
     arch_send_ipi(-1, VEC_IPI_STOPALL);
