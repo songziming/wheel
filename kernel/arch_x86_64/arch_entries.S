@@ -85,7 +85,7 @@ isr_\vec:
 // Low  |   RDI    | <-- %rsp
 
 // rdi 已经在入口点保存，现在 rdi 保存向量号
-#define push_caller_saved_regs  \
+#define push_8_caller_saved_regs  \
     pushq   %rsi;               \
     pushq   %rdx;               \
     pushq   %rcx;               \
@@ -94,7 +94,7 @@ isr_\vec:
     pushq   %r10;               \
     pushq   %r11;               \
     pushq   %rax
-#define pop_caller_saved_regs   \
+#define pop_9_caller_saved_regs   \
     popq    %rax;               \
     popq    %r11;               \
     popq    %r10;               \
@@ -106,14 +106,14 @@ isr_\vec:
     popq    %rdi
 
 // 只要不切换任务，这些寄存器就无需保存
-#define push_callee_saved_regs  \
+#define push_6_callee_saved_regs  \
     pushq   %rbx;               \
     pushq   %rbp;               \
     pushq   %r12;               \
     pushq   %r13;               \
     pushq   %r14;               \
     pushq   %r15
-#define pop_callee_saved_regs   \
+#define pop_6_callee_saved_regs \
     popq    %r15;               \
     popq    %r14;               \
     popq    %r13;               \
@@ -129,7 +129,7 @@ exception_stub:
     swapgs                  // 如果来自用户态，需要交换 gsbase
 exp_from_ring0:
 
-    push_caller_saved_regs
+    push_8_caller_saved_regs
     subq    $48, %rsp       // 跳过 6 个 callee-saved regs
     movq    %rsp, %rsi      // 参数：当前栈顶/寄存器文件
 
@@ -138,7 +138,7 @@ exp_from_ring0:
     call    *%rax
 
     addq    $48, %rsp       // 跳过 6 个 callee-save regs
-    pop_caller_saved_regs
+    pop_9_caller_saved_regs
     addq    $8, %rsp        // 跳过错误码
 
     testl   $3, 8(%rsp)     // 检查 CS.RPL
@@ -155,8 +155,8 @@ interrupt_stub:
     swapgs                  // 如果来自用户态，需要交换 gsbase
 int_from_ring0:
 
-    push_caller_saved_regs
-    push_callee_saved_regs
+    push_8_caller_saved_regs
+    push_6_callee_saved_regs
     movq    %rsp, %rsi      // 参数：当前栈顶/寄存器文件
 
     // 所有寄存器已经保存在 regs_t（位于任务内核栈），检查是否需要切换中断栈
@@ -197,8 +197,8 @@ int_return_to_task:
 int_return_nested:
     decl    %gs:(g_int_depth)
     movq    %rdi, %gs:(g_prev_task) // prev_task = next_task
-    pop_callee_saved_regs
-    pop_caller_saved_regs
+    pop_6_callee_saved_regs
+    pop_9_caller_saved_regs
     addq    $8, %rsp        // 跳过错误码
 
     testl   $3, 8(%rsp)     // 检查 CS.RPL
@@ -240,7 +240,9 @@ arch_task_switch:
     pushq   $0x08           // cs
     pushq   $resume         // rip 从这里恢复（这是 32bit 立即数！）
     subq    $80, %rsp       // errcode, rdi, and other 8 caller-saved regs
-    push_callee_saved_regs
+    // subq    $16, %rsp       // errcode, rdi
+    // push_8_caller_saved_regs
+    push_6_callee_saved_regs
     movq    %rsp, (%rsi)    // prev_task->regs = rsp
 
     incl    %gs:(g_int_depth)
@@ -253,5 +255,8 @@ resume:
 
 
 arch_task_entry:
+    pushq   $0
+    movq    %rsp, %rbp
+
     callq   *%rsi
     call    task_exit

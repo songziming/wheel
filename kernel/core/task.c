@@ -26,11 +26,11 @@ static PERCPU_BSS int g_rdy_count;
 static PERCPU_BSS int g_migrate_target;
 
 // 抢占禁用深度，> 0 时中断返回不切换任务
-PERCPU_BSS int g_preempt_depth;
+PERCPU_DATA int g_preempt_depth = 0;
 
 // 僵尸任务链表，等待回收栈和 TCB
-static spin_t g_zombie_lock = SPIN_INIT;
-static dlnode_t g_zombie_list;
+static PERCPU_DATA spin_t g_zombie_lock = SPIN_INIT;
+static PERCPU_BSS dlnode_t g_zombie_list;
 static PERCPU_BSS work_t g_reap_work;
 
 static void sched_request_migrate();
@@ -109,9 +109,10 @@ void sched_init() {
     idle->affinity = cpu_index();
     rdyq_insert(q, &idle->dl, 31);
 
-    if (0 == cpu_index()) {
-        dl_init_circular(&g_zombie_list);
-    }
+    // if (0 == cpu_index()) {
+    //     dl_init_circular(&g_zombie_list);
+    // }
+    dl_init_circular(THISCPU(&g_zombie_list));
 
     atomic_fetch_or(&g_idle_mask, 1U << cpu_index());
     THISCPU_SET(g_prev_task, &g_dummy_task);
@@ -421,6 +422,7 @@ void task_start(task_t *task) {
 
 // 回收已退出任务的资源，必须在中断栈或非当前任务的上下文中调用
 static void task_free(task_t *task) {
+    ASSERT(task->state != TS_READY);
     vmspace_remove(&g_kernel_vm, &task->stack);
 
     // TODO: 回收 TCB（当 TCB 动态分配时）
@@ -431,27 +433,31 @@ static void task_free(task_t *task) {
 // work 回调：收割僵尸链表上所有等待回收的任务
 // 运行在中断栈上，因此可以安全地释放 task 的栈
 static void reap_work_func(work_t *wk UNUSED) {
-    int key = irq_spin_take(&g_zombie_lock);
-    while (g_zombie_list.next != &g_zombie_list) {
-        dlnode_t *dl = g_zombie_list.next;
-        dl_remove(dl);
-        irq_spin_give(&g_zombie_lock, key);
+    spin_t *lock = THISCPU(&g_zombie_lock);
+    dlnode_t *list = THISCPU(&g_zombie_list);
 
+    int key = irq_spin_take(lock);
+    dlnode_t *dl = list->next;
+    dl_init_circular(list);
+
+    for (; dl != list; dl = dl->next) {
         task_free(containerof(dl, task_t, dl));
-
-        key = irq_spin_take(&g_zombie_lock);
     }
-    irq_spin_give(&g_zombie_lock, key);
+    irq_spin_give(lock, key);
 }
 
 // 退出当前任务。将自身放入僵尸链表，注册 work 在下一次中断返回
 // 流程中回收资源（此时已在中断栈上），然后切换走，永不返回。
 NORETURN void task_exit() {
     task_t *self = sched_stop_self(TS_STOPPED);
+    logk("delete self task %s\n", self->name);
 
-    int key = irq_spin_take(&g_zombie_lock);
-    dl_insert_before(&self->dl, &g_zombie_list);
-    irq_spin_give(&g_zombie_lock, key);
+    spin_t *lock = THISCPU(&g_zombie_lock);
+    dlnode_t *list = THISCPU(&g_zombie_list);
+
+    int key = irq_spin_take(lock);
+    dl_insert_before(&self->dl, list);
+    irq_spin_give(lock, key);
 
     // work 在 arch_task_switch → int_return_to_task → work_flush 中执行
     // 此时已离开当前栈，运行在中断栈上，可以安全释放栈内存

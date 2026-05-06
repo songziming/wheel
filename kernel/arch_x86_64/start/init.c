@@ -286,6 +286,8 @@ static INIT_TEXT void root_proc() {
     logk("all CPU running\n");
     arch_send_ipi(-1, VEC_IPI_RESCHED);
 
+    logk("testing create and exit:\n");
+    test_enterleave();
     logk("testing semaphore\n");
     test_semaphore();
     logk("testing round-robin\n");

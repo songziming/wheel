@@ -48,7 +48,7 @@ void work_flush() {
     dl_init_circular(head); // 首先把队列清空，work 里面还可以注册下一个 work
     for (; node != head; node = node->next) {
         work_t *work = containerof(node, work_t, dl);
-        logk("running work %p name %s\n", work, work->desc);
+        // logk("running work %p name %s\n", work, work->desc);
         work->func(work);
     }
 

@@ -41,7 +41,7 @@ typedef struct task {
 
 extern task_t *g_prev_task;
 extern task_t *g_next_task;
-extern PERCPU_BSS int g_preempt_depth;
+extern PERCPU_DATA int g_preempt_depth;
 
 void preempt_disable();
 void preempt_enable();

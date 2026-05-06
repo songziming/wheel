@@ -1,6 +1,7 @@
 #ifndef BENCH_H
 #define BENCH_H
 
+void test_enterleave();
 void test_semaphore();
 void test_round_robin();
 void test_priority();
