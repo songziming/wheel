@@ -111,10 +111,10 @@ INIT_TEXT void thiscpu_init(int idx) {
     ASSERT(idx >= 0);
     ASSERT(idx < cpu_count());
 
-    logk("cpu-%d setting gsbase %zx\n", idx, g_percpu_base + g_percpu_step * idx);
+    // logk("cpu-%d setting gsbase %zx\n", idx, g_percpu_base + g_percpu_step * idx);
     write_gsbase(g_percpu_base + g_percpu_step * idx);
-    // ASMV("movl %0,%%gs:(g_thiscpu_idx)" :: "r"(idx)， "m");
     THISCPU_SET(g_thiscpu_idx, idx);
+    // ASMV("movl %0,%%gs:(g_thiscpu_idx)" :: "r"(idx)， "m");
     // ASMV("movl %1,%%gs:(%0)" : "=r"(g_thiscpu_idx) : "r"(idx));
 }
 

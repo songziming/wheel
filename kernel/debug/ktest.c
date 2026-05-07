@@ -9,6 +9,56 @@
 
 // OS 中运行的测试程序
 
+//------------------------------------------------------------------------------
+// 测试两个任务来回切换
+//------------------------------------------------------------------------------
+
+static task_t task_ping;
+static task_t task_pong;
+
+static void proc_ping() {
+    logk("task ping running\n");
+    for (int i = 0; i < 10; ++i) {
+        THISCPU_SET(g_next_task, &task_pong);
+        arch_task_switch();
+        logk("111 ping %d\n", i);
+    }
+    logk("task ping finished\n");
+    task_exit();
+    while (1) {
+        cpu_pause();
+        cpu_halt();
+    }
+}
+
+static void proc_pong() {
+    logk("task pong running\n");
+    for (int i = 0; i < 10; ++i) {
+        THISCPU_SET(g_next_task, &task_ping);
+        arch_task_switch();
+        logk("111 pong %d\n", i);
+    }
+    logk("task pong finished\n");
+    task_exit();
+    while (1) {
+        cpu_pause();
+        cpu_halt();
+    }
+}
+
+void test_pingpong() {
+    task_create(&task_ping, "ping", 10, proc_ping);
+    task_create(&task_pong, "pong", 10, proc_pong);
+    task_ping.affinity = 0;
+    task_pong.affinity = 0;
+    task_start(&task_ping);
+    task_start(&task_pong);
+    THISCPU_SET(g_next_task, &task_ping);
+    arch_task_switch();
+
+    logk("back to root\n");
+}
+
 
 //------------------------------------------------------------------------------
 // 测试任务创建和退出
@@ -23,7 +73,7 @@ static void proc_t1() {
 }
 
 void test_enterleave() {
-    task_create(&t1, "test1", 10, proc_t1);
+    task_create(&t1, "t1", 10, proc_t1);
     task_start(&t1);
     arch_task_switch();
 
@@ -229,6 +279,7 @@ void test_sched_stress() {
     for (int i = 0; i < STRESS_COUNT; i++) {
         int prio = 10 + (i % 5);
         task_create(&g_stress_tasks[i], "stress", prio, stress_worker);
+        g_stress_tasks[i].affinity = 0;
     }
     preempt_disable();
     for (int i = 0; i < STRESS_COUNT; i++) {

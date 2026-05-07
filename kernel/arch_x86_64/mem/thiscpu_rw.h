@@ -47,5 +47,16 @@
     uint64_t: _THISCPU_SET("movq", var, val), \
     default:  _THISCPU_SET("movq", var, val)  \
 )
+#define THISCPU_ADD(var, val) _Generic((var), \
+     int8_t:  _THISCPU_SET("addb", var, val), \
+    uint8_t:  _THISCPU_SET("addb", var, val), \
+     int16_t: _THISCPU_SET("addw", var, val), \
+    uint16_t: _THISCPU_SET("addw", var, val), \
+     int32_t: _THISCPU_SET("addl", var, val), \
+    uint32_t: _THISCPU_SET("addl", var, val), \
+     int64_t: _THISCPU_SET("addq", var, val), \
+    uint64_t: _THISCPU_SET("addq", var, val), \
+    default:  _THISCPU_SET("addq", var, val)  \
+)
 
 #endif // ARCH_X86_64_MEM_THISCPU_RW_H

@@ -57,8 +57,8 @@ void arch_task_init(task_t *task, size_t entry, size_t stack_top) {
     regs->ss = 0x10;
     regs->rflags = 0x0200UL;    // 开启中断
     regs->rsp = stack_top;
-    // regs->rip = (uint64_t)arch_task_entry;
-    regs->rip = (uint64_t)entry;
+    regs->rip = (uint64_t)arch_task_entry;
+    // regs->rip = (uint64_t)entry;
     regs->rdi = (uint64_t)task;
     regs->rsi = (uint64_t)entry;
 

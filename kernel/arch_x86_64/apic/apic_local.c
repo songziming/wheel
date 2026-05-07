@@ -191,7 +191,7 @@ static void on_spurious(int vec UNUSED, regs_t *f UNUSED) {}
 INIT_TEXT void loapic_init() {
     if (g_cpu_features & CPU_FEATURE_X2APIC) {
         // 支持 x2APIC，使用 MSR 读写 local APIC 寄存器
-        logk("supports x2APIC\n");
+        // logk("supports x2APIC\n");
         loapic_enable_x2();
     }
 
@@ -381,10 +381,10 @@ INIT_TEXT void loapic_timer_calibrate() {
     out8(0x61, in8(0x61) & ~1);
 
     // TSC 频率可以保存下来，也许有用
-    logk("loapic counter from %u mid %u to %u\n", start_ctr, mid_ctr, end_ctr);
-    logk("starting pit ch2 output %x\n", start_out);
+    // logk("loapic counter from %u mid %u to %u\n", start_ctr, mid_ctr, end_ctr);
+    // logk("starting pit ch2 output %x\n", start_out);
     g_timer_freq = (start_ctr - end_ctr) * 20;
-    logk("loapic timer freq %zd\n", g_timer_freq);
+    // logk("loapic timer freq %zd\n", g_timer_freq);
 }
 
 INIT_TEXT void loapic_timer_busywait(int us) {

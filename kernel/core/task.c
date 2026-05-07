@@ -148,9 +148,9 @@ void sched_process() {
     THISCPU_SET(g_next_task, task);
     irq_spin_give(&q->lock, key);
 
-    if (31 == task->priority) {
-        sched_request_migrate();
-    }
+    // if (31 == task->priority) {
+    //     sched_request_migrate();
+    // }
 }
 
 // // 停止的任务必须位于当前 CPU，要么
@@ -344,25 +344,14 @@ void sched_cont_on(task_t *task, uint32_t bits, int cpu) {
 // task management
 //------------------------------------------------------------------------------
 
-// // 新任务的默认执行入口，该函数不能返回
-// static NORETURN void task_entry(task_t *self) {
-//     logk("starting task %s\n", self->name);
-//     // TODO 在这里调用
-//     self->entry();
-//     logk("stopping task %s\n", self->name);
-
-//     while (1) {
-//         cpu_pause();
-//         cpu_halt();
-//     }
-// }
-
 void preempt_disable() {
-    THISCPU_SET(g_preempt_depth, THISCPU_GET(g_preempt_depth) + 1);
+    // THISCPU_SET(g_preempt_depth, THISCPU_GET(g_preempt_depth) + 1);
+    THISCPU_ADD(g_preempt_depth, 1);
 }
 
 void preempt_enable() {
-    THISCPU_SET(g_preempt_depth, THISCPU_GET(g_preempt_depth) - 1);
+    // THISCPU_SET(g_preempt_depth, THISCPU_GET(g_preempt_depth) - 1);
+    THISCPU_ADD(g_preempt_depth, -1);
 }
 
 void task_create(task_t *task, const char *name, int priority, void *entry) {
@@ -423,6 +412,7 @@ void task_start(task_t *task) {
 // 回收已退出任务的资源，必须在中断栈或非当前任务的上下文中调用
 static void task_free(task_t *task) {
     ASSERT(task->state != TS_READY);
+    logk("(%d-free-task-%s)", cpu_index(), task->name);
     vmspace_remove(&g_kernel_vm, &task->stack);
 
     // TODO: 回收 TCB（当 TCB 动态分配时）
@@ -450,7 +440,7 @@ static void reap_work_func(work_t *wk UNUSED) {
 // 流程中回收资源（此时已在中断栈上），然后切换走，永不返回。
 NORETURN void task_exit() {
     task_t *self = sched_stop_self(TS_STOPPED);
-    logk("delete self task %s\n", self->name);
+    // logk("delete self task %s\n", self->name);
 
     spin_t *lock = THISCPU(&g_zombie_lock);
     dlnode_t *list = THISCPU(&g_zombie_list);
@@ -468,4 +458,31 @@ NORETURN void task_exit() {
     while (1) {
         cpu_halt();
     }
+}
+
+// TODO 等待其他任务结束
+void task_join(task_t *tid) {
+    // TBD
+}
+
+void sched_list_ready() {
+    rdyq_t *q = THISCPU(&g_rdy_queue);
+    int key = irq_spin_take(&q->lock);
+
+    for (int p = 0; p < 32; ++p) {
+        if (NULL == q->heads[p]) {
+            continue;
+        }
+        dlnode_t *head = q->heads[p];
+        logk("priority-%d: (%s)", p, containerof(head, task_t, dl)->name);
+        for (dlnode_t *dl = head->next; dl != head; dl = dl->next) {
+            logk(", (%s)", containerof(dl, task_t, dl)->name);
+        }
+        logk(";\n");
+    }
+
+    irq_spin_give(&q->lock, key);
+
+    // spin_t *lock = THISCPU(&g_zombie_lock);
+    // dlnode_t *list = THISCPU(&g_zombie_list);
 }

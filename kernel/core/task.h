@@ -60,6 +60,7 @@ void sched_try_migrate();
 task_t *sched_stop_self(uint32_t bits);
 void sched_cont(task_t *task, uint32_t bits);
 void sched_cont_on(task_t *task, uint32_t bits, int cpu);
+void sched_list_ready();
 
 void task_create(task_t *task, const char *name, int priority, void *entry);
 void task_start(task_t *task);

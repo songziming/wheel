@@ -218,7 +218,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     int_init(); // 初始化中断管理机制
     int_init_local();
 
-    hpet_init();
+    // TODO 将8254替换成精度更高的时钟，用来校准 local apic timer
+    // hpet_init();
 
     // 中断控制器初始化
     i8259_disable();
@@ -254,7 +255,7 @@ end:
 
 // 第一个运行的任务，运行在 BSP
 static INIT_TEXT void root_proc() {
-    logk("hello from root task!\n");
+    // logk("hello from root task!\n");
 
     cpu_features_show();
 
@@ -283,13 +284,18 @@ static INIT_TEXT void root_proc() {
         semaphore_take(&g_smp_sem, 1, FOREVER);
     }
 
-    logk("all CPU running\n");
-    arch_send_ipi(-1, VEC_IPI_RESCHED);
+    // logk("all CPU running\n");
+    // arch_send_ipi(-1, VEC_IPI_RESCHED);
+
+    // test_pingpong();
 
     logk("testing create and exit:\n");
     test_enterleave();
     logk("testing semaphore\n");
     test_semaphore();
+
+    sched_list_ready();
+
     logk("testing round-robin\n");
     test_round_robin();
     logk("testing priority\n");
