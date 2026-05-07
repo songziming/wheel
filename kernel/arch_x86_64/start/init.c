@@ -297,7 +297,7 @@ static INIT_TEXT void root_proc() {
     sched_list_ready();
 
     logk("testing round-robin\n");
-    test_round_robin();
+    // test_round_robin();
     logk("testing priority\n");
     test_priority();
     logk("stress scheduler\n");

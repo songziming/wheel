@@ -44,8 +44,11 @@ size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs);
 void   mmu_map(size_t tbl, size_t va, size_t end, size_t pa, mmu_attr_t attrs);
 void   mmu_unmap(size_t tbl, size_t va, size_t end);
 
-// // device
-// uint32_t pci_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg);
-// void pci_write(uint8_t bus, uint8_t dev, uint8_t func, uint8_t reg, uint32_t data);
+// 多任务支持
+typedef struct task task_t;
+void arch_task_init(task_t *task, size_t entry, size_t stack_top,
+    size_t arg1, size_t arg2, size_t arg3, size_t arg4);
+void arch_task_switch(); // also flush workq
+
 
 #endif // ARCH_API_COMMON_H

@@ -25,12 +25,5 @@ static inline void cpu_rwfence() { ASMV("mfence" ::: "memory"); }
 int arch_unwind_from(size_t *addrs, int max, uint64_t rbp);
 int arch_unwind(size_t *addrs, int max);
 
-//------------------------------------------------------------------------------
-// task support
-//------------------------------------------------------------------------------
-
-typedef struct task task_t;
-void arch_task_init(task_t *task, size_t entry, size_t stack_top);
-void arch_task_switch(); // also flush workq
 
 #endif // ARCH_X86_64_ARCH_API_H

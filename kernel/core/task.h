@@ -55,7 +55,7 @@ dlnode_t *rdyq_head(rdyq_t *q);
 
 INIT_TEXT void sched_init();
 void sched_process();
-void sched_try_migrate();
+// void sched_try_migrate();
 // void sched_stop(task_t *task, uint32_t bits);
 task_t *sched_stop_self(uint32_t bits);
 void sched_cont(task_t *task, uint32_t bits);

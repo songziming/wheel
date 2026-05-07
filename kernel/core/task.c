@@ -33,7 +33,7 @@ static PERCPU_DATA spin_t g_zombie_lock = SPIN_INIT;
 static PERCPU_BSS dlnode_t g_zombie_list;
 static PERCPU_BSS work_t g_reap_work;
 
-static void sched_request_migrate();
+// static void sched_request_migrate();
 static void reap_work_func(work_t *wk UNUSED);
 
 
@@ -200,89 +200,89 @@ task_t *sched_stop_self(uint32_t bits) {
 
 // 挑选负载最高的 CPU（就绪任务数量最多），发送迁移请求
 // 在 sched_process() 选到 idle 后调用，不持有 rdyq lock
-static void sched_request_migrate() {
-    int me = cpu_index();
-    int victim = -1;
-    int max_count = 0;
+// static void sched_request_migrate() {
+//     int me = cpu_index();
+//     int victim = -1;
+//     int max_count = 0;
 
-    for (int i = 0; i < cpu_count(); i++) {
-        if (i == me) continue;
-        int cnt = *PERCPU(i, &g_rdy_count);
-        if (cnt > max_count) {
-            max_count = cnt;
-            victim = i;
-        }
-    }
+//     for (int i = 0; i < cpu_count(); i++) {
+//         if (i == me) continue;
+//         int cnt = *PERCPU(i, &g_rdy_count);
+//         if (cnt > max_count) {
+//             max_count = cnt;
+//             victim = i;
+//         }
+//     }
 
-    if (victim < 0) return;
+//     if (victim < 0) return;
 
-    *PERCPU(victim, &g_migrate_target) = me;
-    arch_send_ipi(victim, VEC_IPI_MIGRATE);
-}
+//     *PERCPU(victim, &g_migrate_target) = me;
+//     arch_send_ipi(victim, VEC_IPI_MIGRATE);
+// }
 
-// 响应 VEC_IPI_MIGRATE：从自己的就绪队列中选一个任务捐给请求方
-// 在请求方 CPU 的 ISR 上下文中执行
-void sched_try_migrate() {
-    int me = cpu_index();
-    int target = *THISCPU(&g_migrate_target);
-    *THISCPU(&g_migrate_target) = -1;
+// // 响应 VEC_IPI_MIGRATE：从自己的就绪队列中选一个任务捐给请求方
+// // 在请求方 CPU 的 ISR 上下文中执行
+// void sched_try_migrate() {
+//     int me = cpu_index();
+//     int target = *THISCPU(&g_migrate_target);
+//     *THISCPU(&g_migrate_target) = -1;
 
-    if (target < 0 || target >= cpu_count() || target == me) return;
+//     if (target < 0 || target >= cpu_count() || target == me) return;
 
-    rdyq_t *myq = THISCPU(&g_rdy_queue);
-    int key = irq_spin_take(&myq->lock);
+//     rdyq_t *myq = THISCPU(&g_rdy_queue);
+//     int key = irq_spin_take(&myq->lock);
 
-    task_t *prev = THISCPU_GET(g_prev_task);
-    task_t *dntd = NULL;  // donated
+//     task_t *prev = THISCPU_GET(g_prev_task);
+//     task_t *dntd = NULL;  // donated
 
-    // 从低优先级找可迁移任务：无 affinity、非 g_prev_task、非 idle
-    for (int prio = 30; prio >= 0; prio--) {
-        if (NULL == myq->heads[prio]) continue;
-        dlnode_t *dl = myq->heads[prio];
-        dlnode_t *start = dl;
-        do {
-            task_t *t = containerof(dl, task_t, dl);
-            if (t != prev && t->affinity < 0) {
-                dntd = t;
-                break;
-            }
-            dl = dl->next;
-        } while (dl != start);
-        if (dntd) {
-            rdyq_remove(myq, &dntd->dl, prio);
-            break;
-        }
-    }
+//     // 从低优先级找可迁移任务：无 affinity、非 g_prev_task、非 idle
+//     for (int prio = 30; prio >= 0; prio--) {
+//         if (NULL == myq->heads[prio]) continue;
+//         dlnode_t *dl = myq->heads[prio];
+//         dlnode_t *start = dl;
+//         do {
+//             task_t *t = containerof(dl, task_t, dl);
+//             if (t != prev && t->affinity < 0) {
+//                 dntd = t;
+//                 break;
+//             }
+//             dl = dl->next;
+//         } while (dl != start);
+//         if (dntd) {
+//             rdyq_remove(myq, &dntd->dl, prio);
+//             break;
+//         }
+//     }
 
-    if (dntd) {
-        (*THISCPU(&g_rdy_count))--;
-        if (dntd == THISCPU_GET(g_next_task)) {
-            dlnode_t *head = rdyq_head(myq);
-            THISCPU_SET(g_next_task, containerof(head, task_t, dl));
-        }
-    }
+//     if (dntd) {
+//         (*THISCPU(&g_rdy_count))--;
+//         if (dntd == THISCPU_GET(g_next_task)) {
+//             dlnode_t *head = rdyq_head(myq);
+//             THISCPU_SET(g_next_task, containerof(head, task_t, dl));
+//         }
+//     }
 
-    irq_spin_give(&myq->lock, key);
+//     irq_spin_give(&myq->lock, key);
 
-    if (NULL == dntd) return;
+//     if (NULL == dntd) return;
 
-    // 插入目标 CPU 的就绪队列
-    rdyq_t *tq = PERCPU(target, &g_rdy_queue);
-    key = irq_spin_take(&tq->lock);
+//     // 插入目标 CPU 的就绪队列
+//     rdyq_t *tq = PERCPU(target, &g_rdy_queue);
+//     key = irq_spin_take(&tq->lock);
 
-    rdyq_insert(tq, &dntd->dl, dntd->priority);
-    (*PERCPU(target, &g_rdy_count))++;
+//     rdyq_insert(tq, &dntd->dl, dntd->priority);
+//     (*PERCPU(target, &g_rdy_count))++;
 
-    task_t *tgt_idle = PERCPU(target, &g_idle_task);
-    if (*PERCPU(target, &g_next_task) == tgt_idle) {
-        atomic_fetch_and(&g_idle_mask, ~(1ULL << target));
-    }
-    *PERCPU(target, &g_next_task) = containerof(rdyq_head(tq), task_t, dl);
+//     task_t *tgt_idle = PERCPU(target, &g_idle_task);
+//     if (*PERCPU(target, &g_next_task) == tgt_idle) {
+//         atomic_fetch_and(&g_idle_mask, ~(1ULL << target));
+//     }
+//     *PERCPU(target, &g_next_task) = containerof(rdyq_head(tq), task_t, dl);
 
-    irq_spin_give(&tq->lock, key);
+//     irq_spin_give(&tq->lock, key);
 
-    arch_send_ipi(target, VEC_IPI_RESCHED);
-}
+//     arch_send_ipi(target, VEC_IPI_RESCHED);
+// }
 
 // 在当前 CPU 恢复运行这个 task
 // 但不要立即触发 task-switch
@@ -354,6 +354,11 @@ void preempt_enable() {
     THISCPU_ADD(g_preempt_depth, -1);
 }
 
+static NORETURN void task_entry(void (*real_entry)()) {
+    real_entry();
+    task_exit();
+}
+
 void task_create(task_t *task, const char *name, int priority, void *entry) {
     // 必须分配足够大的栈，如果执行 logk，对栈的使用很大
     // 不应该允许用户自己指定栈顶地址，必须动态分配页，动态映射，这样越界容易发现
@@ -367,42 +372,30 @@ void task_create(task_t *task, const char *name, int priority, void *entry) {
     task->tick = 10;
     task->tick_reload = 10;
     task->affinity = -1;
-    arch_task_init(task, (size_t)entry, (size_t)stack_top);
+    arch_task_init(task, (size_t)task_entry, (size_t)stack_top,
+        (size_t)entry, 0, 0, 0);
 }
 
 void task_start(task_t *task) {
-    // int cpu = task->affinity;
-    // if (cpu < 0) {
-    //     uint64_t idle_mask = atomic_load(&g_idle_mask);
-    //     uint64_t this_mask = 1ULL << cpu_index();
-    // }
-    if (task->affinity >= 0) {
-        if (task->affinity == cpu_index()) {
-            sched_cont(task, TS_STOPPED);
-        } else {
-            // logk("2 starting task %s on %d\n", task->name, task->affinity);
-            sched_cont_on(task, TS_STOPPED, task->affinity);
-            arch_send_ipi(task->affinity, VEC_IPI_RESCHED);
+    int cpu = task->affinity;
+    if (cpu < 0) {
+        cpu = cpu_index();
+        uint64_t idle_mask = atomic_load(&g_idle_mask);
+        uint64_t this_mask = 1ULL << cpu;
+        if ((0 != idle_mask) && !(idle_mask & this_mask)) {
+            // 当前 cpu 不是 idle，且存在其他 idle cpu，挑选一个 cpu
+            cpu = __builtin_ctzll(idle_mask);
+            ASSERT(cpu_index() != cpu);
         }
-        return;
     }
 
-    // 挑选一个CPU
-    uint64_t idle_mask = atomic_load(&g_idle_mask);
-    uint64_t this_mask = 1ULL << cpu_index();
-    if ((0 == idle_mask) || (idle_mask & this_mask)) {
-        // 没有 idle cpu，或者当前 CPU 也 idle，则直接在当前 cpu 运行任务
+    if (cpu_index() == cpu) {
         sched_cont(task, TS_STOPPED);
-        // 自身 cpu，不执行 task_switch
-        return;
+        // 在当前 cpu 运行，不要触发任务切换（后面可能还要启动别的任务）
+    } else {
+        sched_cont_on(task, TS_STOPPED, cpu);
+        arch_send_ipi(cpu, VEC_IPI_RESCHED); // 立即唤醒
     }
-
-    // 在另一个 cpu 上运行任务
-    int cpu = __builtin_ctzll(idle_mask);
-    ASSERT(cpu_index() != cpu);
-    // logk("3 starting task %s on %d\n", task->name, cpu);
-    sched_cont_on(task, TS_STOPPED, cpu);
-    arch_send_ipi(cpu, VEC_IPI_RESCHED); // 立即唤醒
 }
 
 //------------------------------------------------------------------------------
@@ -440,7 +433,6 @@ static void reap_work_func(work_t *wk UNUSED) {
 // 流程中回收资源（此时已在中断栈上），然后切换走，永不返回。
 NORETURN void task_exit() {
     task_t *self = sched_stop_self(TS_STOPPED);
-    // logk("delete self task %s\n", self->name);
 
     spin_t *lock = THISCPU(&g_zombie_lock);
     dlnode_t *list = THISCPU(&g_zombie_list);

@@ -39,14 +39,12 @@ int arch_unwind(size_t *addrs, int max) {
     return arch_unwind_from(addrs, max, rbp);
 }
 
-
-void arch_task_entry(); // defined in arch_entries.S
-
 // 填写栈顶的寄存器
-void arch_task_init(task_t *task, size_t entry, size_t stack_top) {
+void arch_task_init(task_t *task, size_t entry, size_t stack_top,
+        size_t arg1, size_t arg2, size_t arg3, size_t arg4) {
     stack_top &= ~15UL;  // 栈顶按 16 字节对齐
 
-    // 写入 return addr，防止任务中 backtrace 越界
+    // 写入 dummy-return-addr，防止任务中 backtrace 越界
     stack_top -= 16;
     *(uint64_t*)stack_top = 0ULL;
 
@@ -57,10 +55,16 @@ void arch_task_init(task_t *task, size_t entry, size_t stack_top) {
     regs->ss = 0x10;
     regs->rflags = 0x0200UL;    // 开启中断
     regs->rsp = stack_top;
-    regs->rip = (uint64_t)arch_task_entry;
-    // regs->rip = (uint64_t)entry;
-    regs->rdi = (uint64_t)task;
-    regs->rsi = (uint64_t)entry;
+    regs->rip = entry;
+
+    regs->rdi = arg1;
+    regs->rsi = arg2;
+    regs->rdx = arg3;
+    regs->rcx = arg4;
+    // regs->rip = (uint64_t)arch_task_entry;
+    // // regs->rip = (uint64_t)entry;
+    // regs->rdi = (uint64_t)task;
+    // regs->rsi = (uint64_t)entry;
 
     task->regs = regs;
 }

@@ -11,7 +11,6 @@
 .extern g_next_task
 .extern irq_handlers
 .extern work_flush
-.extern task_exit
 
 .altmacro // 需要在 macro 和循环里使用变量
 
@@ -254,9 +253,9 @@ resume:
     ret
 
 
-arch_task_entry:
-    pushq   $0
-    movq    %rsp, %rbp
+// arch_task_entry:
+//     pushq   $0
+//     movq    %rsp, %rbp
 
-    callq   *%rsi
-    call    task_exit
+//     callq   *%rsi
+//     call    task_exit

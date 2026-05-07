@@ -151,10 +151,10 @@ static void on_resched(int vec UNUSED, regs_t *f UNUSED) {
     // 无需任何动作，中断返回过程自然会切换任务
 }
 
-static void on_migrate(int vec UNUSED, regs_t *f UNUSED) {
-    g_write(REG_EOI, 0);
-    sched_try_migrate();
-}
+// static void on_migrate(int vec UNUSED, regs_t *f UNUSED) {
+//     g_write(REG_EOI, 0);
+//     sched_try_migrate();
+// }
 
 static void on_stopall(int vec UNUSED, regs_t *f UNUSED) {
     g_write(REG_EOI, 0);
@@ -200,7 +200,7 @@ INIT_TEXT void loapic_init() {
     //      定义专用的 naked isr function，然后修改 IDT
     irq_handlers[VEC_IPI_RESCHED] = on_resched;
     irq_handlers[VEC_IPI_STOPALL] = on_stopall;
-    irq_handlers[VEC_IPI_MIGRATE] = on_migrate;
+    // irq_handlers[VEC_IPI_MIGRATE] = on_migrate;
     irq_handlers[VEC_LOAPIC_TIMER] = on_timer;
     irq_handlers[VEC_LOAPIC_ERROR] = on_error;
     irq_handlers[VEC_LOAPIC_THERMAL] = on_thermal;
@@ -327,7 +327,7 @@ void arch_send_ipi(int cpu, int vec) {
 
 INIT_TEXT void loapic_timer_calibrate() {
     uint64_t start_ctr;
-    uint64_t mid_ctr;
+    uint64_t mid_ctr UNUSED;
     uint64_t end_ctr;
 
     // 首先确保 channel 2 处于禁用状态，输入低电平
