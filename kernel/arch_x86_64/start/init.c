@@ -287,21 +287,25 @@ static INIT_TEXT void root_proc() {
     // logk("all CPU running\n");
     // arch_send_ipi(-1, VEC_IPI_RESCHED);
 
-    // test_pingpong();
+    for (int t = 0; t < 5; ++t) {
+        test_pingpong();
+        // test_priority();
+        loapic_timer_busywait(500000);
+    }
 
-    logk("testing create and exit:\n");
-    test_enterleave();
-    logk("testing semaphore\n");
-    test_semaphore();
+    // logk("testing create and exit:\n");
+    // test_enterleave();
+    // logk("testing semaphore\n");
+    // test_semaphore();
 
-    sched_list_ready();
+    // sched_list_ready();
 
-    logk("testing round-robin\n");
-    // test_round_robin();
-    logk("testing priority\n");
-    test_priority();
-    logk("stress scheduler\n");
-    test_sched_stress();
+    // logk("testing round-robin\n");
+    // // test_round_robin();
+    // logk("testing priority\n");
+    // test_priority();
+    // logk("stress scheduler\n");
+    // test_sched_stress();
 
     logk("stop system\n");
     arch_send_ipi(-1, VEC_IPI_STOPALL);

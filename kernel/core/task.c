@@ -20,7 +20,7 @@ PERCPU_BSS task_t *g_next_task; // also guarded by rdyq->lock
 static _Atomic uint64_t g_idle_mask;
 
 // 每个 CPU 就绪队列中非 idle 任务的数量，在 rdyq lock 内修改
-static PERCPU_BSS int g_rdy_count;
+// static PERCPU_BSS int g_rdy_count;
 
 // 收到 IPI_MIGRATE 的 CPU 应将一个任务迁移到此目标 CPU，-1 表示没有请求
 static PERCPU_BSS int g_migrate_target;
@@ -180,7 +180,7 @@ task_t *sched_stop_self(uint32_t bits) {
     task_t *self = THISCPU_GET(g_prev_task);
     rdyq_remove(q, &self->dl, self->priority);
     self->state |= bits;
-    (*THISCPU(&g_rdy_count))--;
+    // (*THISCPU(&g_rdy_count))--;
 
     dlnode_t *head = rdyq_head(q);
     task_t *next = containerof(head, task_t, dl);
@@ -300,7 +300,6 @@ void sched_cont(task_t *task, uint32_t bits) {
     int key = irq_spin_take(&q->lock);
 
     rdyq_insert(q, &task->dl, task->priority);
-    (*THISCPU(&g_rdy_count))++;
     task_t *next = containerof(rdyq_head(q), task_t, dl);
     if (THISCPU_GET(g_next_task) == THISCPU(&g_idle_task)) {
         atomic_fetch_and(&g_idle_mask, ~(1U << cpu_index()));
@@ -330,7 +329,6 @@ void sched_cont_on(task_t *task, uint32_t bits, int cpu) {
     int key = irq_spin_take(&q->lock);
 
     rdyq_insert(q, &task->dl, task->priority);
-    (*PERCPU(cpu, &g_rdy_count))++;
     task_t *next = containerof(rdyq_head(q), task_t, dl);
     if (*PERCPU(cpu, &g_next_task) == PERCPU(cpu, &g_idle_task)) {
         atomic_fetch_and(&g_idle_mask, ~(1U << cpu));
@@ -365,6 +363,8 @@ void task_create(task_t *task, const char *name, int priority, void *entry) {
     size_t stack_va = vmspace_alloc_stack(&g_kernel_vm, &task->stack, 0);
     size_t stack_top = stack_va + PAGE_SIZE;
     task->stack.desc = name;
+
+    logk("%s stack at %zx~%zx\n", name, stack_va, task->stack.vend);
 
     task->name = name;
     task->priority = priority;
@@ -405,8 +405,8 @@ void task_start(task_t *task) {
 // 回收已退出任务的资源，必须在中断栈或非当前任务的上下文中调用
 static void task_free(task_t *task) {
     ASSERT(task->state != TS_READY);
-    logk("(%d-free-task-%s)", cpu_index(), task->name);
     vmspace_remove(&g_kernel_vm, &task->stack);
+    logk("(%d-free-task-%s)", cpu_index(), task->name);
 
     // TODO: 回收 TCB（当 TCB 动态分配时）
     // task_t 目前是静态分配的，以后若改用 slab 或动态分配，
@@ -453,7 +453,7 @@ NORETURN void task_exit() {
 }
 
 // TODO 等待其他任务结束
-void task_join(task_t *tid) {
+void task_join(task_t *tid UNUSED) {
     // TBD
 }
 

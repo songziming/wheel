@@ -6,59 +6,139 @@
 #include <kstring.h>
 #include <debug.h>
 
+#include <arch_int.h>
+
 
 // OS 中运行的测试程序
 
 //------------------------------------------------------------------------------
-// 测试两个任务来回切换
+// 测试两个任务来回切换，主动切换
 //------------------------------------------------------------------------------
 
+// static task_t *task_root;
 static task_t task_ping;
 static task_t task_pong;
 
 static void proc_ping() {
-    logk("task ping running\n");
-    for (int i = 0; i < 10; ++i) {
+    logk("(task ping running)");
+    // logk("[pong regs %p rsp %zx\n", task_pong.regs, ((regs_t*)task_pong.regs)->rsp);
+    for (int i = 0; i < 60; ++i) {
+        if (i % 10 == 0) {
+            size_t rsp;
+            ASMV("movq %%rsp,%0" : "=r"(rsp));
+            logk("(ping-%d-%zx)", i, rsp);
+        } else {
+            logk("(ping-%d)", i);
+        }
         THISCPU_SET(g_next_task, &task_pong);
         arch_task_switch();
-        logk("111 ping %d\n", i);
     }
-    logk("task ping finished\n");
-    task_exit();
-    while (1) {
-        cpu_pause();
-        cpu_halt();
-    }
+    logk("(task ping finished)");
+    // THISCPU_SET(g_next_task, &task_pong);
+    // arch_task_switch();
 }
 
 static void proc_pong() {
-    logk("task pong running\n");
-    for (int i = 0; i < 10; ++i) {
+    logk("(task pong running)");
+    // logk("[ping regs %p rsp %zx\n", task_ping.regs, ((regs_t*)task_ping.regs)->rsp);
+    for (int i = 0; i < 60; ++i) {
+        if (i % 10 == 0) {
+            size_t rsp;
+            ASMV("movq %%rsp,%0" : "=r"(rsp));
+            logk("(pong-%d-%zx)", i, rsp);
+        } else {
+            logk("(pong-%d)", i);
+        }
         THISCPU_SET(g_next_task, &task_ping);
         arch_task_switch();
-        logk("111 pong %d\n", i);
     }
-    logk("task pong finished\n");
-    task_exit();
-    while (1) {
-        cpu_pause();
-        cpu_halt();
-    }
+    logk("(task pong finished)");
+    // THISCPU_SET(g_next_task, task_root);
+    // arch_task_switch();
 }
 
 void test_pingpong() {
+    ASMV("int $0xd0"); // resched
+
+    // task_root = THISCPU_GET(g_prev_task);
     task_create(&task_ping, "ping", 10, proc_ping);
+    // logk("ping regs %p rsp %zx\n", task_ping.regs, ((regs_t*)task_ping.regs)->rsp);
     task_create(&task_pong, "pong", 10, proc_pong);
+    // logk("pong regs %p rsp %zx\n", task_pong.regs, ((regs_t*)task_pong.regs)->rsp);
     task_ping.affinity = 0;
     task_pong.affinity = 0;
+
+
+    preempt_disable();
     task_start(&task_ping);
     task_start(&task_pong);
+    // logk("ping regs %p rsp %zx\n", task_ping.regs, ((regs_t*)task_ping.regs)->rsp);
+    // logk("pong regs %p rsp %zx\n", task_pong.regs, ((regs_t*)task_pong.regs)->rsp);
     THISCPU_SET(g_next_task, &task_ping);
+    // logk("ping regs %p rsp %zx\n", task_ping.regs, ((regs_t*)task_ping.regs)->rsp);
+    logk(">>> testing pingpong\n");
     arch_task_switch();
-
-    logk("back to root\n");
+    logk("(back to root)\n");
 }
 
+//------------------------------------------------------------------------------
+// 测试调度器：优先级抢占
+//------------------------------------------------------------------------------
+
+static task_t task_a;
+static task_t task_b;
+static task_t task_c;
+
+static void proc_a() {
+    int i = 0;
+    for (; i < 10; ++i) {
+        logk("(A-%d)", i);
+        arch_task_switch();
+    }
+    task_start(&task_b);
+    arch_task_switch();
+    for (; i < 20; ++i) {
+        logk("(A-%d)", i);
+        arch_task_switch();
+    }
+    logk("(A-exit)");
+}
+
+static void proc_b() {
+    int i = 0;
+    for (; i < 10; ++i) {
+        logk("(B-%d)", i);
+        arch_task_switch();
+    }
+    task_start(&task_c);
+    arch_task_switch();
+    for (; i < 20; ++i) {
+        logk("(B-%d)", i);
+        arch_task_switch();
+    }
+    logk("(B-exit)");
+}
+
+static void proc_c() {
+    for (int i = 0; i < 10; ++i) {
+        logk("(C-%d)", i);
+        arch_task_switch();
+    }
+}
+
+void test_priority() {
+    task_create(&task_a, "ta", 9, proc_a);
+    task_create(&task_b, "tb", 8, proc_b);
+    task_create(&task_c, "tc", 7, proc_c);
+    task_a.affinity = 0;
+    task_b.affinity = 0;
+    task_c.affinity = 0;
+
+    logk(">>> testing priority\n");
+    task_start(&task_a);
+    arch_task_switch();
+    logk("(priority test done)\n");
+}
 
 //------------------------------------------------------------------------------
 // 测试任务创建和退出
@@ -89,7 +169,7 @@ static task_t tb;
 static task_t tc;
 static semaphore_t g_sema;
 
-static void proc_a() {
+static void proc_consumer_a() {
     for (int i = 0; i < 10; ++i) {
         logk("(a-waiting-%d)", cpu_index());
         int got = semaphore_take(&g_sema, 3, FOREVER);
@@ -99,7 +179,7 @@ static void proc_a() {
     task_exit();
 }
 
-static void proc_b() {
+static void proc_consumer_b() {
     for (int i = 0; i < 10; ++i) {
         logk("(b-waiting-%d)", cpu_index());
         int got = semaphore_take(&g_sema, 2, FOREVER);
@@ -109,7 +189,7 @@ static void proc_b() {
     task_exit();
 }
 
-static void proc_c() {
+static void proc_consumer_c() {
     for (int i = 0; i < 10; ++i) {
         logk("(c-waiting-%d)", cpu_index());
         int got = semaphore_take(&g_sema, 1, FOREVER);
@@ -121,9 +201,9 @@ static void proc_c() {
 
 // 当前任务是生产者，三个高优先级任务是消费者
 void test_semaphore() {
-    task_create(&ta, "sema-A", 10, proc_a);
-    task_create(&tb, "sema-B", 10, proc_b);
-    task_create(&tc, "sema-C", 10, proc_c);
+    task_create(&ta, "sema-A", 10, proc_consumer_a);
+    task_create(&tb, "sema-B", 10, proc_consumer_b);
+    task_create(&tc, "sema-C", 10, proc_consumer_c);
 
     semaphore_init(&g_sema, 0, 1000);
 
@@ -197,54 +277,6 @@ void test_round_robin() {
     logk("(root yielding to rr-tasks)");
     arch_task_switch();
     logk("(root back from rr)\n");
-}
-
-
-//------------------------------------------------------------------------------
-// 测试调度器：优先级顺序
-//------------------------------------------------------------------------------
-
-static task_t g_prio_tasks[3];
-static semaphore_t g_prio_sem;
-
-static void prio_worker() {
-    task_t *self = THISCPU_GET(g_prev_task);
-    logk("(%s running cpu%d)", self->name, cpu_index());
-    semaphore_take(&g_prio_sem, 1, FOREVER);
-    logk("(%s got semaphore cpu%d)", self->name, cpu_index());
-    sched_stop_self(TS_STOPPED);
-    arch_task_switch();
-}
-
-void test_priority() {
-    semaphore_init(&g_prio_sem, 0, 3);
-
-    task_create(&g_prio_tasks[0], "prio-5",  5,  prio_worker);
-    task_create(&g_prio_tasks[1], "prio-10", 10, prio_worker);
-    task_create(&g_prio_tasks[2], "prio-15", 15, prio_worker);
-
-    preempt_disable();
-    for (int i = 0; i < 3; i++) {
-        g_prio_tasks[i].affinity = 0;
-        task_start(&g_prio_tasks[i]);
-    }
-    logk("(root yield)");
-    arch_task_switch();
-    logk("(root back)");
-
-    logk("(root give-1)");
-    semaphore_give(&g_prio_sem, 1);
-    arch_task_switch();
-
-    logk("(root give-2)");
-    semaphore_give(&g_prio_sem, 1);
-    arch_task_switch();
-
-    logk("(root give-3)");
-    semaphore_give(&g_prio_sem, 1);
-    arch_task_switch();
-
-    logk("(priority test done)\n");
 }
 
 

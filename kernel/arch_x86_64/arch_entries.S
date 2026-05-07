@@ -185,10 +185,10 @@ int_return_to_task:
     // 即将退出最后一层中断，在这里执行异步任务
     call    work_flush
 
-    // 如果抢占被禁用，跳过任务切换
-    cmpl    $0, %gs:(g_preempt_depth)
-    cmovne  %gs:(g_prev_task), %rdi
-    jne     int_return_nested
+    // // 如果抢占被禁用，跳过任务切换
+    // cmpl    $0, %gs:(g_preempt_depth)
+    // cmovne  %gs:(g_prev_task), %rdi
+    // jne     int_return_nested
 
     // 切换到新任务的栈顶（也可能是同一个任务）
     movq    %gs:(g_next_task), %rdi
@@ -218,16 +218,17 @@ syscall_entry:
 // 保存当前任务的上下文，然后执行中断返回流程
 // 当这个函数返回，说明又重新回到了原本的任务
 arch_task_switch:
+    pushfq
+    cli                     // 关中断，防止 prev_task/next_task 改变
+
     cmpq    $0, %gs:(g_int_depth)   // 如果已处于中断
-    jne     resume                  // 则不必切换任务（中断退出时会自动切换）
+    jne     noswitch                  // 则不必切换任务（中断退出时会自动切换）
 
     movq    %gs:(g_prev_task), %rsi
     movq    %gs:(g_next_task), %rdi
     cmpq    %rsi, %rdi
-    je      resume          // 目标任务相同，不用切换
+    je      noswitch          // 目标任务相同，不用切换
 
-    pushfq
-    cli                     // 关中断（防止中断干扰任务切换）
     popq    %rax            // 获取 rflags
     movq    %rsp, %r8       // 获取 rsp
     andq    $-16, %rsp      // 栈帧按 16 字节对齐
@@ -249,6 +250,9 @@ arch_task_switch:
     movl    $0, %gs:(g_preempt_depth) // arch_task_switch开抢占
     jmp     int_return_to_task
 
+noswitch:
+    // pushq   %rax
+    popfq
 resume:
     ret
 
