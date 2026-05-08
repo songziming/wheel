@@ -7,8 +7,8 @@
 
 .extern g_int_depth
 .extern g_int_stack_top
-.extern g_prev_task
-.extern g_next_task
+.extern g_tid_prev
+.extern g_tid_next
 .extern irq_handlers
 .extern work_flush
 
@@ -123,16 +123,15 @@ isr_\vec:
 // 异常响应流程，不切换中断栈，不允许重入，不切换任务
 // 异常更像是被动的函数调用，无需保存 callee-save regs，因为调用 C 函数时会自动保存
 exception_stub:
-    testl   $3, 0x18(%rsp)  // 检查 CS.CPL
-    jz      exp_from_ring0  // 如果 CS.CPL=0，说明来自 ring0
-    swapgs                  // 如果来自用户态，需要交换 gsbase
-exp_from_ring0:
+//     testl   $3, 0x18(%rsp)  // 检查 CS.CPL
+//     jz      exp_from_ring0  // 如果 CS.CPL=0，说明来自 ring0
+//     swapgs                  // 如果来自用户态，需要交换 gsbase
+// exp_from_ring0:
 
-    push_8_caller_saved_regs
-    subq    $48, %rsp       // 跳过 6 个 callee-saved regs
+    push_8_caller_saved_regs // 这些函数会被 ISR 破坏，需要保存
+    subq    $48, %rsp       // 跳过 6 个 callee-saved regs，ISR 自己会保存
     movq    %rsp, %rsi      // 参数：当前栈顶/寄存器文件
 
-    // 调用 C 函数，函数会自己保存 callee-saved regs
     movq    irq_handlers(,%rdi,8), %rax
     call    *%rax
 
@@ -140,19 +139,20 @@ exp_from_ring0:
     pop_9_caller_saved_regs
     addq    $8, %rsp        // 跳过错误码
 
-    testl   $3, 8(%rsp)     // 检查 CS.RPL
-    jz      exp_to_ring0    // 返回到内核态
-    swapgs                  // 返回到用户态
-exp_to_ring0:
+//     testl   $3, 8(%rsp)     // 检查 CS.RPL
+//     jz      exp_to_ring0    // 返回到内核态
+//     swapgs                  // 返回到用户态
+// exp_to_ring0:
     iretq
 
-// 中断响应流程，需要切换中断栈，允许重入，可能切换任务
+// 中断响应流程，需要切换中断栈，可能切换任务
 // 需要保存全部寄存器（不含浮点寄存器）
+// 中断内部可能异常，但我们不允许中断重入
 interrupt_stub:
-    testl   $3, 0x18(%rsp)  // 检查 CS.CPL
-    jz      int_from_ring0  // 如果 CS.CPL=0，说明来自 ring0
-    swapgs                  // 如果来自用户态，需要交换 gsbase
-int_from_ring0:
+//     testl   $3, 0x18(%rsp)  // 检查 CS.CPL
+//     jz      int_from_ring0  // 如果 CS.CPL=0，说明来自 ring0
+//     swapgs                  // 如果来自用户态，需要交换 gsbase
+// int_from_ring0:
 
     push_8_caller_saved_regs
     push_6_callee_saved_regs
@@ -163,9 +163,10 @@ int_from_ring0:
     cmpl    $1, %gs:(g_int_depth)
     jne     int_enter_nested
 
-    // 不是重入，需要切换到中断栈，把当前栈位置也记录下来
-    movq    %gs:(g_prev_task), %rax
-    movq    %rsi, (%rax) // g_prev_task->regs = %rsp
+    // 不是重入，当前处于任务栈
+    // 切换到中断栈，把当前栈顶保存在 TCB
+    movq    %gs:(g_tid_prev), %rax
+    movq    %rsi, (%rax) // g_tid_prev->stack_top = %rsp
     movq    %gs:(g_int_stack_top), %rsp
 
 int_enter_nested:
@@ -182,38 +183,32 @@ int_enter_nested:
     // 判断是否退出最后一层中断，如果是，需要执行任务切换
     cmpl    $1, %gs:(g_int_depth)
     jne     int_return_nested
-// int_return_to_task:
+
     // 即将退出最后一层中断，在这里执行异步任务
     call    work_flush
 
     // // 如果抢占被禁用，跳过任务切换
     // cmpl    $0, %gs:(g_preempt_depth)
-    // cmovne  %gs:(g_prev_task), %rdi
+    // cmovne  %gs:(g_tid_prev), %rdi
     // jne     int_return_nested
 
     // 切换到新任务的栈顶（也可能是同一个任务）
-    movq    %gs:(g_next_task), %rdi
+    movq    %gs:(g_tid_next), %rdi
 int_return_to_task:
-    movq    (%rdi), %rsp // rsp = g_next_task->regs
-    movq    %rdi, %gs:(g_prev_task) // prev_task = next_task
+    movq    (%rdi), %rsp // rsp = g_tid_next->regs
+    movq    %rdi, %gs:(g_tid_prev) // prev_task = next_task
 int_return_nested:
     decl    %gs:(g_int_depth)
     pop_6_callee_saved_regs
     pop_9_caller_saved_regs
     addq    $8, %rsp        // 跳过错误码
 
-    testl   $3, 8(%rsp)     // 检查 CS.RPL
-    jz      int_to_ring0    // 返回到内核态
-    int $3
-    swapgs                  // 返回到用户态
-int_to_ring0:
+//     testl   $3, 8(%rsp)     // 检查 CS.RPL
+//     jz      int_to_ring0    // 返回到内核态
+//     int $3
+//     swapgs                  // 返回到用户态
+// int_to_ring0:
     iretq
-
-
-// 系统调用入口，类似
-// 使用 syscall 命令跳转
-syscall_entry:
-    sysret
 
 
 // 不执行调度函数，直接从当前任务切换到下一个任务
@@ -228,8 +223,8 @@ arch_task_switch:
     cmpq    $0, %gs:(g_int_depth)   // 如果已处于中断
     jne     noswitch                  // 则不必切换任务（中断退出时会自动切换）
 
-    movq    %gs:(g_prev_task), %rsi
-    movq    %gs:(g_next_task), %rdi
+    movq    %gs:(g_tid_prev), %rsi
+    movq    %gs:(g_tid_next), %rdi
     cmpq    %rsi, %rdi
     je      noswitch          // 目标任务相同，不用切换
 
@@ -260,9 +255,7 @@ resume:
     ret
 
 
-// arch_task_entry:
-//     pushq   $0
-//     movq    %rsp, %rbp
-
-//     callq   *%rsi
-//     call    task_exit
+// 系统调用入口，类似
+// 使用 syscall 命令跳转
+syscall_entry:
+    sysret

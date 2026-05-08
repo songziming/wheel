@@ -24,7 +24,7 @@
 #include <ktimer.h>
 #include <kstring.h>
 #include <spin.h>
-#include <semaphore.h>
+// #include <semaphore.h>
 #include <debug.h>
 #include <ktest.h>
 
@@ -36,12 +36,12 @@ char _real_end;
 static INIT_BSS uint32_t g_fgcolor;
 static INIT_BSS size_t   g_rsdp;
 
-static INIT_BSS task_t g_root_task;
+static INIT_BSS task_t g_root_tcb;
 static INIT_TEXT void root_proc();
 
 
 static INIT_DATA int g_cpu_started = 1;
-static INIT_BSS semaphore_t g_smp_sem;
+// static INIT_BSS semaphore_t g_smp_sem;
 static INIT_BSS work_t g_smp_notifier;
 static INIT_TEXT NORETURN void ap_init(int idx);
 
@@ -240,9 +240,10 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     sched_init();
 
     // 创建根任务并开始运行，优先级 30，仅高于 idle
-    task_create(&g_root_task, "root", 30, root_proc);
-    g_root_task.affinity = 0;
-    task_start(&g_root_task);
+    task_create(&g_root_tcb, "root", 30, root_proc);
+    g_root_tcb.affinity = 0;
+    task_start(&g_root_tcb);
+    // THISCPU_SET(g_tid_next, &g_root_tcb);
     arch_task_switch();
     // 之后的代码不再运行
 
@@ -255,9 +256,22 @@ end:
 
 // 第一个运行的任务，运行在 BSP
 static INIT_TEXT void root_proc() {
-    // logk("hello from root task!\n");
-
     cpu_features_show();
+
+    // for (int i = 0; i < 1000; ++i) {
+    //     logk("R%d", i);
+    //     loapic_timer_busywait(20000);
+    // }
+
+    for (int i = 0; i < 10; ++i) {
+        logk("testing round #%d:\n", i);
+        test_cooperative();
+    }
+
+    while (1) {
+        cpu_pause();
+        cpu_halt();
+    }
 
     // 将实模式代码复制到 1M 以下
     char *from = &_real_addr;
@@ -265,7 +279,7 @@ static INIT_TEXT void root_proc() {
     kmemcpy(to, from, &_real_end - from);
     logk("copy trampoline code from %p to %p\n", from, to);
 
-    semaphore_init(&g_smp_sem, 0, 1);
+    // semaphore_init(&g_smp_sem, 0, 1);
 
     // 启动代码地址页号就是 startup-IPI 的向量号
     int vec = KERNEL_REAL_ADDR >> 12;
@@ -281,31 +295,11 @@ static INIT_TEXT void root_proc() {
 
         // 当 CPU 开始运行 task，说明初始化已经结束，不再使用 init stack
         // 前一个 CPU 初始化完成才能初始化下一个
-        semaphore_take(&g_smp_sem, 1, FOREVER);
+        // semaphore_take(&g_smp_sem, 1, FOREVER);
     }
 
     // logk("all CPU running\n");
     // arch_send_ipi(-1, VEC_IPI_RESCHED);
-
-    for (int t = 0; t < 5; ++t) {
-        test_pingpong();
-        // test_priority();
-        loapic_timer_busywait(500000);
-    }
-
-    // logk("testing create and exit:\n");
-    // test_enterleave();
-    // logk("testing semaphore\n");
-    // test_semaphore();
-
-    // sched_list_ready();
-
-    // logk("testing round-robin\n");
-    // // test_round_robin();
-    // logk("testing priority\n");
-    // test_priority();
-    // logk("stress scheduler\n");
-    // test_sched_stress();
 
     logk("stop system\n");
     arch_send_ipi(-1, VEC_IPI_STOPALL);
@@ -320,7 +314,7 @@ static INIT_TEXT void root_proc() {
 // BSP 可以启动下一个 AP，或者将 init-stack 回收
 static INIT_TEXT void notify_ap_started(work_t *work UNUSED) {
     ASSERT(cpu_int_depth() > 0);
-    semaphore_give(&g_smp_sem, 1);
+    // semaphore_give(&g_smp_sem, 1);
 }
 
 // AP 启动流程，使用 init-stack

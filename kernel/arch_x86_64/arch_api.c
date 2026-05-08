@@ -61,10 +61,6 @@ void arch_task_init(task_t *task, size_t entry, size_t stack_top,
     regs->rsi = arg2;
     regs->rdx = arg3;
     regs->rcx = arg4;
-    // regs->rip = (uint64_t)arch_task_entry;
-    // // regs->rip = (uint64_t)entry;
-    // regs->rdi = (uint64_t)task;
-    // regs->rsi = (uint64_t)entry;
 
-    task->regs = regs;
+    task->stack_top = regs;
 }
