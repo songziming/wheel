@@ -55,6 +55,7 @@ dlnode_t *rdyq_head(rdyq_t *q);
 
 INIT_TEXT void sched_init();
 void sched_process();
+void sched_yield();
 // void sched_try_migrate();
 // void sched_stop(task_t *task, uint32_t bits);
 task_t *sched_stop_self(uint32_t bits);
@@ -65,5 +66,6 @@ void sched_list_ready();
 void task_create(task_t *task, const char *name, int priority, void *entry);
 void task_start(task_t *task);
 NORETURN void task_exit();
+void purge_zombie_list();
 
 #endif // CORE_TASK_H

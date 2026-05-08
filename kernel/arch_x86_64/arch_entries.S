@@ -83,7 +83,7 @@ isr_\vec:
 //      | ERR CODE |
 // Low  |   RDI    | <-- %rsp
 
-// rdi 已经在入口点保存，现在 rdi 保存向量号
+// rdi 已经在入口点保存，现在 rdi 表示向量号
 #define push_8_caller_saved_regs  \
     pushq   %rsi;               \
     pushq   %rdx;               \
@@ -168,20 +168,21 @@ int_from_ring0:
     movq    %rsi, (%rax) // g_prev_task->regs = %rsp
     movq    %gs:(g_int_stack_top), %rsp
 
-    // TODO 需要伪造一个 stack-frame，防止 stack trace 越界
+int_enter_nested:
+    // 需要伪造一个 stack-frame，防止 stack trace 越界
     pushq   $0
     pushq   %rbp
     movq    %rsp, %rbp
-int_enter_nested:
 
     // 调用 C 函数处理中断
     movq    irq_handlers(,%rdi,8), %rax
     call    *%rax
+    addq    $16, %rsp
 
     // 判断是否退出最后一层中断，如果是，需要执行任务切换
     cmpl    $1, %gs:(g_int_depth)
     jne     int_return_nested
-int_return_to_task:
+// int_return_to_task:
     // 即将退出最后一层中断，在这里执行异步任务
     call    work_flush
 
@@ -192,16 +193,18 @@ int_return_to_task:
 
     // 切换到新任务的栈顶（也可能是同一个任务）
     movq    %gs:(g_next_task), %rdi
+int_return_to_task:
     movq    (%rdi), %rsp // rsp = g_next_task->regs
+    movq    %rdi, %gs:(g_prev_task) // prev_task = next_task
 int_return_nested:
     decl    %gs:(g_int_depth)
-    movq    %rdi, %gs:(g_prev_task) // prev_task = next_task
     pop_6_callee_saved_regs
     pop_9_caller_saved_regs
     addq    $8, %rsp        // 跳过错误码
 
     testl   $3, 8(%rsp)     // 检查 CS.RPL
     jz      int_to_ring0    // 返回到内核态
+    int $3
     swapgs                  // 返回到用户态
 int_to_ring0:
     iretq
@@ -218,6 +221,7 @@ syscall_entry:
 // 保存当前任务的上下文，然后执行中断返回流程
 // 当这个函数返回，说明又重新回到了原本的任务
 arch_task_switch:
+    movq    %rsp, %r8       // 获取 rsp
     pushfq
     cli                     // 关中断，防止 prev_task/next_task 改变
 
@@ -230,7 +234,6 @@ arch_task_switch:
     je      noswitch          // 目标任务相同，不用切换
 
     popq    %rax            // 获取 rflags
-    movq    %rsp, %r8       // 获取 rsp
     andq    $-16, %rsp      // 栈帧按 16 字节对齐
 
     // 模仿发生了一次中断
@@ -238,16 +241,16 @@ arch_task_switch:
     pushq   %r8             // rsp
     pushq   %rax            // rflags
     pushq   $0x08           // cs
-    pushq   $resume         // rip 从这里恢复（这是 32bit 立即数！）
-    subq    $80, %rsp       // errcode, rdi, and other 8 caller-saved regs
-    // subq    $16, %rsp       // errcode, rdi
-    // push_8_caller_saved_regs
+    pushq   $resume         // rip 从这里恢复
+    // subq    $80, %rsp       // errcode, rdi, and other 8 caller-saved regs
+    subq    $16, %rsp       // errcode, rdi
+    push_8_caller_saved_regs
     push_6_callee_saved_regs
     movq    %rsp, (%rsi)    // prev_task->regs = rsp
 
     incl    %gs:(g_int_depth)
     movq    %gs:(g_int_stack_top), %rsp // 切换到中断栈，因为要执行 work_flush
-    movl    $0, %gs:(g_preempt_depth) // arch_task_switch开抢占
+    // movl    $0, %gs:(g_preempt_depth) // arch_task_switch开抢占
     jmp     int_return_to_task
 
 noswitch:

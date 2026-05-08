@@ -23,7 +23,7 @@ static _Atomic uint64_t g_idle_mask;
 // static PERCPU_BSS int g_rdy_count;
 
 // 收到 IPI_MIGRATE 的 CPU 应将一个任务迁移到此目标 CPU，-1 表示没有请求
-static PERCPU_BSS int g_migrate_target;
+// static PERCPU_BSS int g_migrate_target;
 
 // 抢占禁用深度，> 0 时中断返回不切换任务
 PERCPU_DATA int g_preempt_depth = 0;
@@ -117,7 +117,7 @@ void sched_init() {
     atomic_fetch_or(&g_idle_mask, 1U << cpu_index());
     THISCPU_SET(g_prev_task, &g_dummy_task);
     THISCPU_SET(g_next_task, idle);
-    THISCPU_SET(g_migrate_target, -1);
+    // THISCPU_SET(g_migrate_target, -1);
 }
 
 // run in ISR
@@ -151,6 +151,25 @@ void sched_process() {
     // if (31 == task->priority) {
     //     sched_request_migrate();
     // }
+}
+
+void sched_yield() {
+    rdyq_t *q = THISCPU(&g_rdy_queue);
+    int key = irq_spin_take(&q->lock);
+
+    task_t *task = THISCPU_GET(g_prev_task);
+    task_t *head = containerof(rdyq_head(q), task_t, dl);
+    if (head->priority == task->priority) {
+        task = containerof(task->dl.next, task_t, dl);
+        logk("<roundto-%d=%s>", cpu_index(), task->name);
+    } else {
+        task = head;
+        logk("<yieldto-%d=%s>", cpu_index(), task->name);
+    }
+    THISCPU_SET(g_next_task, task);
+
+    irq_spin_give(&q->lock, key);
+    arch_task_switch();
 }
 
 // // 停止的任务必须位于当前 CPU，要么
@@ -188,6 +207,7 @@ task_t *sched_stop_self(uint32_t bits) {
         atomic_fetch_or(&g_idle_mask, 1U << cpu_index());
     }
 
+    logk("<stopto-%d=%s>", cpu_index(), next->name);
     THISCPU_SET(g_next_task, next);
     irq_spin_give(&q->lock, key);
 
@@ -305,6 +325,7 @@ void sched_cont(task_t *task, uint32_t bits) {
         atomic_fetch_and(&g_idle_mask, ~(1U << cpu_index()));
     }
 
+    logk("<preempt-%d=%s>", cpu_index(), next->name);
     THISCPU_SET(g_next_task, next);
     irq_spin_give(&q->lock, key);
 }
@@ -334,6 +355,7 @@ void sched_cont_on(task_t *task, uint32_t bits, int cpu) {
         atomic_fetch_and(&g_idle_mask, ~(1U << cpu));
     }
 
+    logk("<stopto-%d=%s>", cpu, next->name);
     *PERCPU(cpu, &g_next_task) = next;
     irq_spin_give(&q->lock, key);
 }
@@ -429,24 +451,49 @@ static void reap_work_func(work_t *wk UNUSED) {
     irq_spin_give(lock, key);
 }
 
+void purge_zombie_list() {
+    reap_work_func(NULL);
+}
+
 // 退出当前任务。将自身放入僵尸链表，注册 work 在下一次中断返回
 // 流程中回收资源（此时已在中断栈上），然后切换走，永不返回。
+// TODO 流程类似 sched_stop_self，只是多出了注册 work，可以合并
 NORETURN void task_exit() {
-    task_t *self = sched_stop_self(TS_STOPPED);
+    ASSERT(cpu_int_depth() == 0);
 
-    spin_t *lock = THISCPU(&g_zombie_lock);
-    dlnode_t *list = THISCPU(&g_zombie_list);
+    rdyq_t *q = THISCPU(&g_rdy_queue);
+    spin_t *zblock = THISCPU(&g_zombie_lock);
+    dlnode_t *zblist = THISCPU(&g_zombie_list);
 
-    int key = irq_spin_take(lock);
-    dl_insert_before(&self->dl, list);
-    irq_spin_give(lock, key);
+    // 关闭中断，本函数执行中不可以抢占，也不会执行 work
+    // TODO lock-preempt 也可以
+    int key = irq_spin_take(&q->lock);
 
-    // work 在 arch_task_switch → int_return_to_task → work_flush 中执行
-    // 此时已离开当前栈，运行在中断栈上，可以安全释放栈内存
-    work_defer(THISCPU(&g_reap_work), reap_work_func, "delete task");
+    task_t *self = THISCPU_GET(g_prev_task);
+    rdyq_remove(q, &self->dl, self->priority);
+    self->state |= TS_STOPPED;
 
+    dlnode_t *head = rdyq_head(q);
+    task_t *next = containerof(head, task_t, dl);
+    if (THISCPU(&g_idle_task) == next) {
+        atomic_fetch_or(&g_idle_mask, 1U << cpu_index());
+    }
+
+    // 还不能立即结束，需要趁着中断关闭，注册work
+    reap_work_func(NULL);
+    raw_spin_take(zblock);
+    dl_insert_before(&self->dl, zblist);
+    raw_spin_give(zblock);
+    logk("(deferring-del-%s)", self->name);
+    // work_defer(THISCPU(&g_reap_work), reap_work_func, "delete task");
+
+    // 更新下一个要运行的任务，开启中断
+    logk("<giveto-%d=%s>", cpu_index(), next->name);
+    THISCPU_SET(g_next_task, next);
+    irq_spin_give(&q->lock, key);
+
+    // 触发切换，切换过程中执行 work，在中断栈上执行资源删除
     arch_task_switch();
-
     while (1) {
         cpu_halt();
     }

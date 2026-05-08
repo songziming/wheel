@@ -43,6 +43,8 @@ void work_flush() {
     // spin_t *lock = THISCPU(&g_work_lock);
     // int key = irq_spin_take(lock);
 
+    int key = cpu_int_lock();
+
     dlnode_t *head = THISCPU(&g_work_q);
     dlnode_t *node = head->next;
     dl_init_circular(head); // 首先把队列清空，work 里面还可以注册下一个 work
@@ -52,5 +54,6 @@ void work_flush() {
         work->func(work);
     }
 
+    cpu_int_unlock(key);
     // irq_spin_give(lock, key);
 }

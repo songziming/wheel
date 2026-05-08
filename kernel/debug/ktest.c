@@ -20,65 +20,56 @@ static task_t task_ping;
 static task_t task_pong;
 
 static void proc_ping() {
-    logk("(task ping running)");
-    // logk("[pong regs %p rsp %zx\n", task_pong.regs, ((regs_t*)task_pong.regs)->rsp);
+    logk("(task A running)");
     for (int i = 0; i < 60; ++i) {
-        if (i % 10 == 0) {
-            size_t rsp;
-            ASMV("movq %%rsp,%0" : "=r"(rsp));
-            logk("(ping-%d-%zx)", i, rsp);
-        } else {
-            logk("(ping-%d)", i);
-        }
-        THISCPU_SET(g_next_task, &task_pong);
-        arch_task_switch();
+        // uint64_t rsp;
+        // ASMV("movq %%rsp,%0" : "=r"(rsp));
+        // logk("(A%d %zx->%zx)", i, rsp, ((regs_t*)task_pong.regs)->rsp);
+        // logk("(A%d-%p)", i, task_pong.regs);
+        logk("(A%d)", i);
+        // logk("(A%s-%d)", THISCPU_GET(g_prev_task)->name, i);
+        sched_yield();
     }
-    logk("(task ping finished)");
-    // THISCPU_SET(g_next_task, &task_pong);
-    // arch_task_switch();
+    logk("(task A finished)");
 }
 
 static void proc_pong() {
-    logk("(task pong running)");
-    // logk("[ping regs %p rsp %zx\n", task_ping.regs, ((regs_t*)task_ping.regs)->rsp);
+    logk("(task B running)");
     for (int i = 0; i < 60; ++i) {
-        if (i % 10 == 0) {
-            size_t rsp;
-            ASMV("movq %%rsp,%0" : "=r"(rsp));
-            logk("(pong-%d-%zx)", i, rsp);
-        } else {
-            logk("(pong-%d)", i);
-        }
-        THISCPU_SET(g_next_task, &task_ping);
-        arch_task_switch();
+        // uint64_t rsp;
+        // ASMV("movq %%rsp,%0" : "=r"(rsp));
+        // logk("(B%d %zx->%zx)", i, rsp, ((regs_t*)task_ping.regs)->rsp);
+        // logk("(B%d-%p)", i, task_ping.regs);
+        logk("(B%d)", i);
+        // logk("(B%s-%d)", THISCPU_GET(g_prev_task)->name, i);
+        sched_yield();
     }
-    logk("(task pong finished)");
-    // THISCPU_SET(g_next_task, task_root);
-    // arch_task_switch();
+    logk("(task B finished)");
 }
 
+static int pp_cnt = 0;
 void test_pingpong() {
-    ASMV("int $0xd0"); // resched
+    ++pp_cnt;
+    logk("running pp #%d\n", pp_cnt);
+
+    // 确保前一次的 task_t 已经结束
+    purge_zombie_list();
 
     // task_root = THISCPU_GET(g_prev_task);
     task_create(&task_ping, "ping", 10, proc_ping);
-    // logk("ping regs %p rsp %zx\n", task_ping.regs, ((regs_t*)task_ping.regs)->rsp);
     task_create(&task_pong, "pong", 10, proc_pong);
-    // logk("pong regs %p rsp %zx\n", task_pong.regs, ((regs_t*)task_pong.regs)->rsp);
     task_ping.affinity = 0;
     task_pong.affinity = 0;
 
-
-    preempt_disable();
+    // preempt_disable();
+    int key = cpu_int_lock();
     task_start(&task_ping);
     task_start(&task_pong);
-    // logk("ping regs %p rsp %zx\n", task_ping.regs, ((regs_t*)task_ping.regs)->rsp);
-    // logk("pong regs %p rsp %zx\n", task_pong.regs, ((regs_t*)task_pong.regs)->rsp);
-    THISCPU_SET(g_next_task, &task_ping);
-    // logk("ping regs %p rsp %zx\n", task_ping.regs, ((regs_t*)task_ping.regs)->rsp);
-    logk(">>> testing pingpong\n");
-    arch_task_switch();
-    logk("(back to root)\n");
+    logk("*** testing#%d A=%zx B=%zx\n", pp_cnt,
+        ((regs_t*)task_ping.regs)->rsp,
+        ((regs_t*)task_pong.regs)->rsp);
+    cpu_int_unlock(key);
+    sched_yield();
 }
 
 //------------------------------------------------------------------------------
