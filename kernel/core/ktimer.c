@@ -35,7 +35,7 @@ void timer_process() {
         tmr->delta--;
     }
 
-    // 将 delta==0 的子链表去掉
+    // 将链表开头 delta==0 的子序列去掉
     dlnode_t *oldhead = timer_q.next;
     if (oldhead != newhead) {
         timer_q.next = newhead;
@@ -45,8 +45,9 @@ void timer_process() {
     irq_spin_give(&timer_lock, key);
 
     // 遍历被移除的子链表，运行里面的函数
-    for (dlnode_t *dl = oldhead; dl != newhead; dl = dl->next) {
-        ktimer_t *old = containerof(dl, ktimer_t, dl);
+    while (oldhead != newhead) {
+        ktimer_t *old = containerof(oldhead, ktimer_t, dl);
+        oldhead = oldhead->next;
         old->func(old);
     }
 }

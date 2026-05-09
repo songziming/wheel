@@ -93,6 +93,7 @@ void sched_cont(task_t *tid, uint32_t bits) {
     if (tid->priority < THISCPU_GET(g_tid_next)->priority) {
         logk("<preempt-%d=%s>", cpu_index(), tid->name);
         THISCPU_SET(g_tid_next, tid);
+        // ASMV("xchgw %bx, %bx");
     }
 
     irq_spin_give(&q->lock, key);
@@ -108,11 +109,16 @@ typedef struct freework {
     task_t *tid;
 } freework_t;
 
+// work 函数还要访问 next
 static void task_free(work_t *wk) {
+    // work 也在函数栈上，删除映射后，不能再访问 work
     freework_t *work = containerof(wk, freework_t, wk);
-    logk("free task %s\n", work->tid->name);
-    vmspace_remove(&g_kernel_vm, &work->tid->stack);
-    work->tid->state = TS_DELETED;
+    task_t *tid = work->tid;
+    logk("free task %s\n", tid->name);
+    // logk("stack at va:%zx pa:%zx\n", tid->stack.vaddr, tid->stack.paddr);
+    // logk("work at %p, tcb at %p\n", work, tid);
+    vmspace_remove(&g_kernel_vm, &tid->stack);
+    tid->state = TS_DELETED;
 }
 
 // 全程必须关闭中断，防止被抢占，否则 work 没来得及注册，任务无法回收
@@ -179,10 +185,21 @@ void sched_process() {
     rdyq_t *q = THISCPU(&g_rdyq);
     raw_spin_take(&q->lock);
 
-    task_t *prev = THISCPU_GET(g_tid_prev);
+    task_t *prev = THISCPU_GET(g_tid_next);
     task_t *next = containerof(prev->dl.next, task_t, dl);
-    // logk("(%s->%s)", prev->name, next->name);
-    THISCPU_SET(g_tid_next, next);
+    if (prev != next) {
+        THISCPU_SET(g_tid_next, next);
+        // logk("(%s:%p->%s:%p)", prev->name, prev, next->name, next);
+
+        // logk("(%s->%s)", prev->name, next->name);
+        // size_t prev_stk = (size_t)prev->stack_top >> PAGE_SHIFT;
+        // size_t next_stk = (size_t)next->stack_top >> PAGE_SHIFT;
+        // if (prev_stk == next_stk) {
+        //     logk("same stack!\n");
+        //     ASMV("xchgw %bx, %bx");
+        //     while (1) { cpu_halt(); }
+        // }
+    }
 
     raw_spin_give(&q->lock);
 }
@@ -195,7 +212,7 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
 
     vmspace_alloc_stack(&g_kernel_vm, &tid->stack, 0);
     tid->stack.desc = name;
-    logk("%s stack at %zx\n", name, tid->stack.vaddr);
+    logk("%s stack at va:%zx -> pa:%zx\n", name, tid->stack.vaddr, tid->stack.paddr);
     arch_task_init(tid, (size_t)task_entry, tid->stack.vend, (size_t)func,0,0,0);
 }
 

@@ -40,17 +40,16 @@ void work_defer(work_t *wk, void *func, const char *desc) {
 // 在中断返回过程中执行，只有最外层中断返回时执行
 // 此时中断仍禁用，无需获取锁
 void work_flush() {
+    int key = cpu_int_lock();
     // spin_t *lock = THISCPU(&g_work_lock);
     // int key = irq_spin_take(lock);
-
-    int key = cpu_int_lock();
 
     dlnode_t *head = THISCPU(&g_work_q);
     dlnode_t *node = head->next;
     dl_init_circular(head); // 首先把队列清空，work 里面还可以注册下一个 work
-    for (; node != head; node = node->next) {
+    while (node != head) {
         work_t *work = containerof(node, work_t, dl);
-        // logk("running work %p name %s\n", work, work->desc);
+        node = node->next; // 执行函数之后，work所在内存可能就不存在了
         work->func(work);
     }
 

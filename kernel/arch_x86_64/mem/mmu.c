@@ -112,6 +112,7 @@ static uint64_t pt_unmap(uint64_t pt, uint64_t va, uint64_t end) {
             --info->ent_num;
         }
         tbl[i] = 0;
+        INVLPG(va);
         va += SIZE_4K;
     }
 

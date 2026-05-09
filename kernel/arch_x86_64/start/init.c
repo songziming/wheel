@@ -266,6 +266,8 @@ static INIT_TEXT void root_proc() {
     for (int i = 0; i < 10; ++i) {
         logk("testing round #%d:\n", i);
         test_cooperative();
+
+        loapic_timer_busywait(500000);
     }
 
     while (1) {

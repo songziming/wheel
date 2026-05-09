@@ -147,7 +147,7 @@ exception_stub:
 
 // 中断响应流程，需要切换中断栈，可能切换任务
 // 需要保存全部寄存器（不含浮点寄存器）
-// 中断内部可能异常，但我们不允许中断重入
+// 中断内部可能异常，但我们不允许中断重入（为了安全，还是检查一下）
 interrupt_stub:
 //     testl   $3, 0x18(%rsp)  // 检查 CS.CPL
 //     jz      int_from_ring0  // 如果 CS.CPL=0，说明来自 ring0
@@ -182,53 +182,56 @@ int_enter_nested:
 
     // 判断是否退出最后一层中断，如果是，需要执行任务切换
     cmpl    $1, %gs:(g_int_depth)
-    jne     int_return_nested
+    jne     iret_nested
 
     // 即将退出最后一层中断，在这里执行异步任务
+    pushq   $0
+    pushq   %rbp
+    movq    %rsp, %rbp
     call    work_flush
+    addq    $16, %rsp
 
     // // 如果抢占被禁用，跳过任务切换
     // cmpl    $0, %gs:(g_preempt_depth)
     // cmovne  %gs:(g_tid_prev), %rdi
-    // jne     int_return_nested
+    // jne     iret_nested
 
     // 切换到新任务的栈顶（也可能是同一个任务）
     movq    %gs:(g_tid_next), %rdi
-int_return_to_task:
-    movq    (%rdi), %rsp // rsp = g_tid_next->regs
+iret_to_task:
+    movq    (%rdi), %rsp // rsp = g_tid_next->stack_top
     movq    %rdi, %gs:(g_tid_prev) // prev_task = next_task
-int_return_nested:
+iret_nested:
     decl    %gs:(g_int_depth)
     pop_6_callee_saved_regs
     pop_9_caller_saved_regs
     addq    $8, %rsp        // 跳过错误码
 
 //     testl   $3, 8(%rsp)     // 检查 CS.RPL
-//     jz      int_to_ring0    // 返回到内核态
+//     jz      iret_to_ring0    // 返回到内核态
 //     int $3
 //     swapgs                  // 返回到用户态
-// int_to_ring0:
+// iret_to_ring0:
     iretq
 
 
-// 不执行调度函数，直接从当前任务切换到下一个任务
-// 但是中途需要切换到中断栈，执行 work_flush 清空异步任务
+// 不执行调度函数，不经过中断栈，直接从当前任务切换到下一个任务
 // 保存当前任务的上下文，然后执行中断返回流程
 // 当这个函数返回，说明又重新回到了原本的任务
 arch_task_switch:
-    movq    %rsp, %r8       // 获取 rsp
     pushfq
-    cli                     // 关中断，防止 prev_task/next_task 改变
+    cli                     // 关中断，防止 tid_prev/tid_next 改变
 
     cmpq    $0, %gs:(g_int_depth)   // 如果已处于中断
-    jne     noswitch                  // 则不必切换任务（中断退出时会自动切换）
+    jne     noswitch                // 则不必切换任务（中断退出时会自动切换）
 
     movq    %gs:(g_tid_prev), %rsi
     movq    %gs:(g_tid_next), %rdi
     cmpq    %rsi, %rdi
-    je      noswitch          // 目标任务相同，不用切换
+    je      noswitch        // 目标任务相同，不用切换
 
     popq    %rax            // 获取 rflags
+    movq    %rsp, %r8       // 获取 rsp
     andq    $-16, %rsp      // 栈帧按 16 字节对齐
 
     // 模仿发生了一次中断
@@ -237,16 +240,16 @@ arch_task_switch:
     pushq   %rax            // rflags
     pushq   $0x08           // cs
     pushq   $resume         // rip 从这里恢复
-    // subq    $80, %rsp       // errcode, rdi, and other 8 caller-saved regs
-    subq    $16, %rsp       // errcode, rdi
-    push_8_caller_saved_regs
+    subq    $80, %rsp       // errcode, rdi, and other 8 caller-saved regs
+    // subq    $16, %rsp       // errcode, rdi
+    // push_8_caller_saved_regs
     push_6_callee_saved_regs
-    movq    %rsp, (%rsi)    // prev_task->regs = rsp
+    movq    %rsp, (%rsi)    // tid_prev->regs = rsp
 
     incl    %gs:(g_int_depth)
-    movq    %gs:(g_int_stack_top), %rsp // 切换到中断栈，因为要执行 work_flush
+    // movq    %gs:(g_int_stack_top), %rsp // 切换到中断栈，因为要执行 work_flush
     // movl    $0, %gs:(g_preempt_depth) // arch_task_switch开抢占
-    jmp     int_return_to_task
+    jmp     iret_to_task
 
 noswitch:
     // pushq   %rax
