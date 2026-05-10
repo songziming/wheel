@@ -41,8 +41,8 @@ static INIT_TEXT void root_proc();
 
 
 static INIT_DATA int g_cpu_started = 1;
-// static INIT_BSS semaphore_t g_smp_sem;
-static INIT_BSS work_t g_smp_notifier;
+static INIT_DATA spin_t g_smp_lock = SPIN_INIT;
+static INIT_BSS  work_t g_smp_notifier;
 static INIT_TEXT NORETURN void ap_init(int idx);
 
 
@@ -258,30 +258,13 @@ end:
 static INIT_TEXT void root_proc() {
     cpu_features_show();
 
-    // for (int i = 0; i < 1000; ++i) {
-    //     logk("R%d", i);
-    //     loapic_timer_busywait(20000);
-    // }
-
-    for (int i = 0; i < 10; ++i) {
-        logk("testing round #%d:\n", i);
-        test_cooperative();
-
-        loapic_timer_busywait(500000);
-    }
-
-    while (1) {
-        cpu_pause();
-        cpu_halt();
-    }
-
     // 将实模式代码复制到 1M 以下
     char *from = &_real_addr;
     char *to = (char*)KERNEL_REAL_ADDR + DIRECT_MAP_ADDR;
     kmemcpy(to, from, &_real_end - from);
     logk("copy trampoline code from %p to %p\n", from, to);
 
-    // semaphore_init(&g_smp_sem, 0, 1);
+    raw_spin_take(&g_smp_lock);
 
     // 启动代码地址页号就是 startup-IPI 的向量号
     int vec = KERNEL_REAL_ADDR >> 12;
@@ -297,11 +280,25 @@ static INIT_TEXT void root_proc() {
 
         // 当 CPU 开始运行 task，说明初始化已经结束，不再使用 init stack
         // 前一个 CPU 初始化完成才能初始化下一个
+        raw_spin_take(&g_smp_lock);
         // semaphore_take(&g_smp_sem, 1, FOREVER);
     }
 
     // logk("all CPU running\n");
     // arch_send_ipi(-1, VEC_IPI_RESCHED);
+
+    for (int i = 0; i < 1; ++i) {
+        logk("testing round #%d:\n", i);
+        test_cooperative();
+        loapic_timer_busywait(500000);
+        logk("testing smp tasks:\n");
+        test_smp_tasks();
+    }
+
+    while (1) {
+        cpu_pause();
+        cpu_halt();
+    }
 
     logk("stop system\n");
     arch_send_ipi(-1, VEC_IPI_STOPALL);
@@ -316,6 +313,7 @@ static INIT_TEXT void root_proc() {
 // BSP 可以启动下一个 AP，或者将 init-stack 回收
 static INIT_TEXT void notify_ap_started(work_t *work UNUSED) {
     ASSERT(cpu_int_depth() > 0);
+    raw_spin_give(&g_smp_lock);
     // semaphore_give(&g_smp_sem, 1);
 }
 

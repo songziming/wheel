@@ -160,13 +160,11 @@ static void on_stopall(int vec UNUSED, regs_t *f UNUSED) {
     }
 }
 
-extern void dummy_sched();
 static void on_timer(int vec UNUSED, regs_t *f UNUSED) {
     g_write(REG_EOI, 0);
     if (0 == cpu_index()) {
         timer_process();
     }
-    // dummy_sched();
     sched_process();
 }
 

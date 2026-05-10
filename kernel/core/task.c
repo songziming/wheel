@@ -23,6 +23,8 @@ static PERCPU_BSS rdyq_t g_rdyq;
 static PERCPU_BSS task_t g_idle_tcb;
 static INIT_BSS task_t g_dummy_tcb;
 
+static _Atomic uint64_t g_idle_mask = 0UL;
+
 PERCPU_BSS task_t *g_tid_prev; // updated in int_return
 PERCPU_BSS task_t *g_tid_next; // guarded by rdyq->lock
 
@@ -74,31 +76,98 @@ dlnode_t *rdyq_head(rdyq_t *q) {
 // 任务状态切换，改变 tid_next 实现抢占
 //------------------------------------------------------------------------------
 
-// 在当前 CPU 恢复运行这个 task
-// 但不要立即触发 task-switch
-void sched_cont(task_t *tid, uint32_t bits) {
-    ASSERT(TS_READY != tid->state);
-    ASSERT(tid->affinity < 0 || tid->affinity == cpu_index());
-
-    tid->state &= ~bits;
-    if (TS_READY != tid->state) {
-        logk("task %s cannot preempt %x\n", tid->name, tid->state);
-        return; // still no ready
-    }
-
+static void _cont_this(task_t *tid) {
     rdyq_t *q = THISCPU(&g_rdyq);
     int key = irq_spin_take(&q->lock);
 
     rdyq_insert(q, &tid->dl, tid->priority);
     if (tid->priority < THISCPU_GET(g_tid_next)->priority) {
-        logk("<preempt-%d=%s>", cpu_index(), tid->name);
+        logk("<preempt %s>", tid->name);
         THISCPU_SET(g_tid_next, tid);
-        // ASMV("xchgw %bx, %bx");
     }
 
     irq_spin_give(&q->lock, key);
 }
 
+static void _cont_cpu(task_t *tid, int cpu) {
+    rdyq_t *q = PERCPU(cpu, &g_rdyq);
+    int key = irq_spin_take(&q->lock);
+
+    rdyq_insert(q, &tid->dl, tid->priority);
+    if (tid->priority < (*PERCPU(cpu, &g_tid_next))->priority) {
+        *PERCPU(cpu, &g_tid_next) = tid;
+    }
+
+    irq_spin_give(&q->lock, key);
+}
+
+// 恢复运行这个 task，返回需要切换任务的 CPU-mask
+// 启动任务、semaphore/fence 恢复任务时调用此函数
+uint64_t sched_cont(task_t *tid, uint32_t bits) {
+    ASSERT(TS_READY != tid->state);
+    // ASSERT(tid->affinity < 0 || tid->affinity == cpu_index());
+
+    tid->state &= ~bits;
+    if (TS_READY != tid->state) {
+        logk("task %s cannot preempt %x\n", tid->name, tid->state);
+        return 0; // still no ready
+    }
+
+    // 变为运行态，寻找一个 CPU 来运行
+    int cpu = tid->affinity;
+    if (cpu < 0) {
+        cpu = cpu_index(); // 优先选择当前 cpu
+        uint64_t this_mask = 1ULL << cpu;
+        uint64_t idle_mask = atomic_load(&g_idle_mask);
+        // logk("selecting cpu from mask %zx\n", idle_mask);
+        if ((0 != idle_mask) && !(idle_mask & this_mask)) {
+            // 当前 cpu 不是 idle，且存在其他 idle cpu，挑选一个 cpu
+            cpu = __builtin_ctzll(idle_mask);
+            ASSERT(cpu_index() != cpu);
+        }
+    }
+    // logk("starting task %s on cpu-%d\n", tid->name, cpu);
+
+    if (cpu_index() == cpu) {
+        _cont_this(tid);
+    } else {
+        _cont_cpu(tid, cpu);
+    }
+
+    atomic_fetch_and(&g_idle_mask, ~(1UL << cpu));
+
+    // 返回 cpu-mask，这样批量恢复任务时（如 semaphore、fence）
+    // 就可以最后统一发送 IPI
+    return 1ULL << cpu;
+}
+
+
+//------------------------------------------------------------------------------
+// 任务停止运行，只能停止当前任务
+//------------------------------------------------------------------------------
+
+void task_stop(uint32_t bits) {
+    task_t *self = THISCPU_GET(g_tid_prev);
+    rdyq_t *q = THISCPU(&g_rdyq);
+
+    self->state |= bits;
+
+    int key = irq_spin_take(&q->lock);
+    rdyq_remove(q, &self->dl, self->priority);
+    task_t *next = containerof(rdyq_head(q), task_t, dl);
+    THISCPU_SET(g_tid_next, next);
+
+    logk("curr %s stop, next is %s\n", self->name, next->name);
+
+    if (31 == next->priority) {
+        logk("cpu-%d idle again\n", cpu_index());
+        atomic_fetch_or(&g_idle_mask, 1UL << cpu_index());
+    }
+
+    // TODO 在这里将 self 放在 pend-queue 里面
+
+    irq_spin_give(&q->lock, key);
+}
 
 //------------------------------------------------------------------------------
 // 退出自身任务
@@ -122,6 +191,7 @@ static void task_free(work_t *wk) {
 }
 
 // 全程必须关闭中断，防止被抢占，否则 work 没来得及注册，任务无法回收
+// TODO 大部分逻辑和 task_stop 一样，应该统一
 void task_exit() {
     task_t *self = THISCPU_GET(g_tid_prev);
 
@@ -133,6 +203,9 @@ void task_exit() {
 
     task_t *next = containerof(rdyq_head(q), task_t, dl);
     THISCPU_SET(g_tid_next, next);
+    if (31 == next->priority) {
+        atomic_fetch_or(&g_idle_mask, 1UL << cpu_index());
+    }
 
     freework_t freework;
     freework.tid = self;
@@ -171,7 +244,10 @@ INIT_TEXT void sched_init() {
     task_t *idle = THISCPU(&g_idle_tcb);
     task_create(idle, "idle", 31, proc_idle);
     idle->affinity = cpu_index();
+    idle->state = TS_READY;
     rdyq_insert(q, &idle->dl, 31);
+    // task_start(idle);
+    g_idle_mask |= 1UL << cpu_index();
 
     g_dummy_tcb.priority = 33; // 确保能抢占
     THISCPU_SET(g_tid_prev, &g_dummy_tcb);
@@ -188,10 +264,10 @@ void sched_process() {
     task_t *prev = THISCPU_GET(g_tid_next);
     task_t *next = containerof(prev->dl.next, task_t, dl);
     if (prev != next) {
+        // logk("(%s->%s)", prev->name, next->name);
         THISCPU_SET(g_tid_next, next);
         // logk("(%s:%p->%s:%p)", prev->name, prev, next->name, next);
 
-        // logk("(%s->%s)", prev->name, next->name);
         // size_t prev_stk = (size_t)prev->stack_top >> PAGE_SHIFT;
         // size_t next_stk = (size_t)next->stack_top >> PAGE_SHIFT;
         // if (prev_stk == next_stk) {
@@ -216,6 +292,6 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
     arch_task_init(tid, (size_t)task_entry, tid->stack.vend, (size_t)func,0,0,0);
 }
 
-void task_start(task_t *tid) {
-    sched_cont(tid, TS_STOPPED);
+uint64_t task_start(task_t *tid) {
+    return sched_cont(tid, TS_STOPPED);
 }
