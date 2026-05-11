@@ -6,9 +6,7 @@
 #include <kstring.h>
 #include <debug.h>
 
-// #include <apic/apic.h>
-
-
+// #define LOG_SCHED 1
 
 #define PRIORITY_NUM 32
 
@@ -82,7 +80,9 @@ static void _cont_this(task_t *tid) {
 
     rdyq_insert(q, &tid->dl, tid->priority);
     if (tid->priority < THISCPU_GET(g_tid_next)->priority) {
+#if defined(LOG_SCHED) && LOG_SCHED
         logk("<preempt %s>", tid->name);
+#endif
         THISCPU_SET(g_tid_next, tid);
     }
 
@@ -186,6 +186,9 @@ static void task_free(work_t *wk) {
     logk("free task %s\n", tid->name);
     // logk("stack at va:%zx pa:%zx\n", tid->stack.vaddr, tid->stack.paddr);
     // logk("work at %p, tcb at %p\n", work, tid);
+
+    // 不同 task 可能共享同一个 vmspace，需要加锁保护
+    // 跨 cpu unmap 可能发送 IPI 执行 TLB-shootdown，造成死锁
     vmspace_remove(&g_kernel_vm, &tid->stack);
     tid->state = TS_DELETED;
 }
@@ -264,7 +267,9 @@ void sched_process() {
     task_t *prev = THISCPU_GET(g_tid_next);
     task_t *next = containerof(prev->dl.next, task_t, dl);
     if (prev != next) {
-        // logk("(%s->%s)", prev->name, next->name);
+#if defined(LOG_SCHED) && LOG_SCHED
+        logk("[%s->%s]", prev->name, next->name);
+#endif
         THISCPU_SET(g_tid_next, next);
         // logk("(%s:%p->%s:%p)", prev->name, prev, next->name, next);
 
@@ -288,7 +293,7 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
 
     vmspace_alloc_stack(&g_kernel_vm, &tid->stack, 0);
     tid->stack.desc = name;
-    logk("%s stack at va:%zx -> pa:%zx\n", name, tid->stack.vaddr, tid->stack.paddr);
+    // logk("%s stack at va:%zx -> pa:%zx\n", name, tid->stack.vaddr, tid->stack.paddr);
     arch_task_init(tid, (size_t)task_entry, tid->stack.vend, (size_t)func,0,0,0);
 }
 

@@ -40,6 +40,8 @@
 - [ ] 改进终端输出，klog 不再直接控制 framebuf，而是写文件 /sys/log。另创建一个 print task，不断读取 /sys/log，将读取到的内容显示在 framebuf。
       输出文件 /sys/log 在字符模式和图形模式都可用，还可以将输出真的写到磁盘上。
 
+- [ ] 优化 vmspace-unmap TLB-shootdown，向其他 CPU 发送 IPI 清除缓存
+- [ ] 不在中断里执行 work、vmspace-unmap，借鉴 linux bottomhalf 机制，启动一个高优先级任务 irqtask 执行任务。
 
 # 优化点
 

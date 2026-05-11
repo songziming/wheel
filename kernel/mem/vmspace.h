@@ -1,6 +1,7 @@
 #ifndef VMSPACE_H
 #define VMSPACE_H
 
+#include <spin.h>
 #include <dllist.h>
 #include <arch_api.h>
 
@@ -16,6 +17,7 @@ typedef struct vmrange {
 
 // 代表一个虚拟地址空间
 typedef struct vmspace {
+    spin_t   lock;
     dlnode_t head;   // vmrange 链表头节点
     size_t   table;  // 页表
     // pglist_t cache;  // 缓存几个物理页，页表操作时无需访问 page-alloc

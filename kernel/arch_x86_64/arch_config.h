@@ -30,8 +30,9 @@
 
 // 中断向量号
 #define VEC_GSI_BASE        0x40
-#define VEC_IPI_RESCHED     0xd0    // 触发任务切换
-#define VEC_IPI_STOPALL     0xd1    // 所有 CPU 都停止
+#define VEC_IPI_STOPALL     0xd0    // 所有 CPU 都停止
+#define VEC_IPI_RESCHED     0xd1    // 触发任务切换
+#define VEC_IPI_INVLPG      0xd2    // TLB-shootdown
 // #define VEC_IPI_MIGRATE     0xd2    // 迁移任务到空闲 CPU
 #define VEC_LOAPIC_TIMER    0xe0
 #define VEC_LOAPIC_ERROR    0xf0

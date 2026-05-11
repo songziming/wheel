@@ -284,9 +284,6 @@ static INIT_TEXT void root_proc() {
         // semaphore_take(&g_smp_sem, 1, FOREVER);
     }
 
-    // logk("all CPU running\n");
-    // arch_send_ipi(-1, VEC_IPI_RESCHED);
-
     for (int i = 0; i < 1; ++i) {
         logk("testing round #%d:\n", i);
         test_cooperative();
@@ -295,13 +292,10 @@ static INIT_TEXT void root_proc() {
         test_smp_tasks();
     }
 
-    while (1) {
-        cpu_pause();
-        cpu_halt();
-    }
-
     logk("stop system\n");
-    arch_send_ipi(-1, VEC_IPI_STOPALL);
+    arch_send_ipi(IPI_ALL_EXCLUDING_SELF, VEC_IPI_STOPALL);
+
+    logk("BSP in root is not stopped\n");
 
     while (1) {
         cpu_pause();

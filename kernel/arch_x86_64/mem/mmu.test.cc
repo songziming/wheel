@@ -24,6 +24,8 @@ protected:
     }
 };
 
+static void tlb_shootdown(size_t va) {}
+
 // 测试各级映射
 TEST_F(MmuTest, MapUnmapNormal) {
     size_t pgtbl = mmu_create();

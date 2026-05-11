@@ -16,4 +16,6 @@ INIT_TEXT size_t thiscpu_int_stack();
 
 INIT_TEXT void mem_init();
 
+void on_ipi_invlpg();
+
 #endif // ARCH_X86_64_MEM_MEM_H

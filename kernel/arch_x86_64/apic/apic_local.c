@@ -2,6 +2,7 @@
 #include <arch_api.h>
 #include <arch_int.h>
 #include <cpu/features.h>
+#include <mem/mem.h>
 #include <ktimer.h>
 #include <task.h>
 #include <debug.h>
@@ -53,7 +54,7 @@ enum loapic_reg {
 #define LOAPIC_MSR_EXTD     0x00000400  // enable x2APIC mode
 #define LOAPIC_MSR_BSP      0x00000100  // local APIC is bsp
 
-// ICR bits
+// ICR/LVT bits
 #define ICR_VECTOR_MASK     0x000000ff  // vector number mask
 #define LOAPIC_DM_FIXED     0x00000000  // delivery mode: fixed
 #define LOAPIC_DM_LOWEST    0x00000100  // delivery mode: lowest
@@ -63,15 +64,17 @@ enum loapic_reg {
 #define LOAPIC_DM_STARTUP   0x00000600  // delivery mode: startup
 #define LOAPIC_DM_EXTINT    0x00000700  // delivery mode: ExtINT
 #define LOAPIC_LOGICAL      0x00000800  // destination mode: logical
-#define LOAPIC_IDLE         0x00000000  // delivery status: idle
+#define LOAPIC_IDLE         0x00000000  // delivery status: idle (no in x2APIC)
 #define LOAPIC_PENDING      0x00001000  // delivery status: pend
-#define LOAPIC_HIGH         0x00000000  // polarity: High
+#define LOAPIC_HIGH         0x00000000  // polarity: High (no in ICR)
 #define LOAPIC_LOW          0x00002000  // polarity: Low
 #define LOAPIC_REMOTE       0x00004000  // remote IRR
 #define LOAPIC_DEASSERT     0x00000000  // level: de-assert
 #define LOAPIC_ASSERT       0x00004000  // level: assert
 #define LOAPIC_EDGE         0x00000000  // trigger mode: Edge
 #define LOAPIC_LEVEL        0x00008000  // trigger mode: Level
+
+
 #define LOAPIC_INT_MASK     0x00010000  // interrupt disabled mask
 
 // local APIC spurious-interrupt reg bits
@@ -146,11 +149,6 @@ static INIT_TEXT void loapic_enable_x2() {
 // 中断处理函数
 //------------------------------------------------------------------------------
 
-static void on_resched(int vec UNUSED, regs_t *f UNUSED) {
-    g_write(REG_EOI, 0);
-    // 无需任何动作，中断返回过程自然会切换任务
-}
-
 static void on_stopall(int vec UNUSED, regs_t *f UNUSED) {
     g_write(REG_EOI, 0);
     logk("[CPU-%d stopped]\n", cpu_index());
@@ -158,6 +156,16 @@ static void on_stopall(int vec UNUSED, regs_t *f UNUSED) {
         cpu_pause();
         cpu_halt();
     }
+}
+
+static void on_resched(int vec UNUSED, regs_t *f UNUSED) {
+    g_write(REG_EOI, 0);
+    // 无需任何动作，中断返回过程自然会切换任务
+}
+
+static void on_invlpg(int vec UNUSED, regs_t *f UNUSED) {
+    g_write(REG_EOI, 0);
+    on_ipi_invlpg();
 }
 
 static void on_timer(int vec UNUSED, regs_t *f UNUSED) {
@@ -193,8 +201,9 @@ INIT_TEXT void loapic_init() {
     // TODO 有些 local apic handlers 非常简单，直接 iretq 就可以
     //      完全可以跳过默认中断的寄存器保存恢复
     //      定义专用的 naked isr function，然后修改 IDT
-    irq_handlers[VEC_IPI_RESCHED] = on_resched;
     irq_handlers[VEC_IPI_STOPALL] = on_stopall;
+    irq_handlers[VEC_IPI_RESCHED] = on_resched;
+    irq_handlers[VEC_IPI_INVLPG]  = on_invlpg;
     irq_handlers[VEC_LOAPIC_TIMER] = on_timer;
     irq_handlers[VEC_LOAPIC_ERROR] = on_error;
     irq_handlers[VEC_LOAPIC_THERMAL] = on_thermal;
@@ -296,6 +305,11 @@ void arch_send_ipi(int cpu, int vec) {
 
     uint32_t lo = (vec & ICR_VECTOR_MASK) | LOAPIC_DM_FIXED | LOAPIC_EDGE | LOAPIC_DEASSERT;
     if (cpu < 0) {
+        if (IPI_ALL_INCLUDING_SELF == cpu) {
+            lo |= 2 << 18; // dest shorthand: all including self
+        } else if (IPI_ALL_EXCLUDING_SELF == cpu) {
+            lo |= 3 << 18; // dest shorthand: all excluding self
+        }
         g_write_icr(0xffffffffU, lo); // 广播
     } else {
         g_write_icr(g_loapics[cpu].apic_id, lo);
