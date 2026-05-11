@@ -6,7 +6,6 @@ Thumbs.db
 .vscode/
 /build*
 
-.gdbinit
 .gdb_history
 
 *.bak

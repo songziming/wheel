@@ -43,6 +43,7 @@ void   mmu_delete(size_t tbl);
 size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs);
 void   mmu_map(size_t tbl, size_t va, size_t end, size_t pa, mmu_attr_t attrs);
 void   mmu_unmap(size_t tbl, size_t va, size_t end);
+void tlb_shootdown(size_t vstart, size_t vend);
 
 // 多任务支持
 typedef struct task task_t;

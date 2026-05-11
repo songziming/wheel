@@ -42,7 +42,7 @@
 #define OFFSET_1G(x)    ((x) & (SIZE_1G - 1))
 
 
-// #define tlb_shootdown(va)  ASMV("invlpg (%0)" :: "r"(va) : "memory")
+#define INVLPG(va)  ASMV("invlpg (%0)" :: "r"(va) : "memory")
 
 // 单元测试，模仿虚拟地址和物理地址的转换
 #if defined(UNIT_TEST)
@@ -67,8 +67,6 @@ static uint64_t alloc_table(int tag UNUSED) {
 static void free_table(uint64_t tbl) {
     page_free(tbl);
 }
-
-static void tlb_shootdown(size_t va);
 
 
 
@@ -115,7 +113,7 @@ static uint64_t pt_unmap(uint64_t pt, uint64_t va, uint64_t end) {
             --info->ent_num;
         }
         tbl[i] = 0;
-        tlb_shootdown(va);
+        INVLPG(va);
         va += SIZE_4K;
     }
 
@@ -214,7 +212,7 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
             }
             --info->ent_num;
             tbl[i] = 0;
-            tlb_shootdown(va);
+            INVLPG(va);
             va += SIZE_2M;
             continue;
         }
@@ -241,7 +239,7 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
                 va = end;
             }
             tbl[i] = (pt & MMU_ADDR) | MMU_P | MMU_US | MMU_RW;
-            tlb_shootdown(va2m);
+            INVLPG(va2m);
         } else {
             va += pt_unmap(pt, va, end);
         }
@@ -364,7 +362,7 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
             }
             tbl[i] = 0;
             --info->ent_num;
-            tlb_shootdown(va);
+            INVLPG(va);
             va += SIZE_1G;
             continue;
         }
@@ -392,7 +390,7 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
             }
 
             tbl[i] = (pd & MMU_ADDR) | MMU_P | MMU_US | MMU_RW;
-            tlb_shootdown(va1g);
+            INVLPG(va1g);
         } else {
             va += pd_unmap(pd, va, end);
         }
@@ -625,29 +623,31 @@ void mmu_unmap(size_t tbl, size_t va, size_t end) {
 
 static spin_t g_shootdown_lock = SPIN_INIT;
 static _Atomic int g_shootdown_cnt;
-static size_t g_shootdown_va;
+static size_t g_shootdown_vstart;
+static size_t g_shootdown_vend;
 
 void on_ipi_invlpg() {
-    ASMV("invlpg (%0)" :: "r"(g_shootdown_va) : "memory");
-    // atomic_fetch_sub(&g_shootdown_cnt, 1);
+    for (uint64_t va = g_shootdown_vstart; va < g_shootdown_vend; va += PAGE_SIZE) {
+        ASMV("invlpg (%0)" :: "r"(va) : "memory");
+    }
+    atomic_fetch_sub(&g_shootdown_cnt, 1);
 }
 
-// TLB-shootdown 是不同 cpu 之间发生的，关闭中断是无效的
-// 必须保持中断开启，否则收不到 IPI-INVLPG
-// TODO 该函数在 vmspace_unmap 内部调用，调用者正持有 vmspace lock 且关闭中断
-//      其他 cpu 可能正在 work 函数中释放任务的栈空间，也需要操作 vmspace，且中断关闭
-//      会造成死锁，处于 ISR 的 CPU 接收不到 invlpg-IPI，又在等待 vmspace-lock
-static void tlb_shootdown(size_t va) {
+// 让其他 cpu 清除映射，必须在任务里执行，不能在中断调用
+// 执行之后，其他 cpu 都不再持有这段 va 的映射，只有自身 cpu 有映射
+// 接下来，当前 cpu 可以放心地删除任务栈，放心地执行 vmspace_remove
+// vmspace_remove 函数中，会执行 invlpg 删除当前 cpu 的映射
+void tlb_shootdown(size_t vstart, size_t vend) {
+    ASSERT(0 == cpu_int_depth());
 
-    // raw_spin_take(&g_shootdown_lock);
-
-    // atomic_store(&g_shootdown_cnt, cpu_count() - 1);
-    // g_shootdown_va = va;
+    raw_spin_take(&g_shootdown_lock);
+    atomic_store(&g_shootdown_cnt, cpu_count() - 1);
+    g_shootdown_vstart = vstart;
+    g_shootdown_vend = vend;
     arch_send_ipi(IPI_ALL_EXCLUDING_SELF, VEC_IPI_INVLPG); // all except self
-    ASMV("invlpg (%0)" :: "r"(va) : "memory");
-    // while (atomic_load(&g_shootdown_cnt) > 0) {
-    //     cpu_pause();
-    // }
 
-    // raw_spin_give(&g_shootdown_lock);
+    while (atomic_load(&g_shootdown_cnt) > 0) {
+        cpu_pause();
+    }
+    raw_spin_give(&g_shootdown_lock);
 }

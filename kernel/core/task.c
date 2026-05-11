@@ -181,14 +181,13 @@ typedef struct freework {
 // work 函数还要访问 next
 static void task_free(work_t *wk) {
     // work 也在函数栈上，删除映射后，不能再访问 work
+    // 所以提前读出 task，后面直接用 tid
     freework_t *work = containerof(wk, freework_t, wk);
     task_t *tid = work->tid;
     logk("free task %s\n", tid->name);
     // logk("stack at va:%zx pa:%zx\n", tid->stack.vaddr, tid->stack.paddr);
     // logk("work at %p, tcb at %p\n", work, tid);
 
-    // 不同 task 可能共享同一个 vmspace，需要加锁保护
-    // 跨 cpu unmap 可能发送 IPI 执行 TLB-shootdown，造成死锁
     vmspace_remove(&g_kernel_vm, &tid->stack);
     tid->state = TS_DELETED;
 }
@@ -197,6 +196,10 @@ static void task_free(work_t *wk) {
 // TODO 大部分逻辑和 task_stop 一样，应该统一
 void task_exit() {
     task_t *self = THISCPU_GET(g_tid_prev);
+
+    // 发送 IPI，让其他 cpu 清楚当前 task-stack
+    // 这样只剩当前 cpu 还保留 mapping，留到 work 里面删除
+    tlb_shootdown(self->stack.vaddr, self->stack.vend);
 
     rdyq_t *q = THISCPU(&g_rdyq);
     int key = irq_spin_take(&q->lock);

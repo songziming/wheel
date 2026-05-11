@@ -50,11 +50,8 @@ void test_cooperative() {
     task_create(&ta, "ta", 10, proc_a);
     task_create(&tb, "tb", 10, proc_b);
 
-    // TODO 如果在其他 CPU 运行，启动下一轮测试时会报 #GP
-    // TODO 可能原因是 vmspace 没有自旋锁保护，两个 cpu 共同操作页表竞争
-    // NEXT 研究 TLB-shootdown 问题，vmspace 加锁
-    ta.affinity = 0;
-    tb.affinity = 0;
+    // ta.affinity = 0;
+    // tb.affinity = 0;
 
     int key = cpu_int_lock();
     task_start(&ta);
@@ -104,7 +101,7 @@ void test_smp_tasks() {
         kmemcpy(smp_names[i], "smpX", 5);
         smp_names[i][3] = 'A' + i;
         task_create(&smp_tcbs[i], smp_names[i], 10, proc_smp);
-        smp_tcbs[i].affinity = 0;
+        // smp_tcbs[i].affinity = 0;
     }
 
     int key = cpu_int_lock();
@@ -123,10 +120,9 @@ void test_smp_tasks() {
     }
     while (cpuset) {
         int cpu = __builtin_ctzll(cpuset);
+        ASSERT(cpu_index() != cpu);
         cpuset &= cpuset - 1;
-        if (cpu_index() == cpu) {
-            arch_send_ipi(cpu, VEC_IPI_RESCHED);
-        }
+        arch_send_ipi(cpu, VEC_IPI_RESCHED);
     }
 
     cpu_int_unlock(key);
