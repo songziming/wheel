@@ -110,13 +110,22 @@ void test_smp_tasks() {
         // smp_tcbs[i].affinity = 0;
     }
 
-    int key = cpu_int_lock();
+    // 批量启动多个任务，应该禁用中断
+    preempt_lock();
+    // int key = cpu_int_lock();
     uint64_t cpuset = 0UL;
     for (int i = 0; i < 10; ++i) {
         cpuset |= task_start(&smp_tcbs[i]);
     }
     notify_resched(cpuset);
-
-    cpu_int_unlock(key);
+    preempt_unlock();
+    // cpu_int_unlock(key);
     arch_task_switch();
+
+    for (int i = 0; i < 10; ++i) {
+        while (TS_DELETED != smp_tcbs[i].state) {
+            cpu_pause();
+        }
+    }
+    logk("all smp tasks finished!\n");
 }

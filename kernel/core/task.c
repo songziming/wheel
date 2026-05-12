@@ -322,20 +322,26 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
     arch_task_init(tid, (size_t)task_entry, tid->stack.vend, (size_t)func,0,0,0);
 }
 
+// 启动任务并立即切换
+void task_start_now(task_t *tid) {
+    uint64_t cpumask = sched_cont(tid, TS_STOPPED);
+    int cpu = __builtin_ctzll(cpumask);
+    if (cpu_index() == cpu) {
+        arch_task_switch();
+    } else {
+        arch_send_ipi(cpu, VEC_IPI_RESCHED);
+    }
+}
+
+// 启动任务但暂时不要切换
+// 如果批量启动任务，顺序是：禁用抢占，启动任务，发送 ipi，启用抢占，切换
 uint64_t task_start(task_t *tid) {
     return sched_cont(tid, TS_STOPPED);
 }
 
-
 // 执行 task_start 之后，调用此函数发送 IPI，通知目标 cpu 切换任务
 // 不操作当前 cpu，调用者应保证禁用抢占
 void notify_resched(uint64_t cpumask) {
-    // int has_local = 0;
-    // uint64_t this_mask = 1UL << cpu_index();
-    // if (cpumask & this_mask) {
-    //     has_local = 1;
-    //     cpumask &= ~this_mask;
-    // }
     cpumask &= ~(1UL << cpu_index());
     while (cpumask) {
         int cpu = __builtin_ctzll(cpumask);

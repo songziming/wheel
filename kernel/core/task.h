@@ -35,6 +35,7 @@ void sched_process();
 void task_create(task_t *tid, const char *name, int prio, void *func);
 void task_stop(uint32_t bits);
 uint64_t task_start(task_t *tid);
+void task_start_now(task_t *tid);
 void notify_resched(uint64_t cpumask);
 
 #endif // TASK_H
