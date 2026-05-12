@@ -7,6 +7,7 @@
 
 .extern g_int_depth
 .extern g_int_stack_top
+.extern g_preempt_depth
 .extern g_tid_prev
 .extern g_tid_next
 .extern irq_handlers
@@ -191,10 +192,10 @@ int_enter_nested:
     call    work_flush
     addq    $16, %rsp
 
-    // // 如果抢占被禁用，跳过任务切换
-    // cmpl    $0, %gs:(g_preempt_depth)
-    // cmovne  %gs:(g_tid_prev), %rdi
-    // jne     iret_nested
+    // 如果禁用抢占被禁用，跳过任务切换
+    cmpl    $0, %gs:(g_preempt_depth)
+    cmovne  %gs:(g_tid_prev), %rdi
+    jne     iret_to_task
 
     // 切换到新任务的栈顶（也可能是同一个任务）
     movq    %gs:(g_tid_next), %rdi

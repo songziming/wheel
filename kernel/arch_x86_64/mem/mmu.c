@@ -1,5 +1,6 @@
 #include <arch_api.h>
 #include <page.h>
+#include <task.h>
 #include <kstring.h>
 #include <spin.h>
 #include <debug.h>
@@ -640,14 +641,18 @@ void on_ipi_invlpg() {
 void tlb_shootdown(size_t vstart, size_t vend) {
     ASSERT(0 == cpu_int_depth());
 
+    preempt_lock();
     raw_spin_take(&g_shootdown_lock);
     atomic_store(&g_shootdown_cnt, cpu_count() - 1);
     g_shootdown_vstart = vstart;
     g_shootdown_vend = vend;
     arch_send_ipi(IPI_ALL_EXCLUDING_SELF, VEC_IPI_INVLPG); // all except self
 
+    // 等待过程保持中断开启，当时禁用抢占
+    // 如果另一个 cpu 发来 shootdown-IPI，我们也能处理
     while (atomic_load(&g_shootdown_cnt) > 0) {
         cpu_pause();
     }
     raw_spin_give(&g_shootdown_lock);
+    preempt_unlock();
 }

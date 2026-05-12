@@ -28,18 +28,16 @@ void fence_signal(fence_t *fence) {
     dlnode_t *dl = fence->penders.next;
     dl_init_circular(&fence->penders);
 
+    // 恢复任务的过程中，保持中断关闭
     uint64_t cpu_mask = 0UL;
     while (dl != &fence->penders) {
         fence_pender_t *pender = containerof(dl, fence_pender_t, dl);
         dl = dl->next;
-        task_start(pender->tid);
+        cpu_mask |= task_start(pender->tid);
     }
+    notify_resched(cpu_mask);
 
-    while (cpu_mask) {
-        int cpu = __builtin_ctzll(cpu_mask);
-        cpu_mask &= cpu_mask - 1;
-        arch_send_ipi(cpu, VEC_IPI_RESCHED);
-    }
-
+    // 打开中断，当前 cpu 也要检查抢占
     irq_spin_give(&fence->lock, key);
+    arch_task_switch();
 }

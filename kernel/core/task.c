@@ -21,8 +21,11 @@ static PERCPU_BSS rdyq_t g_rdyq;
 static PERCPU_BSS task_t g_idle_tcb;
 static INIT_BSS task_t g_dummy_tcb;
 
+// 负载均衡
 static _Atomic uint64_t g_idle_mask = 0UL;
+static _Atomic uint32_t g_next_cpu = 0U;
 
+PERCPU_DATA int g_preempt_depth = 0;
 PERCPU_BSS task_t *g_tid_prev; // updated in int_return
 PERCPU_BSS task_t *g_tid_next; // guarded by rdyq->lock
 
@@ -71,6 +74,18 @@ dlnode_t *rdyq_head(rdyq_t *q) {
 }
 
 //------------------------------------------------------------------------------
+// 禁用抢占但允许中断
+//------------------------------------------------------------------------------
+
+void preempt_lock() {
+    THISCPU_ADD(g_preempt_depth, 1);
+}
+
+void preempt_unlock() {
+    THISCPU_ADD(g_preempt_depth, -1);
+}
+
+//------------------------------------------------------------------------------
 // 任务状态切换，改变 tid_next 实现抢占
 //------------------------------------------------------------------------------
 
@@ -116,17 +131,18 @@ uint64_t sched_cont(task_t *tid, uint32_t bits) {
     // 变为运行态，寻找一个 CPU 来运行
     int cpu = tid->affinity;
     if (cpu < 0) {
-        cpu = cpu_index(); // 优先选择当前 cpu
-        uint64_t this_mask = 1ULL << cpu;
+        uint64_t this_mask = 1ULL << cpu_index();
         uint64_t idle_mask = atomic_load(&g_idle_mask);
-        // logk("selecting cpu from mask %zx\n", idle_mask);
-        if ((0 != idle_mask) && !(idle_mask & this_mask)) {
-            // 当前 cpu 不是 idle，且存在其他 idle cpu，挑选一个 cpu
+        if (idle_mask & this_mask) {
+            cpu = cpu_index(); // prefer thiscpu
+        } else if (0 != idle_mask) {
             cpu = __builtin_ctzll(idle_mask);
             ASSERT(cpu_index() != cpu);
+        } else {
+            // 按顺序挑选，平摊负载
+            cpu = atomic_fetch_add(&g_next_cpu, 1) % cpu_count();
         }
     }
-    // logk("starting task %s on cpu-%d\n", tid->name, cpu);
 
     if (cpu_index() == cpu) {
         _cont_this(tid);
@@ -157,10 +173,14 @@ void task_stop(uint32_t bits) {
     task_t *next = containerof(rdyq_head(q), task_t, dl);
     THISCPU_SET(g_tid_next, next);
 
+#if defined(LOG_SCHED) && LOG_SCHED
     logk("curr %s stop, next is %s\n", self->name, next->name);
+#endif
 
     if (31 == next->priority) {
+#if defined(LOG_SCHED) && LOG_SCHED
         logk("cpu-%d idle again\n", cpu_index());
+#endif
         atomic_fetch_or(&g_idle_mask, 1UL << cpu_index());
     }
 
@@ -184,7 +204,9 @@ static void task_free(work_t *wk) {
     // 所以提前读出 task，后面直接用 tid
     freework_t *work = containerof(wk, freework_t, wk);
     task_t *tid = work->tid;
+#if defined(LOG_SCHED) && LOG_SCHED
     logk("free task %s\n", tid->name);
+#endif
     // logk("stack at va:%zx pa:%zx\n", tid->stack.vaddr, tid->stack.paddr);
     // logk("work at %p, tcb at %p\n", work, tid);
 
@@ -302,4 +324,23 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
 
 uint64_t task_start(task_t *tid) {
     return sched_cont(tid, TS_STOPPED);
+}
+
+
+// 执行 task_start 之后，调用此函数发送 IPI，通知目标 cpu 切换任务
+// 不操作当前 cpu，调用者应保证禁用抢占
+void notify_resched(uint64_t cpumask) {
+    // int has_local = 0;
+    // uint64_t this_mask = 1UL << cpu_index();
+    // if (cpumask & this_mask) {
+    //     has_local = 1;
+    //     cpumask &= ~this_mask;
+    // }
+    cpumask &= ~(1UL << cpu_index());
+    while (cpumask) {
+        int cpu = __builtin_ctzll(cpumask);
+        ASSERT(cpu_index() != cpu);
+        cpumask &= cpumask - 1;
+        arch_send_ipi(cpu, VEC_IPI_RESCHED);
+    }
 }

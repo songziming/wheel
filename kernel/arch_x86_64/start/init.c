@@ -276,11 +276,13 @@ static INIT_TEXT void root_proc() {
         loapic_send_sipi(i, vec);       // 发送 startup-IPI
         loapic_timer_busywait(200);     // 等待 200us
         loapic_send_sipi(i, vec);       // 再次发送 startup-IPI
-        loapic_timer_busywait(200);     // 等待 200us
+        // loapic_timer_busywait(200);     // 等待 200us
 
         // 当 CPU 开始运行 task，说明初始化已经结束，不再使用 init stack
         // 前一个 CPU 初始化完成才能初始化下一个
-        raw_spin_take(&g_smp_lock);
+        // raw_spin_take(&g_smp_lock);
+        task_stop(TS_STOPPED);
+        arch_task_switch();
         // semaphore_take(&g_smp_sem, 1, FOREVER);
     }
 
@@ -307,7 +309,10 @@ static INIT_TEXT void root_proc() {
 // BSP 可以启动下一个 AP，或者将 init-stack 回收
 static INIT_TEXT void notify_ap_started(work_t *work UNUSED) {
     ASSERT(cpu_int_depth() > 0);
-    raw_spin_give(&g_smp_lock);
+    // raw_spin_give(&g_smp_lock);
+    uint64_t mask = task_start(&g_root_tcb);
+    ASSERT(1 == mask); // 必然是 cpu-0
+    notify_resched(mask);
     // semaphore_give(&g_smp_sem, 1);
 }
 

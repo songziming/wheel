@@ -24,9 +24,7 @@ int irq_spin_take(spin_t *spin) {
     int key = cpu_int_lock();
     uint32_t tickket = atomic_fetch_add(&spin->ticket_counter, 1);
     while (atomic_load(&spin->service_counter) != tickket) {
-        cpu_int_unlock(key);
         cpu_pause();
-        key = cpu_int_lock();
     }
     lockdep_acquire(spin, &spin->dep);
     return key;

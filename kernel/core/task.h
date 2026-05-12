@@ -26,11 +26,15 @@ typedef struct task {
 extern task_t *g_tid_prev;
 extern task_t *g_tid_next;
 
+void preempt_lock();
+void preempt_unlock();
+
 INIT_TEXT void sched_init();
 void sched_process();
 
 void task_create(task_t *tid, const char *name, int prio, void *func);
 void task_stop(uint32_t bits);
 uint64_t task_start(task_t *tid);
+void notify_resched(uint64_t cpumask);
 
 #endif // TASK_H

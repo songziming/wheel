@@ -19,6 +19,12 @@ static void proc_a() {
         logk("(A%s%d)", self->name, i);
         // THISCPU_SET(g_tid_next, &tb);
         // arch_task_switch();
+        if (30 == i) {
+            preempt_lock();
+        }
+        if (60 == i) {
+            preempt_unlock();
+        }
         loapic_timer_busywait(8000);
     }
 
@@ -50,8 +56,8 @@ void test_cooperative() {
     task_create(&ta, "ta", 10, proc_a);
     task_create(&tb, "tb", 10, proc_b);
 
-    // ta.affinity = 0;
-    // tb.affinity = 0;
+    ta.affinity = 0;
+    tb.affinity = 0;
 
     int key = cpu_int_lock();
     task_start(&ta);
@@ -109,24 +115,8 @@ void test_smp_tasks() {
     for (int i = 0; i < 10; ++i) {
         cpuset |= task_start(&smp_tcbs[i]);
     }
-
-    // 发送 IPI，触发任务切换
-    logk("resched-notify mask %zx\n", cpuset);
-    int has_local = 0;
-    uint64_t this_mask = 1UL << cpu_index();
-    if (cpuset & this_mask) {
-        has_local = 1;
-        cpuset &= ~this_mask;
-    }
-    while (cpuset) {
-        int cpu = __builtin_ctzll(cpuset);
-        ASSERT(cpu_index() != cpu);
-        cpuset &= cpuset - 1;
-        arch_send_ipi(cpu, VEC_IPI_RESCHED);
-    }
+    notify_resched(cpuset);
 
     cpu_int_unlock(key);
-    if (has_local) {
-        arch_task_switch();
-    }
+    arch_task_switch();
 }
