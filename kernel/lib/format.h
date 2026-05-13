@@ -5,7 +5,7 @@
 
 // format 可以使用有限长度的 buff，多次调用回调返回格式化结果
 // 返回字符串完整格式化之后的长度，不含结尾的 '\0'
-typedef void (*format_cb_t)(void *, const char *, size_t);
+typedef void (*format_cb_t)(void *user, const char **s, size_t *len);
 size_t format(char *buf, size_t n, format_cb_t func, void *user, const char *fmt, va_list args);
 
 size_t vsnprintk(char *buf, size_t n, const char *fmt, va_list args);

@@ -5,9 +5,9 @@
 
 log_func_t g_log_func = NULL;
 
-static void log_cb(void *user UNUSED, const char *s, size_t n) {
+static void log_cb(void *user UNUSED, const char **s, size_t *len) {
     if (g_log_func) {
-        g_log_func(s, n);
+        g_log_func(*s, *len);
     }
 }
 

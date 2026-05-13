@@ -2,6 +2,12 @@
 #include "kstring.h"
 
 
+// format 作用类似 snprintf，但可定制程度更高
+// 为了避免频繁 strcpy，也避免需要调用者申请过大的 buffer
+// format 可以将格式化字符串的结果分成多个子串，分多次输出
+// format 可以传入一个小于输出字符串长度的 out-buf，每次 out-buf 填满就执行回调
+
+
 // 使用循环缓冲区接收格式化之后的字符串
 // 缓冲区填满了，就执行回调函数输出，然后重置缓冲区
 typedef struct fmt_context {
@@ -16,14 +22,22 @@ typedef struct fmt_context {
 
 static inline void fmt_flush(fmt_context_t *ctx) {
     if (NULL != ctx->func) {
-        size_t len = (size_t)(ctx->ptr - ctx->buf);
-        ctx->func(ctx->user, ctx->buf, len);
-        ctx->ptr  = ctx->buf;
-        ctx->len += len;
+        const char *s   = ctx->buf;
+        size_t      len = (size_t)(ctx->ptr - ctx->buf);
+        size_t  written = len;
+        ctx->func(ctx->user, &s, &len);
+        ctx->buf = (char *)s;
+        ctx->end = ctx->buf + len;
+        ctx->ptr = ctx->buf;
+        ctx->len += written;
     }
 }
 
 static inline void fmt_putchar(fmt_context_t *ctx, char ch) {
+    if (NULL == ctx->func) {
+        ++ctx->len;
+        return;
+    }
     if (ctx->ptr >= ctx->end) {
         fmt_flush(ctx);
     }
@@ -203,28 +217,32 @@ static void fmt_number(fmt_context_t *ctx, uint64_t abs, int base, uint32_t flag
 
 
 
+// 仅写入 buf 不使用回调时，不需要切换缓冲区，维持原样即可
+static void fmt_buf_only_cb(void *user, const char **s, size_t *len) {}
+
 // 格式化字符串，返回完整输出字符串的长度（不含结尾的零）
-// 如果输出字符串超过 buf 长度，则会多次调用 func，每次传入一部分字符串
+// 如果 func == NULL，则只计算长度，不写入 buf，不触发回调
+// 否则输出到 buf，buf 写满时调用 func，func 可通过 s/len 切换下一段缓冲区
 size_t format(char *buf, size_t n, format_cb_t func, void *user, const char *fmt, va_list args) {
     if (NULL == fmt) {
         return 0;
     }
 
-    // 使用 NULL 会产生 UB，于是指向一块局部变量
-    char dummy_buf[8] = {0};
-    if ((NULL == buf) || (0 == n)) {
-        buf = dummy_buf;
-        n   = sizeof(dummy_buf);
-        func = NULL;
-    }
-
     fmt_context_t ctx;
-    ctx.buf = buf;
-    ctx.end = buf + n;
-    ctx.ptr = ctx.buf;
     ctx.len = 0;
     ctx.func = func;
     ctx.user = user;
+
+    if (NULL == func) {
+        // 仅计算长度，不需要真实缓冲区
+        ctx.buf = NULL;
+        ctx.end = NULL;
+        ctx.ptr = NULL;
+    } else {
+        ctx.buf = buf;
+        ctx.end = buf + n;
+        ctx.ptr = ctx.buf;
+    }
 
     while (*fmt) {
         if ('%' != *fmt) {
@@ -381,12 +399,16 @@ size_t format(char *buf, size_t n, format_cb_t func, void *user, const char *fmt
         fmt_number(&ctx, abs, base, flags, width, precision);
     }
 
+    if (NULL == func) {
+        return ctx.len;
+    }
     fmt_flush(&ctx);
     return ctx.len + (size_t)(ctx.ptr - ctx.buf);
 }
 
 size_t vsnprintk(char *buf, size_t n, const char *fmt, va_list args) {
-    size_t len = format(buf, n, NULL, NULL, fmt, args);
+    format_cb_t func = ((NULL == buf) || (0 == n)) ? NULL : fmt_buf_only_cb;
+    size_t len = format(buf, n, func, NULL, fmt, args);
 
     if (NULL != buf) {
         if (len < n) {

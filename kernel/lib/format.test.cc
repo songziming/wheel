@@ -6,9 +6,9 @@ extern "C" {
     #include <stdio.h>
 }
 
-static void dst_print(void *user, const char *s, size_t n) {
+static void dst_print(void *user, const char **s, size_t *len) {
     std::string *str = (std::string*)user;
-    str->append(s, n);
+    str->append(*s, *len);
 }
 
 static size_t cmp_print(const char *wanted, const char *fmt, ...) {
