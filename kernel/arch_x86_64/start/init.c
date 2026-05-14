@@ -281,7 +281,7 @@ static INIT_TEXT void root_proc() {
         // 当 CPU 开始运行 task，说明初始化已经结束，不再使用 init stack
         // 前一个 CPU 初始化完成才能初始化下一个
         // raw_spin_take(&g_smp_lock);
-        task_stop(TS_STOPPED);
+        task_stop(TS_STOPPED, NULL, 0);
         arch_task_switch();
         // semaphore_take(&g_smp_sem, 1, FOREVER);
     }

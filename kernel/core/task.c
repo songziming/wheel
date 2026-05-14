@@ -8,16 +8,14 @@
 
 // #define LOG_SCHED 1
 
-#define PRIORITY_NUM 32
 
-typedef struct rdyq {
-    spin_t      lock;
-    dlnode_t   *heads[PRIORITY_NUM];
-    uint32_t    priorities; // mask
-    int         count;
-} rdyq_t;
+// ready queue
+// static PERCPU_DATA spin_t g_rdy_lock = SPIN_INIT;
+static PERCPU_BSS prioq_t g_rdyq;
+       PERCPU_BSS task_t *g_tid_prev;   // updated in int_return
+       PERCPU_BSS task_t *g_tid_next;   // guarded by g_rdyq.lock
 
-static PERCPU_BSS rdyq_t g_rdyq;
+PERCPU_DATA int g_preempt_depth = 0;
 static PERCPU_BSS task_t g_idle_tcb;
 static INIT_BSS task_t g_dummy_tcb;
 
@@ -25,22 +23,17 @@ static INIT_BSS task_t g_dummy_tcb;
 static _Atomic uint64_t g_idle_mask = 0UL;
 static _Atomic uint32_t g_next_cpu = 0U;
 
-PERCPU_DATA int g_preempt_depth = 0;
-PERCPU_BSS task_t *g_tid_prev; // updated in int_return
-PERCPU_BSS task_t *g_tid_next; // guarded by rdyq->lock
 
 //------------------------------------------------------------------------------
 // 就绪队列函数，全部无锁
 //------------------------------------------------------------------------------
 
-INIT_TEXT void rdyq_init(rdyq_t *q) {
-    q->lock = SPIN_INIT;
+void prioq_init(prioq_t *q) {
     kmemset(q->heads, 0, sizeof(q->heads));
     q->priorities = 0U;
-    q->count = 0;
 }
 
-void rdyq_insert(rdyq_t *q, dlnode_t *dl, int prio) {
+void prioq_insert_nolock(prioq_t *q, dlnode_t *dl, int prio) {
     if (NULL == q->heads[prio]) {
         dl_init_circular(dl);
         q->heads[prio] = dl;
@@ -50,7 +43,7 @@ void rdyq_insert(rdyq_t *q, dlnode_t *dl, int prio) {
     }
 }
 
-void rdyq_remove(rdyq_t *q, dlnode_t *dl, int prio) {
+void prioq_remove_nolock(prioq_t *q, dlnode_t *dl, int prio) {
     ASSERT(q->priorities & (1U << prio));
     ASSERT(NULL != q->heads[prio]);
 
@@ -68,7 +61,14 @@ void rdyq_remove(rdyq_t *q, dlnode_t *dl, int prio) {
     }
 }
 
-dlnode_t *rdyq_head(rdyq_t *q) {
+int prioq_contains(prioq_t *q, dlnode_t *dl, int prio) {
+    if (q->heads[prio]) {
+        return dl_contains(q->heads[prio], dl);
+    }
+    return 0;
+}
+
+dlnode_t *prioq_head_nolock(prioq_t *q) {
     int prio = __builtin_ctz(q->priorities);
     return q->heads[prio];
 }
@@ -90,10 +90,11 @@ void preempt_unlock() {
 //------------------------------------------------------------------------------
 
 static void _cont_this(task_t *tid) {
-    rdyq_t *q = THISCPU(&g_rdyq);
+    // spin_t *lock = THISCPU(&g_rdy_lock);
+    prioq_t *q = THISCPU(&g_rdyq);
     int key = irq_spin_take(&q->lock);
 
-    rdyq_insert(q, &tid->dl, tid->priority);
+    prioq_insert_nolock(q, &tid->dl, tid->priority);
     if (tid->priority < THISCPU_GET(g_tid_next)->priority) {
 #if defined(LOG_SCHED) && LOG_SCHED
         logk("<preempt %s>", tid->name);
@@ -105,10 +106,11 @@ static void _cont_this(task_t *tid) {
 }
 
 static void _cont_cpu(task_t *tid, int cpu) {
-    rdyq_t *q = PERCPU(cpu, &g_rdyq);
+    // spin_t *lock = THISCPU(&g_rdy_lock);
+    prioq_t *q = PERCPU(cpu, &g_rdyq);
     int key = irq_spin_take(&q->lock);
 
-    rdyq_insert(q, &tid->dl, tid->priority);
+    prioq_insert_nolock(q, &tid->dl, tid->priority);
     if (tid->priority < (*PERCPU(cpu, &g_tid_next))->priority) {
         *PERCPU(cpu, &g_tid_next) = tid;
     }
@@ -118,7 +120,7 @@ static void _cont_cpu(task_t *tid, int cpu) {
 
 // 恢复运行这个 task，返回需要切换任务的 CPU-mask
 // 启动任务、semaphore/fence 恢复任务时调用此函数
-uint64_t sched_cont(task_t *tid, uint32_t bits) {
+int sched_cont(task_t *tid, uint32_t bits) {
     ASSERT(TS_READY != tid->state);
     // ASSERT(tid->affinity < 0 || tid->affinity == cpu_index());
 
@@ -154,7 +156,7 @@ uint64_t sched_cont(task_t *tid, uint32_t bits) {
 
     // 返回 cpu-mask，这样批量恢复任务时（如 semaphore、fence）
     // 就可以最后统一发送 IPI
-    return 1ULL << cpu;
+    return cpu;
 }
 
 
@@ -162,15 +164,42 @@ uint64_t sched_cont(task_t *tid, uint32_t bits) {
 // 任务停止运行，只能停止当前任务
 //------------------------------------------------------------------------------
 
-void task_stop(uint32_t bits) {
+// 阻塞队列节点超时，在 ISR 里面执行
+static void task_timeout(ktimer_t *timer) {
+    // TODO 需要锁住 semaphore，防止这个任务被正常唤醒
+    waiter_t *pender = containerof(timer, waiter_t, timer);
+    prioq_t *wq = pender->wq;
+    task_t *tid = pender->tid;
+
+    // 锁住阻塞队列，同时也锁住了所在semaphore、mutex、event等
+    raw_spin_take(&wq->lock);
+    if (!prioq_contains(wq, &pender->dl, tid->priority)) {
+        // 已经移除了阻塞队列，可能是timer触发之后任务会恢复
+        raw_spin_give(&wq->lock);
+        return;
+    }
+
+    prioq_remove_nolock(wq, &pender->dl, tid->priority);
+    raw_spin_give(&wq->lock);
+
+    int cpu = sched_cont(tid, TS_PENDING);
+    if (cpu_index() != cpu) {
+        arch_send_ipi(cpu, VEC_IPI_RESCHED);
+    }
+}
+
+// wq 是阻塞队列，将任务放在阻塞队列
+// 当前任务停止，必然需要切换到其他任务，调用者需要关闭抢占
+void task_stop(uint32_t bits, prioq_t *wq, int timeout) {
     task_t *self = THISCPU_GET(g_tid_prev);
-    rdyq_t *q = THISCPU(&g_rdyq);
+    // spin_t *lock = THISCPU(&g_rdy_lock);
+    prioq_t *q = THISCPU(&g_rdyq);
 
     self->state |= bits;
 
     int key = irq_spin_take(&q->lock);
-    rdyq_remove(q, &self->dl, self->priority);
-    task_t *next = containerof(rdyq_head(q), task_t, dl);
+    prioq_remove_nolock(q, &self->dl, self->priority);
+    task_t *next = containerof(prioq_head_nolock(q), task_t, dl);
     THISCPU_SET(g_tid_next, next);
 
 #if defined(LOG_SCHED) && LOG_SCHED
@@ -185,6 +214,14 @@ void task_stop(uint32_t bits) {
     }
 
     // TODO 在这里将 self 放在 pend-queue 里面
+    waiter_t pender;
+    pender.tid = self;
+    if (wq) {
+        prioq_insert_nolock(wq, &pender.dl, self->priority);
+        if (FOREVER != timeout) {
+            timer_start(&pender.timer, task_timeout, timeout);
+        }
+    }
 
     irq_spin_give(&q->lock, key);
 }
@@ -223,13 +260,14 @@ void task_exit() {
     // 这样只剩当前 cpu 还保留 mapping，留到 work 里面删除
     tlb_shootdown(self->stack.vaddr, self->stack.vend);
 
-    rdyq_t *q = THISCPU(&g_rdyq);
+    // spin_t *lock = THISCPU(&g_rdy_lock);
+    prioq_t *q = THISCPU(&g_rdyq);
     int key = irq_spin_take(&q->lock);
 
     self->state = TS_STOPPED;
-    rdyq_remove(q, &self->dl, self->priority);
+    prioq_remove_nolock(q, &self->dl, self->priority);
 
-    task_t *next = containerof(rdyq_head(q), task_t, dl);
+    task_t *next = containerof(prioq_head_nolock(q), task_t, dl);
     THISCPU_SET(g_tid_next, next);
     if (31 == next->priority) {
         atomic_fetch_or(&g_idle_mask, 1UL << cpu_index());
@@ -266,14 +304,14 @@ static NORETURN void proc_idle() {
 }
 
 INIT_TEXT void sched_init() {
-    rdyq_t *q = THISCPU(&g_rdyq);
-    rdyq_init(q);
+    prioq_t *q = THISCPU(&g_rdyq);
+    prioq_init(q);
 
     task_t *idle = THISCPU(&g_idle_tcb);
     task_create(idle, "idle", 31, proc_idle);
     idle->affinity = cpu_index();
     idle->state = TS_READY;
-    rdyq_insert(q, &idle->dl, 31);
+    prioq_insert_nolock(q, &idle->dl, 31);
     // task_start(idle);
     g_idle_mask |= 1UL << cpu_index();
 
@@ -286,7 +324,8 @@ INIT_TEXT void sched_init() {
 // 只负责轮转，不抢占（抢占通过 arch_task_switch 触发）
 void sched_process() {
     ASSERT(cpu_int_depth() > 0);
-    rdyq_t *q = THISCPU(&g_rdyq);
+    // spin_t *lock = THISCPU(&g_rdy_lock);
+    prioq_t *q = THISCPU(&g_rdyq);
     raw_spin_take(&q->lock);
 
     task_t *prev = THISCPU_GET(g_tid_next);
@@ -323,9 +362,9 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
 }
 
 // 启动任务并立即切换
-void task_start_now(task_t *tid) {
-    uint64_t cpumask = sched_cont(tid, TS_STOPPED);
-    int cpu = __builtin_ctzll(cpumask);
+// 适合只启动一个任务，无需禁用抢占，启动之后立即可切换
+void task_start_one(task_t *tid) {
+    int cpu = sched_cont(tid, TS_STOPPED);
     if (cpu_index() == cpu) {
         arch_task_switch();
     } else {
@@ -336,7 +375,7 @@ void task_start_now(task_t *tid) {
 // 启动任务但暂时不要切换
 // 如果批量启动任务，顺序是：禁用抢占，启动任务，发送 ipi，启用抢占，切换
 uint64_t task_start(task_t *tid) {
-    return sched_cont(tid, TS_STOPPED);
+    return 1UL << sched_cont(tid, TS_STOPPED);
 }
 
 // 执行 task_start 之后，调用此函数发送 IPI，通知目标 cpu 切换任务

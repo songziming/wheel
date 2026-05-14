@@ -24,12 +24,11 @@ static inline void fmt_flush(fmt_context_t *ctx) {
     if (NULL != ctx->func) {
         const char *s   = ctx->buf;
         size_t      len = (size_t)(ctx->ptr - ctx->buf);
-        size_t  written = len;
+        ctx->len += len;
         ctx->func(ctx->user, &s, &len);
-        ctx->buf = (char *)s;
+        ctx->buf = (char*)s;
         ctx->end = ctx->buf + len;
         ctx->ptr = ctx->buf;
-        ctx->len += written;
     }
 }
 
@@ -77,6 +76,14 @@ static void fmt_string(fmt_context_t *ctx, const char *str, uint32_t flags, int 
     int len = (int)kstrlen(str);
     if ((0 <= precision) && (precision < len)) {
         len = precision;
+    }
+
+    if (NULL == ctx->func) {
+        if (width < len) {
+            width = len;
+        }
+        ctx->len += width;
+        return;
     }
 
     if (0 == (flags & FLG_LEFT)) {
@@ -180,6 +187,15 @@ static void fmt_number(fmt_context_t *ctx, uint64_t abs, int base, uint32_t flag
         }
     }
 
+    if (NULL == ctx->func) {
+        ctx->len += pad_space;
+        ctx->len += pad_zero;
+        ctx->len += bits;
+        ctx->len += (0 != sign) ? 1 : 0;
+        ctx->len += kstrlen(prefix);
+        return;
+    }
+
     // 如果右对齐，就在开头补空格
     if (0 == (flags & FLG_LEFT)) {
         for (int i = 0; i < pad_space; ++i) {
@@ -218,7 +234,7 @@ static void fmt_number(fmt_context_t *ctx, uint64_t abs, int base, uint32_t flag
 
 
 // 仅写入 buf 不使用回调时，不需要切换缓冲区，维持原样即可
-static void fmt_buf_only_cb(void *user, const char **s, size_t *len) {}
+static void fmt_buf_only_cb(void *user UNUSED, const char **s UNUSED, size_t *len UNUSED) {}
 
 // 格式化字符串，返回完整输出字符串的长度（不含结尾的零）
 // 如果 func == NULL，则只计算长度，不写入 buf，不触发回调
