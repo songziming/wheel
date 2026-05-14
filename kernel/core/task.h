@@ -47,9 +47,8 @@ extern task_t *g_tid_next;
 void prioq_init(prioq_t *q);
 void prioq_insert_nolock(prioq_t *q, dlnode_t *dl, int prio);
 void prioq_remove_nolock(prioq_t *q, dlnode_t *dl, int prio);
-int prioq_contains(prioq_t *q, dlnode_t *dl, int prio);
+int prioq_contains_nolock(prioq_t *q, dlnode_t *dl, int prio);
 dlnode_t *prioq_head_nolock(prioq_t *q);
-// void prioq_pendon(prioq_t *q, waiter_t *w, int timeout);
 
 void preempt_lock();
 void preempt_unlock();
@@ -59,8 +58,8 @@ void sched_process();
 
 void task_create(task_t *tid, const char *name, int prio, void *func);
 void task_stop(uint32_t bits, prioq_t *wq, int timeout);
-uint64_t task_start(task_t *tid);
 void task_start_one(task_t *tid);
+uint64_t task_start(task_t *tid);
 void notify_resched(uint64_t cpumask);
 
 #endif // TASK_H

@@ -61,7 +61,7 @@ void prioq_remove_nolock(prioq_t *q, dlnode_t *dl, int prio) {
     }
 }
 
-int prioq_contains(prioq_t *q, dlnode_t *dl, int prio) {
+int prioq_contains_nolock(prioq_t *q, dlnode_t *dl, int prio) {
     if (q->heads[prio]) {
         return dl_contains(q->heads[prio], dl);
     }
@@ -173,7 +173,7 @@ static void task_timeout(ktimer_t *timer) {
 
     // 锁住阻塞队列，同时也锁住了所在semaphore、mutex、event等
     raw_spin_take(&wq->lock);
-    if (!prioq_contains(wq, &pender->dl, tid->priority)) {
+    if (!prioq_contains_nolock(wq, &pender->dl, tid->priority)) {
         // 已经移除了阻塞队列，可能是timer触发之后任务会恢复
         raw_spin_give(&wq->lock);
         return;

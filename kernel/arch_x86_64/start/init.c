@@ -309,11 +309,7 @@ static INIT_TEXT void root_proc() {
 // BSP 可以启动下一个 AP，或者将 init-stack 回收
 static INIT_TEXT void notify_ap_started(work_t *work UNUSED) {
     ASSERT(cpu_int_depth() > 0);
-    // raw_spin_give(&g_smp_lock);
-    uint64_t mask = task_start(&g_root_tcb);
-    ASSERT(1 == mask); // 必然是 cpu-0
-    notify_resched(mask);
-    // semaphore_give(&g_smp_sem, 1);
+    task_start_one(&g_root_tcb);
 }
 
 // AP 启动流程，使用 init-stack
@@ -345,7 +341,12 @@ static INIT_TEXT NORETURN void ap_init(int idx) {
     // 注册一个 work，在切换任务时执行（使用中断栈）
     // 只有不再使用这个 init-stack，才能安全地启动另一个 CPU
     work_defer(&g_smp_notifier, notify_ap_started, "notify ap start");
-    arch_task_switch();
+
+    // arch_task_switch 不会执行 work-flush，需要一个中断
+    // 此时中断关闭，int 可以触发中断，但是 local APIC 发送 self-IPI 无法收到
+    ASMV("int %0" :: "i"(VEC_IPI_RESCHED));
+    // ASMV("sti");
+    // arch_send_ipi(IPI_SELF, VEC_IPI_RESCHED);
 
     while (1) {
         cpu_pause();

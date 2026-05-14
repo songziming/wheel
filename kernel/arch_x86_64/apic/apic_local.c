@@ -309,6 +309,8 @@ void arch_send_ipi(int cpu, int vec) {
             lo |= 2 << 18; // dest shorthand: all including self
         } else if (IPI_ALL_EXCLUDING_SELF == cpu) {
             lo |= 3 << 18; // dest shorthand: all excluding self
+        // } else if (IPI_SELF == cpu) {
+        //     lo |= 1 << 18; // dest shorthand: self
         }
         g_write_icr(0xffffffffU, lo); // 广播
     } else {

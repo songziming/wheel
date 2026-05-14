@@ -250,6 +250,7 @@ arch_task_switch:
     incl    %gs:(g_int_depth)
     // movq    %gs:(g_int_stack_top), %rsp // 切换到中断栈，因为要执行 work_flush
     // movl    $0, %gs:(g_preempt_depth) // arch_task_switch开抢占
+    // jmp     flush_and_switch
     jmp     iret_to_task
 
 noswitch:
