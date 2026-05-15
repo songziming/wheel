@@ -48,38 +48,34 @@ class QemuCmd(gdb.Command):
         gdb.execute("symbol-file build/wheel.elf")
 
 class PerCpuFunc(gdb.Function):
-    '''pcpu命令，用来访问percpu-var'''
+    '''$pcpu(cpu, &var) 访问指定CPU的percpu变量，用法同 percpu_ptr(i, &var)'''
     def __init__(self):
         super().__init__("pcpu")
         print('adding command pcpu')
-    def invoke(self, cpu, var_name):
+    def invoke(self, cpu, var_ptr):
+        # var_ptr 是 &var 求值后的 gdb.Value，类型是 T*（指向变量的指针）
+        # 从中提取模板地址和类型，计算percpu副本地址后解引用
         cpu_idx = int(cpu)
-        name    = str(var_name)
-        val     = gdb.parse_and_eval(name)
         base    = int(gdb.parse_and_eval("g_percpu_base"))
         step    = int(gdb.parse_and_eval("g_percpu_step"))
         if base == 0 or step == 0:
             raise gdb.GdbError("percpu not initialized yet")
-        tpl_addr = int(val.address)
-        actual   = tpl_addr + base + step * cpu_idx
-        return gdb.Value(actual).cast(val.type.pointer()).dereference()
+        tpl_addr = int(var_ptr)
+        actual   = (tpl_addr + base + step * cpu_idx) & 0xFFFFFFFFFFFFFFFF
+        return gdb.Value(actual).cast(var_ptr.type).dereference()
 
 class ThisCpuFunc(gdb.Function):
-    '''thiscpu命令，用来访问当前线程的percpu-var'''
+    '''$thiscpu(&var) 访问当前CPU的percpu变量，等价于 $pcpu(cpu_index(), &var)'''
     def __init__(self):
         super().__init__("thiscpu")
-        print('adding command pcpu')
-    def invoke(self, var_name):
-        cpu_idx = int(gdb.parse_and_eval("$pcpu(0, g_thiscpu_idx)"))
-        name    = str(var_name)
-        val     = gdb.parse_and_eval(name)
-        base    = int(gdb.parse_and_eval("g_percpu_base"))
-        step    = int(gdb.parse_and_eval("g_percpu_step"))
-        if base == 0 or step == 0:
-            raise gdb.GdbError("percpu not initialized yet")
-        tpl_addr = int(val.address)
-        actual   = tpl_addr + base + step * cpu_idx
-        return gdb.Value(actual).cast(val.type.pointer()).dereference()
+        print('adding command thiscpu')
+    def invoke(self, var_ptr):
+        # var_ptr 是 &var 求值后的 gdb.Value，类型是 T*
+        # 用 gs_base 做偏移，和内核 thiscpu_ptr 一致
+        gs_base  = int(gdb.parse_and_eval("$gs_base"))
+        tpl_addr = int(var_ptr)
+        actual   = (tpl_addr + gs_base) & 0xFFFFFFFFFFFFFFFF
+        return gdb.Value(actual).cast(var_ptr.type).dereference()
 
 
 

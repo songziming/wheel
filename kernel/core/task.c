@@ -6,8 +6,6 @@
 #include <kstring.h>
 #include <debug.h>
 
-// #define LOG_SCHED 1
-
 
 // ready queue
 // static PERCPU_DATA spin_t g_rdy_lock = SPIN_INIT;
@@ -96,9 +94,6 @@ static void _cont_this(task_t *tid) {
 
     prioq_insert_nolock(q, &tid->dl, tid->priority);
     if (tid->priority < THISCPU_GET(g_tid_next)->priority) {
-#if defined(LOG_SCHED) && LOG_SCHED
-        logk("<preempt %s>", tid->name);
-#endif
         THISCPU_SET(g_tid_next, tid);
     }
 
@@ -120,13 +115,12 @@ static void _cont_cpu(task_t *tid, int cpu) {
 
 // 恢复运行这个 task，返回需要切换任务的 CPU-mask
 // 启动任务、semaphore/fence 恢复任务时调用此函数
-int sched_cont(task_t *tid, uint32_t bits) {
+int task_cont(task_t *tid, uint32_t bits) {
     ASSERT(TS_READY != tid->state);
     // ASSERT(tid->affinity < 0 || tid->affinity == cpu_index());
 
     tid->state &= ~bits;
     if (TS_READY != tid->state) {
-        logk("task %s cannot preempt %x\n", tid->name, tid->state);
         return 0; // still no ready
     }
 
@@ -164,14 +158,14 @@ int sched_cont(task_t *tid, uint32_t bits) {
 // 任务停止运行，只能停止当前任务
 //------------------------------------------------------------------------------
 
-// 阻塞队列节点超时，在 ISR 里面执行
+// 阻塞队列节点超时，在 CPU0 ISR 里面执行
 static void task_timeout(ktimer_t *timer) {
-    // TODO 需要锁住 semaphore，防止这个任务被正常唤醒
     waiter_t *pender = containerof(timer, waiter_t, timer);
     prioq_t *wq = pender->wq;
     task_t *tid = pender->tid;
 
     // 锁住阻塞队列，同时也锁住了所在semaphore、mutex、event等
+    // 处于 isr，中断已经关闭，使用 raw-spin take/give 即可
     raw_spin_take(&wq->lock);
     if (!prioq_contains_nolock(wq, &pender->dl, tid->priority)) {
         // 已经移除了阻塞队列，可能是timer触发之后任务会恢复
@@ -182,17 +176,16 @@ static void task_timeout(ktimer_t *timer) {
     prioq_remove_nolock(wq, &pender->dl, tid->priority);
     raw_spin_give(&wq->lock);
 
-    int cpu = sched_cont(tid, TS_PENDING);
+    int cpu = task_cont(tid, TS_PENDING);
     if (cpu_index() != cpu) {
         arch_send_ipi(cpu, VEC_IPI_RESCHED);
     }
 }
 
-// wq 是阻塞队列，将任务放在阻塞队列
+// wq 是阻塞队列，将任务放在阻塞队列，调用者需要持有 wq 自旋锁
 // 当前任务停止，必然需要切换到其他任务，调用者需要关闭抢占
 void task_stop(uint32_t bits, prioq_t *wq, int timeout) {
     task_t *self = THISCPU_GET(g_tid_prev);
-    // spin_t *lock = THISCPU(&g_rdy_lock);
     prioq_t *q = THISCPU(&g_rdyq);
 
     self->state |= bits;
@@ -200,23 +193,18 @@ void task_stop(uint32_t bits, prioq_t *wq, int timeout) {
     int key = irq_spin_take(&q->lock);
     prioq_remove_nolock(q, &self->dl, self->priority);
     task_t *next = containerof(prioq_head_nolock(q), task_t, dl);
-    THISCPU_SET(g_tid_next, next);
-
-#if defined(LOG_SCHED) && LOG_SCHED
-    logk("curr %s stop, next is %s\n", self->name, next->name);
-#endif
-
     if (31 == next->priority) {
-#if defined(LOG_SCHED) && LOG_SCHED
-        logk("cpu-%d idle again\n", cpu_index());
-#endif
         atomic_fetch_or(&g_idle_mask, 1UL << cpu_index());
     }
+    THISCPU_SET(g_tid_next, next);
 
-    // TODO 在这里将 self 放在 pend-queue 里面
     waiter_t pender;
-    pender.tid = self;
     if (wq) {
+        // 在这里将 self 放在 wait-queue 里面
+        // 要求 caller 持有 wait-queue 的锁
+        // 此时中断禁用，timer 不会触发
+        pender.wq = wq;
+        pender.tid = self;
         prioq_insert_nolock(wq, &pender.dl, self->priority);
         if (FOREVER != timeout) {
             timer_start(&pender.timer, task_timeout, timeout);
@@ -224,6 +212,8 @@ void task_stop(uint32_t bits, prioq_t *wq, int timeout) {
     }
 
     irq_spin_give(&q->lock, key);
+    arch_task_switch();
+    // return self;
 }
 
 //------------------------------------------------------------------------------
@@ -241,38 +231,31 @@ static void task_free(work_t *wk) {
     // 所以提前读出 task，后面直接用 tid
     freework_t *work = containerof(wk, freework_t, wk);
     task_t *tid = work->tid;
-#if defined(LOG_SCHED) && LOG_SCHED
-    logk("free task %s\n", tid->name);
-#endif
-    // logk("stack at va:%zx pa:%zx\n", tid->stack.vaddr, tid->stack.paddr);
-    // logk("work at %p, tcb at %p\n", work, tid);
-
     vmspace_remove(&g_kernel_vm, &tid->stack);
     tid->state = TS_DELETED;
 }
 
 // 全程必须关闭中断，防止被抢占，否则 work 没来得及注册，任务无法回收
-// TODO 大部分逻辑和 task_stop 一样，应该统一
+// 大致逻辑与 task_stop 类似
 void task_exit() {
     task_t *self = THISCPU_GET(g_tid_prev);
+    prioq_t *q = THISCPU(&g_rdyq);
 
-    // 发送 IPI，让其他 cpu 清楚当前 task-stack
+    // 发送 IPI，让其他 cpu 清除此任务的栈
     // 这样只剩当前 cpu 还保留 mapping，留到 work 里面删除
     tlb_shootdown(self->stack.vaddr, self->stack.vend);
 
-    // spin_t *lock = THISCPU(&g_rdy_lock);
-    prioq_t *q = THISCPU(&g_rdyq);
+    self->state |= TS_STOPPED;
+
     int key = irq_spin_take(&q->lock);
-
-    self->state = TS_STOPPED;
     prioq_remove_nolock(q, &self->dl, self->priority);
-
     task_t *next = containerof(prioq_head_nolock(q), task_t, dl);
-    THISCPU_SET(g_tid_next, next);
     if (31 == next->priority) {
         atomic_fetch_or(&g_idle_mask, 1UL << cpu_index());
     }
+    THISCPU_SET(g_tid_next, next);
 
+    // 注册 work，此时中断关闭，确保 work 不会触发
     freework_t freework;
     freework.tid = self;
     work_defer(&freework.wk, task_free, "freetask");
@@ -330,21 +313,7 @@ void sched_process() {
 
     task_t *prev = THISCPU_GET(g_tid_next);
     task_t *next = containerof(prev->dl.next, task_t, dl);
-    if (prev != next) {
-#if defined(LOG_SCHED) && LOG_SCHED
-        logk("[%s->%s]", prev->name, next->name);
-#endif
-        THISCPU_SET(g_tid_next, next);
-        // logk("(%s:%p->%s:%p)", prev->name, prev, next->name, next);
-
-        // size_t prev_stk = (size_t)prev->stack_top >> PAGE_SHIFT;
-        // size_t next_stk = (size_t)next->stack_top >> PAGE_SHIFT;
-        // if (prev_stk == next_stk) {
-        //     logk("same stack!\n");
-        //     ASMV("xchgw %bx, %bx");
-        //     while (1) { cpu_halt(); }
-        // }
-    }
+    THISCPU_SET(g_tid_next, next);
 
     raw_spin_give(&q->lock);
 }
@@ -364,7 +333,7 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
 // 启动任务并立即切换
 // 适合只启动一个任务，无需禁用抢占，启动之后立即可切换
 void task_start_one(task_t *tid) {
-    int cpu = sched_cont(tid, TS_STOPPED);
+    int cpu = task_cont(tid, TS_STOPPED);
     if (cpu_index() == cpu) {
         arch_task_switch();
     } else {
@@ -375,7 +344,7 @@ void task_start_one(task_t *tid) {
 // 启动任务但暂时不要切换
 // 如果批量启动任务，顺序是：禁用抢占，启动任务，发送 ipi，启用抢占，切换
 uint64_t task_start(task_t *tid) {
-    return 1UL << sched_cont(tid, TS_STOPPED);
+    return 1UL << task_cont(tid, TS_STOPPED);
 }
 
 // 执行 task_start 之后，调用此函数发送 IPI，通知目标 cpu 切换任务

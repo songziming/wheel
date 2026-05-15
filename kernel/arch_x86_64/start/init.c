@@ -229,7 +229,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 校准时钟
     loapic_timer_calibrate();
-    loapic_timer_set_periodic(50);
+    loapic_timer_set_periodic(SYSTIMER_FREQ);
 
     // 加载正式页表，此后 CONST 变为只读
     write_cr3(g_kernel_vm.table);
@@ -282,7 +282,7 @@ static INIT_TEXT void root_proc() {
         // 前一个 CPU 初始化完成才能初始化下一个
         // raw_spin_take(&g_smp_lock);
         task_stop(TS_STOPPED, NULL, 0);
-        arch_task_switch();
+        // arch_task_switch();
         // semaphore_take(&g_smp_sem, 1, FOREVER);
     }
 
@@ -332,7 +332,7 @@ static INIT_TEXT NORETURN void ap_init(int idx) {
     int_init_local();
 
     loapic_init_local();
-    loapic_timer_set_periodic(2);
+    loapic_timer_set_periodic(SYSTIMER_FREQ);
     write_cr3(g_kernel_vm.table);   // 加载正式页表
 
     work_init_this();

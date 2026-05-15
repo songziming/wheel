@@ -58,6 +58,8 @@ void sched_process();
 
 void task_create(task_t *tid, const char *name, int prio, void *func);
 void task_stop(uint32_t bits, prioq_t *wq, int timeout);
+int task_cont(task_t *tid, uint32_t bits);
+
 void task_start_one(task_t *tid);
 uint64_t task_start(task_t *tid);
 void notify_resched(uint64_t cpumask);

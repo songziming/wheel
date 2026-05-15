@@ -45,6 +45,9 @@
 #define IPI_ALL_INCLUDING_SELF -1
 #define IPI_ALL_EXCLUDING_SELF -2
 
+// 系统时钟主频
+#define SYSTIMER_FREQ   50
+
 // 等待时间
 // tick=0 表示下一次时钟中断立即运行
 #define NOWAIT  -1
