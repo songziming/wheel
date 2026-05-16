@@ -223,8 +223,10 @@ arch_task_switch:
     pushfq
     cli                     // 关中断，防止 tid_prev/tid_next 改变
 
-    cmpq    $0, %gs:(g_int_depth)   // 如果已处于中断
+    cmpl    $0, %gs:(g_int_depth)   // 如果已处于中断
     jne     noswitch                // 则不必切换任务（中断退出时会自动切换）
+    cmpl    $0, %gs:(g_preempt_depth)
+    jne     noswitch
 
     movq    %gs:(g_tid_prev), %rsi
     movq    %gs:(g_tid_next), %rdi

@@ -21,6 +21,7 @@ typedef struct waiter {
     prioq_t    *wq; // 阻塞在哪个队列
     task_t     *tid; // 阻塞的任务
     ktimer_t    timer;
+    int         expired; // 是否已超时
 } waiter_t;
 
 // 任务状态掩码
@@ -57,7 +58,7 @@ INIT_TEXT void sched_init();
 void sched_process();
 
 void task_create(task_t *tid, const char *name, int prio, void *func);
-void task_stop(uint32_t bits, prioq_t *wq, int timeout);
+int task_stop(uint32_t bits, prioq_t *wq, int key, int timeout);
 int task_cont(task_t *tid, uint32_t bits);
 
 void task_start_one(task_t *tid);

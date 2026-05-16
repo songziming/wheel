@@ -27,8 +27,9 @@ static _Atomic uint32_t g_next_cpu = 0U;
 //------------------------------------------------------------------------------
 
 void prioq_init(prioq_t *q) {
-    kmemset(q->heads, 0, sizeof(q->heads));
+    q->lock = SPIN_INIT;
     q->priorities = 0U;
+    kmemset(q->heads, 0, sizeof(q->heads));
 }
 
 void prioq_insert_nolock(prioq_t *q, dlnode_t *dl, int prio) {
@@ -79,6 +80,7 @@ void preempt_lock() {
     THISCPU_ADD(g_preempt_depth, 1);
 }
 
+// 解除抢占锁，但不会立即切换任务，需要调用 arch_task_switch 才能触发
 void preempt_unlock() {
     THISCPU_ADD(g_preempt_depth, -1);
 }
@@ -96,6 +98,7 @@ static void _cont_this(task_t *tid) {
     if (tid->priority < THISCPU_GET(g_tid_next)->priority) {
         THISCPU_SET(g_tid_next, tid);
     }
+    atomic_fetch_and(&g_idle_mask, ~(1UL << cpu_index()));
 
     irq_spin_give(&q->lock, key);
 }
@@ -109,19 +112,21 @@ static void _cont_cpu(task_t *tid, int cpu) {
     if (tid->priority < (*PERCPU(cpu, &g_tid_next))->priority) {
         *PERCPU(cpu, &g_tid_next) = tid;
     }
+    atomic_fetch_and(&g_idle_mask, ~(1UL << cpu));
 
     irq_spin_give(&q->lock, key);
 }
 
 // 恢复运行这个 task，返回需要切换任务的 CPU-mask
 // 启动任务、semaphore/fence 恢复任务时调用此函数
+// 如果任务恢复运行，返回目标 cpu 的编号，未运行则返回 -1
 int task_cont(task_t *tid, uint32_t bits) {
     ASSERT(TS_READY != tid->state);
     // ASSERT(tid->affinity < 0 || tid->affinity == cpu_index());
 
     tid->state &= ~bits;
     if (TS_READY != tid->state) {
-        return 0; // still no ready
+        return -1; // still no ready
     }
 
     // 变为运行态，寻找一个 CPU 来运行
@@ -145,8 +150,6 @@ int task_cont(task_t *tid, uint32_t bits) {
     } else {
         _cont_cpu(tid, cpu);
     }
-
-    atomic_fetch_and(&g_idle_mask, ~(1UL << cpu));
 
     // 返回 cpu-mask，这样批量恢复任务时（如 semaphore、fence）
     // 就可以最后统一发送 IPI
@@ -173,24 +176,30 @@ static void task_timeout(ktimer_t *timer) {
         return;
     }
 
+    pender->expired = 1; // 标记 pend 状态已超时
     prioq_remove_nolock(wq, &pender->dl, tid->priority);
     raw_spin_give(&wq->lock);
 
     int cpu = task_cont(tid, TS_PENDING);
-    if (cpu_index() != cpu) {
+    if ((cpu >= 0) && (cpu_index() != cpu)) {
         arch_send_ipi(cpu, VEC_IPI_RESCHED);
     }
 }
 
 // wq 是阻塞队列，将任务放在阻塞队列，调用者需要持有 wq 自旋锁
+// key 是调用者获取 wq 自旋锁时得到的中断锁
 // 当前任务停止，必然需要切换到其他任务，调用者需要关闭抢占
-void task_stop(uint32_t bits, prioq_t *wq, int timeout) {
+int task_stop(uint32_t bits, prioq_t *wq, int key, int timeout) {
+    ASSERT(NULL != wq);
+    ASSERT(cpu_int_depth() == 0); // 不能在中断里调用
+    ASSERT(THISCPU_GET(g_preempt_depth) == 0); // 不能在关抢占时调用
+
     task_t *self = THISCPU_GET(g_tid_prev);
     prioq_t *q = THISCPU(&g_rdyq);
 
     self->state |= bits;
 
-    int key = irq_spin_take(&q->lock);
+    raw_spin_take(&q->lock);
     prioq_remove_nolock(q, &self->dl, self->priority);
     task_t *next = containerof(prioq_head_nolock(q), task_t, dl);
     if (31 == next->priority) {
@@ -199,21 +208,30 @@ void task_stop(uint32_t bits, prioq_t *wq, int timeout) {
     THISCPU_SET(g_tid_next, next);
 
     waiter_t pender;
-    if (wq) {
-        // 在这里将 self 放在 wait-queue 里面
-        // 要求 caller 持有 wait-queue 的锁
-        // 此时中断禁用，timer 不会触发
-        pender.wq = wq;
-        pender.tid = self;
-        prioq_insert_nolock(wq, &pender.dl, self->priority);
-        if (FOREVER != timeout) {
-            timer_start(&pender.timer, task_timeout, timeout);
-        }
+    pender.expired = 0;
+    pender.wq = wq;
+    pender.tid = self;
+
+    // 在这里将 self 放在 wait-queue 里面
+    // 要求 caller 持有 wait-queue 的锁
+    // 此时中断禁用，timer 不会触发
+    prioq_insert_nolock(wq, &pender.dl, self->priority);
+    if (FOREVER != timeout) {
+        timer_start(&pender.timer, task_timeout, timeout);
     }
 
-    irq_spin_give(&q->lock, key);
+    // 释放两层锁，让出 cpu，开始阻塞
+    raw_spin_give(&q->lock);
+    irq_spin_give(&wq->lock, key);
     arch_task_switch();
-    // return self;
+
+    // 执行到这里，说明已经恢复运行
+    // 可能是因为超时，也可能正常退出阻塞态（此时 timer 还在等待）
+    // 需要立即取消 timer，防止本函数退出后 timer 析构，timer 函数仍触发
+    timer_cancel(&pender.timer);
+
+    // 如果超时，timer 函数会将 expired 赋值为 1
+    return pender.expired;
 }
 
 //------------------------------------------------------------------------------
@@ -238,6 +256,9 @@ static void task_free(work_t *wk) {
 // 全程必须关闭中断，防止被抢占，否则 work 没来得及注册，任务无法回收
 // 大致逻辑与 task_stop 类似
 void task_exit() {
+    ASSERT(cpu_int_depth() == 0);
+    ASSERT(THISCPU_GET(g_preempt_depth) == 0);
+
     task_t *self = THISCPU_GET(g_tid_prev);
     prioq_t *q = THISCPU(&g_rdyq);
 
@@ -336,7 +357,7 @@ void task_start_one(task_t *tid) {
     int cpu = task_cont(tid, TS_STOPPED);
     if (cpu_index() == cpu) {
         arch_task_switch();
-    } else {
+    } else if (cpu >= 0) {
         arch_send_ipi(cpu, VEC_IPI_RESCHED);
     }
 }
@@ -344,7 +365,8 @@ void task_start_one(task_t *tid) {
 // 启动任务但暂时不要切换
 // 如果批量启动任务，顺序是：禁用抢占，启动任务，发送 ipi，启用抢占，切换
 uint64_t task_start(task_t *tid) {
-    return 1UL << task_cont(tid, TS_STOPPED);
+    int cpu = task_cont(tid, TS_STOPPED);
+    return (cpu >= 0) ? (1UL << cpu) : 0UL;
 }
 
 // 执行 task_start 之后，调用此函数发送 IPI，通知目标 cpu 切换任务

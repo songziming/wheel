@@ -24,7 +24,7 @@
 #include <ktimer.h>
 #include <kstring.h>
 #include <spin.h>
-// #include <semaphore.h>
+#include <sema.h>
 #include <debug.h>
 #include <ktest.h>
 
@@ -41,7 +41,8 @@ static INIT_TEXT void root_proc();
 
 
 static INIT_DATA int g_cpu_started = 1;
-static INIT_DATA spin_t g_smp_lock = SPIN_INIT;
+// static INIT_DATA spin_t g_smp_lock = SPIN_INIT;
+static INIT_BSS sema_t g_smp_sema;
 static INIT_BSS  work_t g_smp_notifier;
 static INIT_TEXT NORETURN void ap_init(int idx);
 
@@ -264,7 +265,8 @@ static INIT_TEXT void root_proc() {
     kmemcpy(to, from, &_real_end - from);
     logk("copy trampoline code from %p to %p\n", from, to);
 
-    raw_spin_take(&g_smp_lock);
+    // raw_spin_take(&g_smp_lock);
+    sema_init(&g_smp_sema, 0, 1);
 
     // 启动代码地址页号就是 startup-IPI 的向量号
     int vec = KERNEL_REAL_ADDR >> 12;
@@ -281,7 +283,8 @@ static INIT_TEXT void root_proc() {
         // 当 CPU 开始运行 task，说明初始化已经结束，不再使用 init stack
         // 前一个 CPU 初始化完成才能初始化下一个
         // raw_spin_take(&g_smp_lock);
-        task_stop(TS_STOPPED, NULL, 0);
+        // task_stop(TS_STOPPED, NULL, 0, 0);
+        sema_take(&g_smp_sema, FOREVER);
         // arch_task_switch();
         // semaphore_take(&g_smp_sem, 1, FOREVER);
     }
@@ -309,7 +312,8 @@ static INIT_TEXT void root_proc() {
 // BSP 可以启动下一个 AP，或者将 init-stack 回收
 static INIT_TEXT void notify_ap_started(work_t *work UNUSED) {
     ASSERT(cpu_int_depth() > 0);
-    task_start_one(&g_root_tcb);
+    // task_start_one(&g_root_tcb);
+    sema_give(&g_smp_sema);
 }
 
 // AP 启动流程，使用 init-stack
