@@ -1,5 +1,6 @@
 #include "ktest.h"
 #include <task.h>
+#include <sema.h>
 #include <kstring.h>
 #include <debug.h>
 
@@ -129,3 +130,70 @@ void test_smp_tasks() {
     }
     logk("all smp tasks finished!\n");
 }
+
+//------------------------------------------------------------------------------
+// 信号量测试
+//------------------------------------------------------------------------------
+
+static sema_t g_sem;
+static task_t sa;
+static task_t sb;
+static task_t sc;
+
+static void proc_consumer_a() {
+    for (int i = 0; i < 10; ++i) {
+        logk("(a-waiting-%d)", cpu_index());
+        int got = sema_take(&g_sem, SYSTIMER_FREQ);
+        logk("(a-%d)", got);
+    }
+    logk("sema-a exit\n");
+}
+
+static void proc_consumer_b() {
+    for (int i = 0; i < 10; ++i) {
+        logk("(b-waiting-%d)", cpu_index());
+        int got = sema_take(&g_sem, SYSTIMER_FREQ);
+        logk("(b-%d)", got);
+    }
+    logk("sema-b exit\n");
+}
+
+static void proc_consumer_c() {
+    for (int i = 0; i < 10; ++i) {
+        logk("(c-waiting-%d)", cpu_index());
+        int got = sema_take(&g_sem, SYSTIMER_FREQ);
+        logk("(c-%d)", got);
+    }
+    logk("sema-c exit\n");
+}
+
+
+void test_sema() {
+    task_create(&sa, "sema-A", 10, proc_consumer_a);
+    task_create(&sb, "sema-B", 10, proc_consumer_b);
+    task_create(&sc, "sema-C", 10, proc_consumer_c);
+
+    sema_init(&g_sem, 0, 1000);
+
+    // 启动三个消费者，开始不断获取资源
+    uint64_t cpus = 0;
+    preempt_lock();
+    cpus |= task_start(&sa);
+    cpus |= task_start(&sb);
+    cpus |= task_start(&sc);
+    notify_resched(cpus);
+    preempt_unlock();
+    arch_task_switch();
+
+    // 共请求 30 次，提供 28 次，最后两次超时
+    for (int i = 0; i < 28; ++i) {
+        loapic_timer_busywait(9000);
+        sema_give(&g_sem);
+    }
+
+    while (TS_DELETED != sa.state) { cpu_pause(); }
+    while (TS_DELETED != sb.state) { cpu_pause(); }
+    while (TS_DELETED != sc.state) { cpu_pause(); }
+    logk("consumers exited\n");
+}
+

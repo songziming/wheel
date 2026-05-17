@@ -10,8 +10,8 @@
 // ready queue
 // static PERCPU_DATA spin_t g_rdy_lock = SPIN_INIT;
 static PERCPU_BSS prioq_t g_rdyq;
-       PERCPU_BSS task_t *g_tid_prev;   // updated in int_return
-       PERCPU_BSS task_t *g_tid_next;   // guarded by g_rdyq.lock
+PERCPU_DATA task_t *g_tid_prev = NULL;   // updated in int_return
+PERCPU_DATA task_t *g_tid_next = NULL;   // guarded by g_rdyq.lock
 
 PERCPU_DATA int g_preempt_depth = 0;
 static PERCPU_BSS task_t g_idle_tcb;
@@ -62,7 +62,7 @@ void prioq_remove_nolock(prioq_t *q, dlnode_t *dl, int prio) {
 
 int prioq_contains_nolock(prioq_t *q, dlnode_t *dl, int prio) {
     if (q->heads[prio]) {
-        return dl_contains(q->heads[prio], dl);
+        return (dl==q->heads[prio]) || dl_contains(q->heads[prio], dl);
     }
     return 0;
 }

@@ -295,6 +295,8 @@ static INIT_TEXT void root_proc() {
         loapic_timer_busywait(500000);
         logk("testing smp tasks:\n");
         test_smp_tasks();
+        logk("testing semaphore:\n");
+        test_sema();
     }
 
     logk("stop system\n");

@@ -3,5 +3,6 @@
 
 void test_cooperative();
 void test_smp_tasks();
+void test_sema();
 
 #endif // KTEST_H

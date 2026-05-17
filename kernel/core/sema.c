@@ -28,13 +28,7 @@ int sema_take(sema_t *sema, int timeout) {
     }
 
     // 调用 task_stop 自动释放了 wq 自旋锁
-    if (task_stop(TS_PENDING, &sema->wq, key, timeout)) {
-        // 因为超时而返回
-        return 0;
-    }
-
-    // 因为其他任务 give，得到了信号量
-    return 1;
+    return !task_stop(TS_PENDING, &sema->wq, key, timeout);
 }
 
 // 不会阻塞，可以在中断里调用
