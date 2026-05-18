@@ -15,6 +15,7 @@
 #include <dev/console.h>
 #include <dev/framebuf.h>
 #include <dev/i8259.h>
+#include <dev/i8042.h>
 #include <dev/hpet.h>
 
 #include <early_alloc.h>
@@ -231,6 +232,9 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // 校准时钟
     loapic_timer_calibrate();
     loapic_timer_set_periodic(SYSTIMER_FREQ);
+
+    // 设备初始化
+    i8042_init();
 
     // 加载正式页表，此后 CONST 变为只读
     write_cr3(g_kernel_vm.table);

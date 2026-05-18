@@ -40,7 +40,7 @@ UNIT_COV := $(OUT_DIR)/coverage
 
 # source files and objects
 KERNEL := kernel
-KDIRS  := arch_$(ARCH) core debug lib mem
+KDIRS  := arch_$(ARCH) core debug lib mem services
 AFILES := $(shell find $(KDIRS:%=$(KERNEL)/%) -name "*.S")
 CFILES := $(shell find $(KDIRS:%=$(KERNEL)/%) -name "*.c")
 XFILES := $(shell find $(KDIRS:%=$(KERNEL)/%) -name "*.cc")

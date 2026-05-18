@@ -46,6 +46,7 @@ INIT_TEXT int need_int_remap();
 INIT_TEXT void loapic_init();
 INIT_TEXT void loapic_init_local();
 void loapic_show();
+void loapic_send_eoi();
 INIT_TEXT void loapic_send_init(int cpu);
 INIT_TEXT void loapic_send_sipi(int cpu, int vec);
 
@@ -59,6 +60,6 @@ INIT_TEXT void ioapic_init();
 void ioapic_mask_gsi(uint32_t gsi);
 void ioapic_unmask_gsi(uint32_t gsi);
 void ioapic_route_gsi(uint32_t gsi, int cpu, uint8_t vec);
-void ioapic_send_eoi(int vec);
+void ioapic_send_eoi(int vec); // 只有 level-triggered 中断需要调用
 
 #endif // ARCH_X86_64_APIC_APIC_H

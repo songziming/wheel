@@ -149,6 +149,10 @@ static INIT_TEXT void loapic_enable_x2() {
 // 中断处理函数
 //------------------------------------------------------------------------------
 
+inline void loapic_send_eoi() {
+    g_write(REG_EOI, 0);
+}
+
 static void on_stopall(int vec UNUSED, regs_t *f UNUSED) {
     g_write(REG_EOI, 0);
     logk("[CPU-%d stopped]\n", cpu_index());
