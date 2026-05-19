@@ -6,6 +6,7 @@
 typedef struct ringbuf {
     char    *data;
     size_t   size;
+    size_t   mask;
     size_t   r_head;
     size_t   w_head;
 } ringbuf_t;

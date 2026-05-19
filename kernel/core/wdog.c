@@ -1,4 +1,4 @@
-#include "ktimer.h"
+#include "wdog.h"
 #include <spin.h>
 #include <debug.h>
 
@@ -8,13 +8,13 @@ static spin_t timer_lock = SPIN_INIT;
 static dlnode_t timer_q;
 
 
-INIT_TEXT void timer_init() {
+INIT_TEXT void wdog_init() {
     // spin_init(&timer_lock);
     dl_init_circular(&timer_q);
 }
 
 // 挑出队列开头 delta==0 的节点，执行这些节点中的函数
-void timer_process() {
+void wdog_process() {
     int key = irq_spin_take(&timer_lock);
     if (dl_is_lastone(&timer_q)) {
         irq_spin_give(&timer_lock, key);
@@ -23,10 +23,10 @@ void timer_process() {
 
     // 找出队列开头所有 delta==0 的元素，停在第一个 delta!=0 的元素
     dlnode_t *newhead = timer_q.next;
-    ktimer_t *tmr = containerof(newhead, ktimer_t, dl);
+    wdog_t *tmr = containerof(newhead, wdog_t, dl);
     while ((&timer_q != newhead) && (tmr->delta <= 0)) {
         newhead = newhead->next;
-        tmr = containerof(newhead, ktimer_t, dl);
+        tmr = containerof(newhead, wdog_t, dl);
     }
 
     // 停在第一个 delta!=0 的元素
@@ -46,19 +46,19 @@ void timer_process() {
 
     // 遍历被移除的子链表，运行里面的函数
     while (oldhead != newhead) {
-        ktimer_t *old = containerof(oldhead, ktimer_t, dl);
+        wdog_t *old = containerof(oldhead, wdog_t, dl);
         oldhead = oldhead->next;
         old->func(old);
     }
 }
 
-void timer_start(ktimer_t *tmr, timer_func_t func, int tick) {
+void wdog_start(wdog_t *tmr, wdog_cb_t func, int tick) {
     int key = irq_spin_take(&timer_lock);
     ASSERT(!dl_contains(&timer_q, &tmr->dl));
 
     dlnode_t *dl;
     for (dl = timer_q.next; dl != &timer_q; dl = dl->next) {
-        ktimer_t *ref = containerof(dl, ktimer_t, dl);
+        wdog_t *ref = containerof(dl, wdog_t, dl);
         if (tick < ref->delta) {
             ref->delta -= tick;
             break;
@@ -73,14 +73,14 @@ void timer_start(ktimer_t *tmr, timer_func_t func, int tick) {
 }
 
 // 删除一个节点，需要把 delta 加到后一个节点之上
-void timer_cancel(ktimer_t *tmr) {
+void wdog_cancel(wdog_t *tmr) {
     int key = irq_spin_take(&timer_lock);
     for (dlnode_t *dl = timer_q.next; dl != &timer_q; dl = dl->next) {
         if (&tmr->dl != dl) {
             continue;
         }
         if (dl->next != &timer_q) {
-            ktimer_t *next = containerof(dl->next, ktimer_t, dl);
+            wdog_t *next = containerof(dl->next, wdog_t, dl);
             next->delta += tmr->delta;
         }
         dl_remove(dl);

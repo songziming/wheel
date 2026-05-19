@@ -1,3 +1,9 @@
+// 任务管理
+// 任务的创建/删除/状态转换
+// 本模块的函数服务于 semaphore、mutex、msgq 这类同步原语
+// 通常不需要直接调用这些函数
+
+
 #include "task.h"
 #include "work.h"
 #include <arch_api.h>
@@ -8,7 +14,7 @@
 
 
 // ready queue
-// static PERCPU_DATA spin_t g_rdy_lock = SPIN_INIT;
+static PERCPU_DATA spin_t g_rdy_lock = SPIN_INIT;
 static PERCPU_BSS prioq_t g_rdyq;
 PERCPU_DATA task_t *g_tid_prev = NULL;   // updated in int_return
 PERCPU_DATA task_t *g_tid_next = NULL;   // guarded by g_rdyq.lock
@@ -27,12 +33,12 @@ static _Atomic uint32_t g_next_cpu = 0U;
 //------------------------------------------------------------------------------
 
 void prioq_init(prioq_t *q) {
-    q->lock = SPIN_INIT;
+    // q->lock = SPIN_INIT;
     q->priorities = 0U;
     kmemset(q->heads, 0, sizeof(q->heads));
 }
 
-void prioq_insert_nolock(prioq_t *q, dlnode_t *dl, int prio) {
+void prioq_insert(prioq_t *q, dlnode_t *dl, int prio) {
     if (NULL == q->heads[prio]) {
         dl_init_circular(dl);
         q->heads[prio] = dl;
@@ -42,7 +48,7 @@ void prioq_insert_nolock(prioq_t *q, dlnode_t *dl, int prio) {
     }
 }
 
-void prioq_remove_nolock(prioq_t *q, dlnode_t *dl, int prio) {
+void prioq_remove(prioq_t *q, dlnode_t *dl, int prio) {
     ASSERT(q->priorities & (1U << prio));
     ASSERT(NULL != q->heads[prio]);
 
@@ -60,14 +66,14 @@ void prioq_remove_nolock(prioq_t *q, dlnode_t *dl, int prio) {
     }
 }
 
-int prioq_contains_nolock(prioq_t *q, dlnode_t *dl, int prio) {
+int prioq_contains(prioq_t *q, dlnode_t *dl, int prio) {
     if (q->heads[prio]) {
         return (dl==q->heads[prio]) || dl_contains(q->heads[prio], dl);
     }
     return 0;
 }
 
-dlnode_t *prioq_head_nolock(prioq_t *q) {
+dlnode_t *prioq_head(prioq_t *q) {
     int prio = __builtin_ctz(q->priorities);
     return q->heads[prio];
 }
@@ -90,31 +96,31 @@ void preempt_unlock() {
 //------------------------------------------------------------------------------
 
 static void _cont_this(task_t *tid) {
-    // spin_t *lock = THISCPU(&g_rdy_lock);
+    spin_t *lock = THISCPU(&g_rdy_lock);
     prioq_t *q = THISCPU(&g_rdyq);
-    int key = irq_spin_take(&q->lock);
+    int key = irq_spin_take(lock);
 
-    prioq_insert_nolock(q, &tid->dl, tid->priority);
+    prioq_insert(q, &tid->dl, tid->priority);
     if (tid->priority < THISCPU_GET(g_tid_next)->priority) {
         THISCPU_SET(g_tid_next, tid);
     }
     atomic_fetch_and(&g_idle_mask, ~(1UL << cpu_index()));
 
-    irq_spin_give(&q->lock, key);
+    irq_spin_give(lock, key);
 }
 
 static void _cont_cpu(task_t *tid, int cpu) {
-    // spin_t *lock = THISCPU(&g_rdy_lock);
+    spin_t *lock = THISCPU(&g_rdy_lock);
     prioq_t *q = PERCPU(cpu, &g_rdyq);
-    int key = irq_spin_take(&q->lock);
+    int key = irq_spin_take(lock);
 
-    prioq_insert_nolock(q, &tid->dl, tid->priority);
+    prioq_insert(q, &tid->dl, tid->priority);
     if (tid->priority < (*PERCPU(cpu, &g_tid_next))->priority) {
         *PERCPU(cpu, &g_tid_next) = tid;
     }
     atomic_fetch_and(&g_idle_mask, ~(1UL << cpu));
 
-    irq_spin_give(&q->lock, key);
+    irq_spin_give(lock, key);
 }
 
 // 恢复运行这个 task，返回需要切换任务的 CPU-mask
@@ -161,8 +167,91 @@ int task_cont(task_t *tid, uint32_t bits) {
 // 任务停止运行，只能停止当前任务
 //------------------------------------------------------------------------------
 
+// 调用者需要持有 waitq 所在对象的锁，中断关闭
+// 超时回调函数需要锁住同步对象，我们不知道同步对象是什么
+void task_pend(uint32_t bits, prioq_t *wq, waiter_t *pender, int timeout, wdog_cb_t cb) {
+    ASSERT(0 == cpu_int_depth());
+
+    task_t *self = THISCPU_GET(g_tid_prev);
+    prioq_t *q = THISCPU(&g_rdyq);
+    spin_t *lock = THISCPU(&g_rdy_lock);
+
+    self->state |= bits;
+
+    raw_spin_take(lock);
+    prioq_remove(q, &self->dl, self->priority);
+    task_t *next = containerof(prioq_head(q), task_t, dl);
+    if (31 == next->priority) {
+        atomic_fetch_or(&g_idle_mask, 1UL << cpu_index());
+    }
+    THISCPU_SET(g_tid_next, next);
+    raw_spin_give(lock);
+
+    pender->expired = 0;
+    pender->tid = self;
+    // pender->wq = wq;
+
+    prioq_insert(wq, &pender->dl, self->priority);
+    if (FOREVER != timeout) {
+        wdog_start(&pender->timer, cb, timeout);
+    }
+}
+
+// 在超时回调ISR里执行
+// caller 需要锁住同步对象
+void task_wake_timeout(prioq_t *wq, waiter_t *pender) {
+    ASSERT(0 != cpu_int_depth());
+
+    // prioq_t *wq = pender->wq;
+    task_t *tid = pender->tid;
+    if (!prioq_contains(wq, &pender->dl, tid->priority)) {
+        // 已经移除了阻塞队列，可能是timer触发之后任务被正常恢复
+        return;
+    }
+
+    pender->expired = 1; // 标记 pend 状态已超时
+    prioq_remove(wq, &pender->dl, tid->priority);
+    int cpu = task_cont(tid, TS_PENDING);
+    if ((cpu >= 0) && (cpu_index() != cpu)) {
+        arch_send_ipi(cpu, VEC_IPI_RESCHED);
+    }
+}
+
+// 从阻塞状态恢复，检查恢复运行的原因（得到资源还是超时）
+// 删除timer防止再次触发（未注册也可以删除）
+int task_onresume(waiter_t *pender) {
+    ASSERT(0 == cpu_int_depth());
+    // 执行到这里，说明已经恢复运行
+    // 可能是因为超时，也可能正常退出阻塞态（此时 timer 还在等待）
+    // 需要立即取消 timer，防止本函数退出后 timer 析构，timer 函数仍触发
+    wdog_cancel(&pender->timer);
+
+    // 如果超时，timer 函数会将 expired 赋值为 1
+    return pender->expired;
+}
+
+// 任务获取到资源，按正常流程唤醒下一个等待的任务
+// 由上一个owner调用，可能在 ISR 里面调用
+// 返回1表示启动了一个任务，返回0表示没有阻塞的线程
+task_t *task_unpend_one(prioq_t *wq) {
+    dlnode_t *dl = prioq_head(wq);
+    if (NULL == dl) {
+        return NULL;
+    }
+
+    // 存在阻塞者，将其唤醒，并将其设为新的 owner
+    waiter_t *w = containerof(dl, waiter_t, dl);
+    prioq_remove(wq, dl, w->tid->priority);
+    int cpu = task_cont(w->tid, TS_PENDING);
+    if (cpu_index() != cpu) {
+        arch_send_ipi(cpu, VEC_IPI_RESCHED);
+    }
+    return w->tid;
+}
+
+#if 0
 // 阻塞队列节点超时，在 CPU0 ISR 里面执行
-static void task_timeout(ktimer_t *timer) {
+static void task_timeout(wdog_t *timer) {
     waiter_t *pender = containerof(timer, waiter_t, timer);
     prioq_t *wq = pender->wq;
     task_t *tid = pender->tid;
@@ -170,14 +259,14 @@ static void task_timeout(ktimer_t *timer) {
     // 锁住阻塞队列，同时也锁住了所在semaphore、mutex、event等
     // 处于 isr，中断已经关闭，使用 raw-spin take/give 即可
     raw_spin_take(&wq->lock);
-    if (!prioq_contains_nolock(wq, &pender->dl, tid->priority)) {
+    if (!prioq_contains(wq, &pender->dl, tid->priority)) {
         // 已经移除了阻塞队列，可能是timer触发之后任务会恢复
         raw_spin_give(&wq->lock);
         return;
     }
 
     pender->expired = 1; // 标记 pend 状态已超时
-    prioq_remove_nolock(wq, &pender->dl, tid->priority);
+    prioq_remove(wq, &pender->dl, tid->priority);
     raw_spin_give(&wq->lock);
 
     int cpu = task_cont(tid, TS_PENDING);
@@ -196,12 +285,13 @@ int task_stop(uint32_t bits, prioq_t *wq, int key, int timeout) {
 
     task_t *self = THISCPU_GET(g_tid_prev);
     prioq_t *q = THISCPU(&g_rdyq);
+    spin_t *lock = THISCPU(&g_rdy_lock);
 
     self->state |= bits;
 
-    raw_spin_take(&q->lock);
-    prioq_remove_nolock(q, &self->dl, self->priority);
-    task_t *next = containerof(prioq_head_nolock(q), task_t, dl);
+    raw_spin_take(lock);
+    prioq_remove(q, &self->dl, self->priority);
+    task_t *next = containerof(prioq_head(q), task_t, dl);
     if (31 == next->priority) {
         atomic_fetch_or(&g_idle_mask, 1UL << cpu_index());
     }
@@ -215,24 +305,25 @@ int task_stop(uint32_t bits, prioq_t *wq, int key, int timeout) {
     // 在这里将 self 放在 wait-queue 里面
     // 要求 caller 持有 wait-queue 的锁
     // 此时中断禁用，timer 不会触发
-    prioq_insert_nolock(wq, &pender.dl, self->priority);
+    prioq_insert(wq, &pender.dl, self->priority);
     if (FOREVER != timeout) {
-        timer_start(&pender.timer, task_timeout, timeout);
+        wdog_start(&pender.timer, task_timeout, timeout);
     }
 
     // 释放两层锁，让出 cpu，开始阻塞
-    raw_spin_give(&q->lock);
-    irq_spin_give(&wq->lock, key);
+    raw_spin_give(lock);
+    // irq_spin_give(&wq->lock, key);
     arch_task_switch();
 
     // 执行到这里，说明已经恢复运行
     // 可能是因为超时，也可能正常退出阻塞态（此时 timer 还在等待）
     // 需要立即取消 timer，防止本函数退出后 timer 析构，timer 函数仍触发
-    timer_cancel(&pender.timer);
+    wdog_cancel(&pender.timer);
 
     // 如果超时，timer 函数会将 expired 赋值为 1
     return pender.expired;
 }
+#endif
 
 //------------------------------------------------------------------------------
 // 退出自身任务
@@ -261,6 +352,7 @@ void task_exit() {
 
     task_t *self = THISCPU_GET(g_tid_prev);
     prioq_t *q = THISCPU(&g_rdyq);
+    spin_t *lock = THISCPU(&g_rdy_lock);
 
     // 发送 IPI，让其他 cpu 清除此任务的栈
     // 这样只剩当前 cpu 还保留 mapping，留到 work 里面删除
@@ -268,9 +360,9 @@ void task_exit() {
 
     self->state |= TS_STOPPED;
 
-    int key = irq_spin_take(&q->lock);
-    prioq_remove_nolock(q, &self->dl, self->priority);
-    task_t *next = containerof(prioq_head_nolock(q), task_t, dl);
+    int key = irq_spin_take(lock);
+    prioq_remove(q, &self->dl, self->priority);
+    task_t *next = containerof(prioq_head(q), task_t, dl);
     if (31 == next->priority) {
         atomic_fetch_or(&g_idle_mask, 1UL << cpu_index());
     }
@@ -281,7 +373,7 @@ void task_exit() {
     freework.tid = self;
     work_defer(&freework.wk, task_free, "freetask");
 
-    irq_spin_give(&q->lock, key);
+    irq_spin_give(lock, key);
     arch_task_switch();
 }
 
@@ -315,7 +407,7 @@ INIT_TEXT void sched_init() {
     task_create(idle, "idle", 31, proc_idle);
     idle->affinity = cpu_index();
     idle->state = TS_READY;
-    prioq_insert_nolock(q, &idle->dl, 31);
+    prioq_insert(q, &idle->dl, 31);
     // task_start(idle);
     g_idle_mask |= 1UL << cpu_index();
 
@@ -328,15 +420,15 @@ INIT_TEXT void sched_init() {
 // 只负责轮转，不抢占（抢占通过 arch_task_switch 触发）
 void sched_process() {
     ASSERT(cpu_int_depth() > 0);
-    // spin_t *lock = THISCPU(&g_rdy_lock);
-    prioq_t *q = THISCPU(&g_rdyq);
-    raw_spin_take(&q->lock);
+    spin_t *lock = THISCPU(&g_rdy_lock);
+    // prioq_t *q = THISCPU(&g_rdyq);
+    raw_spin_take(lock);
 
     task_t *prev = THISCPU_GET(g_tid_next);
     task_t *next = containerof(prev->dl.next, task_t, dl);
     THISCPU_SET(g_tid_next, next);
 
-    raw_spin_give(&q->lock);
+    raw_spin_give(lock);
 }
 
 void task_create(task_t *tid, const char *name, int prio, void *func) {

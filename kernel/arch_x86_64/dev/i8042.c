@@ -61,7 +61,7 @@ static int g_state = STATE_NORMAL;
 
 static void handle_keycode(keycode_t key, int release) {
     if (release) {
-        key | KEY_RELEASE;
+        send_keycode(key | KEY_RELEASE);
     }
 }
 

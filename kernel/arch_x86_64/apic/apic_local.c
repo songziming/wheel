@@ -3,7 +3,7 @@
 #include <arch_int.h>
 #include <cpu/features.h>
 #include <mem/mem.h>
-#include <ktimer.h>
+#include <wdog.h>
 #include <task.h>
 #include <debug.h>
 
@@ -175,7 +175,7 @@ static void on_invlpg(int vec UNUSED, regs_t *f UNUSED) {
 static void on_timer(int vec UNUSED, regs_t *f UNUSED) {
     g_write(REG_EOI, 0);
     if (0 == cpu_index()) {
-        timer_process();
+        wdog_process();
     }
     sched_process();
 }

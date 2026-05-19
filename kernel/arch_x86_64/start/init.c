@@ -22,7 +22,7 @@
 #include <pmlayout.h>
 #include <task.h>
 #include <work.h>
-#include <ktimer.h>
+#include <wdog.h>
 #include <kstring.h>
 #include <spin.h>
 #include <sema.h>
@@ -241,7 +241,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 初始化任务调度
     work_init_this();
-    timer_init();
+    wdog_init();
     sched_init();
 
     // 创建根任务并开始运行，优先级 30，仅高于 idle

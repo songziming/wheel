@@ -8,9 +8,9 @@
 
 // 因为用在 log，这个代码内部不能使用 assert，不能调用 log
 
-// size 必须是 2 的幂，r_head..w_head 之间的数据是有效的
-// ringbuf  [......r_head----------w_head.....]
-// wrap:    [-----w_head......r_head----------]
+// size 必须是 2 的幂，[r_head..w_head) 之间的数据是有效的
+// ringbuf  [......r_head**********w_head.....]
+// wrap:    [*****w_head......r_head**********]
 
 // TODO 可以让 OS 在虚拟空间里分配2倍长度的空间，前后两段映射到相同的物理内存
 //      这样我们就无需关心 buffer 末端的 rollback 问题（Linux kfifo 就是这么做的）
@@ -22,6 +22,7 @@ void ringbuf_init(ringbuf_t *rbuf, char *data, size_t size) {
     }
     rbuf->data = data;
     rbuf->size = size;
+    rbuf->mask = size - 1;
     rbuf->r_head = 0;
     rbuf->w_head = 0;
 }
@@ -40,6 +41,42 @@ int ringbuf_is_empty(ringbuf_t *rbuf) {
     return rbuf->r_head == rbuf->w_head;
 }
 
+
+// 最多能写多少数据（非破坏性写入）
+size_t ringbuf_write_max(ringbuf_t *rbuf) {
+    return rbuf->size + rbuf->r_head - rbuf->w_head;
+}
+
+// 准备写入数据，先申请空间
+// 申请和提交之间不能释放锁
+char *ringbuf_alloc_for_w(ringbuf_t *rbuf, size_t sz) {
+    size_t max = rbuf->size - (rbuf->w_head - rbuf->r_head);
+    if (max < sz) {
+        return NULL;
+    }
+    return &rbuf->data[rbuf->w_head & rbuf->mask];
+}
+
+void ringbuf_done_write(ringbuf_t *rbuf, size_t len) {
+    rbuf->w_head += len;
+}
+
+
+// 最多能读多少数据
+size_t ringbuf_read_max(ringbuf_t *rbuf) {
+    return rbuf->w_head - rbuf->r_head;
+}
+
+char *ringbuf_prepare_read(ringbuf_t *rbuf, size_t sz) {
+    if (rbuf->r_head + sz > rbuf->w_head) {
+        return NULL;
+    }
+    return &rbuf->data[rbuf->r_head];
+}
+
+void ringbuf_done_read(ringbuf_t *rbuf, size_t len) {
+    rbuf->r_head += len;
+}
 
 // 至少写入 min 字节，至多写入 max 字节，否则写入 0 字节
 size_t ringbuf_write(ringbuf_t *rbuf, const void *ptr, size_t min, size_t max) {
