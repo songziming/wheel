@@ -62,6 +62,8 @@ static int g_state = STATE_NORMAL;
 static void handle_keycode(keycode_t key, int release) {
     if (release) {
         send_keycode(key | KEY_RELEASE);
+    } else {
+        send_keycode(key);
     }
 }
 
@@ -201,7 +203,7 @@ static void handle_kbd() {
         handle_scancode(in8(PS2KBD_DATA_PORT));
     }
 
-    // 一次中断结束，
+    // 一次中断结束
     ASSERT(STATE_NORMAL == g_state);
     loapic_send_eoi();
 }

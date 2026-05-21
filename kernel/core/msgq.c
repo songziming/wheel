@@ -1,5 +1,6 @@
 #include "msgq.h"
 #include <page.h>
+#include <debug.h>
 
 void msgq_init(msgq_t *q) {
     q->lock = SPIN_INIT;
@@ -12,6 +13,8 @@ void msgq_init(msgq_t *q) {
     mmu_map(g_kernel_vm.table, va, va+PAGE_SIZE, pa, MMU_WRITE);
     mmu_map(g_kernel_vm.table, va+PAGE_SIZE, va+PAGE_SIZE*2, pa, MMU_WRITE);
     q->rng.paddr = pa;
+
+    fifo_init(&q->fifo, (void*)va, PAGE_SIZE);
 }
 
 static void writer_timeout(wdog_t *wd) {
@@ -31,6 +34,8 @@ static void reader_timeout(wdog_t *wd) {
 }
 
 size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout) {
+    ASSERT(cpu_int_depth() == 0);
+
     waiter_t pender;
     pender.user = q;
     pender.expired = 0;
@@ -42,13 +47,13 @@ size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout) {
             return 0; // 超时则直接返回
         }
 
-        size_t len = fifo_write(&q->fifo, msg, len, len);
-        if (len) {
+        size_t wrote = fifo_write(&q->fifo, msg, len, len);
+        if (wrote) {
             task_onresume(&pender); // 删除 timeout wdog
             task_unpend_one(&q->readers);
             irq_spin_give(&q->lock, key);
             arch_task_switch();
-            return len;
+            return wrote;
         }
 
         // 没有写入数据
@@ -68,7 +73,17 @@ size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout) {
     }
 }
 
+void msgq_send_force(msgq_t *q, void *msg, size_t len) {
+    int key = irq_spin_take(&q->lock);
+    fifo_force_write(&q->fifo, msg, len);
+    task_unpend_one(&q->readers);
+    irq_spin_give(&q->lock, key);
+    arch_task_switch();
+}
+
 size_t msgq_recv(msgq_t *q, void *dst, size_t len, int timeout) {
+    ASSERT(cpu_int_depth() == 0);
+
     waiter_t pender;
     pender.user = q;
     pender.expired = 0;

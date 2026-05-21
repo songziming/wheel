@@ -26,6 +26,8 @@
 #include <kstring.h>
 #include <spin.h>
 #include <sema.h>
+#include <keyboard.h>
+#include <kshell.h>
 #include <debug.h>
 #include <ktest.h>
 
@@ -234,7 +236,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     loapic_timer_set_periodic(SYSTIMER_FREQ);
 
     // 设备初始化
-    i8042_init();
+    keyboard_init(); // create keycode pipe
+    i8042_init(); // write keycode to pipe
 
     // 加载正式页表，此后 CONST 变为只读
     write_cr3(g_kernel_vm.table);
@@ -293,15 +296,23 @@ static INIT_TEXT void root_proc() {
         // semaphore_take(&g_smp_sem, 1, FOREVER);
     }
 
-    for (int i = 0; i < 1; ++i) {
-        logk("testing round #%d:\n", i);
-        test_cooperative();
-        loapic_timer_busywait(500000);
-        logk("testing smp tasks:\n");
-        test_smp_tasks();
-        logk("testing semaphore:\n");
-        test_sema();
-    }
+    // for (int i = 0; i < 1; ++i) {
+    //     // logk("testing round #%d:\n", i);
+    //     // test_cooperative();
+    //     // loapic_timer_busywait(500000);
+    //     // logk("testing smp tasks:\n");
+    //     // test_smp_tasks();
+    //     // logk("testing semaphore:\n");
+    //     // test_sema();
+    //     logk("testing message queue:\n");
+    //     test_msgq();
+    // }
+
+    // logk("")
+    kshell_start();
+
+    logk("root stopped\n");
+    return;
 
     logk("stop system\n");
     arch_send_ipi(IPI_ALL_EXCLUDING_SELF, VEC_IPI_STOPALL);

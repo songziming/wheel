@@ -1,6 +1,7 @@
 #include "ktest.h"
 #include <task.h>
 #include <sema.h>
+#include <msgq.h>
 #include <kstring.h>
 #include <debug.h>
 
@@ -197,3 +198,56 @@ void test_sema() {
     logk("consumers exited\n");
 }
 
+//------------------------------------------------------------------------------
+// 测试消息队列
+//------------------------------------------------------------------------------
+
+static task_t tw;
+static task_t tr;
+static msgq_t mq;
+
+static void q_writer() {
+    logk("writer running\n");
+
+    loapic_timer_busywait(5000);
+    logk("writing a...");
+    size_t len = msgq_send(&mq, "AAAAA", 5, FOREVER);
+    logk("wrote %zu\n", len);
+
+    loapic_timer_busywait(5000);
+    logk("writing b...");
+    len = msgq_send(&mq, "BBBBB", 5, FOREVER);
+    logk("wrote %zu\n", len);
+
+    loapic_timer_busywait(5000);
+    msgq_send(&mq, "CCCCC", 5, FOREVER);
+}
+
+static void q_reader() {
+    logk("reader running\n");
+    char dst[1024];
+    size_t got = msgq_recv(&mq, dst, 8, FOREVER);
+    logk("got %zu bytes: %.*s\n", got, (int)got, dst);
+    got = msgq_recv(&mq, dst, 5, FOREVER);
+    logk("got %zu bytes: %.*s\n", got, (int)got, dst);
+}
+
+void test_msgq() {
+    task_create(&tw, "writer", 10, q_writer);
+    task_create(&tr, "reader", 10, q_reader);
+    tw.affinity = 0;
+    tr.affinity = 0;
+
+    msgq_init(&mq);
+
+    preempt_lock();
+    task_start(&tw);
+    task_start(&tr);
+    preempt_unlock();
+    arch_task_switch();
+
+    while (TS_DELETED != tw.state) { cpu_pause(); }
+    while (TS_DELETED != tr.state) { cpu_pause(); }
+
+    // TODO msgq_destroy
+}

@@ -1,8 +1,10 @@
 #ifndef KEYBOARD_H
 #define KEYBOARD_H
 
+#include <wheel.h>
+
 typedef enum keycode {
-    KEY_RESERVED,
+    KEY_RESERVED = 0,
 
     // 数字
     KEY_0, KEY_1, KEY_2, KEY_3, KEY_4,
@@ -63,6 +65,8 @@ typedef enum keycode {
 // keycode 最高位表示按键释放
 #define KEY_RELEASE 0x80000000U
 
+INIT_TEXT void keyboard_init();
 void send_keycode(keycode_t kc);
+keycode_t get_keycode();
 
 #endif // KEYBOARD_H
