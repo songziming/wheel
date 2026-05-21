@@ -218,3 +218,5 @@ INIT_TEXT void i8042_init() {
     // set_int_handler(gsi + VEC_GSI_BASE, handle_keyboard);
     ioapic_unmask_gsi(gsi);
 }
+
+// TODO 还需要其他键盘函数，例如设置 LED 状态、设置重复按键时间

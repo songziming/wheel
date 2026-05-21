@@ -40,12 +40,13 @@ int sema_take(sema_t *sema, int timeout) {
     // 没有取得信号量，需要阻塞
     waiter_t pender;
     pender.user = sema;
-    task_pend(TS_PENDING, &sema->wq, &pender, timeout, sema_timeout);
+    task_pend(&sema->wq, &pender, timeout, sema_timeout);
     irq_spin_give(&sema->lock, key);
     arch_task_switch();
 
     // 恢复运行，检查是否因为超时而唤醒
-    return !task_onresume(&pender);
+    task_onresume(&pender);
+    return pender.got;
 }
 
 // 不会阻塞，可以在中断里调用

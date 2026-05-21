@@ -40,12 +40,13 @@ int mutex_take(mutex_t *mut, int timeout) {
     // 没有得到，需要阻塞
     waiter_t pender;
     pender.user = mut;
-    task_pend(TS_PENDING, &mut->wq, &pender, timeout, mutex_timeout);
+    task_pend(&mut->wq, &pender, timeout, mutex_timeout);
     irq_spin_give(&mut->lock, key);
     arch_task_switch();
 
     // 恢复运行，检查是否因为超时而唤醒
-    return !task_onresume(&pender);
+    task_onresume(&pender);
+    return pender.got;
 }
 
 void mutex_give(mutex_t *mut) {

@@ -169,14 +169,14 @@ int task_cont(task_t *tid, uint32_t bits) {
 
 // 调用者需要持有 waitq 所在对象的锁，中断关闭
 // 超时回调函数需要锁住同步对象，我们不知道同步对象是什么
-void task_pend(uint32_t bits, prioq_t *wq, waiter_t *pender, int timeout, wdog_cb_t cb) {
+void task_pend(prioq_t *wq, waiter_t *pender, int timeout, wdog_cb_t cb) {
     ASSERT(0 == cpu_int_depth());
 
     task_t *self = THISCPU_GET(g_tid_prev);
     prioq_t *q = THISCPU(&g_rdyq);
     spin_t *lock = THISCPU(&g_rdy_lock);
 
-    self->state |= bits;
+    self->state |= TS_PENDING;
 
     raw_spin_take(lock);
     prioq_remove(q, &self->dl, self->priority);
@@ -219,6 +219,7 @@ void task_wake_timeout(prioq_t *wq, waiter_t *pender) {
 
 // 从阻塞状态恢复，检查恢复运行的原因（得到资源还是超时）
 // 删除timer防止再次触发（未注册也可以删除）
+// 返回 1 表示等待超时
 int task_onresume(waiter_t *pender) {
     ASSERT(0 == cpu_int_depth());
     // 执行到这里，说明已经恢复运行
@@ -241,6 +242,7 @@ task_t *task_unpend_one(prioq_t *wq) {
 
     // 存在阻塞者，将其唤醒，并将其设为新的 owner
     waiter_t *w = containerof(dl, waiter_t, dl);
+    w->got = 1;
     prioq_remove(wq, dl, w->tid->priority);
     int cpu = task_cont(w->tid, TS_PENDING);
     if (cpu_index() != cpu) {

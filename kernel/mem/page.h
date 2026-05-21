@@ -11,6 +11,7 @@ enum {
     PT_PGTBL   = 3,
     PT_STACK   = 4,
     PT_POOL    = 5,
+    PT_MSGQ    = 6,
 };
 
 // rank 合法取值 0~15

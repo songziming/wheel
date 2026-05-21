@@ -14,5 +14,7 @@ typedef struct msgq {
 } msgq_t;
 
 void msgq_init(msgq_t *q);
+size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout);
+size_t msgq_recv(msgq_t *q, void *dst, size_t len, int timeout);
 
 #endif // MSGQ_H

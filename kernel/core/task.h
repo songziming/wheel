@@ -22,7 +22,7 @@ typedef struct waiter {
     task_t     *tid; // 阻塞的任务
     wdog_t      timer;
     void       *user;
-    int         got;
+    int         got;    // 是否正常唤醒
     int         expired; // 是否已超时
 } waiter_t;
 
@@ -61,7 +61,7 @@ void sched_process();
 
 void task_create(task_t *tid, const char *name, int prio, void *func);
 
-void task_pend(uint32_t bits, prioq_t *wq, waiter_t *pender, int timeout, wdog_cb_t cb);
+void task_pend(prioq_t *wq, waiter_t *pender, int timeout, wdog_cb_t cb);
 void task_wake_timeout(prioq_t *wq, waiter_t *pender);
 int task_onresume(waiter_t *pender);
 task_t *task_unpend_one(prioq_t *wq);
