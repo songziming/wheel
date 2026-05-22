@@ -16,7 +16,7 @@ static task_t ta;
 static task_t tb;
 
 static void proc_a() {
-    task_t *self = THISCPU_GET(g_tid_prev);
+    task_t *self = current_task();
     for (int i = 0; i < 100; ++i) {
         logk("(A%s%d)", self->name, i);
         // THISCPU_SET(g_tid_next, &tb);
@@ -38,7 +38,7 @@ static void proc_a() {
 }
 
 static void proc_b() {
-    task_t *self = THISCPU_GET(g_tid_prev);
+    task_t *self = current_task();
     for (int i = 0; i < 100; ++i) {
         logk("(B%s%d)", self->name, i);
         // THISCPU_SET(g_tid_next, &ta);
@@ -86,7 +86,7 @@ static task_t smp_tcbs[10];
 static char smp_names[10][32];
 
 static void proc_smp() {
-    task_t *self = THISCPU_GET(g_tid_prev);
+    task_t *self = current_task();
 
     char tok = 'A';
     for (int i = 0; i < 10; ++i) {

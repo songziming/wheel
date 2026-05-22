@@ -76,11 +76,13 @@ static void handle_scancode(uint8_t code) {
             g_state = STATE_E0;
             break;
         }
-        if (0xe1 == code) {     // must be pause_sequence
+        if (0xe1 == code) { // must be pause_sequence
             g_state = STATE_PAUSE_1;
             break;
         }
-        handle_keycode(SET1_LUT[code & 0x7f], code & 0x80);
+        if ((code & 0x7f) < sizeof(SET1_LUT) / sizeof(SET1_LUT[0])) {
+            handle_keycode(SET1_LUT[code & 0x7f], code & 0x80);
+        }
         break;
     case STATE_E0:
         if (0x2a == code) {
@@ -208,17 +210,66 @@ static void handle_kbd() {
     loapic_send_eoi();
 }
 
+// 向 PS/2 controller 发送命令，并接受反馈
+static void i8042_command(uint8_t cmd) {
+    while (in8(PS2KBD_CTRL_PORT) & 2) {
+        cpu_pause();
+    }
+    out8(PS2KBD_CTRL_PORT, cmd);
+}
+
+// 向 PS/2 controller 发送数据
+static void i8042_data(uint8_t data) {
+    while (in8(PS2KBD_CTRL_PORT) & 2) {
+        cpu_pause();
+    }
+    out8(PS2KBD_DATA_PORT, data);
+}
+
+// 从 PS/2 controller 读取数据
+static uint8_t i8042_read() {
+    while (0 == (in8(PS2KBD_CTRL_PORT) & 1)) {
+        cpu_pause();
+    }
+    return in8(PS2KBD_DATA_PORT);
+}
+
 INIT_TEXT void i8042_init() {
+    // PC 一般都有 8042 兼容设备，我们默认存在
+
+    i8042_command(0xad); // 关闭第一个 PS/2 端口（键盘）
+    i8042_command(0xa7); // 关闭第二个 PS/2 端口（鼠标）
+
     // 不断读取缓冲区
     while (in8(PS2KBD_CTRL_PORT) & 1) {
         in8(PS2KBD_DATA_PORT);
     }
+
+    // 自检（这会重置设备，需要放在配置之前）
+    i8042_command(0xaa);
+    uint8_t chk = i8042_read();
+    if (0x55 != chk) {
+        logk("warning: i8042 self-test failed, expect 0x55, got 0x%x\n", chk);
+    }
+
+    // 配置
+    i8042_command(0x20); // read config
+    uint8_t cfg = i8042_read();
+    cfg |=   1 << 0;    // enable keyboard IRQ
+    cfg |=   1 << 4;    // enable keyboard clock
+    cfg &= ~(1 << 1);   // disable mouse IRQ
+    cfg &= ~(1 << 6);   // disable translation（继续使用 scan code set 1）
+    i8042_command(0x60); // write config
+    i8042_data(cfg);
 
     // IBM-PC 键盘中断连接到 IRQ 1
     int gsi = g_irq_to_gsi[1];
     irq_handlers[VEC_GSI_BASE + gsi] = handle_kbd;
     // set_int_handler(gsi + VEC_GSI_BASE, handle_keyboard);
     ioapic_unmask_gsi(gsi);
+
+    // 启用键盘端口
+    i8042_command(0xae);
 }
 
 // TODO 还需要其他键盘函数，例如设置 LED 状态、设置重复按键时间

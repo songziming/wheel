@@ -37,7 +37,7 @@ static CONST uint8_t *g_back = NULL;
 // 如果没有 BGA，则表示 back-buffer 中哪一行对应屏幕开头（单位：字符）
 static unsigned g_disp_top = 0;
 
-CONST uint32_t g_framebuf_color = 0xffffffff;   // 像素颜色
+static uint32_t g_framebuf_color = 0xffffffff;   // 像素颜色
 static spin_t g_framebuf_lock = SPIN_INIT;
 
 
@@ -51,7 +51,7 @@ static spin_t g_framebuf_lock = SPIN_INIT;
 // 同时绘制到 LFB 和 back-buffer
 // 也可能是不可见字符
 static void nobga_draw_char_at(char ch, uint32_t fg, int r, int c) {
-    int back_r = (r + g_disp_top) & g_em_rows;
+    int back_r = (r + g_disp_top) % g_em_rows;
     int fb_pos = r * g_font->rows * g_pitch + c * g_font->cols * sizeof(uint32_t);
     int back_pos = back_r * g_font->rows * g_pitch + c * g_font->cols * sizeof(uint32_t);
 
@@ -78,7 +78,7 @@ static void nobga_draw_char_at(char ch, uint32_t fg, int r, int c) {
 // 类似绘制字符，只是字符内容全部为前景
 // TODO 光标是否也要在 back-buffer 里面标记出来？后面打印不可见字符时可以将其抹掉
 static void nobga_draw_caret_at(uint32_t fg, int r, int c) {
-    int back_r = (r + g_disp_top) & g_em_rows;
+    int back_r = (r + g_disp_top) % g_em_rows;
     int fb_pos = r * g_font->rows * g_pitch + c * g_font->cols * sizeof(uint32_t);
     int back_pos = back_r * g_font->rows * g_pitch + c * g_font->cols * sizeof(uint32_t);
 

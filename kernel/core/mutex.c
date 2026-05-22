@@ -22,7 +22,7 @@ static void mutex_timeout(wdog_t *tmr) {
 int mutex_take(mutex_t *mut, int timeout) {
     ASSERT(0 == cpu_int_depth());
 
-    task_t *self = THISCPU_GET(g_tid_prev);
+    task_t *self = current_task();
 
     int key = irq_spin_take(&mut->lock);
     ASSERT(self != mut->owner); // 不许重入
@@ -53,7 +53,7 @@ void mutex_give(mutex_t *mut) {
     ASSERT(0 == cpu_int_depth());
 
     int key = irq_spin_take(&mut->lock);
-    task_t *self = THISCPU_GET(g_tid_prev);
+    task_t *self = current_task();
     if (self != mut->owner) {
         panic("release mutex from %p, owner=%p\n", self, mut->owner);
     }

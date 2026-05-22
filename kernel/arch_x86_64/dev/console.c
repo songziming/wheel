@@ -34,10 +34,11 @@ INIT_TEXT void console_init() {
 
     // 两屏内容清空
     uint64_t *dst = (uint64_t*)g_vbuf;
+    size_t len = ROWS * COLS * sizeof(uint16_t) / sizeof(uint64_t);
     uint64_t fill = (uint64_t)' ' | ((uint64_t)g_text_color << 8);
     fill |= fill << 16;
     fill |= fill << 32;
-    for (int i = 0; i < ROWS * COLS * 4; ++i) {
+    for (int i = 0; i < len; ++i) {
         dst[i] = fill;
     }
 

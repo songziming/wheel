@@ -250,9 +250,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // 创建根任务并开始运行，优先级 30，仅高于 idle
     task_create(&g_root_tcb, "root", 30, root_proc);
     g_root_tcb.affinity = 0;
-    task_start(&g_root_tcb);
-    // THISCPU_SET(g_tid_next, &g_root_tcb);
-    arch_task_switch();
+    task_start_now(&g_root_tcb);
     // 之后的代码不再运行
 
 end:
@@ -329,7 +327,6 @@ static INIT_TEXT void root_proc() {
 // BSP 可以启动下一个 AP，或者将 init-stack 回收
 static INIT_TEXT void notify_ap_started(work_t *work UNUSED) {
     ASSERT(cpu_int_depth() > 0);
-    // task_start_one(&g_root_tcb);
     sema_give(&g_smp_sema);
 }
 
@@ -337,10 +334,6 @@ static INIT_TEXT void notify_ap_started(work_t *work UNUSED) {
 // 多个 CPU 不能同时执行此函数，因为共用同一个栈
 static INIT_TEXT NORETURN void ap_init(int idx) {
     logk("CPU-%d started\n", idx);
-
-    // size_t sp;
-    // ASMV("movq %%rsp, %0" : "=r"(sp));
-    // logk("AP-%d current stack pointer 0x%zx\n", idx, sp);
 
     cpu_features_enable();
     gdt_load();
@@ -359,15 +352,13 @@ static INIT_TEXT NORETURN void ap_init(int idx) {
     work_init_this();
     sched_init();
 
-    // 注册一个 work，在切换任务时执行（使用中断栈）
+    // 注册一个 work，在中断返回时执行（使用中断栈）
     // 只有不再使用这个 init-stack，才能安全地启动另一个 CPU
     work_defer(&g_smp_notifier, notify_ap_started, "notify ap start");
 
     // arch_task_switch 不会执行 work-flush，需要一个中断
-    // 此时中断关闭，int 可以触发中断，但是 local APIC 发送 self-IPI 无法收到
+    // 此时中断关闭，发送 self-IPI 是收不到的，但 int 指令可以触发
     ASMV("int %0" :: "i"(VEC_IPI_RESCHED));
-    // ASMV("sti");
-    // arch_send_ipi(IPI_SELF, VEC_IPI_RESCHED);
 
     while (1) {
         cpu_pause();

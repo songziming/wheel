@@ -119,6 +119,9 @@ unit: $(UNIT_BIN)
 clean:
 	rm -rf $(OUT_DIR)
 
+loc:
+	find $(KERNEL) -name "*.S" -o -name "*.c" -o -name "*.h" | xargs wc -l
+
 # 创建目标文件所在目录
 $(ALLOBJS) : | $(OBJDIRS)
 $(OBJDIRS):

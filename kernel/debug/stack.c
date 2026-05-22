@@ -7,6 +7,7 @@
 
 const uintptr_t __stack_chk_guard = 0x595e9fbd94fda766ULL;
 
+// 栈被破坏，不停机继续运行
 void __stack_chk_fail() {
     logk("fatal: stack smashing detected\n");
     log_stacktrace();

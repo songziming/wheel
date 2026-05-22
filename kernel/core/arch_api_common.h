@@ -49,7 +49,7 @@ void tlb_shootdown(size_t vstart, size_t vend);
 typedef struct task task_t;
 void arch_task_init(task_t *task, size_t entry, size_t stack_top,
     size_t arg1, size_t arg2, size_t arg3, size_t arg4);
-void arch_task_switch(); // also flush workq
+void arch_task_switch();
 
 
 #endif // ARCH_API_COMMON_H

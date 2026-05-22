@@ -248,5 +248,5 @@ static void kshell_proc() {
 
 INIT_TEXT void kshell_start() {
     task_create(&shell_tcb, "shell", 1, kshell_proc);
-    task_start_one(&shell_tcb);
+    task_start_now(&shell_tcb);
 }

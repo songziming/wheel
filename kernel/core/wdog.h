@@ -7,7 +7,7 @@
 
 // 代表一个定时任务
 typedef struct wdog wdog_t;
-typedef void (*wdog_cb_t)(wdog_t *self);
+typedef void (*wdog_cb_t)(wdog_t*);
 struct wdog {
     dlnode_t    dl;
     int         delta;  // 和前一个 job 相差多少个 tick

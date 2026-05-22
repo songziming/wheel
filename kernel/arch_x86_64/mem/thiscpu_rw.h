@@ -15,6 +15,8 @@
 // 无条件使用 RIP-relative addressing，这样的指令更短
 // 注意，lea 计算的是 offset，也就是段寄存器并不会生效
 
+// 更新 thiscpu 变量需要加上 memory clobber
+// 告知编译器内存可能发生修改
 
 #define _THISCPU_GET(op, var) ({ \
      __typeof__(var) dst; \
@@ -22,7 +24,7 @@
      dst; \
 })
 #define _THISCPU_SET(op, var, val) ({ \
-     ASMV(op " %0,%%gs:%1" :: "r"(val), "m"(var)); \
+     ASMV(op " %0,%%gs:%1" :: "r"(val), "m"(var) : "memory"); \
 })
 
 #define THISCPU_GET(var) _Generic((var), \

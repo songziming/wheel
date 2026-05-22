@@ -22,7 +22,7 @@ INIT_TEXT void work_init_this() {
 }
 
 // 注册一个异步任务，放在队列中
-void work_defer(work_t *wk, void *func, const char *desc) {
+void work_defer(work_t *wk, work_cb_t func, const char *desc) {
     wk->func = func;
     wk->desc = desc;
 

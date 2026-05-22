@@ -9,6 +9,11 @@ void msgq_init(msgq_t *q) {
     prioq_init(&q->writers);
 
     size_t pa = PAGE_ALLOC(0, PT_MSGQ);
+    if (0 == pa) {
+        logk("cannot alloc page for msgq");
+        return;
+    }
+
     size_t va = vmspace_valloc(&g_kernel_vm, &q->rng, POOL_ZONE_START, POOL_ZONE_END, PAGE_SIZE * 2);
     mmu_map(g_kernel_vm.table, va, va+PAGE_SIZE, pa, MMU_WRITE);
     mmu_map(g_kernel_vm.table, va+PAGE_SIZE, va+PAGE_SIZE*2, pa, MMU_WRITE);

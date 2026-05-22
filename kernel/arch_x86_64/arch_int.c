@@ -36,6 +36,7 @@ inline void cpu_int_unlock(int key) {
 
 
 // 默认的中断处理函数
+// TODO 中断里面不应该打印，可能得不到 serial/console 自旋锁
 static void handle_irq(int vec, regs_t *f) {
     logk("[cpu-%d] interrupt vec #%d err=%zx\n", cpu_index(), vec, f->errcode);
     logk("rip=%zx rsp=%zx frame=%p\n", f->rip, f->rsp, f);

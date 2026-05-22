@@ -30,8 +30,10 @@ void log_stacktrace() {
 }
 
 NORETURN void panic(const char *fmt, ...) {
-    char tmp[1024];
+    // 广播 IPI，停止其他 CPU
+    arch_send_ipi(IPI_ALL_EXCLUDING_SELF, VEC_IPI_STOPALL);
 
+    char tmp[1024];
     va_list args;
     va_start(args, fmt);
     format(tmp, sizeof(tmp), log_cb, NULL, fmt, args);
@@ -54,6 +56,7 @@ NORETURN void panic(const char *fmt, ...) {
 #ifndef UNIT_TEST
 
 // 断言失败
+// 保持运行，不要停机
 void assertion_fail(const char *file, int line, const char *func) {
     logk("Assertion fail: %s:%d func:%s\n", file, line, func);
     log_stacktrace();
