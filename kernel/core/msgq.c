@@ -10,7 +10,7 @@ void msgq_init(msgq_t *q) {
 
     size_t pa = PAGE_ALLOC(0, PT_MSGQ);
     if (0 == pa) {
-        logk("cannot alloc page for msgq");
+        panic("cannot alloc page for msgq");
         return;
     }
 
@@ -73,8 +73,7 @@ size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout) {
         irq_spin_give(&q->lock, key);
         arch_task_switch();
 
-        // TODO 被唤醒，但是数据还是在 fifo 里面，并没有读取出来
-        // 需要重试一遍
+        // 被唤醒，但是数据还是在 fifo 里面，并没有读取出来，需要重试
     }
 }
 

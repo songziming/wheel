@@ -1,4 +1,4 @@
-#include "console.h"
+#include "vgatext.h"
 #include "keyboard.h"
 #include <kstring.h>
 

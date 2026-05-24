@@ -1,4 +1,4 @@
-#include "i8042.h"
+#include "i8042_kbd.h"
 #include <arch_api.h>
 #include <arch_int.h>
 #include <apic/apic.h>
@@ -210,6 +210,8 @@ static void handle_kbd() {
     loapic_send_eoi();
 }
 
+// TODO 轮询 ready bit 需要有超时时间
+
 // 向 PS/2 controller 发送命令，并接受反馈
 static void i8042_command(uint8_t cmd) {
     while (in8(PS2KBD_CTRL_PORT) & 2) {
@@ -245,31 +247,59 @@ INIT_TEXT void i8042_init() {
         in8(PS2KBD_DATA_PORT);
     }
 
-    // 自检（这会重置设备，需要放在配置之前）
+    // 配置
+    i8042_command(0x20); // read config
+    uint8_t cfg = i8042_read();
+    cfg &= ~(1 << 0);   // disable port 1 IRQ
+    cfg &= ~(1 << 4);   // enable port 1 clock
+    cfg &= ~(1 << 6);   // disable port 1 translation
+    i8042_command(0x60); // write config
+    i8042_data(cfg);
+
+    // 自检
     i8042_command(0xaa);
     uint8_t chk = i8042_read();
     if (0x55 != chk) {
         logk("warning: i8042 self-test failed, expect 0x55, got 0x%x\n", chk);
     }
 
-    // 配置
+    // 判断 channel 2 是否存在
+    i8042_command(0xa8); // try enable channel 2
     i8042_command(0x20); // read config
-    uint8_t cfg = i8042_read();
-    cfg |=   1 << 0;    // enable keyboard IRQ
-    cfg |=   1 << 4;    // enable keyboard clock
-    cfg &= ~(1 << 1);   // disable mouse IRQ
-    cfg &= ~(1 << 6);   // disable translation（继续使用 scan code set 1）
+    cfg = i8042_read();
+    int dual_channel = 0 == (cfg & (1 << 5));
+    if (dual_channel) {
+        logk("PS/2 has channel 2\n");
+        i8042_command(0xa7); // disable channel 2
+        cfg &= ~(1 << 1); // disable port 2 IRQ
+        cfg &= ~(1 << 5); // enable port 2 clock
+        i8042_command(0x60); // write config
+        i8042_data(cfg);
+    }
+
+    // 重新打开 channel 1
+    cfg |= 1 << 0;  // enable keyboard IRQ
+    cfg |= 1 << 6;  // enable translation (to scan code set 1)
     i8042_command(0x60); // write config
     i8042_data(cfg);
 
     // IBM-PC 键盘中断连接到 IRQ 1
     int gsi = g_irq_to_gsi[1];
     irq_handlers[VEC_GSI_BASE + gsi] = handle_kbd;
-    // set_int_handler(gsi + VEC_GSI_BASE, handle_keyboard);
     ioapic_unmask_gsi(gsi);
 
     // 启用键盘端口
     i8042_command(0xae);
+
+#if 0
+    // 重置 PS/2 device（注意不是重置 controller）
+    logk("resetting PS2 keyboard\n");
+    i8042_data(0xff);
+    uint8_t rsp1 = i8042_read();
+    uint8_t rsp2 = i8042_read();
+    uint8_t id = i8042_read();
+    logk("rsponse = %02x,%02x, dev id = %02x\n", rsp1, rsp2, id);
+#endif
 }
 
 // TODO 还需要其他键盘函数，例如设置 LED 状态、设置重复按键时间

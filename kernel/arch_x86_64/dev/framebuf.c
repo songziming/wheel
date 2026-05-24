@@ -181,15 +181,12 @@ static CONST void (*g_draw_caret)(uint32_t fg, int r, int c);
 static CONST void (*g_scroll)(unsigned nrows);
 
 INIT_TEXT void framebuf_init(uint32_t rows, uint32_t cols, uint32_t pitch, uint32_t addr) {
-    // spin_init(&g_framebuf_lock);
-
-    // 虚拟环境下，调用 BGA 设置虚拟缓冲区，利用硬件滚屏功能
     int has_bga = 0;
     if (bga_check()) {
-        // 虚拟机，有 BGA 支持，我们可以自己选择宽高 1280x960
+        // 虚拟环境下，调用 BGA 设置虚拟缓冲区，利用硬件滚屏功能
+        // 我们可以自己选择宽高 1280x960，32-bit 色深
         // virt_height = 2*960，分配两个屏幕高度的虚拟 framebuffer
         if (bga_config(1280, 960, 32, 1280, 2*960)) {
-            // logk("BGA FB addr 0x%x->0x%x\n", addr, BGA_FB_ADDR);
             rows = 960;
             cols = 1280;
             pitch = 1280 * 4;    // 32-bit

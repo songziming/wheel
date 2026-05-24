@@ -1,4 +1,4 @@
-#include "console.h"
+#include "vgatext.h"
 #include <arch_api.h>
 #include <spin.h>
 #include <kstring.h>
@@ -24,9 +24,7 @@ static unsigned g_caret_col;    // 光标所在列
 static unsigned g_start_row;    // g_vram 首行在 g_vbuf 中的行号
 
 
-INIT_TEXT void console_init() {
-    // spin_init(&g_console_spin);
-
+INIT_TEXT void vgatext_init() {
     g_text_color = 0x0f; // 黑底白字
     g_caret_row = 0;
     g_caret_col = 0;
@@ -38,7 +36,7 @@ INIT_TEXT void console_init() {
     uint64_t fill = (uint64_t)' ' | ((uint64_t)g_text_color << 8);
     fill |= fill << 16;
     fill |= fill << 32;
-    for (int i = 0; i < len; ++i) {
+    for (size_t i = 0; i < len; ++i) {
         dst[i] = fill;
     }
 
@@ -101,7 +99,7 @@ static void console_putc(char ch) {
     }
 }
 
-void console_puts(const char *s, size_t n) {
+void vgatext_puts(const char *s, size_t n) {
     int key = irq_spin_take(&g_console_spin);
     for (size_t i = 0; i < n; ++i) {
         console_putc(s[i]);

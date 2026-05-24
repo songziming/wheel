@@ -227,8 +227,6 @@ INIT_TEXT void page_init(size_t pa_start, size_t pa_end) {
         return;
     }
 
-    // spin_init(&g_page_spin);
-
     g_page_start = (uint32_t)pa_start;
     g_page_end = (uint32_t)pa_end;
     uint32_t page_num = g_page_end - g_page_start;

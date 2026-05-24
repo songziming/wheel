@@ -1,4 +1,4 @@
-#include "i8259.h"
+#include "i8259_pit.h"
 #include <cpu/rw.h>
 
 // 8259 PIC port

@@ -3,6 +3,8 @@
 #include <acpi/acpi.h>
 #include <debug.h>
 
+// WIP 高精度时钟，适合异构平台同步 tsc
+
 typedef struct hpet {
     acpi_tbl_t  header;
 

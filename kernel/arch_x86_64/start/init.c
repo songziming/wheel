@@ -12,11 +12,10 @@
 #include <arch_int.h>
 
 #include <dev/serial.h>
-#include <dev/console.h>
+#include <dev/vgatext.h>
 #include <dev/framebuf.h>
-#include <dev/i8259.h>
-#include <dev/i8042.h>
-#include <dev/hpet.h>
+#include <dev/i8259_pit.h>
+#include <dev/i8042_kbd.h>
 
 #include <early_alloc.h>
 #include <pmlayout.h>
@@ -42,9 +41,7 @@ static INIT_BSS size_t   g_rsdp;
 static INIT_BSS task_t g_root_tcb;
 static INIT_TEXT void root_proc();
 
-
 static INIT_DATA int g_cpu_started = 1;
-// static INIT_DATA spin_t g_smp_lock = SPIN_INIT;
 static INIT_BSS sema_t g_smp_sema;
 static INIT_BSS  work_t g_smp_notifier;
 static INIT_TEXT NORETURN void ap_init(int idx);
@@ -148,7 +145,7 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
 
 static INIT_TEXT void text_log(const char *s, size_t n) {
     serial_puts(s, n);
-    console_puts(s, n);
+    vgatext_puts(s, n);
 }
 
 static INIT_TEXT void gui_log(const char *s, size_t n) {
@@ -161,6 +158,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         ap_init(g_cpu_started++);
     }
 
+    // 初始化串口，打印输出就用这个
     serial_init();
     g_log_func = serial_puts;
 
@@ -178,7 +176,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     if (g_fgcolor) {
         g_log_func = gui_log;
     } else {
-        console_init();
+        vgatext_init();
         g_log_func = text_log;
     }
     logk("Wheel Operating System (%s %s)\n", __DATE__, __TIME__);
@@ -221,9 +219,6 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     thistss_init_load(0); // 依赖 thiscpu，需要放在 thiscpu_init 之后
     int_init(); // 初始化中断管理机制
     int_init_local();
-
-    // TODO 将8254替换成精度更高的时钟，用来校准 local apic timer
-    // hpet_init();
 
     // 中断控制器初始化
     i8259_disable();

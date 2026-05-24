@@ -9,7 +9,6 @@ static dlnode_t timer_q;
 
 
 INIT_TEXT void wdog_init() {
-    // spin_init(&timer_lock);
     dl_init_circular(&timer_q);
 }
 

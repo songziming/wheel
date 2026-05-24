@@ -1,5 +1,6 @@
-#include "i8254.h"
+#include "i8254_timer.h"
 
+// WIP 将 local apic 里面 8254 相关代码剥离出来
 
 // Intel 8254
 // 晶振频率 1.193181666 MHz，方波
