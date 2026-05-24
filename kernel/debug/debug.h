@@ -1,14 +1,14 @@
 #ifndef DEBUG_H
 #define DEBUG_H
 
-#include <stddef.h>
+#include <wheel.h>
 
 typedef void (*log_func_t)(const char *, size_t);
 extern log_func_t g_log_func;
 
-void logk(const char *fmt, ...);
+void logk(const char *fmt, ...) PRINTF(1,2);
 void log_stacktrace();
-void panic(const char *fmt, ...);
+void panic(const char *fmt, ...) PRINTF(1,2);
 
 #if defined(UNIT_TEST)
     #include <assert.h>

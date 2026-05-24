@@ -74,7 +74,7 @@ INIT_TEXT void ioapic_init() {
         uint32_t ver = ioapic_read(io, IOAPIC_VER);
 
         if (id != io->apic_id) {
-            logk("IO-APIC .%d id=%u madt=%u\n", id, io->apic_id);
+            logk("IO-APIC .%d id=%u\n", id, io->apic_id);
         }
 
         io->ver = ver & 0xff;

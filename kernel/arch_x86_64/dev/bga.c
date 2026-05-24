@@ -263,7 +263,7 @@ INIT_TEXT int bga_init(bga_info_t *info, uint32_t width, uint32_t height,
 
     bga_enable_pat();
 
-    logk("bga: %ux%ux%u, virt_h=%u, pitch=%u, fb=0x%llx\n",
+    logk("bga: %ux%ux%u, virt_h=%u, pitch=%u, fb=0x%lx\n",
          info->xres, info->yres, info->bpp, info->virt_height, info->pitch,
          info->fb_pa);
 
@@ -290,6 +290,6 @@ INIT_TEXT uint8_t *bga_enable_wc(bga_info_t *info) {
     mmu_map(g_kernel_vm.table, (size_t)wc_va, (size_t)wc_va + info->fb_size,
             info->fb_pa, MMU_WRITE | MMU_WC);
 
-    logk("bga: WC mapped [%p, %p) -> PA 0x%llx\n", wc_va, wc_va + info->fb_size, info->fb_pa);
+    logk("bga: WC mapped [%p, %p) -> PA 0x%lx\n", wc_va, wc_va + info->fb_size, info->fb_pa);
     return wc_va;
 }

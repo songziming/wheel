@@ -27,6 +27,7 @@
 #include <sema.h>
 #include <keyboard.h>
 #include <kshell.h>
+#include <console.h>
 #include <debug.h>
 #include <ktest.h>
 
@@ -143,15 +144,15 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
     }
 }
 
-static INIT_TEXT void text_log(const char *s, size_t n) {
-    serial_puts(s, n);
-    vgatext_puts(s, n);
-}
+// static INIT_TEXT void text_log(const char *s, size_t n) {
+//     serial_puts(s, n);
+//     vgatext_puts(s, n);
+// }
 
-static INIT_TEXT void gui_log(const char *s, size_t n) {
-    serial_puts(s, n);
-    framebuf_puts(s, n);
-}
+// static INIT_TEXT void gui_log(const char *s, size_t n) {
+//     serial_puts(s, n);
+//     framebuf_puts(s, n);
+// }
 
 INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     if (0 == eax) {
@@ -173,13 +174,17 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     case MB2_BOOTLOADER_MAGIC: mb2_init(ebx); break;
     }
 
-    if (g_fgcolor) {
-        g_log_func = gui_log;
-    } else {
+    // if (g_fgcolor) {
+    //     g_log_func = gui_log;
+    // } else {
+    //     vgatext_init();
+    //     g_log_func = text_log;
+    // }
+    if (!g_fgcolor) {
         vgatext_init();
-        g_log_func = text_log;
     }
-    logk("Wheel Operating System (%s %s)\n", __DATE__, __TIME__);
+    console_printf("Wheel Operating System (%s %s)\n", __DATE__, __TIME__);
+    // console_printf("")
 
     // parse ACPI tables
     if (0 == g_rsdp) {

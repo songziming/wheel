@@ -1,5 +1,6 @@
 #include "kshell.h"
 #include "keyboard.h"
+#include "console.h"
 #include <task.h>
 #include <debug.h>
 
@@ -198,6 +199,10 @@ static char keycode_to_ascii(keycode_t key) {
         return ' ';
     case KEY_ENTER:
         return '\n';
+    
+    // editing
+    case KEY_BACKSPACE:
+        return '\b';
 
     // unsupported keys
     default:
@@ -213,12 +218,12 @@ static task_t shell_tcb;
 #define PROMPT "kshell"
 
 static void execute(const char *cmd) {
-    logk("handling command `%s`\n", cmd);
+    console_printf("handling command `%s`\n", cmd);
 }
 
 static void kshell_proc() {
     logk("kernel shell started\n");
-    logk("%s> ", PROMPT);
+    console_printf("%s> ", PROMPT);
 
     char input[1024];
     int len = 0;
@@ -230,13 +235,13 @@ static void kshell_proc() {
             continue;   // 非打印字符
         }
 
-        logk("%c", ch); // 回显
+        console_printf("%c", ch); // 回显
 
         if ('\n' == ch) {
             input[len] = '\0';
             execute(input); // 执行命令
             len = 0;
-            logk("%s> ", PROMPT); // 打印下一个 prompt
+            console_printf("%s> ", PROMPT); // 打印下一个 prompt
             continue;
         }
 

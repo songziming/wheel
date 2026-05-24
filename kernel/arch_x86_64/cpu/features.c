@@ -458,7 +458,7 @@ INIT_TEXT void cpu_features_detect() {
         amd_get_cache_info();
         amd_detect_svm();
     } else {
-        logk("unknown vendor name '%.12s'\n", g_vendor);
+        logk("unknown vendor name '%.12s'\n", (char*)g_vendor);
     }
 }
 

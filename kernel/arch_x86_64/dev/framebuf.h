@@ -4,10 +4,10 @@
 #include <wheel.h>
 
 typedef struct fbfont {
-    unsigned       rows;    // 字符高度（单位：像素）
-    unsigned       cols;    // 字符宽度（单位：像素）
-    unsigned       pitch;   // 字符一行的字节数
-    unsigned       size;    // 字符总字节数
+    int            rows;    // 字符高度（单位：像素）
+    int            cols;    // 字符宽度（单位：像素）
+    int            pitch;   // 字符一行的字节数
+    int            size;    // 字符总字节数
     const uint8_t *data;
 } fbfont_t;
 
