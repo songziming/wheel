@@ -5,7 +5,7 @@
 #include <spin.h>
 #include <debug.h>
 
-// WIP
+
 // 终端，管理输入输出
 // 使用者调用 read，则不断读取键盘输入，解析为 ascii，返回调用者
 // 输出函数可以处理 escape-sequence，可以设置光标位置、修改字体颜色
