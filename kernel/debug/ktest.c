@@ -4,6 +4,7 @@
 #include <msgq.h>
 #include <kstring.h>
 #include <debug.h>
+#include <kshell.h>
 
 #include <apic/apic.h>
 
@@ -78,6 +79,8 @@ void test_cooperative() {
     logk("TCB safely deleted\n");
 }
 
+KSHELL_CMD("coop", test_cooperative);
+
 //------------------------------------------------------------------------------
 // 测试多个 CPU 上同时运行
 //------------------------------------------------------------------------------
@@ -131,6 +134,8 @@ void test_smp_tasks() {
     }
     logk("all smp tasks finished!\n");
 }
+
+KSHELL_CMD("smp", test_smp_tasks);
 
 //------------------------------------------------------------------------------
 // 信号量测试

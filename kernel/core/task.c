@@ -151,6 +151,17 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
     arch_task_init(tid, (size_t)task_entry, tid->stack.vend, (size_t)func,0,0,0);
 }
 
+void task_create_ex(task_t *tid, const char *name, int prio, void *func, uint32_t stack_rank) {
+    tid->state    = TS_STOPPED;
+    tid->name     = name;
+    tid->priority = prio;
+    tid->affinity = -1;
+
+    vmspace_alloc_stack(&g_kernel_vm, &tid->stack, stack_rank);
+    tid->stack.desc = name;
+    arch_task_init(tid, (size_t)task_entry, tid->stack.vend, (size_t)func,0,0,0);
+}
+
 //------------------------------------------------------------------------------
 // 任务停止运行，只能停止当前任务
 //------------------------------------------------------------------------------

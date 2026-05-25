@@ -4,7 +4,7 @@
 #include <wheel.h>
 
 typedef enum keycode {
-    KEY_RESERVED = 0,
+    KEY_NONE = 0,
 
     // 数字
     KEY_0, KEY_1, KEY_2, KEY_3, KEY_4,
@@ -19,20 +19,25 @@ typedef enum keycode {
     // 功能键
     KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6,
     KEY_F7, KEY_F8, KEY_F9, KEY_F10,KEY_F11,KEY_F12,
+    KEY_F13,KEY_F14,KEY_F15,KEY_F16,KEY_F17,KEY_F18,
+    KEY_F19,KEY_F20,KEY_F21,KEY_F22,KEY_F23,KEY_F24,
 
     // modifiers
-    KEY_LEFTCTRL,   KEY_RIGHTCTRL,
-    KEY_LEFTSHIFT,  KEY_RIGHTSHIFT,
-    KEY_LEFTALT,    KEY_RIGHTALT,
+    KEY_L_CTRL,   KEY_R_CTRL,
+    KEY_L_SHIFT,  KEY_R_SHIFT,
+    KEY_L_ALT,    KEY_R_ALT,
 
     // 标点符号
     KEY_BACKTICK,   KEY_MINUS,      KEY_EQUAL,      KEY_TAB,
-    KEY_LEFTBRACE,  KEY_RIGHTBRACE, KEY_SEMICOLON,  KEY_QUOTE,
+    KEY_L_BRACE,    KEY_R_BRACE,    KEY_SEMICOLON,  KEY_QUOTE,
     KEY_COMMA,      KEY_DOT,        KEY_SLASH,      KEY_BACKSLASH,
     KEY_SPACE,      KEY_BACKSPACE,  KEY_ENTER,
 
+    // ISO extra 非美式键盘上的按键
+    KEY_INTL,   // 位于 LShift 和 Z 之间，通常代表 \| 或者 <>
+
     // control keys
-    KEY_ESC,        KEY_CAPSLOCK,   KEY_NUMLOCK,    KEY_SCROLLLOCK,
+    KEY_ESC,        KEY_CAPSLOCK,   KEY_NUMLOCK,    KEY_SCRLOCK,
     KEY_INSERT,     KEY_DELETE,     KEY_HOME,       KEY_END,
     KEY_PAGEUP,     KEY_PAGEDOWN,
     KEY_UP,         KEY_DOWN,       KEY_LEFT,       KEY_RIGHT,

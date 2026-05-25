@@ -3,6 +3,7 @@
 #include <kstring.h>
 #include <format.h>
 #include <spin.h>
+#include <debug.h>
 
 // WIP
 // 终端，管理输入输出
@@ -84,14 +85,16 @@ void console_printf(const char *fmt, ...) {
 
 // 键盘状态
 static struct {
-    unsigned capslock  : 1;
-    unsigned numlock   : 1;
-    unsigned l_shift   : 1;
-    unsigned r_shift   : 1;
-    unsigned l_control : 1;
-    unsigned r_control : 1;
-    unsigned l_alt     : 1;
-    unsigned r_alt     : 1;
+    unsigned capslock   : 1;
+    unsigned numlock    : 1;
+    unsigned scrlock    : 1;
+    //
+    unsigned l_shift    : 1;
+    unsigned r_shift    : 1;
+    unsigned l_ctrl     : 1;
+    unsigned r_ctrl     : 1;
+    unsigned l_alt      : 1;
+    unsigned r_alt      : 1;
 } kbd_state;
 
 // 数字键上方的符号（数字 0 排在开头，与键盘布局不同）
@@ -104,28 +107,29 @@ static char handle_keycode(keycode_t key) {
 
     if (release) {
         switch (key) {
-        case KEY_LEFTSHIFT:     kbd_state.l_shift = 0;      return -1;
-        case KEY_RIGHTSHIFT:    kbd_state.r_shift = 0;      return -1;
-        case KEY_LEFTCTRL:      kbd_state.l_control = 0;    return -1;
-        case KEY_RIGHTCTRL:     kbd_state.r_control = 0;    return -1;
-        case KEY_LEFTALT:       kbd_state.l_alt = 0;        return -1;
-        case KEY_RIGHTALT:      kbd_state.r_alt = 0;        return -1;
+        case KEY_L_SHIFT:   kbd_state.l_shift = 0;  return -1;
+        case KEY_R_SHIFT:   kbd_state.r_shift = 0;  return -1;
+        case KEY_L_CTRL:    kbd_state.l_ctrl = 0;   return -1;
+        case KEY_R_CTRL:    kbd_state.r_ctrl = 0;   return -1;
+        case KEY_L_ALT:     kbd_state.l_alt = 0;    return -1;
+        case KEY_R_ALT:     kbd_state.r_alt = 0;    return -1;
         default: return -1;
         }
     }
 
     switch (key) {
     // modifiers
-    case KEY_LEFTSHIFT:     kbd_state.l_shift = 1;      return -1;
-    case KEY_RIGHTSHIFT:    kbd_state.r_shift = 1;      return -1;
-    case KEY_LEFTCTRL:      kbd_state.l_control = 1;    return -1;
-    case KEY_RIGHTCTRL:     kbd_state.r_control = 1;    return -1;
-    case KEY_LEFTALT:       kbd_state.l_alt = 1;        return -1;
-    case KEY_RIGHTALT:      kbd_state.r_alt = 1;        return -1;
+    case KEY_L_SHIFT:   kbd_state.l_shift = 1;  return -1;
+    case KEY_R_SHIFT:   kbd_state.r_shift = 1;  return -1;
+    case KEY_L_CTRL:    kbd_state.l_ctrl = 1;   return -1;
+    case KEY_R_CTRL:    kbd_state.r_ctrl = 1;   return -1;
+    case KEY_L_ALT:     kbd_state.l_alt = 1;    return -1;
+    case KEY_R_ALT:     kbd_state.r_alt = 1;    return -1;
 
     // locks
-    case KEY_CAPSLOCK:      kbd_state.capslock ^= 1;    return -1;
-    case KEY_NUMLOCK:       kbd_state.numlock  ^= 1;    return -1;
+    case KEY_CAPSLOCK:  kbd_state.capslock ^= 1;    return -1;
+    case KEY_NUMLOCK:   kbd_state.numlock  ^= 1;    return -1;
+    case KEY_SCRLOCK:   kbd_state.scrlock  ^= 1;    return -1;
 
     // letters
     case KEY_A: case KEY_B: case KEY_C: case KEY_D: case KEY_E:
@@ -134,7 +138,7 @@ static char handle_keycode(keycode_t key) {
     case KEY_P: case KEY_Q: case KEY_R: case KEY_S: case KEY_T:
     case KEY_U: case KEY_V: case KEY_W: case KEY_X: case KEY_Y:
     case KEY_Z:
-        if (kbd_state.l_control | kbd_state.r_control) {
+        if (kbd_state.l_ctrl | kbd_state.r_ctrl) {
             // TODO: control characters
             return -1;
         }
@@ -151,7 +155,7 @@ static char handle_keycode(keycode_t key) {
     // numbers
     case KEY_0: case KEY_1: case KEY_2: case KEY_3: case KEY_4:
     case KEY_5: case KEY_6: case KEY_7: case KEY_8: case KEY_9:
-        if (kbd_state.l_control | kbd_state.r_control) {
+        if (kbd_state.l_ctrl | kbd_state.r_ctrl) {
             // TODO: control characters
             return -1;
         }
@@ -183,13 +187,13 @@ static char handle_keycode(keycode_t key) {
         } else {
             return '=';
         }
-    case KEY_LEFTBRACE:
+    case KEY_L_BRACE:
         if (kbd_state.l_shift | kbd_state.r_shift) {
             return '{';
         } else {
             return '[';
         }
-    case KEY_RIGHTBRACE:
+    case KEY_R_BRACE:
         if (kbd_state.l_shift | kbd_state.r_shift) {
             return '}';
         } else {
@@ -233,28 +237,105 @@ static char handle_keycode(keycode_t key) {
         }
 
     // whitespace
-    case KEY_TAB:
-        return '\t';
-    case KEY_SPACE:
-        return ' ';
-    case KEY_ENTER:
-        return '\n';
+    case KEY_SPACE:     return ' ';
+    case KEY_TAB:       return '\t';
+    case KEY_ENTER:     return '\n';
+    case KEY_BACKSPACE: return '\b';
 
     // unsupported keys
-    default:
-        return -1;
+    default: break;
     }
+
+    // handle keypad
+    if (kbd_state.numlock) {
+        switch (key) {
+        case KEY_KP_0: case KEY_KP_1: case KEY_KP_2: case KEY_KP_3: case KEY_KP_4:
+        case KEY_KP_5: case KEY_KP_6: case KEY_KP_7: case KEY_KP_8: case KEY_KP_9:
+            return '0' + (key - KEY_KP_0);
+        case KEY_KP_SLASH:  return '/';
+        case KEY_KP_STAR:   return '*';
+        case KEY_KP_MINUS:  return '-';
+        case KEY_KP_PLUS:   return '+';
+        case KEY_KP_DOT:    return '.';
+        case KEY_KP_ENTER:  return '\n';
+        default: break;
+        }
+    }
+
+    return -1;
 }
+
+// 返回一个按键，但也要处理，否则无法响应 capslock、shift 这类状态
+keycode_t console_readraw() {
+    keycode_t kc = get_keycode();
+    handle_keycode(kc);
+    return kc;
+}
+
+// 读取一个完整字符串，一行，输入回车则停止，字符串不含换行
+// 如果按下tab，自动转换成多个空格，不允许滚屏
+void console_readline(char *dst, size_t max) {
+    size_t limit = g_display->width * 10; // 最多允许读取 10 行
+    if (max > limit) {
+        max = limit;
+    }
+
+    size_t len = 0; // 已经读取多少字符
+    while (len < max - 1) {
+        keycode_t kc = get_keycode();
+        char c = handle_keycode(kc);
+
+        // 光标也是画出来的，回显之前需要首先清除 caret
+        g_display->draw_char(' ', caret_x, caret_y);
+
+        if ('\n' == c) {
+            ++caret_y;
+            caret_x = 0;
+        } else if ('\t' == c) {
+            int nspaces = 8 - (caret_x & 7);
+            for (; nspaces && (len < max - 1); --nspaces, ++len, ++caret_x) {
+                dst[len] = ' ';
+            }
+        } else if ('\b' == c) {
+            if (len > 0) {
+                --len;
+                --caret_x;
+                if (caret_x < 0) {
+                    caret_x = g_display->width - 1;
+                    --caret_y;
+                }
+                g_display->draw_char(' ', caret_x, caret_y); // 清除字符
+            }
+        } else if (-1 != c) {
+            dst[len] = c;
+            g_display->draw_char(c, caret_x, caret_y);
+            ++len;
+            ++caret_x;
+        }
+
+        if (caret_x >= g_display->width) {
+            caret_x = 0;
+            ++caret_y;
+            if (caret_y >= g_display->height) {
+                g_display->scroll(caret_y - g_display->height + 1);
+                caret_y = g_display->height - 1;
+            }
+        }
+
+        g_display->draw_caret(caret_x, caret_y);
+        if ('\n' == c) {
+            break;
+        }
+    }
+
+    dst[len] = '\0';
+}
+
+//------------------------------------------------------------------------------
+// 初始化
+//------------------------------------------------------------------------------
 
 INIT_TEXT void console_init() {
     kmemset(&kbd_state, 0, sizeof(kbd_state));
     kbd_state.numlock = 1; // 默认开启小键盘
 }
-
-// 读取一个完整字符串
-void console_readline() {
-    // TODO 需要主动读取才会 get-keycode，否则键盘状态无法更新
-    // TODO 需要判断什么时候停下来
-    handle_keycode(get_keycode());
-}
-

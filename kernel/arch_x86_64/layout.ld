@@ -58,6 +58,9 @@ SECTIONS {
     . += 4K;
     .rodata ALIGN(4K) : AT(ADDR(.rodata) - TEXT_ADDR) {
         _rodata_addr = .;
+        _kcmd_addr = .;
+        KEEP(*(.kcmd))  /* 放在 rodata 开头，地址对齐 */
+        _kcmd_end = .;
         *(.rodata)
         *(.rodata.*)
     } : rodata = 0

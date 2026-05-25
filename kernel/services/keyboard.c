@@ -19,5 +19,5 @@ keycode_t get_keycode() {
     if (sizeof(code) == len) {
         return code;
     }
-    return KEY_RESERVED;
+    return KEY_NONE;
 }

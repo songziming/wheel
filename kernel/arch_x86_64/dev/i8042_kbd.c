@@ -16,29 +16,36 @@
 
 // 将 scan code set1 扫描码转换为 keycode
 static const keycode_t SET1_LUT[] = {
-    KEY_RESERVED,   KEY_ESC,        KEY_1,          KEY_2,          // 0x00 - 0x03
-    KEY_3,          KEY_4,          KEY_5,          KEY_6,          // 0x04 - 0x07
-    KEY_7,          KEY_8,          KEY_9,          KEY_0,
-    KEY_MINUS,      KEY_EQUAL,      KEY_BACKSPACE,  KEY_TAB,
-    KEY_Q,          KEY_W,          KEY_E,          KEY_R,
-    KEY_T,          KEY_Y,          KEY_U,          KEY_I,
-    KEY_O,          KEY_P,          KEY_LEFTBRACE,  KEY_RIGHTBRACE,
-    KEY_ENTER,      KEY_LEFTCTRL,   KEY_A,          KEY_S,
-    KEY_D,          KEY_F,          KEY_G,          KEY_H,
-    KEY_J,          KEY_K,          KEY_L,          KEY_SEMICOLON,
-    KEY_QUOTE,      KEY_BACKTICK,   KEY_LEFTSHIFT,  KEY_BACKSLASH,
-    KEY_Z,          KEY_X,          KEY_C,          KEY_V,
-    KEY_B,          KEY_N,          KEY_M,          KEY_COMMA,
-    KEY_DOT,        KEY_SLASH,      KEY_RIGHTSHIFT, KEY_KP_STAR,
-    KEY_LEFTALT,    KEY_SPACE,      KEY_CAPSLOCK,   KEY_F1,
-    KEY_F2,         KEY_F3,         KEY_F4,         KEY_F5,
-    KEY_F6,         KEY_F7,         KEY_F8,         KEY_F9,
-    KEY_F10,        KEY_NUMLOCK,    KEY_SCROLLLOCK, KEY_KP_7,
-    KEY_KP_8,       KEY_KP_9,       KEY_KP_MINUS,   KEY_KP_4,
-    KEY_KP_5,       KEY_KP_6,       KEY_KP_PLUS,    KEY_KP_1,
-    KEY_KP_2,       KEY_KP_3,       KEY_KP_0,       KEY_KP_DOT,
-    KEY_RESERVED,   KEY_RESERVED,   KEY_RESERVED,   KEY_F11,
-    KEY_F12,        KEY_RESERVED,   KEY_RESERVED,   KEY_RESERVED,   // 0x58 - 0x5b
+    KEY_NONE,   KEY_ESC,      KEY_1,         KEY_2,      // 0x00 - 0x03
+    KEY_3,      KEY_4,        KEY_5,         KEY_6,      // 0x04 - 0x07
+    KEY_7,      KEY_8,        KEY_9,         KEY_0,
+    KEY_MINUS,  KEY_EQUAL,    KEY_BACKSPACE, KEY_TAB,
+    KEY_Q,      KEY_W,        KEY_E,         KEY_R,
+    KEY_T,      KEY_Y,        KEY_U,         KEY_I,
+    KEY_O,      KEY_P,        KEY_L_BRACE,   KEY_R_BRACE,
+    KEY_ENTER,  KEY_L_CTRL,   KEY_A,         KEY_S,
+    KEY_D,      KEY_F,        KEY_G,         KEY_H,
+    KEY_J,      KEY_K,        KEY_L,         KEY_SEMICOLON,
+    KEY_QUOTE,  KEY_BACKTICK, KEY_L_SHIFT,   KEY_BACKSLASH,
+    KEY_Z,      KEY_X,        KEY_C,         KEY_V,
+    KEY_B,      KEY_N,        KEY_M,         KEY_COMMA,
+    KEY_DOT,    KEY_SLASH,    KEY_R_SHIFT,   KEY_KP_STAR,
+    KEY_L_ALT,  KEY_SPACE,    KEY_CAPSLOCK,  KEY_F1,
+    KEY_F2,     KEY_F3,       KEY_F4,        KEY_F5,
+    KEY_F6,     KEY_F7,       KEY_F8,        KEY_F9,
+    KEY_F10,    KEY_NUMLOCK,  KEY_SCRLOCK,   KEY_KP_7,
+    KEY_KP_8,   KEY_KP_9,     KEY_KP_MINUS,  KEY_KP_4,
+    KEY_KP_5,   KEY_KP_6,     KEY_KP_PLUS,   KEY_KP_1,
+    KEY_KP_2,   KEY_KP_3,     KEY_KP_0,      KEY_KP_DOT,
+    KEY_NONE,   KEY_NONE,     KEY_INTL,      KEY_F11,    // 0x54 - 0x57
+    KEY_F12,    KEY_NONE,     KEY_NONE,      KEY_NONE,   // 0x58 - 0x5b
+    KEY_NONE,   KEY_NONE,     KEY_NONE,      KEY_NONE,   // 0x5c - 0x5f
+    KEY_NONE,   KEY_NONE,     KEY_NONE,      KEY_NONE,   // 0x60 - 0x63
+    KEY_F13,    KEY_F14,      KEY_F15,       KEY_F16,    // 0x64 - 0x67
+    KEY_F17,    KEY_F18,      KEY_F19,       KEY_F20,    // 0x68 - 0x6b
+    KEY_F21,    KEY_F22,      KEY_F23,       KEY_NONE,   // 0x6c - 0x6f
+    KEY_NONE,   KEY_NONE,     KEY_NONE,      KEY_NONE,   // 0x70 - 0x73
+    KEY_NONE,   KEY_NONE,     KEY_F24,       KEY_NONE,   // 0x74 - 0x77
 };
 
 
@@ -69,7 +76,6 @@ static void handle_keycode(keycode_t key, int release) {
 
 // 输入 scancode，将其转换成可打印字符
 static void handle_scancode(uint8_t code) {
-    // logk("^%02x", code);
     switch (g_state) {
     case STATE_NORMAL:
         if (0xe0 == code) {
@@ -97,7 +103,7 @@ static void handle_scancode(uint8_t code) {
         case 0x10: handle_keycode(KEY_MM_PREV,       code & 0x80); break;
         case 0x19: handle_keycode(KEY_MM_NEXT,       code & 0x80); break;
         case 0x1c: handle_keycode(KEY_KP_ENTER,      code & 0x80); break;
-        case 0x1d: handle_keycode(KEY_RIGHTCTRL,     code & 0x80); break;
+        case 0x1d: handle_keycode(KEY_R_CTRL,        code & 0x80); break;
         case 0x20: handle_keycode(KEY_MM_MUTE,       code & 0x80); break;
         case 0x21: handle_keycode(KEY_MM_CALC,       code & 0x80); break;
         case 0x22: handle_keycode(KEY_MM_PLAY,       code & 0x80); break;
@@ -106,7 +112,7 @@ static void handle_scancode(uint8_t code) {
         case 0x30: handle_keycode(KEY_MM_VOLUP,      code & 0x80); break;
         case 0x32: handle_keycode(KEY_WWW_HOME,      code & 0x80); break;
         case 0x35: handle_keycode(KEY_KP_SLASH,      code & 0x80); break;
-        case 0x38: handle_keycode(KEY_RIGHTALT,      code & 0x80); break;
+        case 0x38: handle_keycode(KEY_R_ALT,         code & 0x80); break;
         case 0x47: handle_keycode(KEY_HOME,          code & 0x80); break;
         case 0x48: handle_keycode(KEY_UP,            code & 0x80); break;
         case 0x49: handle_keycode(KEY_PAGEUP,        code & 0x80); break;
@@ -117,6 +123,8 @@ static void handle_scancode(uint8_t code) {
         case 0x51: handle_keycode(KEY_PAGEDOWN,      code & 0x80); break;
         case 0x52: handle_keycode(KEY_INSERT,        code & 0x80); break;
         case 0x53: handle_keycode(KEY_DELETE,        code & 0x80); break;
+        case 0x57: handle_keycode(KEY_F11,           code & 0x80); break;
+        case 0x58: handle_keycode(KEY_F12,           code & 0x80); break;
         case 0x5b: handle_keycode(KEY_GUI_LEFT,      code & 0x80); break;
         case 0x5c: handle_keycode(KEY_GUI_RIGHT,     code & 0x80); break;
         case 0x5d: handle_keycode(KEY_APPS,          code & 0x80); break;

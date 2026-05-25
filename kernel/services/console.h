@@ -14,8 +14,8 @@ typedef struct display_ops {
 
 extern display_ops_t *g_display;
 
-INIT_TEXT void console_init();
-void console_readline();
 void console_printf(const char *fmt, ...) PRINTF(1,2);
+void console_readline(char *dst, size_t max);
+INIT_TEXT void console_init();
 
 #endif // CONSOLE_H
