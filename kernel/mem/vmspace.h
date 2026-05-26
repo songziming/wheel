@@ -38,6 +38,5 @@ size_t vmspace_alloc(vmspace_t *space, vmrange_t *rng,
         uint32_t type, mmu_attr_t attrs);
 size_t vmspace_alloc_stack(vmspace_t *space, vmrange_t *rng, uint32_t rank);
 void vmspace_remove(vmspace_t *space, vmrange_t *rng);
-void vmspace_show(vmspace_t *space);
 
 #endif // VMSPACE_H

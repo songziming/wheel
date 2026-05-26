@@ -18,6 +18,7 @@ void msgq_init(msgq_t *q) {
     mmu_map(g_kernel_vm.table, va, va+PAGE_SIZE, pa, MMU_WRITE);
     mmu_map(g_kernel_vm.table, va+PAGE_SIZE, va+PAGE_SIZE*2, pa, MMU_WRITE);
     q->rng.paddr = pa;
+    q->rng.desc = "msgq";
 
     fifo_init(&q->fifo, (void*)va, PAGE_SIZE);
 }

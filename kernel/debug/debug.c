@@ -3,20 +3,42 @@
 #include <kstring.h>
 #include <format.h>
 
+#include <spin.h>
+#include <fifo.h>
+
 log_func_t g_log_func = NULL;
 
-static void log_cb(void *user UNUSED, const char **s, size_t *len) {
-    if (g_log_func) {
-        g_log_func(*s, *len);
-    }
+static spin_t log_lock = SPIN_INIT;
+static fifo_t log_fifo;
+
+static char log_buff[PAGE_SIZE];
+
+INIT_TEXT void log_init() {
+    fifo_init(&log_fifo, log_buff, sizeof(log_buff));
 }
 
-void logk(const char *fmt, ...) {
-    char tmp[1024];
+// static void log_cb(void *user UNUSED, const char **s, size_t *len) {
+//     if (g_log_func) {
+//         g_log_func(*s, *len);
+//     }
+// }
 
+// void logk(const char *fmt, ...) {
+//     char tmp[1024];
+//     va_list args;
+//     va_start(args, fmt);
+//     format(tmp, sizeof(tmp), log_cb, NULL, fmt, args);
+//     va_end(args);
+// }
+
+// 很多地方都要调用这个函数，包括中断里面
+void logk(const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    format(tmp, sizeof(tmp), log_cb, NULL, fmt, args);
+    int key = irq_spin_take(&log_lock);
+    fifo_vprint(&log_fifo, fmt, args, g_log_func);
+    irq_spin_give(&log_lock, key);
+    // format(tmp, sizeof(tmp), log_cb, NULL, fmt, args);
     va_end(args);
 }
 
@@ -29,14 +51,22 @@ void log_stacktrace() {
     }
 }
 
+// 发生严重错误，应该使用 console 输出
 NORETURN void panic(const char *fmt, ...) {
     // 广播 IPI，停止其他 CPU
     arch_send_ipi(IPI_ALL_EXCLUDING_SELF, VEC_IPI_STOPALL);
 
-    char tmp[1024];
+    // char tmp[1024];
+    // va_list args;
+    // va_start(args, fmt);
+    // format(tmp, sizeof(tmp), log_cb, NULL, fmt, args);
+    // va_end(args);
+
     va_list args;
     va_start(args, fmt);
-    format(tmp, sizeof(tmp), log_cb, NULL, fmt, args);
+    int key = irq_spin_take(&log_lock);
+    fifo_vprint(&log_fifo, fmt, args, g_log_func);
+    irq_spin_give(&log_lock, key);
     va_end(args);
 
     log_stacktrace();

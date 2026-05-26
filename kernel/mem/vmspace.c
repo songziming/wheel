@@ -2,6 +2,8 @@
 #include <arch_api.h>
 #include "page.h"
 #include <debug.h>
+#include <kshell.h>
+#include <console.h>
 
 
 // 内核地址空间布局
@@ -177,12 +179,18 @@ void vmspace_remove(vmspace_t *space, vmrange_t *rng) {
     irq_spin_give(&space->lock, key);
 }
 
-void vmspace_show(vmspace_t *space) {
+
+
+static void vmspace_show() {
+    vmspace_t *space = &g_kernel_vm;
     int key = irq_spin_take(&space->lock);
-    logk("virtual address space:\n");
+    console_printf("virtual address space:\n");
     for (dlnode_t *i = space->head.next; &space->head != i; i = i->next) {
         vmrange_t *rng = containerof(i, vmrange_t, dl);
-        logk("  - vm %016zx~%016zx pa %016zx %s\n", rng->vaddr, rng->vend, rng->paddr, rng->desc);
+        console_printf("  - vm %016zx~%016zx pa %016zx %s\n",
+            rng->vaddr, rng->vend, rng->paddr, rng->desc);
     }
     irq_spin_give(&space->lock, key);
 }
+
+KSHELL_CMD("vm", vmspace_show);

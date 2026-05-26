@@ -488,6 +488,12 @@ INIT_TEXT void cpu_features_enable() {
     }
     write_cr4(cr4);
 
+    // 设置 PAT，使用编号 4 表示 Write-Combined
+    uint64_t pat = read_msr(MSR_PAT);
+    pat &= ~(7UL << 16);
+    pat |= 0x01UL << 16;    // Write-Combined (0x01)
+    write_msr(MSR_PAT, pat);
+
     // 设置 efer
     uint64_t efer = read_msr(MSR_EFER);
     efer |= (1UL <<  0); // SCE，启用快速系统调用指令 syscall/sysret
@@ -524,8 +530,6 @@ void cpu_features_show() {
         { "ht",         CPU_FEATURE_HT         },
         { "nx",         CPU_FEATURE_NX         },
         { "1g",         CPU_FEATURE_1G         },
-        // { "pg",         CPU_FEATURE_PGE        },
-        // { "pat",        CPU_FEATURE_PAT        },
         { "arat",       CPU_FEATURE_ARAT       },
         { "incpcid",    CPU_FEATURE_INVPCID    },
         { "smep",       CPU_FEATURE_SMEP       },

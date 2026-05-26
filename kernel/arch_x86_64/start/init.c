@@ -48,6 +48,10 @@ static INIT_BSS  work_t g_smp_notifier;
 static INIT_TEXT NORETURN void ap_init(int idx);
 
 
+//------------------------------------------------------------------------------
+// 解析 grub 传来的信息
+//------------------------------------------------------------------------------
+
 static INIT_TEXT void mb1_parse_mmap(uint32_t mmap, uint32_t len) {
     g_pmrange_num = 0;
     for (uint32_t off = 0; off < len;) {
@@ -144,16 +148,11 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
     }
 }
 
-// static INIT_TEXT void text_log(const char *s, size_t n) {
-//     serial_puts(s, n);
-//     vgatext_puts(s, n);
-// }
+//------------------------------------------------------------------------------
+// 第一个 CPU 启动过程
+//------------------------------------------------------------------------------
 
-// static INIT_TEXT void gui_log(const char *s, size_t n) {
-//     serial_puts(s, n);
-//     framebuf_puts(s, n);
-// }
-
+// 此时单核、关中断，使用临时栈和临时页表
 INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     if (0 == eax) {
         ap_init(g_cpu_started++);
@@ -161,6 +160,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 初始化串口，打印输出就用这个
     serial_init();
+    log_init();
     g_log_func = serial_puts;
 
     cpu_features_detect();
@@ -238,6 +238,10 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 加载正式页表，此后 CONST 变为只读
     write_cr3(g_kernel_vm.table);
+    if (g_fgcolor) {
+        // LFB 重新映射为 Write-Combined，提升写显存速度
+        framebuf_remap_wc();
+    }
 
     // 初始化任务调度
     work_init_this();
@@ -257,7 +261,10 @@ end:
     }
 }
 
+//------------------------------------------------------------------------------
 // 第一个运行的任务，运行在 BSP
+//------------------------------------------------------------------------------
+
 static INIT_TEXT void root_proc() {
     cpu_features_show();
 
@@ -267,7 +274,6 @@ static INIT_TEXT void root_proc() {
     kmemcpy(to, from, &_real_end - from);
     logk("copy trampoline code from %p to %p\n", from, to);
 
-    // raw_spin_take(&g_smp_lock);
     sema_init(&g_smp_sema, 0, 1);
 
     // 启动代码地址页号就是 startup-IPI 的向量号
@@ -280,45 +286,26 @@ static INIT_TEXT void root_proc() {
         loapic_send_sipi(i, vec);       // 发送 startup-IPI
         loapic_timer_busywait(200);     // 等待 200us
         loapic_send_sipi(i, vec);       // 再次发送 startup-IPI
-        // loapic_timer_busywait(200);     // 等待 200us
 
         // 当 CPU 开始运行 task，说明初始化已经结束，不再使用 init stack
         // 前一个 CPU 初始化完成才能初始化下一个
-        // raw_spin_take(&g_smp_lock);
-        // task_stop(TS_STOPPED, NULL, 0, 0);
         sema_take(&g_smp_sema, FOREVER);
-        // arch_task_switch();
-        // semaphore_take(&g_smp_sem, 1, FOREVER);
     }
 
-    // for (int i = 0; i < 1; ++i) {
-    //     // logk("testing round #%d:\n", i);
-    //     // test_cooperative();
-    //     // loapic_timer_busywait(500000);
-    //     // logk("testing smp tasks:\n");
-    //     // test_smp_tasks();
-    //     // logk("testing semaphore:\n");
-    //     // test_sema();
-    //     logk("testing message queue:\n");
-    //     test_msgq();
-    // }
-
-    // logk("")
+    // 启动内核服务
     kshell_start();
 
-    logk("root stopped\n");
     return;
-
-    logk("stop system\n");
-    arch_send_ipi(IPI_ALL_EXCLUDING_SELF, VEC_IPI_STOPALL);
-
     logk("BSP in root is not stopped\n");
-
     while (1) {
         cpu_pause();
         cpu_halt();
     }
 }
+
+//------------------------------------------------------------------------------
+// 后续 CPU 的启动过程
+//------------------------------------------------------------------------------
 
 // 通知 BSP，又一个 AP 初始化完成，开始运行 task，不再使用 init-stack
 // BSP 可以启动下一个 AP，或者将 init-stack 回收

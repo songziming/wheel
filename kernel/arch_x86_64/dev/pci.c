@@ -1,3 +1,4 @@
+#include "pci.h"
 #include <arch_api.h>
 #include <debug.h>
 

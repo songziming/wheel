@@ -148,6 +148,7 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
 
     vmspace_alloc_stack(&g_kernel_vm, &tid->stack, 0);
     tid->stack.desc = name;
+    // logk("alloc stack for %s at 0x%zx\n", name, tid->stack.vaddr);
     arch_task_init(tid, (size_t)task_entry, tid->stack.vend, (size_t)func,0,0,0);
 }
 

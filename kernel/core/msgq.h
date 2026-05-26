@@ -1,9 +1,10 @@
 #ifndef MSGQ_H
 #define MSGQ_H
 
-#include <fifo.h>
-#include <vmspace.h>
 #include "task.h"
+#include <fifo.h>
+#include <spin.h>
+#include <vmspace.h>
 
 typedef struct msgq {
     spin_t      lock;

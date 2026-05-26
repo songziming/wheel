@@ -8,12 +8,12 @@
 // 使用 console 读取输入、写入输出
 // 作为任务运行，只有一个线程，不会重入，因此不用自旋锁
 
-static task_t shell_tcb;
-#define PROMPT "kshell"
-
 // defined in arch linker.ld
 extern const kcmd_t _kcmd_addr;
 extern const kcmd_t _kcmd_end;
+
+static task_t shell_tcb;
+#define PROMPT "kshell"
 
 static void show_help(int argc UNUSED, char *argv[] UNUSED) {
     console_printf("valid commands:\n");
@@ -37,7 +37,7 @@ static void execute(char *cmd) {
     argv[argc++] = cmd;
 
     // 解析剩下的参数
-    for (; *cmd; ++cmd) {
+    for (; (*cmd) && (argc < 32); ++cmd) {
         if (' ' == *cmd) {
             *cmd++ = '\0';
             while (' ' == *cmd) { ++cmd; }
@@ -48,13 +48,12 @@ static void execute(char *cmd) {
         }
     }
 
-    console_printf(" -- got %d args\n", argc);
-    for (int i = 0; i < argc; ++i) {
-        console_printf("  -> arg.%d = %s\n", i, argv[i]);
-    }
+    // console_printf(" -- got %d args\n", argc);
+    // for (int i = 0; i < argc; ++i) {
+    //     console_printf("  -> arg.%d = %s\n", i, argv[i]);
+    // }
 
     for (const kcmd_t *q = &_kcmd_addr; q < &_kcmd_end; ++q) {
-        // console_printf("searching cmd %p %s\n", q, q->name);
         if (kstrcmp(q->name, argv[0]) == 0) {
             q->func(argc, argv);
             break;
@@ -65,10 +64,11 @@ static void execute(char *cmd) {
 static void kshell_proc() {
     logk("kernel shell started\n");
 
+    int idx = 0;
     char input[1024];
 
     while (1) {
-        console_printf("%s> ", PROMPT);
+        console_printf("%s:%d> ", PROMPT, ++idx);
         console_readline(input, sizeof(input));
         execute(input);
     }

@@ -2,6 +2,7 @@
 #define FIFO_H
 
 #include <wheel.h>
+#include <debug.h>
 
 typedef struct fifo {
     char    *data;
@@ -20,7 +21,8 @@ int  fifo_is_empty(fifo_t *fifo);
 
 size_t fifo_write(fifo_t *fifo, const void *ptr, size_t min, size_t max);
 void fifo_force_write(fifo_t *fifo, const void *ptr, size_t len);
-
 size_t fifo_read(fifo_t *fifo, void *ptr, size_t min, size_t max);
+
+void fifo_vprint(fifo_t *fifo, const char *fmt, va_list va, log_func_t cb);
 
 #endif // FIFO_H

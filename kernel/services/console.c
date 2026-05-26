@@ -19,12 +19,9 @@ static spin_t console_lock = SPIN_INIT;
 static int caret_x = 0;
 static int caret_y = 0;
 
-static void print_flush(void *user UNUSED, const char **s, size_t *len) {
-    const char *p = *s;
-    size_t n = *len;
-
+static void _console_puts(const char *s, size_t n) {
     for (size_t i = 0; i < n; ++i) {
-        switch (p[i]) {
+        switch (s[i]) {
         case '\t':
             caret_x += 8;
             caret_x &= ~7;
@@ -41,7 +38,7 @@ static void print_flush(void *user UNUSED, const char **s, size_t *len) {
             }
             break;
         default:
-            g_display->draw_char(p[i], caret_x, caret_y);
+            g_display->draw_char(s[i], caret_x, caret_y);
             ++caret_x;
             break;
         }
@@ -49,12 +46,24 @@ static void print_flush(void *user UNUSED, const char **s, size_t *len) {
         if (caret_x >= g_display->width) {
             caret_x = 0;
             ++caret_y;
-            if (caret_y >= g_display->height) {
-                g_display->scroll(caret_y - g_display->height + 1);
-                caret_y = g_display->height - 1;
-            }
+        }
+        if (caret_y >= g_display->height) {
+            g_display->scroll(caret_y - g_display->height + 1);
+            caret_y = g_display->height - 1;
         }
     }
+}
+
+void console_puts(const char *s, size_t n) {
+    int key = irq_spin_take(&console_lock);
+    g_display->draw_char(' ', caret_x, caret_y); // 清除当前光标
+    _console_puts(s, n);
+    g_display->draw_caret(caret_x, caret_y); // 绘制新的光标
+    irq_spin_give(&console_lock, key);
+}
+
+static void print_flush(void *user UNUSED, const char **s, size_t *len) {
+    _console_puts(*s, *len);
 }
 
 // 类似 logk，但是向屏幕打印，而不是串口
@@ -63,18 +72,14 @@ void console_printf(const char *fmt, ...) {
     char tmp[256];
 
     int key = irq_spin_take(&console_lock);
-
-    // 清除前一次的光标
-    // TODO 光标处的字符可能不是空的
-    g_display->draw_char(' ', caret_x, caret_y);
+    g_display->draw_char(' ', caret_x, caret_y); // 清除前一次的光标
 
     va_list va;
     va_start(va, fmt);
     format(tmp, sizeof(tmp), print_flush, NULL, fmt, va);
     va_end(va);
 
-    // 绘制光标
-    g_display->draw_caret(caret_x, caret_y);
+    g_display->draw_caret(caret_x, caret_y); // 绘制光标
     irq_spin_give(&console_lock, key);
 }
 
@@ -316,10 +321,10 @@ void console_readline(char *dst, size_t max) {
         if (caret_x >= g_display->width) {
             caret_x = 0;
             ++caret_y;
-            if (caret_y >= g_display->height) {
-                g_display->scroll(caret_y - g_display->height + 1);
-                caret_y = g_display->height - 1;
-            }
+        }
+        if (caret_y >= g_display->height) {
+            g_display->scroll(caret_y - g_display->height + 1);
+            caret_y = g_display->height - 1;
         }
 
         g_display->draw_caret(caret_x, caret_y);

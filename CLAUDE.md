@@ -95,7 +95,7 @@ make cov                                         # build + run + HTML coverage
 - `PERCPU_DATA` / `PERCPU_BSS` macros mark per-CPU variables
 - `UNUSED`, `PACKED`, `NORETURN`, `PRINTF(s,a)` are defined in `core/wheel.h`
 - Comments and identifiers are in Chinese (functions/variables: English snake_case; file names: English)
-- Include guard names omit the directory: `SPIN_H` not `LIB_SPIN_H`, `TASK_H` not `CORE_TASK_H`
+- Include guard names omit the directory: `SPIN_H` not `LIB_SPIN_H`, `TASK_H` not `CORE_TASK_H`. But headers under `kernel/arch/` has full path in guard names: `ARCH_X86_64_BGA_H`
 - Host tools live in `host/` (PSF font parser, BIOS roms, disk image helper)
 
 ### `CONST` and `INIT_*` section macros

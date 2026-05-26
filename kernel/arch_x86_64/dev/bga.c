@@ -81,36 +81,6 @@ static uint16_t bga_read(uint16_t index) {
 }
 
 //-----------------------------------------------------------------------------
-// PAT 配置 — 为 WC 映射做准备
-//-----------------------------------------------------------------------------
-
-// PAT (Page Attribute Table) MSR — 用于配置 WC (Write-Combining)
-#define IA32_PAT  0x0277
-
-// PA4 位于 PAT MSR 的 bit 16-18，{PAT, PCD, PWT} = {1,0,0} = 4
-// 将 PA4 设为 WC(0x01) 后，在 PTE/PDE 中设置 PAT 位即可获得 WC 属性
-#define PAT_PA4_SHIFT  16ULL
-#define PAT_WC          0x01ULL
-
-static CONST int g_pat_ready = 0;
-
-// 将 ID=4 的 PAT entry 设为 Write-Combined
-static void bga_enable_pat() {
-    if (g_pat_ready) {
-        return;
-    }
-    uint64_t pat = read_msr(IA32_PAT);
-    pat &= ~(7ULL << PAT_PA4_SHIFT);
-    pat |= PAT_WC << PAT_PA4_SHIFT;
-    write_msr(IA32_PAT, pat);
-    g_pat_ready = 1;
-}
-
-//-----------------------------------------------------------------------------
-// PCI 配置空间 — 读取 BAR0 获取 framebuffer 物理地址
-//-----------------------------------------------------------------------------
-
-//-----------------------------------------------------------------------------
 // 初始化
 //-----------------------------------------------------------------------------
 
@@ -184,9 +154,35 @@ void bga_set_offset(uint16_t x, uint16_t y) {
 
 
 
+#if 0
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------
+// PAT 配置 — 为 WC 映射做准备
 //-----------------------------------------------------------------------------
+
+// PAT (Page Attribute Table) MSR — 用于配置 WC (Write-Combining)
+#define IA32_PAT  0x0277
+
+// PA4 位于 PAT MSR 的 bit 16-18，{PAT, PCD, PWT} = {1,0,0} = 4
+// 将 PA4 设为 WC(0x01) 后，在 PTE/PDE 中设置 PAT 位即可获得 WC 属性
+#define PAT_PA4_SHIFT  16ULL
+#define PAT_WC          0x01ULL
+
+static CONST int g_pat_ready = 0;
+
+// 将 ID=4 的 PAT entry 设为 Write-Combined
+static void bga_enable_pat() {
+    if (g_pat_ready) {
+        return;
+    }
+    uint64_t pat = read_msr(IA32_PAT);
+    pat &= ~(7ULL << PAT_PA4_SHIFT);
+    pat |= PAT_WC << PAT_PA4_SHIFT;
+    write_msr(IA32_PAT, pat);
+    g_pat_ready = 1;
+}
 
 typedef struct bga_info {
     uint16_t id;          // BGA 版本 ID（BGA_ID0 ~ BGA_ID5）
@@ -293,3 +289,4 @@ INIT_TEXT uint8_t *bga_enable_wc(bga_info_t *info) {
     logk("bga: WC mapped [%p, %p) -> PA 0x%lx\n", wc_va, wc_va + info->fb_size, info->fb_pa);
     return wc_va;
 }
+#endif

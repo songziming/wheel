@@ -3,7 +3,7 @@
 #include <spin.h>
 #include <debug.h>
 
-// 类似于 ktimer，也是异步执行函数，也是在中断返回流程里执行
+// 类似于 wdog，也是异步执行函数，也是在中断返回流程里执行
 // 但 workq 不关心时间，只需保证在 ISR 上下文运行
 // 而且 workq 是每个CPU 都有的，不需要争抢，默认放在当前 cpu 的队列中
 

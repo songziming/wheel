@@ -3,9 +3,12 @@
 
 #include <console.h>
 #include <arch_config.h>
+#include <arch_api.h>
+#include <cpu/rw.h>
 #include <kstring.h>
 #include <spin.h>
 #include <early_alloc.h>
+#include <vmspace.h>
 
 #include <debug.h>
 
@@ -21,6 +24,7 @@ static CONST uint32_t g_rows  = 0;  // 屏幕高度（单位：像素）
 static CONST uint32_t g_cols  = 0;  // 屏幕宽度（单位：像素）
 static CONST uint64_t g_pitch = 0;  // 一行多少字节，可能不是整数个像素
 
+static INIT_DATA size_t g_size = 0;     // LFB 大小（用于映射 WC）
 static CONST uint8_t *g_addr = NULL;    // LFB 映射地址（最好映射为 WC）
 static CONST uint8_t *g_back = NULL;    // 离屏缓冲区（用于无 bga 滚屏）
 
@@ -29,15 +33,7 @@ static CONST uint8_t *g_back = NULL;    // 离屏缓冲区（用于无 bga 滚�
 static int g_disp_top = 0;
 
 static uint32_t g_framebuf_color = 0xffffffff;   // 像素颜色
-static spin_t g_framebuf_lock = SPIN_INIT;
 static CONST display_ops_t ops; // 终端接口实现
-
-// 以字符为单位：
-// static CONST int ops.height;    // 当前字体下的行数
-// static CONST int ops.width;    // 当前字体下的列数
-static int g_caret_row;        // 光标所在字符行号（逻辑行号，0 = 屏幕顶）
-static int g_caret_col;        // 光标所在字符列号
-
 
 //------------------------------------------------------------------------------
 // 无 BGA，有 backbuffer
@@ -179,6 +175,8 @@ static void bga_scroll(int nrows) {
 // static CONST void (*g_scroll)(int nrows);
 
 INIT_TEXT void framebuf_init(uint32_t rows, uint32_t cols, uint32_t pitch, uint32_t addr) {
+    g_size = rows * pitch;
+
     int has_bga = 0;
     if (bga_check()) {
         // 虚拟环境下，调用 BGA 设置虚拟缓冲区，利用硬件滚屏功能
@@ -189,6 +187,7 @@ INIT_TEXT void framebuf_init(uint32_t rows, uint32_t cols, uint32_t pitch, uint3
             cols = 1280;
             pitch = 1280 * 4;    // 32-bit
             addr = bga_get_address();
+            g_size = BGA_FB_SIZE;
             has_bga = 1;
         } else {
             bga_disable();
@@ -201,6 +200,7 @@ INIT_TEXT void framebuf_init(uint32_t rows, uint32_t cols, uint32_t pitch, uint3
 
     // TODO 映射到 Write-Combined region
     g_addr = (uint8_t*)(DIRECT_MAP_ADDR + addr);
+    g_disp_top = 0;
 
     // 如果没有 BGA，则需要另一个离屏缓冲区
     if (has_bga) {
@@ -218,23 +218,37 @@ INIT_TEXT void framebuf_init(uint32_t rows, uint32_t cols, uint32_t pitch, uint3
     ops.height = g_rows / g_font->rows;
     ops.width  = g_cols / g_font->cols;
     g_display = &ops;
-    // ops.height = g_rows / g_font->rows;
-    // ops.width = g_cols / g_font->cols;
+
+#if 0
     g_caret_row = 0;
     g_caret_col = 0;
-    g_disp_top = 0;
-
+#endif
     // ops.draw_caret(g_caret_col, g_caret_row);
 }
 
 // 将 LFB 重新映射为 write-combined，提升写入速度
 INIT_TEXT void framebuf_remap_wc() {
-    // TODO
+    size_t va  = (size_t)g_addr;
+    size_t vend = va + g_size;
+    size_t pa = va - DIRECT_MAP_ADDR;
+    vend += PAGE_SIZE - 1;
+    vend &= ~(PAGE_SIZE - 1);
+    logk("remapping 0x%zx~0x%zx as WC\n", va, vend);
+
+    mmu_unmap(g_kernel_vm.table, va, vend);
+    mmu_map(g_kernel_vm.table, va, vend, pa, MMU_WRITE|MMU_WC);
 }
 
 void framebuf_setfg(uint32_t fg) {
     g_framebuf_color = fg;
 }
+
+// dead code, now replaced by console
+#if 0
+
+static spin_t g_framebuf_lock = SPIN_INIT;
+static int g_caret_row;        // 光标所在字符行号（逻辑行号，0 = 屏幕顶）
+static int g_caret_col;        // 光标所在字符列号
 
 static void framebuf_putc(char ch) {
     int r = g_caret_row;
@@ -284,3 +298,5 @@ void framebuf_puts(const char *s, size_t n) {
     ops.draw_caret(g_caret_col, g_caret_row);
     irq_spin_give(&g_framebuf_lock, key);
 }
+
+#endif

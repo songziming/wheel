@@ -6,17 +6,18 @@
 // 为了避免频繁 strcpy，也避免需要调用者申请过大的 buffer
 // format 可以将格式化字符串的结果分成多个子串，分多次输出
 // format 可以传入一个小于输出字符串长度的 out-buf，每次 out-buf 填满就执行回调
+// 回调函数除了接收格式化结果，还可以改变接下来接收输出的地址
 
 
 // 使用循环缓冲区接收格式化之后的字符串
 // 缓冲区填满了，就执行回调函数输出，然后重置缓冲区
 typedef struct fmt_context {
-    char   *buf;
-    char   *end;
-    char   *ptr;
-    size_t  len; // 已经通过 func 输出的长度
+    char       *buf;
+    char       *end;
+    char       *ptr;
+    size_t      len;    // 已经通过 func 输出的长度
     format_cb_t func;
-    void *user;
+    void       *user;
 } fmt_context_t;
 
 
