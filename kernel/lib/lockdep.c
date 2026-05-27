@@ -17,6 +17,10 @@ INIT_TEXT void lockdep_enable() {
     g_lockdep_ready = 1;
 }
 
+void lockdep_task_init(lockdep_task_t *task) {
+    task->depth = 0;
+}
+
 // 得到锁之后执行
 void lockdep_acquire(void *lock, lockdep_instance_t *dep) {
     if (!g_lockdep_ready) { return; }

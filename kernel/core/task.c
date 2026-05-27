@@ -14,7 +14,7 @@
 #include <debug.h>
 
 
-static INIT_BSS task_t g_dummy_tcb = {.lockdep=LOCKDEP_TASK_INIT};
+static INIT_BSS task_t g_dummy_tcb = {.lockdep={.depth=0}};
 static PERCPU_BSS task_t g_idle_tcb;
 static NORETURN void task_entry(void (*real)());
 static NORETURN void proc_idle();
@@ -121,7 +121,7 @@ INIT_TEXT void sched_init() {
     g_idle_mask |= 1UL << cpu;
 
     g_dummy_tcb.priority = 33; // 确保能被抢占
-    g_dummy_tcb.lockdep = LOCKDEP_TASK_INIT;
+    lockdep_task_init(g_dummy_tcb.lockdep);
     THISCPU_SET(g_tid_prev, &g_dummy_tcb);
     THISCPU_SET(g_tid_next, idle);
 }
@@ -149,7 +149,7 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
     tid->name     = name;
     tid->priority = prio;
     tid->affinity = -1;
-    tid->lockdep  = LOCKDEP_TASK_INIT;
+    lockdep_task_init(&tid->lockdep); // tid->lockdep  = LOCKDEP_TASK_INIT;
 
     vmspace_alloc_stack(&g_kernel_vm, &tid->stack, 0);
     tid->stack.desc = name;

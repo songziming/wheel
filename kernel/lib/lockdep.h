@@ -30,19 +30,19 @@ typedef struct {
     int            depth;
 } lockdep_task_t;
 
-#define LOCKDEP_TASK_INIT (lockdep_task_t){.depth=0}
-
 #if defined(LOCKDEP)
 
 void lockdep_enable();
+void lockdep_task_init(lockdep_task_t *task);
 void lockdep_acquire(void *lock, lockdep_instance_t *dep);
 void lockdep_release(void *lock, lockdep_instance_t *dep);
 
 #else // defined(LOCKDEP)
 
-#define lockdep_enable()               ((void)0)
-#define lockdep_acquire(lock, dep)     ((void)(lock), (void)(dep))
-#define lockdep_release(lock, dep)     ((void)(lock), (void)(dep))
+#define lockdep_enable()            ((void)0)
+#define lockdep_task_init(task)     ((void)task)
+#define lockdep_acquire(lock, dep)  ((void)(lock), (void)(dep))
+#define lockdep_release(lock, dep)  ((void)(lock), (void)(dep))
 
 #endif // defined(LOCKDEP)
 
