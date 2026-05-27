@@ -17,4 +17,8 @@ make unit   # build unit test binary build/unit
 make cov    # run unit test and generate coverage report in build/coverage
 ```
 
+## run in emulator
+
+Create disk image by `sudo ./host/mkimage build/hd.img`.
+
 Launch QEMU using `./run_iso.sh` (or `run_iso.bat` under Windows).

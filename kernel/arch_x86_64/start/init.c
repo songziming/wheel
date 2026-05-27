@@ -16,20 +16,23 @@
 #include <dev/framebuf.h>
 #include <dev/i8259_pit.h>
 #include <dev/i8042_kbd.h>
+#include <dev/ata_pio.h>
 
 #include <early_alloc.h>
 #include <pmlayout.h>
+
 #include <task.h>
 #include <work.h>
 #include <wdog.h>
-#include <kstring.h>
-#include <spin.h>
 #include <sema.h>
+
+#include <kstring.h>
+#include <debug.h>
+
 #include <keyboard.h>
 #include <kshell.h>
 #include <console.h>
-#include <debug.h>
-#include <ktest.h>
+#include <block.h>
 
 
 // layout.ld
@@ -39,13 +42,13 @@ char _real_end;
 static INIT_BSS uint32_t g_fgcolor;
 static INIT_BSS size_t   g_rsdp;
 
-static task_t g_root_tcb; // 不能用 init，需要回收内存
+// 根任务不能放在 init，需要在这里回收 init-section
+static task_t g_root_tcb;
 static void root_proc();
 
 static INIT_DATA int g_cpu_started = 1;
 static INIT_BSS sema_t g_smp_sema;
 static INIT_BSS work_t g_smp_notifier;
-// static INIT_BSS work_t g_init_recycler;
 static INIT_TEXT NORETURN void ap_init(int idx);
 
 
@@ -159,7 +162,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         ap_init(g_cpu_started++);
     }
 
-    // 初始化串口，打印输出就用这个
+    // 初始化串口，打印日志就用它
     serial_init();
     log_init();
     g_log_func = serial_puts;
@@ -234,15 +237,10 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     loapic_timer_calibrate();
     loapic_timer_set_periodic(SYSTIMER_FREQ);
 
-    // 设备初始化
-    keyboard_init(); // create keycode pipe
-    i8042_init(); // write keycode to pipe
-
     // 加载正式页表，此后 CONST 变为只读
     write_cr3(g_kernel_vm.table);
     if (g_fgcolor) {
-        // LFB 重新映射为 Write-Combined，提升写显存速度
-        framebuf_remap_wc();
+        framebuf_remap_wc(); // 重映射为 Write-Combined，提升写显存速度
     }
 
     // 初始化任务调度
@@ -290,6 +288,15 @@ static void root_proc() {
         // 前一个 CPU 初始化完成才能初始化下一个
         sema_take(&g_smp_sema, FOREVER);
     }
+
+    // 系统中间件初始化（console 已经在启动早期初始化）
+    // TODO 这部分代码与硬件平台无关，可以提取出来
+    keyboard_init();
+    block_dev_init();
+
+    // 设备初始化（这些设备依赖前面的系统中间件）
+    i8042_init();
+    ata_init();
 
     // 启动内核服务（这也是 init-text）
     kshell_start();

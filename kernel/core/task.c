@@ -121,7 +121,7 @@ INIT_TEXT void sched_init() {
     g_idle_mask |= 1UL << cpu;
 
     g_dummy_tcb.priority = 33; // 确保能被抢占
-    lockdep_task_init(g_dummy_tcb.lockdep);
+    lockdep_task_init(&g_dummy_tcb.lockdep);
     THISCPU_SET(g_tid_prev, &g_dummy_tcb);
     THISCPU_SET(g_tid_next, idle);
 }

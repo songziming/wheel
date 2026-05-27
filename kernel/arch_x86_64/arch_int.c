@@ -90,6 +90,9 @@ static void handle_pf(int vec UNUSED, regs_t *f) {
         logk(" - frame[%02d] 0x%zx\n", i, frames[i]);
     }
 
+    // TODO 如果 page fault 来自任务，可以将引发异常的任务停止（kill）
+    // 从 ready-q 删除任务，便可以从异常返回（到其他任务），不必在这里死循环
+
     while (1) {
         cpu_pause();
         cpu_halt();

@@ -3,8 +3,6 @@
 
 #include <dllist.h>
 
-// TODO 可以改名为 wdog，借鉴 vxworks
-
 // 代表一个定时任务
 typedef struct wdog wdog_t;
 typedef void (*wdog_cb_t)(wdog_t*);
