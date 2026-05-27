@@ -10,26 +10,27 @@
 #include <spin.h>
 #include <dllist.h>
 #include <kstring.h>
+#include <heap.h>
 #include <debug.h>
 
+
+static INIT_BSS task_t g_dummy_tcb = {.lockdep=LOCKDEP_TASK_INIT};
+static PERCPU_BSS task_t g_idle_tcb;
+static NORETURN void task_entry(void (*real)());
+static NORETURN void proc_idle();
 
 // ready queue
 static PERCPU_DATA spin_t g_rdy_lock = SPIN_INIT;
 static PERCPU_BSS prioq_t g_rdyq;
 
 // task switch
-PERCPU_DATA task_t *g_tid_prev = NULL;   // updated in int_return
-PERCPU_DATA task_t *g_tid_next = NULL;   // guarded by g_rdyq.lock
+PERCPU_DATA task_t *g_tid_prev = &g_dummy_tcb;  // updated in int_return
+PERCPU_DATA task_t *g_tid_next = NULL;          // guarded by g_rdyq.lock
 PERCPU_DATA int g_preempt_depth = 0;
 
 // 负载均衡
 static _Atomic uint64_t g_idle_mask = 0UL;
 static _Atomic uint32_t g_next_cpu = 0U;
-
-static INIT_BSS task_t g_dummy_tcb;
-static PERCPU_BSS task_t g_idle_tcb;
-static NORETURN void task_entry(void (*real)());
-static NORETURN void proc_idle();
 
 
 //------------------------------------------------------------------------------
@@ -109,15 +110,18 @@ INIT_TEXT void sched_init() {
     prioq_t *q = THISCPU(&g_rdyq);
     prioq_init(q);
 
+    int cpu = cpu_index();
+
     // 创建 idle-task
     task_t *idle = THISCPU(&g_idle_tcb);
-    task_create(idle, "idle", 31, proc_idle);
-    idle->affinity = cpu_index();
+    task_create(idle, kernel_heap_mkstr("idle-%d", cpu), 31, proc_idle);
+    idle->affinity = cpu;
     idle->state = TS_READY;
     prioq_insert(q, &idle->dl, 31);
-    g_idle_mask |= 1UL << cpu_index();
+    g_idle_mask |= 1UL << cpu;
 
     g_dummy_tcb.priority = 33; // 确保能被抢占
+    g_dummy_tcb.lockdep = LOCKDEP_TASK_INIT;
     THISCPU_SET(g_tid_prev, &g_dummy_tcb);
     THISCPU_SET(g_tid_next, idle);
 }
@@ -145,6 +149,7 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
     tid->name     = name;
     tid->priority = prio;
     tid->affinity = -1;
+    tid->lockdep  = LOCKDEP_TASK_INIT;
 
     vmspace_alloc_stack(&g_kernel_vm, &tid->stack, 0);
     tid->stack.desc = name;

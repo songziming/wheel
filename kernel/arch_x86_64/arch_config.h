@@ -23,10 +23,11 @@
 
 
 // 预留空间大小
-#define EARLY_RO_SIZE   0x1000
-#define EARLY_RW_SIZE   0x800000    // 需要容纳 framebuf
-#define INIT_STACK_SIZE 0x1000      // 启动使用的临时栈
-#define INT_STACK_SIZE  0x4000      // 中断栈
+#define EARLY_RO_SIZE       0x1000
+#define EARLY_RW_SIZE       0x800000    // 需要容纳 framebuf
+#define INIT_STACK_SIZE     0x1000      // 启动使用的临时栈
+#define INT_STACK_SIZE      0x1000      // 中断栈
+#define KERNEL_HEAP_SIZE    0x1000      // 内核堆
 
 // 中断向量号
 #define VEC_GSI_BASE        0x40

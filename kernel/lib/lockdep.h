@@ -30,6 +30,8 @@ typedef struct {
     int            depth;
 } lockdep_task_t;
 
+#define LOCKDEP_TASK_INIT (lockdep_task_t){.depth=0}
+
 #if defined(LOCKDEP)
 
 void lockdep_enable();

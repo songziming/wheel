@@ -3,23 +3,15 @@
 #include <debug.h>
 
 void msgq_init(msgq_t *q) {
+    size_t va = vmspace_alloc(&g_kernel_vm, &q->rng,
+        POOL_ZONE_START, POOL_ZONE_END, 0, PT_MSGQ, MMU_WRITE);
+    if (0 == va) {
+        panic("cannot create msgq\n");
+    }
+    q->rng.desc = "msgq";
     q->lock = SPIN_INIT;
-
     prioq_init(&q->readers);
     prioq_init(&q->writers);
-
-    size_t pa = PAGE_ALLOC(0, PT_MSGQ);
-    if (0 == pa) {
-        panic("cannot alloc page for msgq");
-        return;
-    }
-
-    size_t va = vmspace_valloc(&g_kernel_vm, &q->rng, POOL_ZONE_START, POOL_ZONE_END, PAGE_SIZE * 2);
-    mmu_map(g_kernel_vm.table, va, va+PAGE_SIZE, pa, MMU_WRITE);
-    mmu_map(g_kernel_vm.table, va+PAGE_SIZE, va+PAGE_SIZE*2, pa, MMU_WRITE);
-    q->rng.paddr = pa;
-    q->rng.desc = "msgq";
-
     fifo_init(&q->fifo, (void*)va, PAGE_SIZE);
 }
 

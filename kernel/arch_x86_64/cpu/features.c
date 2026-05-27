@@ -6,6 +6,9 @@
 #include <kstring.h>
 #include <debug.h>
 
+#include <console.h>
+#include <kshell.h>
+
 
 #define VENDOR_INTEL "GenuineIntel"
 #define VENDOR_AMD   "AuthenticAMD"
@@ -503,20 +506,26 @@ INIT_TEXT void cpu_features_enable() {
     write_msr(MSR_EFER, efer);
 }
 
-void cpu_features_show() {
-    logk("cpu info:\n");
-    logk("  - vendor: %.12s\n", (char*)g_vendor);
+// arch-api func
+size_t arch_cacheline_size() {
+    return g_l1d_info.line_size;
+}
 
-    logk("  - L1I line=%zu, nsets=%zu, nways=%zu, ncolors=%zu\n",
+
+static void cpu_features_show() {
+    console_printf("cpu info:\n");
+    console_printf("  - vendor: %.12s\n", (char*)g_vendor);
+
+    console_printf("  - L1I line=%zu, nsets=%zu, nways=%zu, ncolors=%zu\n",
         g_l1i_info.line_size, g_l1i_info.sets, g_l1i_info.ways,
         g_l1i_info.line_size * g_l1i_info.sets >> PAGE_SHIFT);
-    logk("  - L1D line=%zu, nsets=%zu, nways=%zu, ncolors=%zu\n",
+    console_printf("  - L1D line=%zu, nsets=%zu, nways=%zu, ncolors=%zu\n",
         g_l1d_info.line_size, g_l1d_info.sets, g_l1d_info.ways,
         g_l1d_info.line_size * g_l1d_info.sets >> PAGE_SHIFT);
-    logk("  - L2  line=%zu, nsets=%zu, nways=%zu, ncolors=%zu\n",
+    console_printf("  - L2  line=%zu, nsets=%zu, nways=%zu, ncolors=%zu\n",
         g_l2_info.line_size, g_l2_info.sets, g_l2_info.ways,
         g_l2_info.line_size * g_l2_info.sets >> PAGE_SHIFT);
-    logk("  - L3  line=%zu, nsets=%zu, nways=%zu, ncolors=%zu\n",
+    console_printf("  - L3  line=%zu, nsets=%zu, nways=%zu, ncolors=%zu\n",
         g_l3_info.line_size, g_l3_info.sets, g_l3_info.ways,
         g_l3_info.line_size * g_l3_info.sets >> PAGE_SHIFT);
 
@@ -545,17 +554,15 @@ void cpu_features_show() {
     };
     size_t nfeats = sizeof(FEATS) / sizeof(FEATS[0]);
 
-    logk("  - features:");
+    console_printf("  - features:");
     for (size_t i = 0; i < nfeats; ++i) {
         if (g_cpu_features & FEATS[i].mask) {
-            logk(" %s", FEATS[i].name);
+            console_printf(" %s", FEATS[i].name);
         }
     }
-    logk("\n");
-    logk("  - core-freq: %dHz, tsc/clock=%d/%d, base-freq: %dMHz, max-freq: %dMHz, bus-freq: %dMHz\n",
+    console_printf("\n");
+    console_printf("  - core-freq: %dHz, tsc/clock=%d/%d, base-freq: %dMHz, max-freq: %dMHz, bus-freq: %dMHz\n",
         g_core_freq, g_tsc_clk[0], g_tsc_clk[1], g_base_freq, g_max_freq, g_bus_freq);
 }
 
-size_t arch_cacheline_size() {
-    return g_l1d_info.line_size;
-}
+KSHELL_CMD("cpu", cpu_features_show);

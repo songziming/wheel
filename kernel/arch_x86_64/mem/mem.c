@@ -4,6 +4,7 @@
 #include <pmlayout.h>
 #include <early_alloc.h>
 #include <page.h>
+#include <heap.h>
 #include <debug.h>
 
 
@@ -19,7 +20,7 @@ static vmrange_t g_kernel_init;
 static vmrange_t g_kernel_text;
 static vmrange_t g_kernel_rodata;
 static vmrange_t g_kernel_data;
-// static vmrange_t g_kernel_heap;
+static vmrange_t g_kernel_heap;
 static vmrange_t g_kernel_idmap; // 不拥有物理页，所有内存映射到 canonical hole 之下
 
 
@@ -70,7 +71,12 @@ INIT_TEXT void mem_init() {
     kspace_add(&g_kernel_rodata, (size_t)&_rodata_addr, ro_end, "rodata", MMU_NONE); // 含 early_ro
     kspace_add(&g_kernel_data, (size_t)&_data_addr, rw_end, "data", MMU_WRITE); // 含 bss、early_rw
 
-    // TODO 划分内核堆
+    // 划分内核堆，后面就可以动态分配字符串了
+    rw_end += PAGE_SIZE * 2 - 1;
+    rw_end &= ~(PAGE_SIZE - 1);
+    kspace_add(&g_kernel_heap, rw_end, rw_end + KERNEL_HEAP_SIZE, "heap", MMU_WRITE);
+    kernel_heap_init((void*)rw_end, KERNEL_HEAP_SIZE);
+    rw_end += KERNEL_HEAP_SIZE;
 
     // 分配 percpu 空间
     rw_end = percpu_init(rw_end);
@@ -121,4 +127,23 @@ INIT_TEXT void mem_init() {
         size_t va_end = (rng->vend + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
         mmu_map(g_kernel_vm.table, rng->vaddr, va_end, rng->paddr, rng->attrs);
     }
+}
+
+
+// 回收 init 部分的内存空间（本函数不能使用 init 函数）
+// 在 ISR 里面执行，执行时已经不再使用 init-stack
+void reclaim_init() {
+    size_t vend = g_kernel_init.vend;
+    vend +=   PAGE_SIZE - 1;
+    vend &= ~(PAGE_SIZE - 1);
+
+    // 本函数是 init，但只是把物理页标记回收，映射关系还在
+    pages_add(g_kernel_init.vaddr - KERNEL_TEXT_ADDR, vend - KERNEL_TEXT_ADDR);
+
+    // 删除映射，之后再访问 init 就会出错
+    tlb_shootdown(g_kernel_init.vaddr, vend);
+    mmu_unmap(g_kernel_vm.table, g_kernel_init.vaddr, vend);
+
+    // vmrange 还留在 kernel-vm 里面
+    g_kernel_init.paddr = 0;
 }

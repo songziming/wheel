@@ -39,6 +39,4 @@ extern uint32_t g_cpu_features;
 INIT_TEXT void cpu_features_detect();
 INIT_TEXT void cpu_features_enable();
 
-void cpu_features_show();
-
 #endif // ARCH_X86_64_CPU_FEATURES_H

@@ -41,10 +41,48 @@ static void handle_irq(int vec, regs_t *f) {
     logk("[cpu-%d] interrupt vec #%d err=%zx\n", cpu_index(), vec, f->errcode);
     logk("rip=%zx rsp=%zx frame=%p\n", f->rip, f->rsp, f);
 
-    if (14 == vec) {
-        logk("cr2=%zx\n", read_cr2());
+    size_t frames[32];
+    int depth = arch_unwind_from(frames, 32, f->rbp);
+    logk("backtrace (%d):\n", depth);
+    for (int i = 0; i < depth; ++i) {
+        logk(" - frame[%02d] 0x%zx\n", i, frames[i]);
     }
 
+    while (1) {
+        cpu_pause();
+        cpu_halt();
+    }
+}
+
+// page fault 处理函数
+static void handle_pf(int vec UNUSED, regs_t *f) {
+    uint64_t va = read_cr2();
+    const char *p  = (f->errcode & 1) ? "" : "non-";
+    const char *wr = (f->errcode & 2) ? "write to" : "read from";
+    const char *us = (f->errcode & 4) ? "user mode" : "kernel";
+    if (f->errcode & 16) {
+        wr = "execute";
+    }
+    logk("[cpu-%d] #PF %s %spresent addr 0x%zx from %s\n",
+        cpu_index(), wr, p, va, us);
+
+    if (f->errcode & 8) { // 页表项中的保留位必须是 0
+        logk("page-entry reserved bit was set!!\n");
+    }
+
+    vmrange_t *rng = vmspace_find(&g_kernel_vm, va);
+    if (rng) {
+        logk("trying to access range %s\n", rng->desc);
+    } else {
+        rng = vmspace_find(&g_kernel_vm, va + PAGE_SIZE);
+        if (rng) {
+            logk("right before range %s\n", rng->desc);
+        } else {
+            logk("cannot locate vmrange\n");
+        }
+    }
+
+    logk("rip=%zx rsp=%zx rbp=%zx\n", f->rip, f->rsp, f->rbp);
     size_t frames[32];
     int depth = arch_unwind_from(frames, 32, f->rbp);
     logk("backtrace (%d):\n", depth);
@@ -65,6 +103,7 @@ INIT_TEXT void int_init() {
         idt_set_isr(i, isr_entries[i], 0);
         irq_handlers[i] = handle_irq;
     }
+    irq_handlers[14] = handle_pf;
 
     idt_set_ist(2,  1); // NMI
     idt_set_ist(8,  2); // #DF

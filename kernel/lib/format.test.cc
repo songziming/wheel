@@ -95,6 +95,14 @@ TEST(Fmt, String) {
     EXPECT_STREQ(buff, "hello world  .");
 }
 
+// 截断
+TEST(Fmt, Partial) {
+    char buff[5];
+    size_t len = snprintk(buff, sizeof(buff), "12%s%d0", "3456", 789);
+    EXPECT_EQ(len, 10);
+    EXPECT_STREQ(buff, "1234");
+}
+
 // 特殊情况
 TEST(Fmt, Special) {
     char buff[1024];

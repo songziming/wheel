@@ -39,12 +39,13 @@ char _real_end;
 static INIT_BSS uint32_t g_fgcolor;
 static INIT_BSS size_t   g_rsdp;
 
-static INIT_BSS task_t g_root_tcb;
-static INIT_TEXT void root_proc();
+static task_t g_root_tcb; // 不能用 init，需要回收内存
+static void root_proc();
 
 static INIT_DATA int g_cpu_started = 1;
 static INIT_BSS sema_t g_smp_sema;
-static INIT_BSS  work_t g_smp_notifier;
+static INIT_BSS work_t g_smp_notifier;
+// static INIT_BSS work_t g_init_recycler;
 static INIT_TEXT NORETURN void ap_init(int idx);
 
 
@@ -215,7 +216,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     thiscpu_init(0);
     ASSERT(cpu_index() == 0);
 
-    // 死锁检查，依赖 pthiscpu
+    // 开启死锁检查（依赖 thiscpu 和 tid_prev）
+    // tid_prev 已经指向 dummy_tcb，且 TCB 里面的 lockdep 也已配置好
     lockdep_enable();
 
     thistss_init_load(0); // 依赖 thiscpu，需要放在 thiscpu_init 之后
@@ -265,9 +267,7 @@ end:
 // 第一个运行的任务，运行在 BSP
 //------------------------------------------------------------------------------
 
-static INIT_TEXT void root_proc() {
-    cpu_features_show();
-
+static void root_proc() {
     // 将实模式代码复制到 1M 以下
     char *from = &_real_addr;
     char *to = (char*)KERNEL_REAL_ADDR + DIRECT_MAP_ADDR;
@@ -280,7 +280,6 @@ static INIT_TEXT void root_proc() {
     int vec = KERNEL_REAL_ADDR >> 12;
     for (int i = 1; i < cpu_count(); ++i) {
         logk("(BSP) starting cpu %d...", i);
-
         loapic_send_init(i);            // 发送 INIT
         loapic_timer_busywait(10000);   // 等待 10ms
         loapic_send_sipi(i, vec);       // 发送 startup-IPI
@@ -292,15 +291,11 @@ static INIT_TEXT void root_proc() {
         sema_take(&g_smp_sema, FOREVER);
     }
 
-    // 启动内核服务
+    // 启动内核服务（这也是 init-text）
     kshell_start();
 
-    return;
-    logk("BSP in root is not stopped\n");
-    while (1) {
-        cpu_pause();
-        cpu_halt();
-    }
+    // 回收 init section
+    reclaim_init();
 }
 
 //------------------------------------------------------------------------------

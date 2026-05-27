@@ -182,15 +182,15 @@ void vmspace_remove(vmspace_t *space, vmrange_t *rng) {
 
 
 static void vmspace_show() {
-    vmspace_t *space = &g_kernel_vm;
-    int key = irq_spin_take(&space->lock);
-    console_printf("virtual address space:\n");
-    for (dlnode_t *i = space->head.next; &space->head != i; i = i->next) {
+    vmspace_t *vm = &g_kernel_vm;
+    int key = irq_spin_take(&vm->lock);
+    console_printf("kernel vmspace:\n");
+    for (dlnode_t *i = vm->head.next; &vm->head != i; i = i->next) {
         vmrange_t *rng = containerof(i, vmrange_t, dl);
-        console_printf("  - vm %016zx~%016zx pa %016zx %s\n",
+        console_printf("  - vm %016zx~%016zx -> pa %8zx : %s\n",
             rng->vaddr, rng->vend, rng->paddr, rng->desc);
     }
-    irq_spin_give(&space->lock, key);
+    irq_spin_give(&vm->lock, key);
 }
 
 KSHELL_CMD("vm", vmspace_show);

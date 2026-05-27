@@ -9,6 +9,8 @@
 typedef void (*format_cb_t)(void *user, const char **s, size_t *len);
 size_t format(char *buf, size_t n, format_cb_t func, void *user, const char *fmt, va_list args);
 
+// 返回完整字符串的长度（不含结尾的 '\0'）
+// 最多写入 n 的字节（包含结尾的 '\0'）
 size_t vsnprintk(char *buf, size_t n, const char *fmt, va_list args);
 PRINTF(3,4) size_t snprintk(char *buf, size_t n, const char *fmt, ...);
 

@@ -3,6 +3,7 @@
 #include <arch_api.h>
 #include <vmspace.h>
 #include <kstring.h>
+#include <heap.h>
 #include <debug.h>
 
 
@@ -51,7 +52,8 @@ static inline int is_percpu_var(void *ptr) {
 // 返回结束地址，包括 guard page，对齐到页
 static INIT_TEXT size_t percpu_add(int cpu, vmrange_t *rng, size_t addr, size_t size, const char *desc) {
     size_t end = addr + size;
-    kspace_add(PERCPU(cpu, rng), addr, end, desc, MMU_WRITE);
+    char *name = kernel_heap_mkstr("cpu-%d %s", cpu, desc);
+    kspace_add(PERCPU(cpu, rng), addr, end, name, MMU_WRITE);
     end += PAGE_SIZE * 2 - 1;
     end &= ~(PAGE_SIZE - 1);
     return end;
@@ -92,12 +94,12 @@ INIT_TEXT size_t percpu_init(size_t va) {
     for (int i = 0; i < ncpu; ++i) {
         kmemcpy((uint8_t*)va, &_percpu_addr, copy_size); // 复制 percpu data
         kmemset((uint8_t*)va + copy_size, 0, zero_size); // percpu bss 清零
-        va = percpu_add(i, &g_percpu_vars, va, vars_size,      "smp data");
-        va = percpu_add(i, &g_percpu_nmi,  va, INT_STACK_SIZE, "smp NMI");
-        va = percpu_add(i, &g_percpu_pf,   va, INT_STACK_SIZE, "smp #PF");
-        va = percpu_add(i, &g_percpu_df,   va, INT_STACK_SIZE, "smp #DF");
-        va = percpu_add(i, &g_percpu_mc,   va, INT_STACK_SIZE, "smp #MC");
-        va = percpu_add(i, &g_percpu_int,  va, INT_STACK_SIZE, "smp int stack");
+        va = percpu_add(i, &g_percpu_vars, va, vars_size,      "percpu vars");
+        va = percpu_add(i, &g_percpu_nmi,  va, INT_STACK_SIZE, "NMI stack");
+        va = percpu_add(i, &g_percpu_pf,   va, INT_STACK_SIZE, "#PF stack");
+        va = percpu_add(i, &g_percpu_df,   va, INT_STACK_SIZE, "#DF stack");
+        va = percpu_add(i, &g_percpu_mc,   va, INT_STACK_SIZE, "#MC stack");
+        va = percpu_add(i, &g_percpu_int,  va, INT_STACK_SIZE, "int stack");
     }
 
     return va;

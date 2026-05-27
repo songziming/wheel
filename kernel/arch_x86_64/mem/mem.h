@@ -15,7 +15,8 @@ INIT_TEXT size_t thiscpu_mc_stack();
 INIT_TEXT size_t thiscpu_int_stack();
 
 INIT_TEXT void mem_init();
+void reclaim_init();
 
-void on_ipi_invlpg();
+void on_ipi_invlpg(); // mmu.c
 
 #endif // ARCH_X86_64_MEM_MEM_H

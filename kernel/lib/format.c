@@ -235,7 +235,10 @@ static void fmt_number(fmt_context_t *ctx, uint64_t abs, int base, uint32_t flag
 
 
 // 仅写入 buf 不使用回调时，不需要切换缓冲区，维持原样即可
-static void fmt_buf_only_cb(void *user UNUSED, const char **s UNUSED, size_t *len UNUSED) {}
+static void fmt_buf_only_cb(void *user UNUSED, const char **s, size_t *len) {
+    *s = NULL;
+    *len = 0;
+}
 
 // 格式化字符串，返回完整输出字符串的长度（不含结尾的零）
 // 如果 func == NULL，则只计算长度，不写入 buf，不触发回调

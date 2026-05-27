@@ -39,6 +39,7 @@ typedef struct task {
     int16_t     priority;
     const char *name;
     vmrange_t   stack;
+    lockdep_task_t lockdep;
 } task_t;
 
 void prioq_init(prioq_t *q);

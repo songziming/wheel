@@ -1,6 +1,7 @@
 #include "heap.h"
 #include <dllist.h>
 #include <kstring.h>
+#include <format.h>
 #include <debug.h>
 
 
@@ -311,10 +312,24 @@ void kernel_heap_free(void *ptr) {
     heap_free(&g_common_heap, ptr);
 }
 
-// TBD 分配一个字符串
-char *kheap_mkstr(const char *fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    //
-    va_end(args);
+// 分配一个字符串
+char *kernel_heap_mkstr(const char *fmt, ...) {
+    va_list va1, va2;
+    va_start(va1, fmt);
+    va_copy(va2, va1);
+
+    size_t len = vsnprintk(NULL, 0, fmt, va1);
+    va_end(va1);
+
+    char *str = kernel_heap_alloc(len + 1);
+    if (NULL == str) {
+        va_end(va2);
+        return NULL;
+    }
+
+    size_t len2 = vsnprintk(str, len + 1, fmt, va2);
+    va_end(va2);
+
+    ASSERT(len == len2);
+    return str;
 }
