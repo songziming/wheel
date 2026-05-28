@@ -110,7 +110,7 @@ static void block_free_nolock(uint32_t blk) {
 
 // 分配一个页块，起始页号必须是 N*period+phase
 // 限制起始页号可以实现页面着色，优化缓存性能
-static uint32_t block_alloc_nolock(uint32_t rank, uint32_t period, uint32_t phase, uint32_t type) {
+static uint32_t block_alloc_nolock(uint32_t rank, uint32_t period, uint32_t phase, page_type_t type) {
     ASSERT(type > PT_FREE);
     ASSERT(0 == (period & (period - 1)));
 
@@ -160,7 +160,7 @@ found:
 // public functions
 //------------------------------------------------------------------------------
 
-size_t page_alloc_color(uint32_t rank, uint32_t type,
+size_t page_alloc_color(uint32_t rank, page_type_t type,
         uint32_t period, uint32_t phase,
         const char *file UNUSED, int line UNUSED) {
     int key = irq_spin_take(&g_page_spin);
@@ -177,7 +177,7 @@ size_t page_alloc_color(uint32_t rank, uint32_t type,
     return (size_t)blk << PAGE_SHIFT;
 }
 
-size_t page_alloc(uint32_t rank, uint32_t type, const char *file, int line) {
+size_t page_alloc(uint32_t rank, page_type_t type, const char *file, int line) {
     return page_alloc_color(rank, type, 1, 0, file, line);
 }
 

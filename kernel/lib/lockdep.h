@@ -1,16 +1,6 @@
 #ifndef LOCKDEP_H
 #define LOCKDEP_H
 
-// Lock dependency validator — runtime lock ordering checker.
-//
-// Usage:
-//   spin_t lock = SPIN_INIT;   // auto-named with __FILE__:__LINE__
-//   rwspin_t rw = RWSPIN_INIT;
-//
-// Build with LOCKDEP=1 to enable validation.
-//
-// Phase 1: self-deadlock detection + held-lock stack (LIFO release order).
-
 #include <stddef.h>
 
 #define LOCKDEP_MAX_HELD 8

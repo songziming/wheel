@@ -7,8 +7,8 @@
 #include <debug.h>
 
 
-// lockdep 限制了 take/give 必须成对出现
-// 然而锁还可以用于线程同步，生产者只有 give，消费者只有 take，lockdep 会报错
+// 自旋锁的 take/give 必须成对出现，不能跨线程，且必须后入先出
+// lockdep 可以检查这类错误
 
 // lockdep 需要使用 thiscpu，不能开机就生效
 // lockdep 还需要 tid_prev，为了尽快生效，需要让 tid_prev 指向有效的 TCB

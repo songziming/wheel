@@ -401,7 +401,16 @@ INIT_TEXT void loapic_timer_calibrate() {
     // logk("loapic timer freq %zd\n", g_timer_freq);
 }
 
-INIT_TEXT void loapic_timer_busywait(int us) {
+void loapic_timer_set_periodic(int freq) {
+    uint64_t delay = g_timer_freq + (freq >> 1);
+    delay /= freq;
+
+    g_write(REG_LVT_TIMER, LOAPIC_DM_FIXED | VEC_LOAPIC_TIMER | LOAPIC_PERIODIC);
+    g_write(REG_TIMER_DIV, 0x0b); // divide by 1
+    g_write(REG_TIMER_ICR, delay);
+}
+
+void loapic_timer_busywait(int us) {
     ASSERT(0 != g_timer_freq);
 
     uint32_t start  = g_read(REG_TIMER_CCR);
@@ -430,13 +439,4 @@ INIT_TEXT void loapic_timer_busywait(int us) {
     while (g_read(REG_TIMER_CCR) >= end) {
         cpu_pause();
     }
-}
-
-void loapic_timer_set_periodic(int freq) {
-    uint64_t delay = g_timer_freq + (freq >> 1);
-    delay /= freq;
-
-    g_write(REG_LVT_TIMER, LOAPIC_DM_FIXED | VEC_LOAPIC_TIMER | LOAPIC_PERIODIC);
-    g_write(REG_TIMER_DIV, 0x0b); // divide by 1
-    g_write(REG_TIMER_ICR, delay);
 }

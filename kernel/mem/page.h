@@ -4,7 +4,7 @@
 #include <wheel.h>
 
 // 页块类型
-enum {
+typedef enum page_type {
     PT_INVALID = 0,
     PT_FREE    = 1,
     PT_KERNEL  = 2,
@@ -12,7 +12,8 @@ enum {
     PT_STACK   = 4,
     PT_POOL    = 5,
     PT_MSGQ    = 6,
-};
+    PT_FS      = 7,
+} page_type_t;
 
 // rank 合法取值 0~15
 #define PAGE_BLOCK_RANK_NUM 16
@@ -56,8 +57,8 @@ void pglist_push_tail(pglist_t *pl, uint32_t blk);
 void pglist_push_head(pglist_t *pl, uint32_t blk);
 void pglist_remove(pglist_t *pl, uint32_t blk);
 
-size_t page_alloc_color(uint32_t rank, uint32_t type, uint32_t period, uint32_t phase, const char *file, int line);
-size_t page_alloc(uint32_t rank, uint32_t type, const char *file, int line);
+size_t page_alloc_color(uint32_t rank, page_type_t type, uint32_t period, uint32_t phase, const char *file, int line);
+size_t page_alloc(uint32_t rank, page_type_t type, const char *file, int line);
 void page_free(size_t pa);
 uint32_t page_free_count();
 

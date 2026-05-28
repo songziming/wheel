@@ -2,6 +2,7 @@
 #define VMSPACE_H
 
 #include <spin.h>
+#include "page.h"
 #include <dllist.h>
 #include <arch_api.h>
 
@@ -35,7 +36,7 @@ size_t vmspace_valloc(vmspace_t *space, vmrange_t *rng,
         size_t start, size_t end, size_t size);
 size_t vmspace_alloc(vmspace_t *space, vmrange_t *rng,
         size_t start, size_t end, uint32_t rank,
-        uint32_t type, mmu_attr_t attrs);
+        page_type_t type, mmu_attr_t attrs);
 size_t vmspace_alloc_stack(vmspace_t *space, vmrange_t *rng, uint32_t rank);
 void vmspace_remove(vmspace_t *space, vmrange_t *rng);
 

@@ -4,9 +4,11 @@
 #include <msgq.h>
 #include <kstring.h>
 #include <debug.h>
-#include <kshell.h>
 
 #include <apic/apic.h>
+
+#include <console.h>
+#include <kshell.h>
 
 
 //------------------------------------------------------------------------------
@@ -79,8 +81,6 @@ void test_cooperative() {
     logk("TCB safely deleted\n");
 }
 
-KSHELL_CMD("coop", test_cooperative);
-
 //------------------------------------------------------------------------------
 // 测试多个 CPU 上同时运行
 //------------------------------------------------------------------------------
@@ -134,8 +134,6 @@ void test_smp_tasks() {
     }
     logk("all smp tasks finished!\n");
 }
-
-KSHELL_CMD("smp", test_smp_tasks);
 
 //------------------------------------------------------------------------------
 // 信号量测试
@@ -256,3 +254,28 @@ void test_msgq() {
 
     // TODO msgq_destroy
 }
+
+//------------------------------------------------------------------------------
+// 测试命令
+//------------------------------------------------------------------------------
+
+static void perform_test(int argc, char *argv[]) {
+    if (argc < 2) {
+        console_printf("what to test?\n");
+        return;
+    }
+
+    if (0 == kstrcmp(argv[1], "coop")) {
+        console_printf("testing cooperative tasks...");
+        test_cooperative();
+        console_printf("done\n");
+    } else if (0 == kstrcmp(argv[1], "smp")) {
+        console_printf("testing smp tasks...");
+        test_smp_tasks();
+        console_printf("done\n");
+    } else {
+        console_printf("unknown test name %s\n", argv[1]);
+    }
+}
+
+KSHELL_CMD("test", perform_test);

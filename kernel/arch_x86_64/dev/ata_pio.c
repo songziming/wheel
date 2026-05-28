@@ -1,16 +1,20 @@
 #include "ata_pio.h"
 #include <arch_api.h>
+#include <mutex.h>
 #include <kstring.h>
 #include <debug.h>
 #include <block.h>
 #include <heap.h>
+#include <partition.h>
+
+
 
 // PIO 是 ATA 最慢的访问方式，但驱动最简单
 // 这个模块无需追求高性能
 
 // ATA 有两种工作模式：
 // compatibility mode，端口地址固定（1984 PC AT 之后从未改变），虚拟机使用这个
-// native mode，需要解析PCI，读取 BAR 获得真正的端口号
+// native mode，需要解析 PCI，读取 BAR 获得真正的端口号
 
 
 // 默认端口
@@ -19,11 +23,22 @@
 #define ATA_SECONDARY_IO    0x170
 #define ATA_SECONDARY_CTL   0x376
 
+// 端口列表：
+//  - IO + 0    : data
+//  - IO + 1    : R)error, W)features
+//  - IO + 2    : sector count
+//  - IO + 3    : LBA low
+//  - IO + 4    : LBA mid
+//  - IO + 5    : LBA high
+//  - IO + 7    : R)status, W)command
+//  - CTL + 0   : R)alt_status, W)dev_control
+//  - CTL + 1   : drive address
+
 // control 寄存器各 bit
 #define CTL_IEN     2   // 禁用该设备发送中断
 #define CTL_RESET   4   // 设备重置（需保持至少 5us）
 
-// 状态寄存器各 bit
+// 状态寄存器（IO+7 R）各 bit
 #define STT_ERR     0x01
 #define STT_DRQ     0x08    // data request
 #define STT_READY   0x40
@@ -37,9 +52,10 @@
 
 // 一个 channel 可以关联两个设备：master、slave
 typedef struct ata_channel {
+    mutex_t  mutex;
     uint16_t io_base;       // io 端口
     uint16_t control_base;  // ctrl 端口
-    uint8_t irq;
+    uint8_t  irq;
 } ata_channel_t;
 
 // 两个通道，每个通道可以关联两个设备
@@ -48,7 +64,7 @@ static ata_channel_t g_channels[2];
 
 
 //------------------------------------------------------------------------------
-// ATA 块设备定义，
+// ATA 块设备定义
 //------------------------------------------------------------------------------
 
 enum ata_flag {
@@ -69,7 +85,13 @@ typedef struct ata_device {
     uint8_t     ver;
 } ata_device_t;
 
-static CONST block_ops_t ata_ops;
+
+static void ata_pio_read_sector(block_dev_t *blk, void *dst, uint64_t sector, uint64_t num);
+static void ata_pio_write_sector(block_dev_t *blk, const void *src, uint64_t sector, uint64_t num);
+static const block_ops_t ata_ops = {
+    .read = ata_pio_read_sector,
+    .write = ata_pio_write_sector,
+};
 
 static ata_device_t ata_devs[4];
 
@@ -95,7 +117,8 @@ static inline int ata_wait(ata_channel_t *ch) {
 
 // 等待 busy 清零，data-ready 开启
 static inline int ata_wait_data(ata_channel_t *ch) {
-    for (int i = 0; i < 1000; ++i) {
+    // for (int i = 0; i < 1000; ++i) {
+    while (1) {
         uint8_t status = in8(ch->control_base);
         if (STT_ERR & status) {
             return 1;
@@ -105,7 +128,7 @@ static inline int ata_wait_data(ata_channel_t *ch) {
         }
         cpu_pause();
     }
-    return 0;
+    return 1;
 }
 
 // 选择设备之后，至少要等 400ns
@@ -200,15 +223,14 @@ static INIT_TEXT void ata_detect(ata_device_t *ata, int secondary, int slave) {
         return;
     }
 
-    // // 确认设备存在，创建设备对象
-    // ata_device_t *ata = kernel_heap_alloc(sizeof(ata_device_t));
+    // 确认设备存在，创建设备对象
     ata->flags  = 0;
     ata->flags |= secondary ? ATA_SECONDARY : 0;
     ata->flags |= slave     ? ATA_SLAVE     : 0;
     ata->flags |= (info[0]  & 0x0080) ? ATA_REMOVABLE : 0;
     ata->flags |= (info[49] & 0x0100) ? ATA_DMA       : 0;
     ata->flags |= (info[49] & 0x0200) ? ATA_LBA       : 0;
-    ata->flags |= (info[83] & 0x0200) ? ATA_LBA48     : 0;
+    ata->flags |= (info[83] & 0x0400) ? ATA_LBA48     : 0;
 
     kmemcpy(ata->serial,   &info[10], 20);
     kmemcpy(ata->revision, &info[23], 8);
@@ -238,6 +260,9 @@ static INIT_TEXT void ata_detect(ata_device_t *ata, int secondary, int slave) {
     ata->blk.name = kernel_heap_mkstr("ata%d", secondary * 2 + slave + 1);
     ata->blk.ops = &ata_ops;
     add_block_dev(&ata->blk);
+
+    // 通常硬盘有分区表，每个分区都是一个块设备
+    partition_init(&ata->blk);
 }
 
 //------------------------------------------------------------------------------
@@ -248,7 +273,8 @@ static void ata_pio_read_sector(block_dev_t *blk, void *dst, uint64_t sector, ui
     ata_device_t *ata = containerof(blk, ata_device_t, blk);
     ata_channel_t *ch = &g_channels[(ata->flags & ATA_SECONDARY) ? 1 : 0];
 
-    // TODO 锁住 ata channel
+    // 多个 ATA 设备可能来自同一个通道，互斥锁应该放在 channel 里面
+    mutex_take(&ch->mutex, FOREVER);
 
     uint8_t sel = (ata->flags & ATA_SLAVE) ? 0xf0 : 0xe0; // 开启 LBA
     uint8_t cmd;
@@ -283,6 +309,7 @@ static void ata_pio_read_sector(block_dev_t *blk, void *dst, uint64_t sector, ui
     if (ata_wait_data(ch)) {
         logk("%s error when reading sector\n", ata->blk.name);
         ata_reset(ch);
+        mutex_give(&ch->mutex);
         return;
     }
 
@@ -291,11 +318,15 @@ static void ata_pio_read_sector(block_dev_t *blk, void *dst, uint64_t sector, ui
     for (uint64_t i = 0; i < 256 * num; ++i) {
         buff[i] = in16(ch->io_base);
     }
+
+    mutex_give(&ch->mutex);
 }
 
 static void ata_pio_write_sector(block_dev_t *blk, const void *src, uint64_t sector, uint64_t num) {
     ata_device_t *ata = containerof(blk, ata_device_t, blk);
     ata_channel_t *ch = &g_channels[(ata->flags & ATA_SECONDARY) ? 1 : 0];
+
+    mutex_take(&ch->mutex, FOREVER);
 
     uint8_t sel = (ata->flags & ATA_SLAVE) ? 0xf0 : 0xe0; // 开启 LBA
     uint8_t cmd;
@@ -329,6 +360,7 @@ static void ata_pio_write_sector(block_dev_t *blk, const void *src, uint64_t sec
     if (ata_wait_data(ch)) {
         logk("%s error when writing sector\n", ata->blk.name);
         ata_reset(ch);
+        mutex_give(&ch->mutex);
         return;
     }
 
@@ -340,21 +372,20 @@ static void ata_pio_write_sector(block_dev_t *blk, const void *src, uint64_t sec
     }
 
     // 清缓存
-    out16(ch->io_base + 7, 0xe7);
+    out8(ch->io_base + 7, 0xe7);
+
+    mutex_give(&ch->mutex);
 }
-
-
-
 
 // 初始化
 INIT_TEXT void ata_init() {
-    ata_ops.read = ata_pio_read_sector;
-    ata_ops.write = ata_pio_write_sector;
-
     g_channels[0].io_base      = ATA_PRIMARY_IO;
     g_channels[0].control_base = ATA_PRIMARY_CTL;
     g_channels[1].io_base      = ATA_SECONDARY_IO;
     g_channels[1].control_base = ATA_SECONDARY_CTL;
+
+    mutex_init(&g_channels[0].mutex);
+    mutex_init(&g_channels[1].mutex);
 
     ata_detect(&ata_devs[0], 0, 0); // primary master
     ata_detect(&ata_devs[1], 0, 1); // primary slave

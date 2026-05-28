@@ -52,8 +52,8 @@ INIT_TEXT void loapic_send_sipi(int cpu, int vec);
 
 // local apic timer func
 INIT_TEXT void loapic_timer_calibrate();
-INIT_TEXT void loapic_timer_busywait(int us);
 void loapic_timer_set_periodic(int freq);
+void loapic_timer_busywait(int us);
 
 // IO apic func
 INIT_TEXT void ioapic_init();

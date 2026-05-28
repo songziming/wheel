@@ -8,17 +8,17 @@ if [ "$EUID" -ne 0 ]
     exit
 fi
 
-# 创建虚拟磁盘，共 16MB
-dd if=/dev/zero of=$1 bs=512 count=32768
+# 创建虚拟磁盘，共 64MB
+dd if=/dev/zero of=$1 bs=512 count=131072
 
 # 创建分区表，主分区从 1M 开始
-# 起始扇区号 2048，结尾扇区号 32767
+# 起始扇区号 2048，结尾扇区号 131071
 fdisk $1 << EOF
 n
 p
 1
 2048
-32767
+131071
 a
 w
 EOF
@@ -27,8 +27,8 @@ EOF
 disk_loop=$(losetup --show -f $1)
 part_loop=$(losetup --show -f $1 -o 1M)
 
-# 主分区格式化
-mkfs.vfat $part_loop
+# 主分区格式化，使用 FAT32
+mkfs.vfat -F 32 $part_loop
 
 # 主分区文件系统挂载
 mount_dir=$(mktemp -d)

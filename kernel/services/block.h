@@ -24,8 +24,9 @@ struct block_dev {
 
 INIT_TEXT void block_dev_init();
 void add_block_dev(block_dev_t *dev);
+block_dev_t *find_block_by_name(const char *name);
 
-void block_read(block_dev_t *dev, void *dst, uint32_t sec, uint32_t nsecs);
-void block_write(block_dev_t *dev, const void *src, uint32_t sec, uint32_t nsecs);
+void block_read(block_dev_t *dev, void *dst, uint64_t sec, uint64_t nsecs);
+void block_write(block_dev_t *dev, const void *src, uint64_t sec, uint64_t nsecs);
 
 #endif // BLOCK_H
