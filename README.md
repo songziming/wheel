@@ -21,4 +21,6 @@ make cov    # run unit test and generate coverage report in build/coverage
 
 Create disk image by `sudo ./host/mkimage build/hd.img`.
 
+Copy file into disk image: `mcopy -i "build/hd.img@@1M" your_file ::/`
+
 Launch QEMU using `./run_iso.sh` (or `run_iso.bat` under Windows).

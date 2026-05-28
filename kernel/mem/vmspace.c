@@ -136,6 +136,7 @@ size_t vmspace_alloc(vmspace_t *space, vmrange_t *rng, size_t start, size_t end,
 
     if (rng->vend > end) {
         irq_spin_give(&space->lock, key);
+        logk("no more vspace\n");
         return 0;
     }
 
@@ -144,6 +145,7 @@ size_t vmspace_alloc(vmspace_t *space, vmrange_t *rng, size_t start, size_t end,
         // TODO 如果连续内存分配失败，尝试分配不连续的物理页
         //      拆分成更小的块，组成 pglist
         irq_spin_give(&space->lock, key);
+        logk("cannot alloc page of rank-%d\n", rank);
         return 0;
     }
 

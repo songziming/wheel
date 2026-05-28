@@ -99,6 +99,7 @@ typedef struct fs_fat {
     vmrange_t   rng_fat;
     uint16_t   *fat16;
     uint32_t   *fat32;
+    vmrange_t   rng_clus;
 } fs_fat_t;
 
 
@@ -143,9 +144,13 @@ void fat_determine(fs_fat_t *fs, char *bs) {
     }
     logk("[fat] this is FAT-%d.\n", fs->fat_type);
 
-    // cluster 大小
+    // cluster 大小，必然小于 32K，也可能小于一个页
     fs->clus_size = bs16->bpb.sec_per_clus;
-    fs->clus_rank = __builtin_ctz(fs->clus_size * fs->sec_size >> PAGE_SHIFT);
+    if (fs->clus_size * fs->sec_size < PAGE_SIZE) {
+        fs->clus_rank = 0;
+    } else {
+        fs->clus_rank = __builtin_ctz(fs->clus_size * fs->sec_size >> PAGE_SHIFT);
+    }
 
     // 将完整 FAT 读取出来，我们只读取一个 FAT
     int fat_pages = fs->fat_secs * fs->sec_size;
@@ -160,10 +165,12 @@ void fat_determine(fs_fat_t *fs, char *bs) {
         }
     }
 
+    // 分配 FAT 的空间
     int fat_rank = __builtin_ctz(fat_pages);
     logk("allocating rank-%d for FAT\n", fat_rank);
     size_t fat_va = vmspace_alloc(&g_kernel_vm, &fs->rng_fat,
-        POOL_ZONE_START, POOL_ZONE_END, fat_rank, PT_KERNEL, MMU_WRITE);
+        POOL_ZONE_START, POOL_ZONE_END, fat_rank, PT_FS, MMU_WRITE);
+    fs->rng_fat.desc = "FAT table cache";
     fs->fat16 = (uint16_t*)fat_va;
     fs->fat32 = (uint32_t*)fat_va;
     if (0 == fat_va) {
@@ -172,8 +179,16 @@ void fat_determine(fs_fat_t *fs, char *bs) {
     }
     logk("allocated fat cache at %p\n", fs->fat16);
 
+    // 将 FAT 读取出来
     block_read(fs->blk, fs->fat16, fs->rsvd_secs, fs->fat_secs);
     logk("read %d sectors of FAT\n", fs->fat_secs);
+
+    // 分配 cluster 空间，用于读文件
+    logk("allocating rank-%d for cluster\n", fs->clus_rank);
+    size_t clusva = vmspace_alloc(&g_kernel_vm, &fs->rng_clus,
+        POOL_ZONE_START, POOL_ZONE_END, fs->clus_rank, PT_FS, MMU_WRITE);
+    fs->rng_clus.desc = "FAT cluster cache";
+    logk("allocated cluster cache at %zx %zx\n", clusva, fs->rng_clus.vaddr);
 }
 
 
@@ -183,6 +198,29 @@ void fat_determine(fs_fat_t *fs, char *bs) {
 
 // 打开文件/目录，遍历目录内容，打开关闭文件，读写文件，创建删除文件
 
+typedef struct dir_entry {
+    char        name[11];  // 8.3 format
+    uint8_t     attr;
+    uint8_t     ntres;
+    uint8_t     create_time_tenth;
+    uint16_t    create_time;
+    uint16_t    create_date;
+    uint16_t    last_access_date;
+    uint16_t    first_cluster_hi;
+    uint16_t    write_time;
+    uint16_t    write_date;
+    uint16_t    first_cluster_lo;
+    uint32_t    file_size;
+} PACKED dir_entry_t;
+
+#define ATTR_READ_ONLY   0x01
+#define ATTR_HIDDEN 0x02
+#define ATTR_SYSTEM 0x04
+#define ATTR_VOLUME_ID 0x08
+#define ATTR_DIRECTORY 0x10
+#define ATTR_ARCHIVE  0x20
+#define ATTR_LONG_NAME ATTR_READ_ONLY|ATTR_HIDDEN|ATTR_SYSTEM|ATTR_VOLUME_ID
+
 // 遍历根目录，列出文件
 void fat32_ls_root(fs_fat_t *fs) {
     ASSERT(32 == fs->fat_type);
@@ -190,14 +228,44 @@ void fat32_ls_root(fs_fat_t *fs) {
 
     uint32_t *fat = fs->fat32;
 
-    // 根目录也是一个文件，占据多个 cluster
-    console_printf("root dir clusters:");
+    int entries_per_clus = fs->clus_size * fs->sec_size / sizeof(dir_entry_t);
+    console_printf("max %d entries in one cluster\n", entries_per_clus);
+
+    // 根目录也是一个文件，占据多个 cluster，逐个簇读取
     uint32_t cls = fs->root_clus;
-    while (cls < fs->clus_cnt) {
-        console_printf(" %u,", cls);
-        cls = fat[cls];
+    // while (cls < (uint32_t)fs->clus_cnt) {
+    while (cls < 0x0FFFFFF8) {
+        console_printf("reading root dir cluster %u\n", cls);
+
+        // cluster 转换成扇区号（FAT簇编号从2开始）
+        int sec = fs->rsvd_secs + fs->fat_num * fs->fat_secs + fs->root_secs;
+        sec += (cls - 2) * fs->clus_size;
+        cls = fat[cls]; // 下一个簇
+
+        // 读取这个簇并解析
+        dir_entry_t *entries = (dir_entry_t*)(fs->rng_clus.vaddr);
+        block_read(fs->blk, entries, sec, fs->clus_size);
+
+        // 根目录比较特殊，可能包含一个 entry，只设置属性为ATTR_VOLUME_ID
+        // 对于常规目录，这个元素会被认作结束标记
+        for (int i = 0; i < entries_per_clus; ++i) {
+            console_printf("#%d. root entry '%.11s', attr %02x\n",
+                i, entries[i].name, entries[i].attr);
+            if (ATTR_VOLUME_ID & entries[i].attr) {
+                console_printf("volume ID '%.11s'\n", entries[i].name);
+                continue;
+            }
+            // if (0 == (uint8_t)entries[i].name[0]) {
+            //     console_printf("root dir finished at entry %d\n", i);
+            //     return; // 到了结尾
+            // }
+            if (0xe5 == (uint8_t)entries[i].name[0]) {
+                console_printf("root entry invalid\n");
+                continue;
+            }
+        }
     }
-    console_printf(" (!%u>%u)\n", cls, fs->clus_cnt);
+    // console_printf(" (!%u>%u)\n", cls, fs->clus_cnt);
 
     // 将根目录内容读取出来
 }
