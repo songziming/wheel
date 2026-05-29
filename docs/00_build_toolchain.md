@@ -4,7 +4,7 @@
 
 ~~~
 sudo apt install clang lld llvm grub-pc-bin xorriso libgtest-dev
-sudo apt install grub-pc dosfstools # 创建硬盘镜像需要
+sudo apt install grub-pc dosfstools mtools # 创建硬盘镜像需要
 ~~~
 
 直接使用系统的包管理器就可以。

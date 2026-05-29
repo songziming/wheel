@@ -100,7 +100,7 @@ static ata_device_t ata_devs[4];
 // 读写 ATA 寄存器
 //------------------------------------------------------------------------------
 
-// 等待 busy、data-ready 全部清空
+// 读取 alternate_status 寄存器，等待 BSY、DRQ 清空，之后才可以发送命令
 static inline int ata_wait(ata_channel_t *ch) {
     for (int i = 0; i < 1000; ++i) {
         uint8_t status = in8(ch->control_base);
@@ -115,9 +115,21 @@ static inline int ata_wait(ata_channel_t *ch) {
     return 1;
 }
 
-// 等待 busy 清零，data-ready 开启
+// 选择设备之后，至少要等 400ns，之后读出的 status 才是正确的
+// 读取 alternate_status 14 次，丢弃它们的结果
+// 第 15 次读出的 alternate_status 才是有效的
+// TODO 缓存上一次选中的设备，如果与本次的相同，则无需再次选择
+static void ata_select_drive(ata_channel_t *ch, uint8_t sel) {
+    ata_wait(ch);
+    out8(ch->io_base + 6, sel);
+    for (int i = 0; i < 14; ++i) {
+        (void)in8(ch->control_base);
+    }
+}
+
+// 读取 alternate_status，等待 BSY 清空、DRQ 置位，之后才可以读数据
+// 准备数据需要很长时间
 static inline int ata_wait_data(ata_channel_t *ch) {
-    // for (int i = 0; i < 1000; ++i) {
     while (1) {
         uint8_t status = in8(ch->control_base);
         if (STT_ERR & status) {
@@ -127,17 +139,6 @@ static inline int ata_wait_data(ata_channel_t *ch) {
             return 0;
         }
         cpu_pause();
-    }
-    return 1;
-}
-
-// 选择设备之后，至少要等 400ns
-// TODO 缓存上一次选中的设备，如果与本次的相同，则无需再次选择
-static void ata_select_drive(ata_channel_t *ch, uint8_t sel) {
-    ata_wait(ch);
-    out8(ch->io_base + 6, sel);
-    for (int i = 0; i < 14; ++i) {
-        in8(ch->control_base);
     }
 }
 
@@ -195,8 +196,6 @@ static INIT_TEXT void ata_detect(ata_device_t *ata, int secondary, int slave) {
         return;
     }
 
-    logk("ATA %s-%s exist\n", chn, dev);
-
     // 等待 data ready
     while (1) {
         uint8_t status = in8(ch->control_base);
@@ -235,6 +234,10 @@ static INIT_TEXT void ata_detect(ata_device_t *ata, int secondary, int slave) {
     kmemcpy(ata->serial,   &info[10], 20);
     kmemcpy(ata->revision, &info[23], 8);
     kmemcpy(ata->model,    &info[27], 40);
+
+    logk("ATA %s-%s exist\n", chn, dev);
+    logk("serial %.20s, rev %.8s, model %.40s\n",
+        ata->serial, ata->revision, ata->model);
 
     // get major revision number
     uint16_t ver = info[80];
@@ -276,13 +279,16 @@ static void ata_pio_read_sector(block_dev_t *blk, void *dst, uint64_t sector, ui
     // 多个 ATA 设备可能来自同一个通道，互斥锁应该放在 channel 里面
     mutex_take(&ch->mutex, FOREVER);
 
-    uint8_t sel = (ata->flags & ATA_SLAVE) ? 0xf0 : 0xe0; // 开启 LBA
+    // bit 4 表示 slave
+    // bit 6 表示 LBA
+    // bit 5/7 已废弃，只有非常古老的 ATA 才用到，为了兼容将其置位
+    uint8_t sel = (ata->flags & ATA_SLAVE) ? 0xf0 : 0xe0;
     uint8_t cmd;
 
     if (ATA_LBA48 & ata->flags) {
         cmd = 0x24; // READ_SECTORS_EXT
-    } else {
-        sel |= (sector >> 24) & 0x0f; // LBA28，最高 4-bit 放在这里
+    } else { // LBA28，最高 4-bit 放在这里
+        sel |= (sector >> 24) & 0x0f;
         cmd = 0x20; // READ_SECTORS
     }
 
@@ -292,31 +298,40 @@ static void ata_pio_read_sector(block_dev_t *blk, void *dst, uint64_t sector, ui
 
     // 写入起始扇区号
     if (ata->flags & ATA_LBA48) {
-        out8(ch->io_base + 2, (num >> 8) & 0xff);
-        out8(ch->io_base + 3, (sector >> 24) & 0xff);  // LBA low
-        out8(ch->io_base + 4, (sector >> 32) & 0xff);  // LBA mid
-        out8(ch->io_base + 5, (sector >> 40) & 0xff);  // LBA high
+        out8(ch->io_base + 2, (num >> 8) & 0xff);       // sector count high
+        out8(ch->io_base + 3, (sector >> 24) & 0xff);   // LBA 4
+        out8(ch->io_base + 4, (sector >> 32) & 0xff);   // LBA 5
+        out8(ch->io_base + 5, (sector >> 40) & 0xff);   // LBA 6
     }
-    out8(ch->io_base + 2, num & 0xff);
-    out8(ch->io_base + 3,  sector        & 0xff);  // LBA low
-    out8(ch->io_base + 4, (sector >>  8) & 0xff);  // LBA mid
-    out8(ch->io_base + 5, (sector >> 16) & 0xff);  // LBA high
+    out8(ch->io_base + 2, num & 0xff);              // sector count low
+    out8(ch->io_base + 3,  sector        & 0xff);   // LBA 1
+    out8(ch->io_base + 4, (sector >>  8) & 0xff);   // LBA 2
+    out8(ch->io_base + 5, (sector >> 16) & 0xff);   // LBA 3
 
     // 发送命令
     out8(ch->io_base + 7, cmd);
 
-    // 如果出错，需要重置设备
-    if (ata_wait_data(ch)) {
-        logk("%s error when reading sector\n", ata->blk.name);
-        ata_reset(ch);
-        mutex_give(&ch->mutex);
-        return;
-    }
-
-    // 读取数据
     uint16_t *buff = (uint16_t*)dst;
-    for (uint64_t i = 0; i < 256 * num; ++i) {
-        buff[i] = in16(ch->io_base);
+
+    // 必须逐个扇区读取，每读一个扇区都要等待 status
+    // BSY 清除、ERR 清除、DRQ 置位
+    for (unsigned s = 0; s < num; ++s) {
+        // 如果出错，需要重置设备
+        if (ata_wait_data(ch)) {
+            logk("%s error when reading sector\n", ata->blk.name);
+            ata_reset(ch);
+            break;
+        }
+
+        // 读取一个扇区的数据
+        // for (int i = 0; i < 256; ++i) {
+        //     buff[i] = in16(ch->io_base);
+        // }
+        // buff += 256;
+
+        // rep insw 执行后，rcx 和 rdi 的值会改变，需要声明
+        size_t repeat = ata->blk.sec_size / sizeof(uint16_t);
+        ASMV("rep insw" : "+D"(buff), "+c"(repeat) : "d"(ch->io_base) : "memory");
     }
 
     mutex_give(&ch->mutex);
@@ -326,14 +341,18 @@ static void ata_pio_write_sector(block_dev_t *blk, const void *src, uint64_t sec
     ata_device_t *ata = containerof(blk, ata_device_t, blk);
     ata_channel_t *ch = &g_channels[(ata->flags & ATA_SECONDARY) ? 1 : 0];
 
+    logk("ATA PIO writing sector %lx:%lx\n", sector, num);
+
     mutex_take(&ch->mutex, FOREVER);
 
-    uint8_t sel = (ata->flags & ATA_SLAVE) ? 0xf0 : 0xe0; // 开启 LBA
+    uint8_t sel; // = (ata->flags & ATA_SLAVE) ? 0xf0 : 0xe0; // 开启 LBA
     uint8_t cmd;
 
     if (ATA_LBA48 & ata->flags) {
+        sel = (ata->flags & ATA_SLAVE) ? 0x50 : 0x40;
         cmd = 0x34; // WRITE_SECTORS_EXT
-    } else {
+    } else { // LBA28
+        sel = (ata->flags & ATA_SLAVE) ? 0xf0 : 0xe0;
         sel |= (sector >> 24) & 0x0f;
         cmd = 0x30; // WRITE_SECTORS
     }
@@ -356,24 +375,23 @@ static void ata_pio_write_sector(block_dev_t *blk, const void *src, uint64_t sec
     // 发送命令
     out8(ch->io_base + 7, cmd);
 
-    // 如果出错，需要重置设备
-    if (ata_wait_data(ch)) {
-        logk("%s error when writing sector\n", ata->blk.name);
-        ata_reset(ch);
-        mutex_give(&ch->mutex);
-        return;
-    }
+    for (unsigned s = 0; s < num; ++s) {
+        if (ata_wait_data(ch)) {
+            logk("%s error when writing sector\n", ata->blk.name);
+            ata_reset(ch);  // 如果出错，需要重置设备
+            break;
+        }
 
-    // 写入数据
-    const uint16_t *buff = (const uint16_t*)src;
-    for (uint64_t i = 0; i < 256 * num; ++i) {
-        out16(ch->io_base, buff[i]);
-        cpu_pause();
+        // 写入数据
+        const uint16_t *buff = (const uint16_t*)src;
+        for (uint64_t i = 0; i < 256 * num; ++i) {
+            out16(ch->io_base, buff[i]);
+            cpu_pause();
+        }
     }
 
     // 清缓存
     out8(ch->io_base + 7, 0xe7);
-
     mutex_give(&ch->mutex);
 }
 

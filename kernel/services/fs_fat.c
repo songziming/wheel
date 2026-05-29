@@ -141,6 +141,7 @@ void fat_determine(fs_fat_t *fs, char *bs) {
     } else {
         fs->fat_type = 32;
         fs->root_clus = bs32->ebpb.root_clus;
+        logk("root cluster at %u\n", fs->root_clus);
     }
     logk("[fat] this is FAT-%d.\n", fs->fat_type);
 
@@ -202,14 +203,14 @@ typedef struct dir_entry {
     char        name[11];  // 8.3 format
     uint8_t     attr;
     uint8_t     ntres;
-    uint8_t     create_time_tenth;
-    uint16_t    create_time;
+    uint8_t     create_time_tenth;  // 14
+    uint16_t    create_time;        // 16
     uint16_t    create_date;
     uint16_t    last_access_date;
     uint16_t    first_cluster_hi;
     uint16_t    write_time;
     uint16_t    write_date;
-    uint16_t    first_cluster_lo;
+    uint16_t    first_cluster_lo;   // 28
     uint32_t    file_size;
 } PACKED dir_entry_t;
 
@@ -228,23 +229,39 @@ void fat32_ls_root(fs_fat_t *fs) {
 
     uint32_t *fat = fs->fat32;
 
+    int sec_start = fs->rsvd_secs + fs->fat_num * fs->fat_secs + fs->root_secs;
+    logk("reserved %d secs, fat %dx%d, root %d, start=%d\n",
+        fs->rsvd_secs, fs->fat_num, fs->fat_secs, fs->root_secs, sec_start);
+
     int entries_per_clus = fs->clus_size * fs->sec_size / sizeof(dir_entry_t);
     console_printf("max %d entries in one cluster\n", entries_per_clus);
+    dir_entry_t *entries = (dir_entry_t*)(fs->rng_clus.vaddr);
 
     // 根目录也是一个文件，占据多个 cluster，逐个簇读取
     uint32_t cls = fs->root_clus;
     // while (cls < (uint32_t)fs->clus_cnt) {
     while (cls < 0x0FFFFFF8) {
-        console_printf("reading root dir cluster %u\n", cls);
+        console_printf("reading root dir cluster %u into %p\n", cls, entries);
 
         // cluster 转换成扇区号（FAT簇编号从2开始）
-        int sec = fs->rsvd_secs + fs->fat_num * fs->fat_secs + fs->root_secs;
-        sec += (cls - 2) * fs->clus_size;
+        int sec = sec_start + (cls - 2) * fs->clus_size;
         cls = fat[cls]; // 下一个簇
+        console_printf(" -- sec=%d, clus_size=%d\n", sec, fs->clus_size);
 
         // 读取这个簇并解析
-        dir_entry_t *entries = (dir_entry_t*)(fs->rng_clus.vaddr);
         block_read(fs->blk, entries, sec, fs->clus_size);
+
+        // // 打印hex，每行16字节
+        // uint8_t *sec_content = (uint8_t*)entries;
+        // logk("sector read at %p:\n", entries);
+        // for (int r = 0; r < 8; ++r) {
+        //     logk("+%04x:", r*16);
+        //     for (int c = 0; c < 8; ++c) {
+        //         logk(" %02x%02x", sec_content[0], sec_content[1]);
+        //         sec_content += 2;
+        //     }
+        //     logk("\n");
+        // }
 
         // 根目录比较特殊，可能包含一个 entry，只设置属性为ATTR_VOLUME_ID
         // 对于常规目录，这个元素会被认作结束标记
@@ -255,43 +272,45 @@ void fat32_ls_root(fs_fat_t *fs) {
                 console_printf("volume ID '%.11s'\n", entries[i].name);
                 continue;
             }
-            // if (0 == (uint8_t)entries[i].name[0]) {
-            //     console_printf("root dir finished at entry %d\n", i);
-            //     return; // 到了结尾
-            // }
+            if (0 == (uint8_t)entries[i].name[0]) {
+                console_printf("root dir finished at entry %d\n", i);
+                return; // 到了结尾
+            }
             if (0xe5 == (uint8_t)entries[i].name[0]) {
                 console_printf("root entry invalid\n");
                 continue;
             }
         }
     }
-    // console_printf(" (!%u>%u)\n", cls, fs->clus_cnt);
-
-    // 将根目录内容读取出来
 }
 
 //------------------------------------------------------------------------------
 // 测试命令
 //------------------------------------------------------------------------------
 
+static int fs_valid = 0;
+static fs_fat_t fs;
+
 static void chkfat(int argc, char *argv[]) {
-    if (argc < 2) {
-        console_printf("missing block device name\n");
-        return;
+    if (0 == fs_valid) {
+        if (argc < 2) {
+            console_printf("missing block device name\n");
+            return;
+        }
+
+        block_dev_t *dev = find_block_by_name(argv[1]);
+        if (NULL == dev) {
+            console_printf("error: cannot find block device %s\n", argv[1]);
+            return;
+        }
+
+        fs.blk = dev;
+
+        char sec0[512];
+        block_read(dev, sec0, 0, 1);
+        fat_determine(&fs, sec0);
+        fs_valid = 1;
     }
-
-    block_dev_t *dev = find_block_by_name(argv[1]);
-    if (NULL == dev) {
-        console_printf("error: cannot find block device %s\n", argv[1]);
-        return;
-    }
-
-    fs_fat_t fs;
-    fs.blk = dev;
-
-    char sec0[512];
-    block_read(dev, sec0, 0, 1);
-    fat_determine(&fs, sec0);
 
     if (fs.fat_type != 32) {
         console_printf("this is not fat32\n");
