@@ -344,3 +344,33 @@ INIT_TEXT void console_init() {
     kmemset(&kbd_state, 0, sizeof(kbd_state));
     kbd_state.numlock = 1; // 默认开启小键盘
 }
+
+static size_t parse_num(const char *s, int base) {
+    size_t n = 0;
+    for (; *s; ++s) {
+        n *= base;
+        if (('a' <= *s) && (*s <= 'f')) {
+            n += *s - 'a' + 10;
+        } else if (('A' <= *s) && (*s <= 'F')) {
+            n += *s - 'A' + 10;
+        } else if (('0' <= *s) && (*s <= '9')) {
+            n += *s - '0';
+        } else {
+            break;
+        }
+    }
+    return n;
+}
+
+size_t str2num(const char *s) {
+    if (s[0] != '0') {
+        return parse_num(s, 10);
+    }
+    if (s[1] == 'x' || s[1] == 'X') {
+        return parse_num(s + 2, 16);
+    }
+    if (s[1] == 'b' || s[1] == 'B') {
+        return parse_num(s + 2, 2);
+    }
+    return parse_num(s + 1, 8);
+}

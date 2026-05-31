@@ -93,6 +93,9 @@ typedef struct fs_fat {
     int         clus_size;  // 一个簇对应多少个扇区
     int         clus_rank;  // 一个簇对应的页块大小
 
+    
+    int         data_sec_start; // 数据区起始的扇区号
+
     // fat32
     uint32_t    root_clus;  // 根目录区所在的簇编号
 
@@ -239,7 +242,6 @@ void fat32_ls_root(fs_fat_t *fs) {
 
     // 根目录也是一个文件，占据多个 cluster，逐个簇读取
     uint32_t cls = fs->root_clus;
-    // while (cls < (uint32_t)fs->clus_cnt) {
     while (cls < 0x0FFFFFF8) {
         console_printf("reading root dir cluster %u into %p\n", cls, entries);
 
@@ -251,35 +253,19 @@ void fat32_ls_root(fs_fat_t *fs) {
         // 读取这个簇并解析
         block_read(fs->blk, entries, sec, fs->clus_size);
 
-        // // 打印hex，每行16字节
-        // uint8_t *sec_content = (uint8_t*)entries;
-        // logk("sector read at %p:\n", entries);
-        // for (int r = 0; r < 8; ++r) {
-        //     logk("+%04x:", r*16);
-        //     for (int c = 0; c < 8; ++c) {
-        //         logk(" %02x%02x", sec_content[0], sec_content[1]);
-        //         sec_content += 2;
-        //     }
-        //     logk("\n");
-        // }
-
         // 根目录比较特殊，可能包含一个 entry，只设置属性为ATTR_VOLUME_ID
         // 对于常规目录，这个元素会被认作结束标记
         for (int i = 0; i < entries_per_clus; ++i) {
-            console_printf("#%d. root entry '%.11s', attr %02x\n",
-                i, entries[i].name, entries[i].attr);
+            if (0 == (uint8_t)entries[i].name[0]) {
+                return; // 到了结尾
+            }
             if (ATTR_VOLUME_ID & entries[i].attr) {
                 console_printf("volume ID '%.11s'\n", entries[i].name);
                 continue;
             }
-            if (0 == (uint8_t)entries[i].name[0]) {
-                console_printf("root dir finished at entry %d\n", i);
-                return; // 到了结尾
-            }
-            if (0xe5 == (uint8_t)entries[i].name[0]) {
-                console_printf("root entry invalid\n");
-                continue;
-            }
+            console_printf("#%d. root entry '%.11s', attr %02x, dir-%c\n",
+                i, entries[i].name, entries[i].attr,
+                (entries[i].attr & ATTR_DIRECTORY) ? 'Y' : 'N');
         }
     }
 }

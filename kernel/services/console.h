@@ -17,6 +17,8 @@ extern display_ops_t *g_display;
 void console_puts(const char *s, size_t n);
 void console_printf(const char *fmt, ...) PRINTF(1,2);
 void console_readline(char *dst, size_t max);
+
 INIT_TEXT void console_init();
+size_t str2num(const char *s);
 
 #endif // CONSOLE_H

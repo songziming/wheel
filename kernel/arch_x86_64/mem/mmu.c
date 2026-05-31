@@ -6,6 +6,8 @@
 #include <debug.h>
 #include <cpu/features.h>
 
+#include <console.h>
+#include <kshell.h>
 
 
 // 页表项各字段
@@ -656,3 +658,34 @@ void tlb_shootdown(size_t vstart, size_t vend) {
     raw_spin_give(&g_shootdown_lock);
     preempt_unlock();
 }
+
+//------------------------------------------------------------------------------
+// 计算某个地址映射的物理地址
+//------------------------------------------------------------------------------
+
+void show_mapping(int argc, char *argv[]) {
+    if (argc < 2) {
+        console_printf("usage: %s VIRT_ADDR\n", argv[0]);
+        return;
+    }
+
+    size_t va = str2num(argv[1]);
+
+    mmu_attr_t attrs;
+    size_t pa = mmu_translate(g_kernel_vm.table, va, &attrs);
+    console_printf("physical address 0x%zx\n", pa);
+
+    console_printf("attributes:");
+    if (attrs & MMU_USER) {
+        console_printf(" user");
+    }
+    if (attrs & MMU_WRITE) {
+        console_printf(" write");
+    }
+    if (attrs & MMU_EXEC) {
+        console_printf(" exec");
+    }
+    console_printf("\n");
+}
+
+KSHELL_CMD("page", show_mapping);
