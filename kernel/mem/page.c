@@ -104,6 +104,10 @@ static void block_free_nolock(uint32_t blk) {
 
     // 已经合并到最大，标记为 FREE
     g_pages[blk].type = PT_FREE;
+#if DEBUG
+    g_pages[blk].file = NULL;
+    g_pages[blk].line = -1;
+#endif
     pglist_push_head(&g_blocks[rank], blk);
 }
 
@@ -155,6 +159,85 @@ found:
     return blk;
 }
 
+// 分配若干不连续的物理页
+static void pagelist_alloc_nolock(pglist_t *pl, uint32_t num, page_type_t type,
+        const char *file, int line) {
+    uint32_t rank;
+    uint32_t size;
+    uint32_t blk;
+
+    (void)file;
+    (void)line;
+
+    // TODO 首先检查剩余 page 数量是否满足
+    //      如果剩余内存太少则直接退出
+
+    for (rank = 0; rank < PAGE_BLOCK_RANK_NUM; ++rank) {
+        size = 1U << rank;
+
+        // 不断从队列中取页块
+        while (0 != (blk = g_blocks[rank].head)) {
+            pglist_remove(&g_blocks[rank], blk);
+            if (num < size) {
+                // 页块超过所需，将其拆开
+                // 此时 blk 页类型还是 FREE
+                goto split_into_smaller;
+            }
+            num -= size;
+            g_pages[blk].type = type; // 标记为已分配
+#if DEBUG
+            g_pages[blk].file = file;
+            g_pages[blk].line = line;
+#endif
+            pglist_push_tail(pl, blk);
+            if (0 == num) {
+                return;
+            }
+        }
+    }
+
+    if ((0 == blk) || (num > size)) {
+        logk("warning: cannot satisfy required pages\n");
+        return;
+    }
+
+    ASSERT(0 != blk);
+    ASSERT(num < size);
+
+split_into_smaller:
+    // 当前 blk 超过了所需的大小 num，需要拆分，将一部分放回
+    // 拆解为 size/2、size/4、size/8、...、4、2、1
+    // 从里面挑选某些 block 放入链表
+    while (rank > 0) {
+        --rank;
+        size >>= 1;
+        g_pages[blk].rank = rank;
+        uint32_t sib = blk + size;
+        g_pages[sib].head = 1;
+        g_pages[sib].rank = rank;
+        g_pages[sib].type = g_pages[blk].type;
+
+        if (num >= size) {
+            num -= size;
+            g_pages[sib].type = type;
+#if DEBUG
+            g_pages[sib].file = file;
+            g_pages[sib].line = line;
+#endif
+            pglist_push_head(pl, sib);
+        } else {
+            pglist_push_head(&g_blocks[rank], sib);
+        }
+
+        if (0 == num) {
+            pglist_push_tail(&g_blocks[rank], blk);
+            return;
+        }
+    }
+
+    logk("error: cannot allocate all required pages\n");
+}
+
 
 //------------------------------------------------------------------------------
 // public functions
@@ -162,7 +245,7 @@ found:
 
 size_t page_alloc_color(uint32_t rank, page_type_t type,
         uint32_t period, uint32_t phase,
-        const char *file UNUSED, int line UNUSED) {
+        const char *file, int line) {
     int key = irq_spin_take(&g_page_spin);
     uint32_t blk = block_alloc_nolock(rank, period, phase, type);
 #if DEBUG
@@ -172,6 +255,9 @@ size_t page_alloc_color(uint32_t rank, page_type_t type,
         g_pages[blk].file = file;
         g_pages[blk].line = line;
     }
+#else
+    (void)file;
+    (void)line;
 #endif
     irq_spin_give(&g_page_spin, key);
     return (size_t)blk << PAGE_SHIFT;
@@ -184,15 +270,31 @@ size_t page_alloc(uint32_t rank, page_type_t type, const char *file, int line) {
 void page_free(size_t pa) {
     int key = irq_spin_take(&g_page_spin);
     uint32_t blk = (uint32_t)(pa >> PAGE_SHIFT);
-#if DEBUG
-    ASSERT(NULL != g_pages[blk].file);
-    ASSERT(0 != g_pages[blk].line);
-    g_pages[blk].file = NULL;
-    g_pages[blk].line = -1;
-#endif
     block_free_nolock(blk);
     irq_spin_give(&g_page_spin, key);
 }
+
+
+void pagelist_alloc(pglist_t *pl, uint32_t num, page_type_t type, const char *file, int line) {
+    int key = irq_spin_take(&g_page_spin);
+    pagelist_alloc_nolock(pl, num, type, file, line);
+    irq_spin_give(&g_page_spin, key);
+}
+
+void pagelist_free(pglist_t *pl) {
+    int key = irq_spin_take(&g_page_spin);
+
+    for (uint32_t blk = pl->head; blk; ) {
+        uint32_t next = g_pages[blk].next; // 必须先得到后继页块
+        block_free_nolock(blk); // 这会修改 g_pages
+        blk = next;
+    }
+
+    irq_spin_give(&g_page_spin, key);
+    pl->head = 0;
+    pl->tail = 0;
+}
+
 
 uint32_t page_free_count() {
     int key = irq_spin_take(&g_page_spin);

@@ -132,3 +132,59 @@ TEST_F(PageTest, AllocColor) {
         EXPECT_NE(pa, 0);
     }
 }
+
+TEST_F(PageTest, AllocList) {
+    page_init(1 << PAGE_SHIFT, 100 << PAGE_SHIFT);
+    pages_add(1 << PAGE_SHIFT, 100 << PAGE_SHIFT);
+
+    pglist_t pgl;
+    pagelist_alloc(&pgl, 63, PT_FS, __FILE__, __LINE__);
+
+    uint32_t page_num = 0;
+    for (uint32_t blk = pgl.head; blk; blk = g_pages[blk].next) {
+        page_num += 1U << g_pages[blk].rank;
+    }
+    EXPECT_EQ(page_num, 63);
+}
+
+// 测试严重碎片化的情况
+// TODO 可以直接添加 2^n-1 个页，自然会分解成多种 rank
+TEST_F(PageTest, AllocListFragmented) {
+    page_init(1 << PAGE_SHIFT, 200 << PAGE_SHIFT);
+
+    pages_add(1 << PAGE_SHIFT, 2 << PAGE_SHIFT);
+    pages_add(3 << PAGE_SHIFT, 4 << PAGE_SHIFT);
+    pages_add(5 << PAGE_SHIFT, 6 << PAGE_SHIFT);
+    pages_add(7 << PAGE_SHIFT, 8 << PAGE_SHIFT);
+    
+    pages_add(8 << PAGE_SHIFT, 10 << PAGE_SHIFT);
+    pages_add(12 << PAGE_SHIFT, 14 << PAGE_SHIFT);
+    pages_add(16 << PAGE_SHIFT, 18 << PAGE_SHIFT);
+    pages_add(20 << PAGE_SHIFT, 22 << PAGE_SHIFT);
+    pages_add(24 << PAGE_SHIFT, 26 << PAGE_SHIFT);
+    pages_add(28 << PAGE_SHIFT, 30 << PAGE_SHIFT);
+
+    pages_add(32 << PAGE_SHIFT, 36 << PAGE_SHIFT);
+    pages_add(40 << PAGE_SHIFT, 44 << PAGE_SHIFT);
+    pages_add(48 << PAGE_SHIFT, 52 << PAGE_SHIFT);
+    pages_add(56 << PAGE_SHIFT, 60 << PAGE_SHIFT);
+    
+    pages_add(64 << PAGE_SHIFT, 72 << PAGE_SHIFT);
+    pages_add(80 << PAGE_SHIFT, 88 << PAGE_SHIFT);
+    pages_add(96 << PAGE_SHIFT, 104 << PAGE_SHIFT);
+    pages_add(112 << PAGE_SHIFT, 120 << PAGE_SHIFT);
+    pages_add(128 << PAGE_SHIFT, 136 << PAGE_SHIFT);
+    pages_add(144 << PAGE_SHIFT, 152 << PAGE_SHIFT);
+
+    pages_add(160 << PAGE_SHIFT, 176 << PAGE_SHIFT);
+    // pages_add(160 << PAGE_SHIFT, 176 << PAGE_SHIFT);
+
+    pglist_t pgl;
+    pagelist_alloc(&pgl, 63, PT_FS, __FILE__, __LINE__);
+
+    uint32_t page_num = 0;
+    for (uint32_t blk = pgl.head; blk; blk = g_pages[blk].next) {
+        page_num += 1U << g_pages[blk].rank;
+    }
+    EXPECT_EQ(page_num, 63);
+}

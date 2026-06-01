@@ -50,9 +50,10 @@ extern uint32_t g_page_start;
 extern uint32_t g_page_end;
 extern page_t *g_pages;
 
+// 找出所在块
+uint32_t page_block_head(uint32_t pfn);
 
 // 页链表操作
-uint32_t page_block_head(uint32_t pfn);
 void pglist_push_tail(pglist_t *pl, uint32_t blk);
 void pglist_push_head(pglist_t *pl, uint32_t blk);
 void pglist_remove(pglist_t *pl, uint32_t blk);
@@ -60,6 +61,10 @@ void pglist_remove(pglist_t *pl, uint32_t blk);
 size_t page_alloc_color(uint32_t rank, page_type_t type, uint32_t period, uint32_t phase, const char *file, int line);
 size_t page_alloc(uint32_t rank, page_type_t type, const char *file, int line);
 void page_free(size_t pa);
+
+void pagelist_alloc(pglist_t *pl, uint32_t num, page_type_t type, const char *file, int line);
+void pagelist_free(pglist_t *pl);
+
 uint32_t page_free_count();
 
 #define PAGE_ALLOC(rank, type) page_alloc(rank, type, __FILE__, __LINE__)
