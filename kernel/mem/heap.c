@@ -4,6 +4,9 @@
 #include <format.h>
 #include <debug.h>
 
+#include <console.h>
+#include <kshell.h>
+
 
 #define ALIGNMENT 8
 
@@ -231,8 +234,6 @@ void heap_init(heap_t *heap, void *buff, size_t size) {
     size_t end = ROUND_DOWN((size_t)buff + size);
     ASSERT(start + sizeof(chunk_t) * 3 <= end);
 
-
-
     // 划分为三个 chunk，头尾始终处于 inuse 状态
     size_t guard_size = ROUND_UP(sizeof(chunk_hdr_t));
     build_chunk_used(start, 0, guard_size);
@@ -291,25 +292,24 @@ void heap_free(heap_t *heap, void *ptr) {
 // 内核使用的默认堆
 //------------------------------------------------------------------------------
 
-// 用来分配一些零碎的小对象，例如名称
+// 用来分配一些零碎的小对象，例如对象名称字符串
 
-static heap_t g_common_heap; // = { SPIN_INIT, RBTREE_INIT, NULL, NULL };
-// static uint8_t g_heap_buff[KERNEL_HEAP_SIZE];
+static heap_t g_kernel_heap;
 
 INIT_TEXT void kernel_heap_init(void *buff, size_t size) {
-    ASSERT(NULL == g_common_heap.sizetree.root);
+    ASSERT(NULL == g_kernel_heap.sizetree.root);
     ASSERT(NULL != buff);
-    heap_init(&g_common_heap, buff, size);
+    heap_init(&g_kernel_heap, buff, size);
 }
 
 MALLOC void *kernel_heap_alloc(size_t size) {
-    ASSERT(NULL != g_common_heap.sizetree.root);
-    return heap_alloc(&g_common_heap, size);
+    ASSERT(NULL != g_kernel_heap.sizetree.root);
+    return heap_alloc(&g_kernel_heap, size);
 }
 
 void kernel_heap_free(void *ptr) {
-    ASSERT(NULL != g_common_heap.sizetree.root);
-    heap_free(&g_common_heap, ptr);
+    ASSERT(NULL != g_kernel_heap.sizetree.root);
+    heap_free(&g_kernel_heap, ptr);
 }
 
 // 分配一个字符串
@@ -333,3 +333,37 @@ char *kernel_heap_mkstr(const char *fmt, ...) {
     ASSERT(len == len2);
     return str;
 }
+
+//------------------------------------------------------------------------------
+// 调试命令，显示堆状态
+//------------------------------------------------------------------------------
+
+static void dump_heap_state() {
+    size_t used_cnt = 0;
+    size_t used_size = 0;
+    size_t free_size = 0;
+
+    console_printf("min chunk size %zu\n", sizeof(chunk_t));
+
+    // buff、end 之间的范围不含头尾两个 guard chunk
+    char *ptr = g_kernel_heap.buff;
+    console_printf("allocated sizes:");
+    while (ptr < g_kernel_heap.end) {
+        chunk_hdr_t *hdr = (chunk_hdr_t*)ptr;
+        ptr += hdr->selfsize & ~CHUNK_INUSE;
+
+        if (hdr->selfsize & CHUNK_INUSE) {
+            ++used_cnt;
+            used_size += hdr->selfsize & ~CHUNK_INUSE;
+            console_printf("%u,", hdr->selfsize & ~CHUNK_INUSE);
+        } else {
+            free_size += hdr->selfsize & ~CHUNK_INUSE;
+        }
+    }
+    console_printf("\b.\n");
+
+    console_printf("heap %zu allocated objects, %zu bytes used, %zu bytes free\n",
+        used_cnt, used_size, free_size);
+}
+
+KSHELL_CMD("heap", dump_heap_state);

@@ -83,8 +83,7 @@ typedef struct fat32_volumn {
     uint8_t     *data;
 } fat32_volumn_t;
 
-// 作用类似 inode，可以快速定位文件的位置
-// 并非表示打开的文件，有了 inode 可以缓存索引的结果
+// 作用类似 inode，可以快速定位文件数据的位置，并非表示打开的文件
 typedef struct fs_entry {
     const char *name;
     uint32_t    first_cluster;
@@ -92,6 +91,14 @@ typedef struct fs_entry {
     int         is_dir : 1;
     int         hidden : 1;
 } fs_entry_t;
+
+// 代表一个打开的文件或目录
+typedef struct fat32_handle {
+    fs_entry_t  ent;
+    vmrange_t   cluster_cache;  // 数据读取到哪里
+    uint32_t    curr_clus;      // 当前读到哪个簇
+    uint32_t    curr_pos;       // 当前读到簇里面哪个字节
+} fat32_handle_t;
 
 // 遍历文件夹的回调，返回非零表示是否不再继续遍历
 // 传给回调的参数会被销毁，回调需要自己复制一份
@@ -258,7 +265,6 @@ static int fat32_walk_dir(fat32_volumn_t *vol, uint32_t clus, fs_walker_t cb, vo
     int long_order = 0; // 前一个长名条目的编号
     fs_entry_t ent;
 
-    // uint32_t clus = vol->root_cluster;
     while ((clus >= 2) && (clus < vol->cluster_count)) {
         int sec = vol->data_start + ((clus - 2) << vol->cluster_shift);
         block_read(vol->blk, entries, sec, 1U << vol->cluster_shift);
@@ -331,22 +337,39 @@ static int fat32_walk_dir(fat32_volumn_t *vol, uint32_t clus, fs_walker_t cb, vo
             if (ret) {
                 return ret;
             }
-
-            // if (ATTR_VOLUME_ID & entries[i].attr) {
-            //     console_printf("volume ID '%s'\n", ent.name);
-            //     continue;
-            // }
-            // console_printf("#%zu. root entry '%s', attr %02x, hidden=%c, dir=%c, long=%c\n",
-            //     i, ent.name, entries[i].attr,
-            //     (entries[i].attr & ATTR_HIDDEN) ? 'Y' : 'N',
-            //     (entries[i].attr & ATTR_DIRECTORY) ? 'Y' : 'N',
-            //     ((entries[i].attr & ATTR_LONG_NAME)==ATTR_LONG_NAME) ? 'Y' : 'N');
         }
     }
 
     return 0;
 }
 
+//------------------------------------------------------------------------------
+// 遍历打开的目录，访问下一个 fs_entry
+//------------------------------------------------------------------------------
+
+// 如果已经是最后一个 entry，则返回 1
+int next_dir_entry(fat32_volumn_t *vol, fat32_handle_t *h, fs_entry_t *next) {
+    size_t cluster_size = vol->blk->sec_size << vol->cluster_shift;
+    size_t ent_per_clus = cluster_size / sizeof(fat_entry_t);
+
+    fat_entry_t *entry = (fat_entry_t*)(h->cluster_cache.vaddr + h->curr_pos);
+    if (0 == entry->name[0]) {
+        return 1; // 到了结尾
+    }
+
+    // 不是终止 entry，必然存在下一个 entry
+    h->curr_pos += sizeof(fat_entry_t);
+    if (h->curr_pos >= cluster_size) {
+        h->curr_clus = vol->fat[h->curr_clus];
+    }
+
+    // 从当前 entry 解析文件名
+    // 如果遇到长文件名 entry，则需要多次循环
+
+    return 0;
+}
+
+//------------------------------------------------------------------------------
 
 static int fat32_ls_cb(const fs_entry_t *ent, void *user UNUSED) {
     if (ent->is_dir) {

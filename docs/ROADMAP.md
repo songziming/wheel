@@ -24,7 +24,7 @@
 - [x] 根据 CPU 数量划分中断栈，专用异常栈，保留 stack-guard
 - [x] 将内核虚拟地址空间映射在页表中，切换到内核页表
 - [x] 中断异常处理，记录中断深度，切换中断栈，切换 gsbase
-- [x] 配置 Local APIC，使用 PIT 校准 Local APIC Timer，启用时钟中断x
+- [x] 配置 Local APIC，使用 PIT 校准 Local APIC Timer，启用时钟中断
 - [x] 开始执行任务，通过时钟中断实现任务切换
 - [x] 创建任务时，自动分配栈空间，并记录在地址空间内
 - [x] 启动多核，AP 快速进入 64-bit mode，并初始化
@@ -34,16 +34,16 @@
 - [x] 实现 CPU 之间发送 IPI，实现参数传递（视硬件能力，自动发送 IPI 给负载最低的 CPU）
 - [x] 实现 IO APIC，处理外部中断（PIT、HPET、键盘），转发给某个 CPU
 - [x] 实现键盘中间件，8042 写入数据，shell 读取数据
-- [ ] 实现 ATA PIO 硬盘读写
-- [ ] ATA PIO 添加异常处理，硬件故障时重置硬件
-- [ ] 实现块设备驱动通用框架
-- [ ] 改进终端输出，klog 不再直接控制 framebuf，而是写文件 /sys/log。另创建一个 print task，不断读取 /sys/log，将读取到的内容显示在 framebuf。
-      输出文件 /sys/log 在字符模式和图形模式都可用，还可以将输出真的写到磁盘上。
+- [x] 实现 ATA PIO 硬盘读写
+- [x] 实现块设备驱动通用框架
+- [x] 改进终端输出，klog 不再直接控制 framebuf，而是记录在 ringbuf
+- [x] 优化 vmspace-unmap TLB-shootdown，向其他 CPU 发送 IPI 清除缓存
 
-- [ ] 优化 vmspace-unmap TLB-shootdown，向其他 CPU 发送 IPI 清除缓存
-- [ ] 不在中断里执行 work、vmspace-unmap，借鉴 linux bottomhalf 机制，启动一个高优先级任务 irqtask 执行任务。
+- [ ] 更好的内存分配，不再限制大小为2的幂，不再要求物理内存连续
+- [ ] 启用 SLUB 内存池，用来分配 TCB、fsnode、file_handle 这类对象
+- [ ] 更好的对象管理，能遍历所有的 TCB，所有的 file_handle，file_handle 可以保存在 process_t 里面
 
-# 优化点
+# 远期优化点
 
 内存管理相关
 - [ ] 研究页面着色算法，记录各种颜色的直方图
