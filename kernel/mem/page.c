@@ -116,13 +116,15 @@ static void block_free_nolock(uint32_t blk) {
 // 限制起始页号可以实现页面着色，优化缓存性能
 static uint32_t block_alloc_nolock(uint32_t rank, uint32_t period, uint32_t phase, page_type_t type) {
     ASSERT(type > PT_FREE);
-    ASSERT(0 == (period & (period - 1)));
+    ASSERT(0 == (period & (period - 1)));   // period 必须是 2 的幂
+    ASSERT(phase == (phase & (period - 1))); // phase 必须小于 period
+    ASSERT(0 == (phase & ((1U << rank) - 1))); // phase 必须是 rank 的倍数
 
     // 不断寻找大小足够的块，将更大的块拆分
     uint32_t blk_rank;
     uint32_t blk;
     for (blk_rank = rank; blk_rank < PAGE_BLOCK_RANK_NUM; ++blk_rank) {
-        uint32_t color = phase & (0U - (1U << blk_rank));   // 相对于这个级别 block 的偏移
+        uint32_t color = phase & ~((1U << blk_rank) - 1);   // 相对于这个级别 block 的偏移
 
         // 遍历本层的 free blocks，寻找起始地址符合要求的块
         blk = g_blocks[blk_rank].head;
