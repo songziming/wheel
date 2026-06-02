@@ -179,13 +179,24 @@ TEST_F(PageTest, AllocList) {
     init(1, 100);
     add_free(1, 100);
 
-    pglist_t pgl;
-    pagelist_alloc(&pgl, 63, PT_FS, __FILE__, __LINE__);
+    pglist_t pl;
+    pagelist_alloc(&pl, 63, PT_FS, __FILE__, __LINE__);
 
     uint32_t page_num = 0;
-    for (uint32_t blk = pgl.head; blk; blk = g_pages[blk].next) {
+    for (uint32_t blk = pl.head; blk; blk = g_pages[blk].next) {
         page_num += 1U << g_pages[blk].rank;
     }
+
+    pagelist_free(&pl);
+    validate_block(1, 2);
+    validate_block(2, 4);
+    validate_block(4, 8);
+    validate_block(8, 16);
+    validate_block(16, 32);
+    validate_block(32, 64);
+    validate_block(64, 96);
+    validate_block(96, 100);
+
     EXPECT_EQ(page_num, 63);
 }
 

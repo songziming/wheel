@@ -8,6 +8,17 @@
 #include <kshell.h>
 
 
+// 非常粗糙的堆实现
+// 可以替换成 TLSF 算法（Two-Level Segregated Fit）
+
+// 相同大小的 free-chunk 组成链表，称作 freelist
+// freelist 的头节点还有一个 sizenode，组成红黑树，按 size 排序
+// 通过 sizenode.parent_color 是否为零可以判断这个 chunk 是否为头节点
+
+// 一种尺寸只需要一个 sizenode，理论上可以将 size_bin 提取出来，做成单独的 object
+// 但这样的话，一次 heap_alloc 可能要分配两个 chunk，一个返回用户，一个用于 size_bin
+
+
 #define ALIGNMENT 8
 
 #define ROUND_UP(x) (((x) + ALIGNMENT - 1) & ~(ALIGNMENT - 1))
@@ -26,11 +37,10 @@ typedef struct chunk {
         uint8_t data[8];    // 已分配 chunk 拥有此成员
         struct {
             dlnode_t freenode;
-            rbnode_t sizenode;
+            rbnode_t sizenode; // 相同大小的 chunk 只有一个具有 sizenode
         };
     };
 } ALIGNED(ALIGNMENT) chunk_t;
-
 
 
 static inline chunk_t *build_chunk_used(size_t addr, size_t prevsize, size_t selfsize) {

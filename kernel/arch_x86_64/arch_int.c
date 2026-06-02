@@ -72,11 +72,13 @@ static void handle_pf(int vec UNUSED, regs_t *f) {
 
     vmrange_t *rng = vmspace_find(&g_kernel_vm, va);
     if (rng) {
-        logk("trying to access range %s\n", rng->desc);
+        logk("trying to access range %s 0x%zx~0x%zx\n",
+            rng->desc, rng->vaddr, rng->vend);
     } else {
         rng = vmspace_find(&g_kernel_vm, va + PAGE_SIZE);
         if (rng) {
-            logk("right before range %s\n", rng->desc);
+            logk("right before range %s 0x%zx~0x%zx\n",
+                rng->desc, rng->vaddr, rng->vend);
         } else {
             logk("cannot locate vmrange\n");
         }

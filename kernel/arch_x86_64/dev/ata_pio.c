@@ -323,15 +323,17 @@ static void ata_pio_read_sector(block_dev_t *blk, void *dst, uint64_t sector, ui
             break;
         }
 
+#if 0
         // 读取一个扇区的数据
-        // for (int i = 0; i < 256; ++i) {
-        //     buff[i] = in16(ch->io_base);
-        // }
-        // buff += 256;
-
+        for (int i = 0; i < 256; ++i) {
+            buff[i] = in16(ch->io_base);
+        }
+        buff += 256;
+#else
         // rep insw 执行后，rcx 和 rdi 的值会改变，需要声明
         size_t repeat = ata->blk.sec_size / sizeof(uint16_t);
         ASMV("rep insw" : "+D"(buff), "+c"(repeat) : "d"(ch->io_base) : "memory");
+#endif
     }
 
     mutex_give(&ch->mutex);

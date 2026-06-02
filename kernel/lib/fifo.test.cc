@@ -35,6 +35,8 @@ TEST_F(FifoTest, ReadWrite) {
 TEST_F(FifoTest, Rollback) {
     char rwbuf[100];
 
+    EXPECT_TRUE(fifo_is_empty(&fifo_));
+
     for (int i = 0; i < 10; ++i) {
         memset(rwbuf, 'A' + i, sizeof(rwbuf));
         fifo_force_write(&fifo_, rwbuf, sizeof(rwbuf));
@@ -42,9 +44,13 @@ TEST_F(FifoTest, Rollback) {
 
     // 已经写了 1000B
     EXPECT_EQ(fifo_data_size(&fifo_), 1000);
+    EXPECT_EQ(fifo_left_size(&fifo_), 24);
+    EXPECT_FALSE(fifo_is_full(&fifo_));
 
     // 再写入 100B
     memset(rwbuf, 'Z', sizeof(rwbuf));
     fifo_force_write(&fifo_, rwbuf, sizeof(rwbuf));
     EXPECT_EQ(fifo_data_size(&fifo_), 1024);
+    EXPECT_EQ(fifo_left_size(&fifo_), 0);
+    EXPECT_TRUE(fifo_is_full(&fifo_));
 }

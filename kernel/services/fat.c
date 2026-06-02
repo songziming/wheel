@@ -78,7 +78,7 @@ typedef struct fat32_volumn {
     uint32_t     cluster_count; // 簇个数
     uint32_t     root_cluster;  // 根目录的第一个 cluster 编号
     vmrange_t    fat_cache;     // FAT 单链表的缓存
-    vmrange_t    cluster_cache; // 读写簇使用的缓存
+    // vmrange_t    cluster_cache; // 读写簇使用的缓存
     uint32_t    *fat;
     uint8_t     *data;
 } fat32_volumn_t;
@@ -98,11 +98,10 @@ typedef struct fat32_handle {
     vmrange_t   cluster_cache;  // 数据读取到哪里
     uint32_t    curr_clus;      // 当前读到哪个簇
     uint32_t    curr_pos;       // 当前读到簇里面哪个字节
+    uint8_t    *cache;
+    char    long_name[512];
+    char    short_name[13];
 } fat32_handle_t;
-
-// 遍历文件夹的回调，返回非零表示是否不再继续遍历
-// 传给回调的参数会被销毁，回调需要自己复制一份
-typedef int (*fs_walker_t)(const fs_entry_t *item, void *user);
 
 //------------------------------------------------------------------------------
 // 检查块设备是不是 FAT32 文件系统
@@ -134,12 +133,12 @@ fat32_volumn_t *fat32_mount(block_dev_t *blk, const uint8_t *sec0) {
             return NULL;
     }
 
-    // cluster 大小，必然是 2 的幂，必然小于 32K，也可能小于一个页
-    size_t clus_size = bs->bpb.sec_per_clus * sec_size;
-    int clus_rank = 0;
-    if (clus_size > PAGE_SIZE) {
-        clus_rank = __builtin_ctz(clus_size >> PAGE_SHIFT);
-    }
+    // // cluster 大小，必然是 2 的幂，必然小于 32K，也可能小于一个页
+    // size_t clus_size = bs->bpb.sec_per_clus * sec_size;
+    // int clus_rank = 0;
+    // if (clus_size > PAGE_SIZE) {
+    //     clus_rank = __builtin_ctz(clus_size >> PAGE_SHIFT);
+    // }
 
     // 计算根目录区占据的扇区数（FAT32 为 0）
     uint32_t root_ents = bs->bpb.root_ent_cnt;
@@ -173,36 +172,14 @@ fat32_volumn_t *fat32_mount(block_dev_t *blk, const uint8_t *sec0) {
     }
 
     // 为 FAT 分配空间
-    // TODO 目前只能按 2 的幂次分配内存，可能造成浪费
-    // TODO FAT 有可能超过 block 最大可分配大小
-    size_t fat_pages = (fat_secs * sec_size + PAGE_SIZE - 1) >> PAGE_SHIFT;
-    if (fat_pages & (fat_pages - 1)) {
-        logk("warning: FAT requires %zd pages, rounding up\n", fat_pages);
-        fat_pages <<= 1;
-        while (fat_pages & (fat_pages - 1)) {
-            fat_pages &= fat_pages - 1;
-        }
-    }
-    int fat_rank = __builtin_ctz(fat_pages);
-    vol->fat = (uint32_t*)vmspace_alloc(&g_kernel_vm, &vol->fat_cache,
-        POOL_ZONE_START, POOL_ZONE_END, fat_rank, PT_FS, MMU_WRITE);
+    vol->fat = (uint32_t*)vmspace_alloc_sparse(&g_kernel_vm, &vol->fat_cache,
+        POOL_ZONE_START, POOL_ZONE_END, fat_secs * sec_size, PT_FS, MMU_WRITE);
     if (NULL == vol->fat) {
         logk("cannot allocate space for FAT table!\n");
         kernel_heap_free(vol);
         return NULL;
     }
     vol->fat_cache.desc = "FAT32-fat-cache";
-
-    // 为读写用的簇缓存分配空间
-    vol->data = (uint8_t*)vmspace_alloc(&g_kernel_vm, &vol->cluster_cache,
-        POOL_ZONE_START, POOL_ZONE_END, clus_rank, PT_FS, MMU_WRITE);
-    vol->cluster_cache.desc = "FAT32-cluster-cache";
-    if (NULL == vol->data) {
-        logk("cannot allocate space for FAT32 cluster cache!\n");
-        vmspace_remove(&g_kernel_vm, &vol->fat_cache);
-        kernel_heap_free(vol);
-        return NULL;
-    }
 
     // 读取 FAT
     block_read(blk, vol->fat, bs->bpb.rsvd_sec_cnt, fat_secs);
@@ -253,159 +230,179 @@ typedef struct fat_long_entry {
 #define ATTR_ARCHIVE    0x20
 #define ATTR_LONG_NAME (ATTR_READ_ONLY|ATTR_HIDDEN|ATTR_SYSTEM|ATTR_VOLUME_ID)
 
-// 遍历一个目录
-// 如果提前退出，则回调的返回值就是本函数的返回值，否则返回零
-// 传给回调的 fs_entry 是局部变量，fs_entry 里面的字符串也是局部变量
-static int fat32_walk_dir(fat32_volumn_t *vol, uint32_t clus, fs_walker_t cb, void *user) {
-    fat_entry_t *entries = (fat_entry_t*)vol->data;
-    size_t ent_per_clus = (vol->blk->sec_size << vol->cluster_shift) / sizeof(fat_entry_t);
-
-    char short_name[13]; // 8.3 再加上分隔符、终止符
-    char long_name[256]; // 长文件名用的是宽字符
-    int long_order = 0; // 前一个长名条目的编号
-    fs_entry_t ent;
-
-    while ((clus >= 2) && (clus < vol->cluster_count)) {
-        int sec = vol->data_start + ((clus - 2) << vol->cluster_shift);
-        block_read(vol->blk, entries, sec, 1U << vol->cluster_shift);
-        clus = vol->fat[clus]; // 通过 FAT 找到下一个簇
-
-        for (size_t i = 0; i < ent_per_clus; ++i) {
-            if (0xe5 == (uint8_t)entries[i].name[0]) {
-                continue; // 无效条目
-            }
-            if (0 == (uint8_t)entries[i].name[0]) {
-                return 0; // 到了结尾
-            }
-            if (ATTR_LONG_NAME == (entries[i].attr & ATTR_LONG_NAME)) {
-                // 长文件名条目里面只记录文件名，若干长文件名后面是一个短文件名条目
-                fat_long_entry_t *lent = (fat_long_entry_t*)(entries + i);
-                // if (0x40 & lent->order) {
-                //     logk("start of long name entries\n");
-                // } else if (long_order - 1 != lent->order) {
-                //     logk("long name entries corrupt!");
-                // }
-                long_order = lent->order & ~0x40;
-
-                // 一个 long-name-entry 包含 13 个宽字符
-                // 我们将这 13 个宽字符转换为 ascii 再拼接
-                uint16_t wname[13];
-                kmemcpy(wname, lent->name1, sizeof(lent->name1));
-                kmemcpy(wname + 5, lent->name2, sizeof(lent->name2));
-                kmemcpy(wname + 11, lent->name3, sizeof(lent->name3));
-                char *name = &long_name[(long_order - 1) * 13];
-                for (int j = 0; j < 13; ++j) {
-                    if (wname[j] <= 0x7f) {
-                        name[j] = (char)wname[j];
-                    } else {
-                        name[j] = '?';
-                    }
-                }
-                // logk("appending long name (%d) --> %.13s\n", long_order, name);
-                continue;
-            }
-
-            // 特殊文件直接跳过
-
-            // 记录文件名
-            if (long_order == 1) {
-                long_order = 0;
-                ent.name = long_name; // 长文件名自带终止符
-            } else {
-                // 空格改成终止符
-                char *raw = entries[i].name;
-                // logk("old 8.3 name (%.11s)\n", raw);
-                for (int j = 0; j < 11; ++j) {
-                    if (' ' == raw[j]) {
-                        raw[j] = '\0';
-                    }
-                }
-                snprintk(short_name, sizeof(short_name), "%s.%.3s", raw, raw + 8);
-                ent.name = short_name;
-            }
-
-            // 记录属性
-            ent.is_dir = (entries[i].attr & ATTR_DIRECTORY) ? 1 : 0;
-            ent.hidden = (entries[i].attr & ATTR_HIDDEN) ? 1 : 0;
-            ent.first_cluster   = entries[i].first_cluster_hi;
-            ent.first_cluster <<= 16;
-            ent.first_cluster  |= entries[i].first_cluster_lo;
-            ent.size = entries[i].file_size;
-
-            // 调用回调函数，返回 0 表示不再
-            int ret = cb(&ent, user);
-            if (ret) {
-                return ret;
-            }
-        }
-    }
-
-    return 0;
-}
-
 //------------------------------------------------------------------------------
 // 遍历打开的目录，访问下一个 fs_entry
 //------------------------------------------------------------------------------
 
-// 如果已经是最后一个 entry，则返回 1
-int next_dir_entry(fat32_volumn_t *vol, fat32_handle_t *h, fs_entry_t *next) {
+// 打开文件，动态创建一个 handle
+fat32_handle_t *fat32_open(fat32_volumn_t *vol, const fs_entry_t *ent) {
+    fat32_handle_t *h = kernel_heap_alloc(sizeof(fat32_handle_t));
+    if (NULL == h) {
+        logk("warning: cannot create handle object\n");
+        return NULL;
+    }
+
     size_t cluster_size = vol->blk->sec_size << vol->cluster_shift;
-    size_t ent_per_clus = cluster_size / sizeof(fat_entry_t);
-
-    fat_entry_t *entry = (fat_entry_t*)(h->cluster_cache.vaddr + h->curr_pos);
-    if (0 == entry->name[0]) {
-        return 1; // 到了结尾
+    int rank = (cluster_size < PAGE_SIZE) ? 0 : __builtin_ctz(cluster_size >> PAGE_SHIFT);
+    h->cache = (uint8_t*)vmspace_alloc(&g_kernel_vm, &h->cluster_cache,
+        POOL_ZONE_START, POOL_ZONE_END, rank, PT_FS, MMU_WRITE);
+    logk("allocating space at %p\n", h->cache);
+    if (0 == h->cache) {
+        logk("warning: cannot allocate cache space for open file\n");
+        kernel_heap_free(h);
+        return NULL;
     }
 
-    // 不是终止 entry，必然存在下一个 entry
-    h->curr_pos += sizeof(fat_entry_t);
-    if (h->curr_pos >= cluster_size) {
+    h->curr_clus = ent->first_cluster;
+    int sec = vol->data_start + ((h->curr_clus - 2) << vol->cluster_shift);
+    block_read(vol->blk, h->cache, sec, 1U << vol->cluster_shift);
+    h->curr_pos = 0;
+
+    return h;
+}
+
+// 关闭文件，如果有尚未同步的缓存，此时应该写入磁盘
+void fat32_close(fat32_volumn_t *vol, fat32_handle_t *h) {
+    (void)vol;
+    vmspace_remove(&g_kernel_vm, &h->cluster_cache);
+    kernel_heap_free(h);
+}
+
+// 读取接下来的 N 字节，实际读取的字节数也通过 len 返回
+// 读取的数据已经在 cache 里面了，可以直接返回指针
+void *fat32_read(fat32_volumn_t *vol, fat32_handle_t *h, size_t *len) {
+    size_t cluster_size = vol->blk->sec_size << vol->cluster_shift;
+
+    // 如果到了当前簇末尾，则需要寻找下一个簇
+    // TODO 检查文件大小，目前只能按 cluster 限制
+    if (h->curr_pos == cluster_size) {
         h->curr_clus = vol->fat[h->curr_clus];
+        if (h->curr_clus >= 0xfffffff8) {
+            return NULL; // 后面没有簇
+        }
+
+        int sec = vol->data_start + ((h->curr_clus - 2) << vol->cluster_shift);
+        block_read(vol->blk, h->cache, sec, 1U << vol->cluster_shift);
+        h->curr_pos = 0;
     }
 
-    // 从当前 entry 解析文件名
-    // 如果遇到长文件名 entry，则需要多次循环
+    void *ptr = h->cache + h->curr_pos;
+    if (h->curr_pos + *len > cluster_size) {
+        *len = cluster_size - h->curr_pos;
+    }
+    h->curr_pos += *len;
+    return ptr;
+}
+
+
+// 如果已经是最后一个 entry，没有新的 entry，则返回 1
+int fat32_next_dir_entry(fat32_volumn_t *vol, fat32_handle_t *h, fs_entry_t *next) {
+    // char long_name[512];
+    // char short_name[13];
+    int has_long_name = 0;
+    fat_entry_t *entry;
+
+    while (1) {
+        size_t entsize = sizeof(fat_entry_t);
+        entry = (fat_entry_t*)fat32_read(vol, h, &entsize);
+        ASSERT(entsize == sizeof(fat_entry_t));
+
+        if ((NULL == entry) || (0 == entry->name[0])) {
+            return 1; // 出错或到了结尾
+        }
+
+        if (ATTR_LONG_NAME != (entry->attr & ATTR_LONG_NAME)) {
+            break;
+        }
+
+        has_long_name = 1;
+        fat_long_entry_t *lent = (fat_long_entry_t*)entry;
+        uint8_t order = lent->order & ~0x40;
+
+        // 一个 long-name-entry 包含 13 个宽字符
+        // 我们将这 13 个宽字符转换为 ascii 再拼接
+        uint16_t wname[13];
+        kmemcpy(wname, lent->name1, sizeof(lent->name1));
+        kmemcpy(wname + 5, lent->name2, sizeof(lent->name2));
+        kmemcpy(wname + 11, lent->name3, sizeof(lent->name3));
+        char *name = &h->long_name[(order - 1) * 13];
+        for (int j = 0; j < 13; ++j) {
+            if (wname[j] <= 0x7f) {
+                name[j] = (char)wname[j];
+            } else {
+                name[j] = '?';
+            }
+        }
+    }
+
+    // TODO 检查 attr 特殊属性位：是否系统文件，是否隐藏
+
+    // 记录文件名
+    if (has_long_name) {
+        next->name = h->long_name; // 长文件名自带终止符
+    } else {
+        // 空格改成终止符
+        // 这会修改 cluster cache 的内容，不过没关系
+        char *raw = entry->name;
+        for (int j = 0; j < 11; ++j) {
+            if (' ' == raw[j]) {
+                raw[j] = '\0';
+            }
+        }
+        snprintk(h->short_name, sizeof(h->short_name), "%s.%.3s", raw, raw + 8);
+        next->name = h->short_name;
+    }
+
+    // 记录属性
+    next->is_dir = (entry->attr & ATTR_DIRECTORY) ? 1 : 0;
+    next->hidden = (entry->attr & ATTR_HIDDEN) ? 1 : 0;
+    next->first_cluster  = (uint32_t)entry->first_cluster_hi << 16;
+    next->first_cluster |= entry->first_cluster_lo;
+    next->size = entry->file_size;
 
     return 0;
 }
 
 //------------------------------------------------------------------------------
 
-static int fat32_ls_cb(const fs_entry_t *ent, void *user UNUSED) {
-    if (ent->is_dir) {
-        console_printf("%s/\n", ent->name);
-    } else {
-        console_printf("%s\n", ent->name);
-    }
-    return 0;
-}
-
 // 如果 d==NULL，表示查看根目录内容
 void fat32_ls(fat32_volumn_t *vol, const fs_entry_t *d) {
-    uint32_t clus = d ? d->first_cluster : vol->root_cluster;
-    fat32_walk_dir(vol, clus, fat32_ls_cb, NULL);
+    fs_entry_t root_ent;
+    if (NULL == d) {
+        root_ent.first_cluster = vol->root_cluster;
+        d = &root_ent;
+    }
+    fat32_handle_t *h = fat32_open(vol, d);
+    if (NULL == h) {
+        return;
+    }
+
+    fs_entry_t child;
+    while (0 == fat32_next_dir_entry(vol, h, &child)) {
+        console_printf("%s, is_dir=%c\n", child.name, child.is_dir?'Y':'N');
+    }
+
+    fat32_close(vol, h);
 }
 
-static int fat32_find_cb(const fs_entry_t *ent, void *user) {
-    fs_entry_t *dst = (fs_entry_t*)user;
-    if (0 == kstrcmp(ent->name, dst->name)) {
-        // ent 是局部变量，回调结束后就被销毁，里面的字符串也是局部的，只在本函数里有效
-        // 所以，name 应该保留 dst 里面的取值，这是 caller 传入的
-        const char *oldstr = dst->name;
-        kmemcpy(dst, ent, sizeof(fs_entry_t));
-        dst->name = oldstr;
-        return 1;
-    }
-    return 0;
-}
 
 // 寻找目录 d 内部，名字是 name 的元素
 // 找到则返回 1，未找到返回 0
-// 通过 child 返回的信息包括了 name 字符串，这个字符串指向局部数据，返回之后被销毁
 int fat32_find(fat32_volumn_t *vol, const fs_entry_t *d, const char *name, fs_entry_t *child) {
-    child->name = name;
-    uint32_t clus = d ? d->first_cluster : vol->root_cluster;
-    return fat32_walk_dir(vol, clus, fat32_find_cb, child);
+    fat32_handle_t *h = fat32_open(vol, d);
+    if (NULL == h) {
+        return 0;
+    }
+
+    while (0 == fat32_next_dir_entry(vol, h, child)) {
+        if (0 == kstrcmp(child->name, name)) {
+            fat32_close(vol, h);
+            return 1;
+        }
+    }
+
+    fat32_close(vol, h);
+    return 0;
 }
 
 //------------------------------------------------------------------------------
