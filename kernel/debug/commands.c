@@ -22,4 +22,9 @@ static void show_mem(int argc, char *argv[]) {
     console_printf("\n");
 }
 
+static void inject_ud2() {
+    ASMV("ud2");
+}
+
 KSHELL_CMD("xxd", show_mem);
+KSHELL_CMD("ud2", inject_ud2);

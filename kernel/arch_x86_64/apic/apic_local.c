@@ -245,6 +245,17 @@ INIT_TEXT void loapic_init_local() {
     // 屏蔽中断向量号 0~31
     g_write(REG_TPR, 16);
 
+    // // 设置逻辑目标模式，IOAPIC 用 LOGICAL 模式广播中断时需要
+    // // 每个 Local APIC 的 LDR 位掩码与 IOAPIC dest 做 AND，非零则接受中断
+    // if (g_cpu_features & CPU_FEATURE_X2APIC) {
+    //     // x2APIC 固定为平坦模式，32-bit LDR 每个 CPU 占一个 bit
+    //     g_write(REG_LDR, 1U << lo->apic_id);
+    // } else {
+    //     // xAPIC: DFR 平坦模式，8-bit LDR 位掩码（apic_id 0~7 各占 1 bit）
+    //     g_write(REG_DFR, 0xFFFFFFFF);
+    //     g_write(REG_LDR, 1U << (lo->apic_id % 8));
+    // }
+
     // 设置 LINT0、LINT1，参考 Intel MultiProcessor Spec 第 5.1 节
     // LINT0 通常连接到 8259A，但连接到 8259A 的设备也连接到 IO APIC，可以不设置
     // LINT1 通常连接到 NMI，具体信息以 MADT 为准

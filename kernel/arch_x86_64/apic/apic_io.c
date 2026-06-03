@@ -86,21 +86,25 @@ INIT_TEXT void ioapic_init() {
         // 这些中断以广播形式发送给所有 Local APIC
         int ent = 0;
         for (; (ent < io->red_num) && (gsi < 16); ++ent, ++gsi) {
-            uint32_t lo = IOAPIC_DM_LOWEST | IOAPIC_LOGICAL;
+            // uint32_t lo = IOAPIC_DM_LOWEST | IOAPIC_LOGICAL;
+            uint32_t lo = IOAPIC_DM_FIXED;
             lo |= gsi_is_edge(gsi) ? IOAPIC_EDGE : IOAPIC_LEVEL;
             lo |= gsi_is_high(gsi) ? IOAPIC_HIGH : IOAPIC_LOW;
             lo |= (gsi + VEC_GSI_BASE) & IOAPIC_VEC_MASK;
             lo |= IOAPIC_INT_MASK;
-            ioapic_write(io, IOAPIC_RED_H(ent), 0xff000000); // 广播
+            // ioapic_write(io, IOAPIC_RED_H(ent), 0xff000000); // 广播
+            ioapic_write(io, IOAPIC_RED_H(gsi), g_loapics[0].apic_id << 24);
             ioapic_write(io, IOAPIC_RED_L(ent), lo);
         }
 
         // IRQ 之后的硬件中断，level-triggered，active low
         for (; ent < io->red_num; ++ent, ++gsi) {
-            uint32_t lo = IOAPIC_DM_LOWEST | IOAPIC_LOGICAL | IOAPIC_LEVEL | IOAPIC_LOW;
+            // uint32_t lo = IOAPIC_DM_LOWEST | IOAPIC_LOGICAL | IOAPIC_LEVEL | IOAPIC_LOW;
+            uint32_t lo = IOAPIC_DM_LOWEST | IOAPIC_LEVEL | IOAPIC_LOW;
             lo |= (gsi + VEC_GSI_BASE) & IOAPIC_VEC_MASK;
             lo |= IOAPIC_INT_MASK;
-            ioapic_write(io, IOAPIC_RED_H(ent), 0xff000000); // 广播
+            // ioapic_write(io, IOAPIC_RED_H(ent), 0xff000000); // 广播
+            ioapic_write(io, IOAPIC_RED_H(gsi), g_loapics[0].apic_id << 24);
             ioapic_write(io, IOAPIC_RED_L(ent), lo);
         }
     }

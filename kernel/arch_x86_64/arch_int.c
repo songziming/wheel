@@ -108,7 +108,7 @@ INIT_TEXT void int_init() {
         idt_set_isr(i, isr_entries[i], 0);
         irq_handlers[i] = handle_irq;
     }
-    irq_handlers[14] = handle_pf;
+    // irq_handlers[14] = handle_pf;
 
     idt_set_ist(2,  1); // NMI
     idt_set_ist(8,  2); // #DF
