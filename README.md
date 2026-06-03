@@ -6,6 +6,8 @@ Wheel is an operating system, written from scratch.
 
 64-bit higher half kernel, multiprocessor support, preemptive scheduling, ring-0 only, simple kernel shell.
 
+![kernel shell, fat32, dump vmspace layout](./docs/kshell_fat32_vm.png)
+
 ## build and test
 
 Wheel is build using LLVM under Linux, ses [how to build toolchain](./docs/00_build_toolchain.md).
@@ -21,6 +23,6 @@ make cov    # run unit test and generate coverage report in build/coverage
 
 Create disk image by `sudo ./host/mkimage build/hd.img`.
 
-Copy file into disk image: `mcopy -i "build/hd.img@@1M" your_file ::/`
+Copy file into disk image: `mcopy -i "build/hd.img@@1M" path_to_file ::/`
 
 Launch QEMU using `./run_iso.sh` (or `run_iso.bat` under Windows).

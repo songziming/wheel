@@ -86,19 +86,6 @@ TEST_F(HeapTest, AllocMultiple) {
     heap_free(&m_heap, p);
 }
 
-#if 0
-// 大块内存无法分配，不代表小碎片不存在
-TEST_F(HeapTest, AllocOOM) {
-    // 耗尽
-    void *p;
-    while ((p = heap_alloc(&m_heap, 512))) {}
-
-    // 再分配应返回 NULL
-    EXPECT_EQ(nullptr, heap_alloc(&m_heap, 8));
-    EXPECT_EQ(nullptr, heap_alloc(&m_heap, 1));
-}
-#endif
-
 //------------------------------------------------------------------------------
 // 释放与重用
 //------------------------------------------------------------------------------

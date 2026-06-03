@@ -218,12 +218,6 @@ INIT_TEXT void framebuf_init(uint32_t rows, uint32_t cols, uint32_t pitch, uint3
     ops.height = g_rows / g_font->rows;
     ops.width  = g_cols / g_font->cols;
     g_display = &ops;
-
-#if 0
-    g_caret_row = 0;
-    g_caret_col = 0;
-#endif
-    // ops.draw_caret(g_caret_col, g_caret_row);
 }
 
 // 将 LFB 重新映射为 write-combined，提升写入速度
@@ -242,61 +236,3 @@ INIT_TEXT void framebuf_remap_wc() {
 void framebuf_setfg(uint32_t fg) {
     g_framebuf_color = fg;
 }
-
-// dead code, now replaced by console
-#if 0
-
-static spin_t g_framebuf_lock = SPIN_INIT;
-static int g_caret_row;        // 光标所在字符行号（逻辑行号，0 = 屏幕顶）
-static int g_caret_col;        // 光标所在字符列号
-
-static void framebuf_putc(char ch) {
-    int r = g_caret_row;
-    int c = g_caret_col;
-
-    // 更新光标位置
-    // 遇到非打印字符则换成空格，以清除光标
-    switch (ch) {
-    case '\t':
-        g_caret_col += 8;
-        g_caret_col &= ~7;
-        ch = ' ';
-        break;
-    case '\n':
-        ++g_caret_row;
-        // fallthrough
-    case '\r':
-        g_caret_col = 0;
-        ch = ' ';
-        break;
-    default:
-        ++g_caret_col;
-        break;
-    }
-
-    // 超过屏幕宽度则换行
-    if (g_caret_col >= ops.width) {
-        g_caret_col -= ops.width;
-        ++g_caret_row;
-    }
-
-    // 超过屏幕高度，需要滚屏
-    if (g_caret_row >= ops.height) {
-        ops.scroll(g_caret_row - ops.height + 1);
-        --g_caret_row;
-        --r;
-    }
-
-    ops.draw_char(ch, c, r);
-}
-
-void framebuf_puts(const char *s, size_t n) {
-    int key = irq_spin_take(&g_framebuf_lock);
-    for (size_t i = 0; i < n; ++i) {
-        framebuf_putc(s[i]);
-    }
-    ops.draw_caret(g_caret_col, g_caret_row);
-    irq_spin_give(&g_framebuf_lock, key);
-}
-
-#endif

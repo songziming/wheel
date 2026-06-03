@@ -68,6 +68,44 @@ typedef struct fatbs {
 } PACKED fatbs_t;
 
 //------------------------------------------------------------------------------
+// FAT32 目录条目格式
+//------------------------------------------------------------------------------
+
+typedef struct fat_entry {
+    char        name[11];  // 8.3 format
+    uint8_t     attr;
+    uint8_t     ntres;
+    uint8_t     create_time_tenth;  // 14
+    uint16_t    create_time;        // 16
+    uint16_t    create_date;
+    uint16_t    last_access_date;
+    uint16_t    first_cluster_hi;
+    uint16_t    write_time;
+    uint16_t    write_date;
+    uint16_t    first_cluster_lo;   // 28
+    uint32_t    file_size;
+} PACKED fat_entry_t;
+
+typedef struct fat_long_entry {
+    uint8_t     order;
+    uint8_t     name1[10];
+    uint8_t     attr;
+    uint8_t     type;
+    uint8_t     checksum;
+    uint8_t     name2[12];
+    uint16_t    first_cluster_lo;
+    uint8_t     name3[4];
+} PACKED fat_long_entry_t;
+
+#define ATTR_READ_ONLY  0x01
+#define ATTR_HIDDEN     0x02
+#define ATTR_SYSTEM     0x04
+#define ATTR_VOLUME_ID  0x08
+#define ATTR_DIRECTORY  0x10
+#define ATTR_ARCHIVE    0x20
+#define ATTR_LONG_NAME (ATTR_READ_ONLY|ATTR_HIDDEN|ATTR_SYSTEM|ATTR_VOLUME_ID)
+
+//------------------------------------------------------------------------------
 // FAT 挂载的卷
 //------------------------------------------------------------------------------
 
@@ -90,6 +128,8 @@ typedef struct fs_entry {
     uint32_t    size;
     int         is_dir : 1;
     int         hidden : 1;
+    uint8_t     fatattr;
+    // fat_entry_t fatent;
 } fs_entry_t;
 
 // 代表一个打开的文件或目录
@@ -193,44 +233,6 @@ fat32_volumn_t *fat32_mount(block_dev_t *blk, const uint8_t *sec0) {
 }
 
 //------------------------------------------------------------------------------
-// 遍历根目录内容
-//------------------------------------------------------------------------------
-
-typedef struct fat_entry {
-    char        name[11];  // 8.3 format
-    uint8_t     attr;
-    uint8_t     ntres;
-    uint8_t     create_time_tenth;  // 14
-    uint16_t    create_time;        // 16
-    uint16_t    create_date;
-    uint16_t    last_access_date;
-    uint16_t    first_cluster_hi;
-    uint16_t    write_time;
-    uint16_t    write_date;
-    uint16_t    first_cluster_lo;   // 28
-    uint32_t    file_size;
-} PACKED fat_entry_t;
-
-typedef struct fat_long_entry {
-    uint8_t     order;
-    uint8_t     name1[10];
-    uint8_t     attr;
-    uint8_t     type;
-    uint8_t     checksum;
-    uint8_t     name2[12];
-    uint16_t    first_cluster_lo;
-    uint8_t     name3[4];
-} PACKED fat_long_entry_t;
-
-#define ATTR_READ_ONLY  0x01
-#define ATTR_HIDDEN     0x02
-#define ATTR_SYSTEM     0x04
-#define ATTR_VOLUME_ID  0x08
-#define ATTR_DIRECTORY  0x10
-#define ATTR_ARCHIVE    0x20
-#define ATTR_LONG_NAME (ATTR_READ_ONLY|ATTR_HIDDEN|ATTR_SYSTEM|ATTR_VOLUME_ID)
-
-//------------------------------------------------------------------------------
 // 遍历打开的目录，访问下一个 fs_entry
 //------------------------------------------------------------------------------
 
@@ -246,14 +248,15 @@ fat32_handle_t *fat32_open(fat32_volumn_t *vol, const fs_entry_t *ent) {
     int rank = (cluster_size < PAGE_SIZE) ? 0 : __builtin_ctz(cluster_size >> PAGE_SHIFT);
     h->cache = (uint8_t*)vmspace_alloc(&g_kernel_vm, &h->cluster_cache,
         POOL_ZONE_START, POOL_ZONE_END, rank, PT_FS, MMU_WRITE);
-    logk("allocating space at %p\n", h->cache);
     if (0 == h->cache) {
         logk("warning: cannot allocate cache space for open file\n");
         kernel_heap_free(h);
         return NULL;
     }
+    h->cluster_cache.desc = "open file cluster cache";
 
-    h->curr_clus = ent->first_cluster;
+    // 如果没有传入 entry，表示打开的是根目录
+    h->curr_clus = ent ? ent->first_cluster : vol->root_cluster;
     int sec = vol->data_start + ((h->curr_clus - 2) << vol->cluster_shift);
     block_read(vol->blk, h->cache, sec, 1U << vol->cluster_shift);
     h->curr_pos = 0;
@@ -297,9 +300,7 @@ void *fat32_read(fat32_volumn_t *vol, fat32_handle_t *h, size_t *len) {
 
 // 如果已经是最后一个 entry，没有新的 entry，则返回 1
 int fat32_next_dir_entry(fat32_volumn_t *vol, fat32_handle_t *h, fs_entry_t *next) {
-    // char long_name[512];
-    // char short_name[13];
-    int has_long_name = 0;
+    uint8_t long_name_order = 0;
     fat_entry_t *entry;
 
     while (1) {
@@ -310,14 +311,24 @@ int fat32_next_dir_entry(fat32_volumn_t *vol, fat32_handle_t *h, fs_entry_t *nex
         if ((NULL == entry) || (0 == entry->name[0])) {
             return 1; // 出错或到了结尾
         }
+        if (0xe5 == (uint8_t)entry->name[0]) {
+            // 这个条目被删除
+            long_name_order = 0;
+            continue;
+        }
 
         if (ATTR_LONG_NAME != (entry->attr & ATTR_LONG_NAME)) {
             break;
         }
 
-        has_long_name = 1;
+        // has_long_name = 1;
         fat_long_entry_t *lent = (fat_long_entry_t*)entry;
-        uint8_t order = lent->order & ~0x40;
+        long_name_order = lent->order & 0x3f;
+        if ((0 == long_name_order) || (long_name_order > 20)) {
+            // 无效 LFN，跳过
+            long_name_order = 0;
+            continue;
+        }
 
         // 一个 long-name-entry 包含 13 个宽字符
         // 我们将这 13 个宽字符转换为 ascii 再拼接
@@ -325,7 +336,7 @@ int fat32_next_dir_entry(fat32_volumn_t *vol, fat32_handle_t *h, fs_entry_t *nex
         kmemcpy(wname, lent->name1, sizeof(lent->name1));
         kmemcpy(wname + 5, lent->name2, sizeof(lent->name2));
         kmemcpy(wname + 11, lent->name3, sizeof(lent->name3));
-        char *name = &h->long_name[(order - 1) * 13];
+        char *name = &h->long_name[(long_name_order - 1) * 13];
         for (int j = 0; j < 13; ++j) {
             if (wname[j] <= 0x7f) {
                 name[j] = (char)wname[j];
@@ -333,12 +344,14 @@ int fat32_next_dir_entry(fat32_volumn_t *vol, fat32_handle_t *h, fs_entry_t *nex
                 name[j] = '?';
             }
         }
+
+        // logk("long-name-%u += '%.13s'\n", long_name_order, name);
     }
 
     // TODO 检查 attr 特殊属性位：是否系统文件，是否隐藏
 
     // 记录文件名
-    if (has_long_name) {
+    if (1 == long_name_order) {
         next->name = h->long_name; // 长文件名自带终止符
     } else {
         // 空格改成终止符
@@ -349,7 +362,11 @@ int fat32_next_dir_entry(fat32_volumn_t *vol, fat32_handle_t *h, fs_entry_t *nex
                 raw[j] = '\0';
             }
         }
-        snprintk(h->short_name, sizeof(h->short_name), "%s.%.3s", raw, raw + 8);
+        if ('.' == raw[0]) {
+            kmemcpy(h->short_name, raw, 3);
+        } else {
+            snprintk(h->short_name, sizeof(h->short_name), "%s.%.3s", raw, raw + 8);
+        }
         next->name = h->short_name;
     }
 
@@ -359,6 +376,8 @@ int fat32_next_dir_entry(fat32_volumn_t *vol, fat32_handle_t *h, fs_entry_t *nex
     next->first_cluster  = (uint32_t)entry->first_cluster_hi << 16;
     next->first_cluster |= entry->first_cluster_lo;
     next->size = entry->file_size;
+    // next->fatent = *entry;
+    next->fatattr = entry->attr;
 
     return 0;
 }
@@ -379,7 +398,12 @@ void fat32_ls(fat32_volumn_t *vol, const fs_entry_t *d) {
 
     fs_entry_t child;
     while (0 == fat32_next_dir_entry(vol, h, &child)) {
-        console_printf("%s, is_dir=%c\n", child.name, child.is_dir?'Y':'N');
+        console_printf("%s%c  hidden=%c, cluster=%u, attr=%02x\n",
+            child.name,
+            child.is_dir?'/':' ',
+            child.hidden?'Y':'N',
+            child.first_cluster,
+            child.fatattr);
     }
 
     fat32_close(vol, h);
