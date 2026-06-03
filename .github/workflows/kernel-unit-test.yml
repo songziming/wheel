@@ -1,23 +1,19 @@
-name: Kernel unit test
+name: wheel kernel unit test
 
 on:
   - push
 
 jobs:
-
   run-unit-test:
     runs-on: ubuntu-latest
     steps:
       - name: install packages
         run: sudo apt install -y libgtest-dev
-
       - name: cheskout repo
         uses: actions/checkout@v4
-
       - name: build unit test
-        run: make test
-
+        run: make unit
       - name: run unit test
-        run: build/test
+        run: build/unit
         env:
           LD_LIBRARY_PATH: build

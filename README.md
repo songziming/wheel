@@ -6,25 +6,23 @@ Wheel is an operating system, written from scratch.
 
 64-bit higher half kernel, multiprocessor support, preemptive scheduling, ring-0 only, simple kernel shell.
 
-![kernel shell](./docs/kernel_shell_blocks.png)
-
-## prepare toolchain
-
-Create docker image for compiling kernel and generating bootable image.
-
-```bash
-cat host_tools/Dockerfile | docker build - -t osdev --build-arg NJOBS=8
-```
-
-You can also check `host_tools/Dockerfile` for envsetup instructions.
+![kernel shell, fat32, dump vmspace layout](./docs/kshell_fat32_vm.png)
 
 ## build and test
 
+Wheel is build using LLVM under Linux, ses [how to build toolchain](./docs/00_build_toolchain.md).
+
 ```bash
-make        # compile kernel elf image build/wheel.elf
+make        # build kernel elf image build/wheel.elf
 make iso    # create bootable iso image build/wheel.iso
-make test   # compile unit test binary build/test
-make cov    # run unit test and generate coverage report in build/cov
+make unit   # build unit test binary build/unit
+make cov    # run unit test and generate coverage report in build/coverage
 ```
+
+## run in emulator
+
+Create disk image by `sudo ./host/mkimage build/hd.img`.
+
+Copy file into disk image: `mcopy -i "build/hd.img@@1M" path_to_file ::/`
 
 Launch QEMU using `./run_iso.sh` (or `run_iso.bat` under Windows).

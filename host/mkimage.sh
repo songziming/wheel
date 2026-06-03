@@ -1,0 +1,51 @@
+#! /bin/bash
+
+# 创建虚拟磁盘并安装 grub，硬盘只有一个主分区，起始偏移 1M
+# $1 目标磁盘镜像文件名
+
+if [ "$EUID" -ne 0 ]
+    then echo "run this script as root"
+    exit
+fi
+
+# 创建虚拟磁盘，共 64MB
+dd if=/dev/zero of=$1 bs=512 count=131072
+
+# 创建分区表，主分区从 1M 开始
+# 起始扇区号 2048，结尾扇区号 131071
+fdisk $1 << EOF
+n
+p
+1
+2048
+131071
+a
+w
+EOF
+
+# 创建两个loop文件，分别表示整块磁盘和主分区
+disk_loop=$(losetup --show -f $1)
+part_loop=$(losetup --show -f $1 -o 1M)
+
+# 主分区格式化，使用 FAT32
+mkfs.vfat -F 32 $part_loop
+
+# 主分区文件系统挂载
+mount_dir=$(mktemp -d)
+mount $part_loop $mount_dir
+
+# 安装引导器（BIOS 版本）
+grub-install \
+    --target=i386-pc \
+    --no-floppy \
+    --root-directory=$mount_dir \
+    --modules="normal part_msdos ext2 multiboot" \
+    $disk_loop
+
+# TODO 创建 uefi 版本的引导器，就是一个普通文件，拷贝到 FAT32 分区即可
+
+# 清理
+umount $mount_dir
+rm -rf $mount_dir
+losetup -d $disk_loop
+losetup -d $part_loop

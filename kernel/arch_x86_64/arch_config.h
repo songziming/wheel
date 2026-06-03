@@ -1,67 +1,43 @@
-#ifndef ARCH_X86_64_CONFIG_H
-#define ARCH_X86_64_CONFIG_H
+#ifndef ARCH_X86_64_ARCH_CONFIG_H
+#define ARCH_X86_64_ARCH_CONFIG_H
 
-//------------------------------------------------------------------------------
-// 基本信息
-//------------------------------------------------------------------------------
+// 与 x86_64 平台相关的配置参数
 
-#define AP_BOOT_MAGIC       0xdeadbeef
+#define PAGE_SHIFT  12
+#define PAGE_SIZE   0x1000
 
-#define PAGE_SIZE           0x1000
-#define PAGE_SHIFT          12
-
-#define TIMER_FREQ          60
-
-
-//------------------------------------------------------------------------------
-// 内存布局安排
-//------------------------------------------------------------------------------
-
+// 内核地址空间
+#define KERNEL_REAL_ADDR    0x8000               // 32K，实模式启动代码位置
 #define KERNEL_LOAD_ADDR    0x0000000000100000UL //  1M
 #define KERNEL_TEXT_ADDR    0xffffffff80000000UL // -2G
-#define KERNEL_REAL_ADDR    0x8000  // 32K，实模式启动代码位置
+#define DIRECT_MAP_ADDR     0xffff800000000000UL // 物理内存映射地址（共 16TB - 4GB）
+#define MMIO_WC_BASE        0xffff8FFF00000000UL // WC 映射区域（4GB），位于 direct map 之后
 
-#define DIRECT_MAP_ADDR     0xffff800000000000UL // 物理内存映射地址（共 16TB）
-#define DYNAMIC_MAP_ADDR    0xffff900000000000UL // 动态映射范围（共 16TB）
-#define DYNAMIC_MAP_END     0xffffa00000000000UL
+// 内核栈的映射区域（16TB）
+#define STACK_ZONE_START    0xffff900000000000UL
+#define STACK_ZONE_END      0xffffa00000000000UL
+
+// 内存池映射的区域（16TB）
+#define POOL_ZONE_START     0xffffa00000000000UL
+#define POOL_ZONE_END       0xffffb00000000000UL
 
 
-//------------------------------------------------------------------------------
+// 预留空间大小
+#define EARLY_RO_SIZE       0x1000
+#define EARLY_RW_SIZE       0x800000    // 需要容纳 framebuf
+#define INIT_STACK_SIZE     0x1000      // 启动使用的临时栈
+#define INT_STACK_SIZE      0x1000      // 中断栈
+#define KERNEL_HEAP_SIZE    0x1000      // 内核堆
+
 // 中断向量号
-//------------------------------------------------------------------------------
-
-#define VEC_GSI_BASE        0x40    // 外部中断起始编号
-
-#define VEC_IPI_RESCHED     0xd0
-#define VEC_IPI_STOPALL     0xd1
-
+#define VEC_GSI_BASE        0x40
+#define VEC_IPI_STOPALL     0xd0    // 所有 CPU 都停止
+#define VEC_IPI_RESCHED     0xd1    // 触发任务切换
+#define VEC_IPI_INVLPG      0xd2    // TLB-shootdown
+// #define VEC_IPI_MIGRATE     0xd2    // 迁移任务到空闲 CPU
 #define VEC_LOAPIC_TIMER    0xe0
+#define VEC_LOAPIC_ERROR    0xf0
+#define VEC_LOAPIC_THERMAL  0xf1
+#define VEC_LOAPIC_SPURIOUS 0xff    // spurious 向量号最后 4-bit 必须都是 1
 
-#define VEC_LOAPIC_ERROR    0xfe
-#define VEC_LOAPIC_SPURIOUS 0xff    // spurious 向量号最后 4bit 必须是 f
-
-
-//------------------------------------------------------------------------------
-// 预留的缓冲区大小
-//------------------------------------------------------------------------------
-
-#define EARLY_RO_SIZE       0x200000    // 只读预留内存（需要留足备份 ACPI 表的空间）
-#define EARLY_RW_SIZE       0x800000    // 读写预留内存（需要留足 framebuffer 的空间）
-
-#define KERNEL_HEAP_SIZE    0x400000    // 内核堆
-#define KEYBOARD_BUFF_LEN   64          // 按键码缓冲区
-
-
-//------------------------------------------------------------------------------
-// 栈尺寸
-//------------------------------------------------------------------------------
-
-#define INIT_STACK_SIZE     0x1000      // 初始化阶段使用的栈
-#define INT_STACK_SIZE      0x1000      // 中断栈大小，也是异常栈 IST
-
-// 任务栈也用于中断，栈大小需要能容下 arch_regs_t
-
-#define TASK_STACK_RANK     1       // 任务内核栈的默认大小
-#define IDLE_STACK_RANK     0       // 空闲任务内核栈大小
-
-#endif // ARCH_X86_64_CONFIG_H
+#endif // ARCH_X86_64_ARCH_CONFIG_H

@@ -1,12 +1,12 @@
+REAL_ADDR = 0x0000000000008000; /* 32K AP 实模式引导代码的地址 */
 LOAD_ADDR = 0x0000000000100000; /*  1M 内核加载位置 */
 TEXT_ADDR = 0xffffffff80000000; /* -2G 内核代码虚拟地址偏移 */
-REAL_ADDR = 0x0000000000008000; /* 32K AP 实模式引导代码的地址 */
 
 ENTRY(sys_boot)
 
 PHDRS {
     boot        PT_LOAD;
-    pcpu        PT_LOAD;
+    percpu      PT_LOAD;
     real        PT_LOAD;
     init        PT_LOAD;
     text        PT_LOAD;
@@ -28,12 +28,12 @@ SECTIONS {
     /* 后面的位于高地址 */
     . += TEXT_ADDR;
 
-    /* per cpu 模板，会被复制多份（取决于 CPU 个数） */
-    _pcpu_addr = .;
-    .pcpu.data : AT(ADDR(.pcpu.data) - TEXT_ADDR) { *(.pcpu.data) } : pcpu = 0x90
-    _pcpu_data_end = .;
-    .pcpu.bss (NOLOAD) : AT(ADDR(.pcpu.bss) - TEXT_ADDR) { *(.pcpu.bss) } : pcpu
-    _pcpu_bss_end = .;
+    /* percpu 模板，会被复制多份（取决于 CPU 个数） */
+    _percpu_addr = .;
+    .percpu.data : AT(ADDR(.percpu.data) - TEXT_ADDR) { *(.percpu.data) } : percpu = 0x90
+    _percpu_data_end = .;
+    .percpu.bss (NOLOAD) : AT(ADDR(.percpu.bss) - TEXT_ADDR) { *(.percpu.bss) } : percpu
+    _percpu_bss_end = .;
 
     /* 实模式启动代码模板，会被复制到 1M 以下，用于启动其他 CPU */
     _real_addr = .;
@@ -58,9 +58,11 @@ SECTIONS {
     . += 4K;
     .rodata ALIGN(4K) : AT(ADDR(.rodata) - TEXT_ADDR) {
         _rodata_addr = .;
+        _kcmd_addr = .;
+        KEEP(*(.kcmd))  /* 放在 rodata 开头，地址对齐 */
+        _kcmd_end = .;
         *(.rodata)
         *(.rodata.*)
-        _rodata_end = .;
     } : rodata = 0
     .rotail (NOLOAD) : AT(ADDR(.rotail) - TEXT_ADDR) {
         *(.rotail)
