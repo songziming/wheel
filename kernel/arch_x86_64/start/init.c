@@ -229,9 +229,9 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 中断控制器初始化
     i8259_disable();
-    ioapic_init();
     loapic_init();
     loapic_init_local();
+    ioapic_init();
 
     // 校准时钟
     loapic_timer_calibrate();
