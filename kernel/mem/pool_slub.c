@@ -1,4 +1,4 @@
-#include "slub.h"
+#include "pool_slub.h"
 #include <arch_api.h>
 #include <debug.h>
 
@@ -40,7 +40,7 @@ static inline size_t align_up(size_t x, size_t align) {
 }
 
 static inline void *pfn_to_virt(uint32_t pfn) {
-    return (void *)(DIRECT_MAP_ADDR + ((size_t)pfn << PAGE_SHIFT));
+    return (void*)(DIRECT_MAP_ADDR + ((size_t)pfn << PAGE_SHIFT));
 }
 
 static inline uint32_t virt_to_pfn(void *va) {
@@ -70,7 +70,7 @@ static uint32_t slab_create(uint8_t order, size_t obj_size) {
     uint32_t cnt = (uint32_t)(slab_size / obj_size);
     for (uint32_t i = 0; i < cnt; ++i) {
         uint16_t next = (i + 1 < cnt) ? (uint16_t)((i + 1) * obj_size) : NO_OBJ;
-        *(uint16_t *)((char *)addr + i * obj_size) = next;
+        *(uint16_t*)((char*)addr + i * obj_size) = next;
     }
 
     return pfn;
@@ -81,9 +81,9 @@ static void *slab_obj_alloc(uint32_t slab, size_t obj_size UNUSED) {
     ASSERT(g_pages[slab].head);
     ASSERT(NO_OBJ != g_pages[slab].objects);
 
-    char *base = (char *)pfn_to_virt(slab);
+    char *base = (char*)pfn_to_virt(slab);
     uint16_t off = g_pages[slab].objects;
-    g_pages[slab].objects = *(uint16_t *)(base + off);
+    g_pages[slab].objects = *(uint16_t*)(base + off);
     g_pages[slab].ent_num += 1;
 
     return base + off;
@@ -94,10 +94,10 @@ static void slab_obj_free(uint32_t slab, void *obj) {
     ASSERT(g_pages[slab].head);
     ASSERT(0 != g_pages[slab].ent_num);
 
-    char *base = (char *)pfn_to_virt(slab);
+    char *base = (char*)pfn_to_virt(slab);
     uint16_t head = g_pages[slab].objects;
-    *(uint16_t *)obj = head;
-    g_pages[slab].objects = (uint16_t)((char *)obj - base);
+    *(uint16_t*)obj = head;
+    g_pages[slab].objects = (uint16_t)((char*)obj - base);
     g_pages[slab].ent_num -= 1;
 }
 
@@ -105,7 +105,7 @@ static void slab_obj_free(uint32_t slab, void *obj) {
 // 缓存级别：slub 初始化与销毁
 //------------------------------------------------------------------------------
 
-void slub_init(slub_t *slub, size_t obj_size) {
+void pool_init(pool_t *slub, size_t obj_size) {
     obj_size = align_up(obj_size, arch_cacheline_size());
 
     // 寻找能容纳至少 8 个对象的最小 slab 阶数
@@ -125,7 +125,7 @@ void slub_init(slub_t *slub, size_t obj_size) {
     slub->full       = (pglist_t){0, 0};
 }
 
-void slub_destroy(slub_t *slub) {
+void pool_destroy(pool_t *slub) {
     raw_spin_take(&slub->lock);
 
     uint32_t pfn;
@@ -145,7 +145,7 @@ void slub_destroy(slub_t *slub) {
     raw_spin_give(&slub->lock);
 }
 
-void slub_shrink(slub_t *slub) {
+void pool_shrink(pool_t *slub) {
     raw_spin_take(&slub->lock);
 
     uint32_t pfn;
@@ -161,7 +161,7 @@ void slub_shrink(slub_t *slub) {
 // 缓存级别：对象分配与释放
 //------------------------------------------------------------------------------
 
-void *slub_alloc(slub_t *slub) {
+void *pool_alloc(pool_t *slub) {
     raw_spin_take(&slub->lock);
 
     // partial 为空时，从 empty 取 slab 或创建新的
@@ -195,7 +195,7 @@ void *slub_alloc(slub_t *slub) {
     return obj;
 }
 
-void slub_free(slub_t *slub, void *obj) {
+void pool_free(pool_t *slub, void *obj) {
     raw_spin_take(&slub->lock);
 
     uint32_t pfn = page_block_head(virt_to_pfn(obj));

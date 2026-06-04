@@ -3,7 +3,7 @@
 #include <early_alloc.mock.h>
 
 extern "C" {
-    #include "slub.h"
+    #include "pool_slub.h"
     #include <arch_config.h>
 }
 
@@ -15,13 +15,13 @@ protected:
 };
 
 TEST_F(SlubTest, AllocAndFree) {
-    slub_t slub;
-    slub_init(&slub, 64);
+    pool_t slub;
+    pool_init(&slub, 64);
 
     // 分配 8 个对象
     void *objs[8];
     for (int i = 0; i < 8; ++i) {
-        objs[i] = slub_alloc(&slub);
+        objs[i] = pool_alloc(&slub);
         ASSERT_NE(objs[i], nullptr);
         // 写入测试模式
         *(uint64_t *)objs[i] = 0xDEADBEEF00000000UL + i;
@@ -36,13 +36,13 @@ TEST_F(SlubTest, AllocAndFree) {
 
     // 释放中间 4 个
     for (int i = 2; i < 6; ++i) {
-        slub_free(&slub, objs[i]);
+        pool_free(&slub, objs[i]);
     }
 
     // 再分配 4 个
     void *new_objs[4];
     for (int i = 0; i < 4; ++i) {
-        new_objs[i] = slub_alloc(&slub);
+        new_objs[i] = pool_alloc(&slub);
         ASSERT_NE(new_objs[i], nullptr);
         *(uint64_t *)new_objs[i] = 0xCAFE000000000000UL + i;
     }
@@ -53,5 +53,5 @@ TEST_F(SlubTest, AllocAndFree) {
     EXPECT_EQ(*(uint64_t *)objs[6], 0xDEADBEEF00000000UL + 6);
     EXPECT_EQ(*(uint64_t *)objs[7], 0xDEADBEEF00000000UL + 7);
 
-    slub_destroy(&slub);
+    pool_destroy(&slub);
 }
