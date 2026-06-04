@@ -133,8 +133,15 @@ exception_stub:
     subq    $48, %rsp       // 跳过 6 个 callee-saved regs，ISR 自己会保存
     movq    %rsp, %rsi      // 参数：当前栈顶/寄存器文件
 
+    // 建立一个新的函数栈，连接到发生异常的地方
+    // 就像是从异常位置调用了本函数
+    push    0x80(%rsi)  // frame+160, RIP
+    push    %rbp
+    movq    %rsp, %rbp
+
     movq    irq_handlers(,%rdi,8), %rax
     call    *%rax
+    addq    $16, %rsp   // 跳过 dummy-stack-frame
 
     addq    $48, %rsp       // 跳过 6 个 callee-save regs
     pop_9_caller_saved_regs

@@ -240,10 +240,29 @@ INIT_TEXT void loapic_init_local() {
     }
 
     // 检查编号和 ID（启用之后才能读写寄存器）
-    ASSERT(g_read(REG_ID) == lo->apic_id);
+    if (g_cpu_features & CPU_FEATURE_X2APIC) {
+        ASSERT(g_read(REG_ID) == lo->apic_id);
+    } else {
+        ASSERT(g_read(REG_ID) == (lo->apic_id << 24));
+    }
 
     // 屏蔽中断向量号 0~31
     g_write(REG_TPR, 16);
+
+#if 0
+    // 让 IOAPIC 可以使用 logical mode 广播模式
+    if (g_cpu_features & CPU_FEATURE_X2APIC) {
+        // 对于 x2APIC，LDR 是只读的，且扩展为 32-bit
+        uint32_t ldr = g_read(REG_LDR);
+        uint32_t cluster = ldr >> 16;       // 高 16-bit 代表 cluster id
+        uint32_t logical = ldr & 0xffff;    // 低 16-bit 表示 logical id
+        logk("x2APIC-%d ID=%x, cluster=%x logical=%x\n",
+            cpu_index(), lo->apic_id, cluster, logical);
+    } else {
+        g_write(REG_DFR, 0xffffffffU);  // DFR = flat-mode
+        g_write(REG_LDR, 1U << 24);
+    }
+#endif
 
     // 设置 LINT0、LINT1，参考 Intel MultiProcessor Spec 第 5.1 节
     // LINT0 通常连接到 8259A，但连接到 8259A 的设备也连接到 IO APIC，可以不设置

@@ -36,13 +36,20 @@ inline void cpu_int_unlock(int key) {
 
 
 // 默认的中断处理函数
-// TODO 中断里面不应该打印，可能得不到 serial/console 自旋锁
+// TODO 中断里面不应该打印，可能得不到 serial 自旋锁
 static void handle_irq(int vec, regs_t *f) {
     logk("[cpu-%d] interrupt vec #%d err=%zx\n", cpu_index(), vec, f->errcode);
-    logk("rip=%zx rsp=%zx frame=%p\n", f->rip, f->rsp, f);
+    logk("rip=%zx rsp=%zx rbp=%zx frame=%p\n", f->rip, f->rsp, f->rbp, f);
 
     size_t frames[32];
-    int depth = arch_unwind_from(frames, 32, f->rbp);
+    int depth;
+    if (vec < 32) {
+        // 如果是 exceeption，则不会保存 callee-save-regs
+        // 中断栈是连续的，直接在这里 unwing 就能看到异常位置
+        depth = arch_unwind(frames, 32);
+    } else {
+        depth = arch_unwind_from(frames, 32, f->rbp);
+    }
     logk("backtrace (%d):\n", depth);
     for (int i = 0; i < depth; ++i) {
         logk(" - frame[%02d] 0x%zx\n", i, frames[i]);
@@ -86,7 +93,8 @@ static void handle_pf(int vec UNUSED, regs_t *f) {
 
     logk("rip=%zx rsp=%zx rbp=%zx\n", f->rip, f->rsp, f->rbp);
     size_t frames[32];
-    int depth = arch_unwind_from(frames, 32, f->rbp);
+    // int depth = arch_unwind_from(frames, 32, f->rbp);
+    int depth = arch_unwind(frames, 32);
     logk("backtrace (%d):\n", depth);
     for (int i = 0; i < depth; ++i) {
         logk(" - frame[%02d] 0x%zx\n", i, frames[i]);

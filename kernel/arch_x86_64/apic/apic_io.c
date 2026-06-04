@@ -50,21 +50,19 @@ static void ioapic_write(const ioapic_t *io, uint32_t reg, uint32_t val) {
     *(volatile uint32_t*)(io->addr + DIRECT_MAP_ADDR + IO_REG_WIN) = val;
 }
 
-static INIT_TEXT int gsi_is_edge(uint32_t gsi) {
-    if (gsi <= g_gsi_max) {
-        return g_gsi_modes[gsi] & GSI_MODE_EDGE;
-    } else {
-        return 1; // 默认是 edge-trigger
-    }
-}
 
-static INIT_TEXT int gsi_is_high(uint32_t gsi) {
-    if (gsi <= g_gsi_max) {
-        return g_gsi_modes[gsi] & GSI_MODE_HIGH;
-    } else {
-        return 1; // 默认是 active-high
-    }
-}
+// x2APIC 使用 32-bit ID，可是 IO APIC redirection entry 仍使用 8-bit dest
+// 如果遇到超过 256 的 Local APIC ID，IO APIC 就无法将中断发给这个 CPU
+// （我们只是 hobby OS，其实无需担心）
+// 解决方案一：使用 logical dest mode
+//      能处理 x2APIC-ID 超过 256 的情况，但 CPU 总数超过 256 仍然解决不了
+// 解决方案二：Interrupt Remapping（主流）
+//      使用 Intel VT-d 或 AMD-Vi IOMMU
+//      IO APIC 发送的中断首先经过 IOMMU，由 remapping table 翻译成 32-bit x2APIC-ID
+// 解决方案三：绕过 IO APIC（首选）
+//      使用 MSI/MSI-X，让 PCI 设备直接写 Local APIC，直接向 CPU 发送中断
+//      绕过 IO APIC，还能减少一跳，中断延迟更低
+//      对于 ISA/LPC 遗留中断（必须走 IO APIC），则只能发送给小于 256 的低号 CPU
 
 INIT_TEXT void ioapic_init() {
     uint32_t gsi = 0;
@@ -82,25 +80,31 @@ INIT_TEXT void ioapic_init() {
         io->gsi_base = gsi;
         // gsi += io->red_num;
 
+        // 这些中断固定发送给 CPU0
+        // TODO 改造成广播 lowest priority 模式，发送给优先级最低的 CPU，负载均衡
+
         // 前面 16 个 GSI 继承自 8259A，也就是 IRQ
-        // 这些中断以广播形式发送给所有 Local APIC
         int ent = 0;
         for (; (ent < io->red_num) && (gsi < 16); ++ent, ++gsi) {
-            uint32_t lo = IOAPIC_DM_LOWEST | IOAPIC_LOGICAL;
+            // uint32_t lo = IOAPIC_DM_LOWEST | IOAPIC_LOGICAL;
+            uint32_t lo = IOAPIC_DM_FIXED;
             lo |= gsi_is_edge(gsi) ? IOAPIC_EDGE : IOAPIC_LEVEL;
             lo |= gsi_is_high(gsi) ? IOAPIC_HIGH : IOAPIC_LOW;
             lo |= (gsi + VEC_GSI_BASE) & IOAPIC_VEC_MASK;
             lo |= IOAPIC_INT_MASK;
-            ioapic_write(io, IOAPIC_RED_H(ent), 0xff000000); // 广播
+            // ioapic_write(io, IOAPIC_RED_H(ent), 0xff000000); // 广播
+            ioapic_write(io, IOAPIC_RED_H(gsi), g_loapics[0].apic_id << 24);
             ioapic_write(io, IOAPIC_RED_L(ent), lo);
         }
 
         // IRQ 之后的硬件中断，level-triggered，active low
         for (; ent < io->red_num; ++ent, ++gsi) {
-            uint32_t lo = IOAPIC_DM_LOWEST | IOAPIC_LOGICAL | IOAPIC_LEVEL | IOAPIC_LOW;
+            // uint32_t lo = IOAPIC_DM_LOWEST | IOAPIC_LOGICAL | IOAPIC_LEVEL | IOAPIC_LOW;
+            uint32_t lo = IOAPIC_DM_FIXED | IOAPIC_LEVEL | IOAPIC_LOW;
             lo |= (gsi + VEC_GSI_BASE) & IOAPIC_VEC_MASK;
             lo |= IOAPIC_INT_MASK;
-            ioapic_write(io, IOAPIC_RED_H(ent), 0xff000000); // 广播
+            // ioapic_write(io, IOAPIC_RED_H(ent), 0xff000000); // 广播
+            ioapic_write(io, IOAPIC_RED_H(gsi), g_loapics[0].apic_id << 24);
             ioapic_write(io, IOAPIC_RED_L(ent), lo);
         }
     }

@@ -292,7 +292,7 @@ INIT_TEXT void i8042_init() {
     i8042_data(cfg);
 
     // IBM-PC 键盘中断连接到 IRQ 1
-    int gsi = g_irq_to_gsi[1];
+    int gsi = irq_to_gsi(1);
     irq_handlers[VEC_GSI_BASE + gsi] = handle_kbd;
     ioapic_unmask_gsi(gsi);
 

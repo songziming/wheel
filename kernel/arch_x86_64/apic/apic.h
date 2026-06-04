@@ -30,17 +30,13 @@ extern loapic_t *g_loapics;
 // IO APIC data
 extern int       g_ioapic_num;
 extern ioapic_t *g_ioapics;
-extern uint8_t   g_irq_max;
-extern uint32_t  g_gsi_max;
-extern uint32_t *g_irq_to_gsi;
-extern uint8_t  *g_gsi_to_irq;
-extern uint8_t  *g_gsi_modes; // 记录该中断的 polarity、trigger level
-#define GSI_MODE_EDGE 1 // edge-triggered
-#define GSI_MODE_HIGH 2 // active-high
+
 
 // top func
+INIT_TEXT int irq_to_gsi(uint8_t irq);
+INIT_TEXT int gsi_is_edge(uint32_t gsi);
+INIT_TEXT int gsi_is_high(uint32_t gsi);
 INIT_TEXT void parse_madt(madt_t *madt);
-INIT_TEXT int need_int_remap();
 
 // local apic func
 INIT_TEXT void loapic_init();
