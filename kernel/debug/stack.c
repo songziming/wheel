@@ -1,6 +1,6 @@
 // 栈溢出保护，编译选项 -fstack-protector
 
-#ifndef UNIT_TEST
+#if !defined(UNIT_TEST)
 
 #include <wheel.h>
 #include <debug.h>

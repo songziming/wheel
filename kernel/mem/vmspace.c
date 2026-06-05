@@ -213,7 +213,9 @@ void vmspace_remove(vmspace_t *space, vmrange_t *rng) {
     irq_spin_give(&space->lock, key);
 }
 
+//------------------------------------------------------------------------------
 
+#if !defined(UNIT_TEST)
 
 static void vmspace_show() {
     vmspace_t *vm = &g_kernel_vm;
@@ -228,3 +230,5 @@ static void vmspace_show() {
 }
 
 KSHELL_CMD("vm", vmspace_show);
+
+#endif // !defined(UNIT_TEST)

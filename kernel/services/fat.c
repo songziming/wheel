@@ -433,6 +433,8 @@ int fat32_find(fat32_volumn_t *vol, const fs_entry_t *d, const char *name, fs_en
 // 调试命令
 //------------------------------------------------------------------------------
 
+#if !defined(UNIT_TEST)
+
 static fat32_volumn_t *g_vol = NULL;
 
 static void fatmount(int argc, char *argv[]) {
@@ -520,7 +522,8 @@ static void fatfile(int argc, char *argv[]) {
     console_printf("file size %u\n", curr->size);
 }
 
-
 KSHELL_CMD("fatmount", fatmount);
 KSHELL_CMD("fatls", fatls);
 KSHELL_CMD("fatfile", fatfile);
+
+#endif // !defined(UNIT_TEST)

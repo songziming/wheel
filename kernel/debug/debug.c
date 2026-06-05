@@ -62,7 +62,7 @@ NORETURN void panic(const char *fmt, ...) {
 // 错误处理
 //------------------------------------------------------------------------------
 
-#ifndef UNIT_TEST
+#if !defined(UNIT_TEST)
 
 // 断言失败
 // 保持运行，不要停机

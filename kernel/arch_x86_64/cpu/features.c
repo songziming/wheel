@@ -511,6 +511,11 @@ size_t arch_cacheline_size() {
     return g_l1d_info.line_size;
 }
 
+//------------------------------------------------------------------------------
+// 调试命令
+//------------------------------------------------------------------------------
+
+#if !defined(UNIT_TEST)
 
 static void cpu_features_show() {
     console_printf("cpu info:\n");
@@ -566,3 +571,5 @@ static void cpu_features_show() {
 }
 
 KSHELL_CMD("cpu", cpu_features_show);
+
+#endif // !defined(UNIT_TEST)

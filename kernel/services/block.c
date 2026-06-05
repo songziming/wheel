@@ -36,6 +36,9 @@ void block_write(block_dev_t *dev, const void *src, uint64_t sec, uint64_t nsecs
     dev->ops->write(dev, src, sec, nsecs);
 }
 
+//------------------------------------------------------------------------------
+
+#if !defined(UNIT_TEST)
 
 static void show_blocks() {
     console_printf("block devices:\n");
@@ -47,3 +50,5 @@ static void show_blocks() {
 }
 
 KSHELL_CMD("blocks", show_blocks);
+
+#endif // !defined(UNIT_TEST)

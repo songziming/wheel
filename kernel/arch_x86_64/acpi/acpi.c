@@ -32,7 +32,7 @@ typedef struct acpi_xsdt {
 
 
 // 保存搜索到的 acpi 表
-// TODO 改造为双链表
+// TODO 改造为双链表，不用在启动时计算预留空间
 static CONST int g_table_num = 0;
 static CONST acpi_tbl_t **g_tables = NULL;
 
