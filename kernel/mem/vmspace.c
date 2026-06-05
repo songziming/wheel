@@ -137,7 +137,7 @@ void *vmspace_alloc_block(vmspace_t *space, vmrange_t *rng,
 
     rng->pages.head = 0;
     rng->pages.tail = 0;
-    rng->paddr = PAGE_ALLOC(rank, type);
+    rng->paddr = page_alloc(rank, type);
     if (0 == rng->paddr) {
         logk("cannot alloc page of rank-%d\n", rank);
         irq_spin_give(&space->lock, key);
@@ -170,14 +170,14 @@ void *vmspace_alloc(vmspace_t *space, vmrange_t *rng, size_t size,
 
     // 如果只申请一个页，则使用块分配接口
     if (PAGE_SIZE == size) {
-        rng->paddr = PAGE_ALLOC(0, type);
+        rng->paddr = page_alloc(0, type);
         if (0 == rng->paddr) {
             irq_spin_give(&space->lock, key);
             return NULL;
         }
         mmu_map(space->table, rng->vaddr, rng->vend, rng->paddr, attrs);
     } else {
-        pagelist_alloc(&rng->pages, size >> PAGE_SHIFT, type, __FILE__, __LINE__);
+        pagelist_alloc(&rng->pages, size >> PAGE_SHIFT, type);
         // TODO 检查pagelist申请是否成功
         size_t va = rng->vaddr;
         for (uint32_t blk = rng->pages.head; blk; blk = g_pages[blk].next) {

@@ -12,6 +12,8 @@
 #include <kstring.h>
 #include <heap.h>
 #include <debug.h>
+#include <kshell.h>
+#include <console.h>
 
 
 static INIT_BSS task_t g_dummy_tcb = {.lockdep={.depth=0}};
@@ -31,6 +33,10 @@ PERCPU_DATA int g_preempt_depth = 0;
 // 负载均衡
 static _Atomic uint64_t g_idle_mask = 0UL;
 static _Atomic uint32_t g_next_cpu = 0U;
+
+// 将所有的 TCB 串联在一起
+static spin_t g_task_list_lock = SPIN_INIT;
+static dlnode_t g_task_list_head;
 
 
 //------------------------------------------------------------------------------
@@ -107,10 +113,14 @@ inline task_t *current_task() {
 
 // 初始化调度器
 INIT_TEXT void sched_init() {
+    int cpu = cpu_index();
+    if (0 == cpu) {
+        // 第一个CPU启动任务之前初始化队列
+        dl_init_circular(&g_task_list_head);
+    }
+
     prioq_t *q = THISCPU(&g_rdyq);
     prioq_init(q);
-
-    int cpu = cpu_index();
 
     // 创建 idle-task
     task_t *idle = THISCPU(&g_idle_tcb);
@@ -150,6 +160,10 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
     tid->priority = prio;
     tid->affinity = -1;
     lockdep_task_init(&tid->lockdep); // tid->lockdep  = LOCKDEP_TASK_INIT;
+
+    int key = irq_spin_take(&g_task_list_lock);
+    dl_insert_before(&tid->objnode, &g_task_list_head);
+    irq_spin_give(&g_task_list_lock, key);
 
     vmspace_alloc_stack(&g_kernel_vm, &tid->stack);
     tid->stack.desc = name;
@@ -319,10 +333,16 @@ typedef struct freework {
 // work 也在函数栈上，删除映射后，不能再访问 work
 // 所以提前读出 task，后面直接用 tid
 static void task_free(work_t *wk) {
+    ASSERT(0 != cpu_int_depth());
+
     freework_t *work = containerof(wk, freework_t, wk);
     task_t *tid = work->tid;
     vmspace_remove(&g_kernel_vm, &tid->stack);
     tid->state = TS_DELETED;
+
+    raw_spin_take(&g_task_list_lock);
+    dl_remove(&tid->objnode);
+    raw_spin_give(&g_task_list_lock);
 }
 
 // 全程必须关闭中断，防止被抢占，否则 work 没来得及注册，任务无法回收
@@ -391,7 +411,6 @@ void notify_resched(uint64_t cpumask) {
     }
 }
 
-
 //------------------------------------------------------------------------------
 
 static NORETURN void task_entry(void (*real)()) {
@@ -412,3 +431,21 @@ static NORETURN void proc_idle() {
         cpu_halt();
     }
 }
+
+//------------------------------------------------------------------------------
+
+#if !defined(UNIT_TEST)
+
+static void show_tasks() {
+    int key = irq_spin_take(&g_task_list_lock);
+    for (dlnode_t *dl = g_task_list_head.next; dl != &g_task_list_head; dl = dl->next) {
+        task_t *tid = containerof(dl, task_t, objnode);
+        console_printf(" - task prio=%d, state=%d, name=%s\n",
+            tid->priority, tid->state, tid->name);
+    }
+    irq_spin_give(&g_task_list_lock, key);
+}
+
+KSHELL_CMD("tasks", show_tasks);
+
+#endif // !defined(UNIT_TEST)

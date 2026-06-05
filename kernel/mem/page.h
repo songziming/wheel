@@ -33,11 +33,6 @@ typedef struct page {
 
     // 对于 PT_POOL，表示 freelist 头（slab 内对象偏移，0xFFFF 表示空）
     uint32_t objects : 16;
-
-#if DEBUG
-    const char *file;
-    int         line;
-#endif
 } page_t;
 
 // 相同类型的块可以组成链表（双向不循环链表）
@@ -58,16 +53,14 @@ void pglist_push_tail(pglist_t *pl, uint32_t blk);
 void pglist_push_head(pglist_t *pl, uint32_t blk);
 void pglist_remove(pglist_t *pl, uint32_t blk);
 
-size_t page_alloc_color(uint32_t rank, page_type_t type, uint32_t period, uint32_t phase, const char *file, int line);
-size_t page_alloc(uint32_t rank, page_type_t type, const char *file, int line);
+size_t page_alloc_color(uint32_t rank, page_type_t type, uint32_t period, uint32_t phase);
+size_t page_alloc(uint32_t rank, page_type_t type);
 void page_free(size_t pa);
 
-void pagelist_alloc(pglist_t *pl, uint32_t num, page_type_t type, const char *file, int line);
+void pagelist_alloc(pglist_t *pl, uint32_t num, page_type_t type);
 void pagelist_free(pglist_t *pl);
 
 uint32_t page_free_count();
-
-#define PAGE_ALLOC(rank, type) page_alloc(rank, type, __FILE__, __LINE__)
 
 INIT_TEXT void page_init(size_t pa_start, size_t pa_end);
 INIT_TEXT void pages_add(size_t start, size_t end);

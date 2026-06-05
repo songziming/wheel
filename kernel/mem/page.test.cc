@@ -126,12 +126,12 @@ TEST_F(PageTest, Alloc) {
     add_free(1, 11); // 一共只有 10 个页
 
     for (int i = 0; i < 10; ++i) {
-        size_t pa = PAGE_ALLOC(0, PT_FS);
+        size_t pa = page_alloc(0, PT_FS);
         EXPECT_NE(pa, 0);
     }
 
     // 第 11 次分配应该失败
-    EXPECT_EQ(PAGE_ALLOC(0, PT_FS), 0);
+    EXPECT_EQ(page_alloc(0, PT_FS), 0);
 
     for (size_t i = 1; i < 11; ++i) {
         validate_block(i, i+1, 0);
@@ -151,15 +151,15 @@ TEST_F(PageTest, AllocSize) {
 
     // 分配 rank-7，前四次成功，后一次失败
     for (int i = 0; i < 4; ++i) {
-        EXPECT_NE(PAGE_ALLOC(7, PT_FS), 0);
+        EXPECT_NE(page_alloc(7, PT_FS), 0);
     }
-    EXPECT_EQ(PAGE_ALLOC(7, PT_FS), 0);
+    EXPECT_EQ(page_alloc(7, PT_FS), 0);
 
     // 分配 rank-5，前四次成功，后面八次拆分 rank-6 也可以成功，再分配则失败
     for (int i = 0; i < 4 + 8; ++i) {
-        EXPECT_NE(PAGE_ALLOC(5, PT_FS), 0);
+        EXPECT_NE(page_alloc(5, PT_FS), 0);
     }
-    EXPECT_EQ(PAGE_ALLOC(5, PT_FS), 0);
+    EXPECT_EQ(page_alloc(5, PT_FS), 0);
 }
 
 TEST_F(PageTest, AllocColor) {

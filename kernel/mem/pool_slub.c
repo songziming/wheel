@@ -52,7 +52,7 @@ static inline uint32_t virt_to_pfn(void *va) {
 //------------------------------------------------------------------------------
 
 static uint32_t slab_create(uint8_t order, size_t obj_size) {
-    size_t pa = PAGE_ALLOC(order, PT_POOL);
+    size_t pa = page_alloc(order, PT_POOL);
     if (0 == pa) {
         return 0;
     }

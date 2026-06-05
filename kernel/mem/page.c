@@ -104,10 +104,6 @@ static void block_free_nolock(uint32_t blk) {
 
     // 已经合并到最大，标记为 FREE
     g_pages[blk].type = PT_FREE;
-#if DEBUG
-    g_pages[blk].file = NULL;
-    g_pages[blk].line = -1;
-#endif
     pglist_push_head(&g_blocks[rank], blk);
 }
 
@@ -162,14 +158,10 @@ found:
 }
 
 // 分配若干不连续的物理页
-static void pagelist_alloc_nolock(pglist_t *pl, uint32_t num, page_type_t type,
-        const char *file, int line) {
+static void pagelist_alloc_nolock(pglist_t *pl, uint32_t num, page_type_t type) {
     uint32_t rank;
     uint32_t size;
     uint32_t blk;
-
-    (void)file;
-    (void)line;
 
     // TODO 首先检查剩余 page 数量是否满足
     //      如果剩余内存太少则直接退出
@@ -187,10 +179,6 @@ static void pagelist_alloc_nolock(pglist_t *pl, uint32_t num, page_type_t type,
             }
             num -= size;
             g_pages[blk].type = type; // 标记为已分配
-#if DEBUG
-            g_pages[blk].file = file;
-            g_pages[blk].line = line;
-#endif
             pglist_push_tail(pl, blk);
             if (0 == num) {
                 return;
@@ -222,10 +210,6 @@ split_into_smaller:
         if (num >= size) {
             num -= size;
             g_pages[sib].type = type;
-#if DEBUG
-            g_pages[sib].file = file;
-            g_pages[sib].line = line;
-#endif
             pglist_push_head(pl, sib);
         } else {
             pglist_push_head(&g_blocks[rank], sib);
@@ -246,27 +230,15 @@ split_into_smaller:
 //------------------------------------------------------------------------------
 
 size_t page_alloc_color(uint32_t rank, page_type_t type,
-        uint32_t period, uint32_t phase,
-        const char *file, int line) {
+        uint32_t period, uint32_t phase) {
     int key = irq_spin_take(&g_page_spin);
     uint32_t blk = block_alloc_nolock(rank, period, phase, type);
-#if DEBUG
-    if (0 != blk) {
-        ASSERT(NULL == g_pages[blk].file);
-        ASSERT(-1 == g_pages[blk].line);
-        g_pages[blk].file = file;
-        g_pages[blk].line = line;
-    }
-#else
-    (void)file;
-    (void)line;
-#endif
     irq_spin_give(&g_page_spin, key);
     return (size_t)blk << PAGE_SHIFT;
 }
 
-size_t page_alloc(uint32_t rank, page_type_t type, const char *file, int line) {
-    return page_alloc_color(rank, type, 1, 0, file, line);
+size_t page_alloc(uint32_t rank, page_type_t type) {
+    return page_alloc_color(rank, type, 1, 0);
 }
 
 void page_free(size_t pa) {
@@ -277,9 +249,9 @@ void page_free(size_t pa) {
 }
 
 
-void pagelist_alloc(pglist_t *pl, uint32_t num, page_type_t type, const char *file, int line) {
+void pagelist_alloc(pglist_t *pl, uint32_t num, page_type_t type) {
     int key = irq_spin_take(&g_page_spin);
-    pagelist_alloc_nolock(pl, num, type, file, line);
+    pagelist_alloc_nolock(pl, num, type);
     irq_spin_give(&g_page_spin, key);
 }
 
@@ -357,14 +329,6 @@ INIT_TEXT void pages_add(size_t start, size_t end) {
     }
 
     int key = irq_spin_take(&g_page_spin);
-
-#if DEBUG
-    for (uint32_t pfn = start; pfn < end; ++pfn) {
-        ASSERT(NULL == g_pages[pfn].file);
-        ASSERT(0 == g_pages[pfn].line);
-        g_pages[pfn].line = -1;
-    }
-#endif
 
     // 这一段内存不一定是按块对齐的，尽可能使用更大的块
     while (start < end) {

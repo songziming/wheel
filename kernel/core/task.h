@@ -33,6 +33,7 @@ enum task_state {
 
 typedef struct task {
     void       *stack_top;  // regs_t
+    dlnode_t    objnode;    // node in tasklist
     dlnode_t    dl;         // node in ready-queue
     uint32_t    state;
     int16_t     affinity;
