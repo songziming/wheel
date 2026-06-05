@@ -64,7 +64,7 @@ INIT_TEXT void mem_init() {
     early_alloc_disable();
 
     // 记录内核的虚拟地址空间布局
-    vmspace_init(&g_kernel_vm);
+    vmspace_init(&g_kernel_vm, DYNAMIC_ZONE_START, DYNAMIC_ZONE_END);
     size_t init_addr = KERNEL_TEXT_ADDR + KERNEL_LOAD_ADDR;
     kspace_add(&g_kernel_init, init_addr, (size_t)&_init_end, "init", MMU_WRITE|MMU_EXEC);
     kspace_add(&g_kernel_text, (size_t)&_text_addr, (size_t)&_text_end, "text", MMU_EXEC);

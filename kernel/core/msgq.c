@@ -3,16 +3,16 @@
 #include <debug.h>
 
 void msgq_init(msgq_t *q) {
-    size_t va = vmspace_alloc(&g_kernel_vm, &q->rng,
-        POOL_ZONE_START, POOL_ZONE_END, 0, PT_MSGQ, MMU_WRITE);
-    if (0 == va) {
+    void *va = vmspace_alloc(&g_kernel_vm, &q->rng,
+        PAGE_SIZE, PT_MSGQ, MMU_WRITE);
+    if (NULL == va) {
         panic("cannot create msgq\n");
     }
     q->rng.desc = "msgq";
     q->lock = SPIN_INIT;
     prioq_init(&q->readers);
     prioq_init(&q->writers);
-    fifo_init(&q->fifo, (void*)va, PAGE_SIZE);
+    fifo_init(&q->fifo, va, PAGE_SIZE);
 }
 
 static void writer_timeout(wdog_t *wd) {

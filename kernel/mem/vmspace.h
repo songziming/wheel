@@ -20,8 +20,8 @@ typedef struct vmrange {
 // 代表一个虚拟地址空间
 typedef struct vmspace {
     spin_t   lock;
-    // size_t   start; // 管理范围开始
-    // size_t   end;   // 管理范围结束
+    size_t   dyn_start; // 动态分配范围开始
+    size_t   dyn_end;   // 动态分配范围结束
     dlnode_t head;  // vmrange 链表头节点
     size_t   table; // 页表
 } vmspace_t;
@@ -30,24 +30,22 @@ typedef struct vmspace {
 extern vmspace_t g_kernel_vm;
 
 
-void vmspace_init(vmspace_t *space);
+void vmspace_init(vmspace_t *space, size_t start, size_t end);
 vmrange_t *vmspace_find(vmspace_t *space, size_t addr);
 void vmspace_insert(vmspace_t *space, vmrange_t *rng);
 
 // 仅申请一段虚拟内存，不映射物理内存
-size_t vmspace_valloc(vmspace_t *space, vmrange_t *rng,
-        size_t start, size_t end, size_t size);
+void *vmspace_alloc_nomap(vmspace_t *space, vmrange_t *rng, size_t size);
 
 // 分配连续的物理内存
-size_t vmspace_alloc(vmspace_t *space, vmrange_t *rng,
-        size_t start, size_t end, uint32_t rank,
+void *vmspace_alloc_block(vmspace_t *space, vmrange_t *rng, uint32_t rank,
         page_type_t type, mmu_attr_t attrs);
-size_t vmspace_alloc_stack(vmspace_t *space, vmrange_t *rng, uint32_t rank);
 
 // 分配不连续的物理内存，映射到连续的虚拟地址范围
-size_t vmspace_alloc_sparse(vmspace_t *space, vmrange_t *rng,
-        size_t start, size_t end, size_t size,
+void *vmspace_alloc(vmspace_t *space, vmrange_t *rng, size_t size,
         page_type_t type, mmu_attr_t attrs);
+
+void *vmspace_alloc_stack(vmspace_t *space, vmrange_t *rng);
 
 void vmspace_remove(vmspace_t *space, vmrange_t *rng);
 

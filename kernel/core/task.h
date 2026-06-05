@@ -51,7 +51,6 @@ INIT_TEXT void sched_init();
 void sched_process();
 
 void task_create(task_t *tid, const char *name, int prio, void *func);
-void task_create_ex(task_t *tid, const char *name, int prio, void *func, uint32_t stack_rank);
 
 void task_pend(prioq_t *wq, waiter_t *pender, int timeout, wdog_cb_t cb);
 task_t *task_unpend_one(prioq_t *wq);
