@@ -72,7 +72,7 @@ INIT_TEXT void mem_init() {
     kspace_add(&g_kernel_data, (size_t)&_data_addr, rw_end, "data", MMU_WRITE); // 含 bss、early_rw
 
     // 划分内核堆，后面就可以动态分配字符串了
-    rw_end += PAGE_SIZE * 2 - 1;
+    rw_end += PAGE_SIZE * 2 - 1; // 开头留出一个 guard-page
     rw_end &= ~(PAGE_SIZE - 1);
     kspace_add(&g_kernel_heap, rw_end, rw_end + KERNEL_HEAP_SIZE, "heap", MMU_WRITE);
     kernel_heap_init((void*)rw_end, KERNEL_HEAP_SIZE);

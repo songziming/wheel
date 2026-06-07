@@ -33,14 +33,19 @@
 #include <kshell.h>
 #include <console.h>
 #include <block.h>
+#include <pci.h>
 
 
 // layout.ld
 char _real_addr;
 char _real_end;
 
-static INIT_BSS uint32_t g_fgcolor;
 static INIT_BSS size_t   g_rsdp;
+static INIT_BSS uint32_t g_fbcolor;
+static INIT_BSS uint64_t g_fbaddr;
+static INIT_BSS uint32_t g_fbheight;
+static INIT_BSS uint32_t g_fbwidth;
+static INIT_BSS uint32_t g_fbpitch;
 
 // 根任务不能放在 init，需要在这里回收 init-section
 static task_t g_root_tcb;
@@ -105,11 +110,15 @@ static INIT_TEXT void mb1_init(uint32_t ebx) {
 
     if (MB1_INFO_FRAMEBUFFER_INFO & info->flags) {
         if (1 == info->fb_type && 32 == info->fb_bpp) {
-            g_fgcolor  = ((1U << info->r_size) - 1) << info->r_shift;
-            g_fgcolor |= ((1U << info->g_size) - 1) << info->g_shift;
-            g_fgcolor |= ((1U << info->b_size) - 1) << info->b_shift;
+            g_fbcolor  = ((1U << info->r_size) - 1) << info->r_shift;
+            g_fbcolor |= ((1U << info->g_size) - 1) << info->g_shift;
+            g_fbcolor |= ((1U << info->b_size) - 1) << info->b_shift;
+            g_fbaddr   = info->fb_addr;
+            g_fbheight = info->fb_height;
+            g_fbwidth  = info->fb_width;
+            g_fbpitch  = info->fb_pitch;
             logk("framebuf mapped at 0x%lx\n", info->fb_addr);
-            framebuf_init(info->fb_height, info->fb_width, info->fb_pitch, info->fb_addr);
+            // framebuf_init(info->fb_height, info->fb_width, info->fb_pitch, info->fb_addr);
         }
     }
 }
@@ -132,11 +141,15 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
         case MB2_TAG_TYPE_FRAMEBUFFER: {
             mb2_tag_framebuffer_t *fb = (mb2_tag_framebuffer_t*)tag;
             if (1 == fb->type && 32 == fb->bpp) {
-                g_fgcolor  = ((1U << fb->r_size) - 1) << fb->r_shift;
-                g_fgcolor |= ((1U << fb->g_size) - 1) << fb->g_shift;
-                g_fgcolor |= ((1U << fb->b_size) - 1) << fb->b_shift;
+                g_fbcolor  = ((1U << fb->r_size) - 1) << fb->r_shift;
+                g_fbcolor |= ((1U << fb->g_size) - 1) << fb->g_shift;
+                g_fbcolor |= ((1U << fb->b_size) - 1) << fb->b_shift;
+                g_fbaddr   = fb->addr;
+                g_fbheight = fb->height;
+                g_fbwidth  = fb->width;
+                g_fbpitch  = fb->pitch;
                 logk("framebuf mapped at 0x%lx\n", fb->addr);
-                framebuf_init(fb->height, fb->width, fb->pitch, fb->addr);
+                // framebuf_init(fb->height, fb->width, fb->pitch, fb->addr);
             }
             break;
         }
@@ -171,21 +184,12 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     cpu_features_enable();
 
     // parse multiboot info
-    g_fgcolor = 0;
     g_rsdp = 0;
+    g_fbcolor = 0;
     switch (eax) {
     case MB1_BOOTLOADER_MAGIC: mb1_init(ebx); break;
     case MB2_BOOTLOADER_MAGIC: mb2_init(ebx); break;
     }
-
-    // 选择输出设备，用于 console
-    if (g_fgcolor) {
-        framebuf_setfg(g_fgcolor);
-    } else {
-        vgatext_init();
-    }
-    console_init();
-    console_printf("Wheel Operating System (%s %s)\n", __DATE__, __TIME__);
 
     // parse ACPI tables
     if (0 == g_rsdp) {
@@ -197,6 +201,10 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     }
     acpi_rsdp_parse(g_rsdp);
 
+    // PCI (requires ACPI::MCFG)
+    arch_pci_init();
+    pci_probe();
+
     // parse APIC info
     madt_t *madt = (madt_t*)acpi_table_find("APIC", 0);
     if (NULL == madt) {
@@ -204,6 +212,17 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         goto end;
     }
     parse_madt(madt);
+
+    // 选择输出设备，用于 console
+    if (g_fbcolor) {
+        // framebuf 需要用到 PCI（仅虚拟机），但此时 PCI 尚未初始化
+        framebuf_init(g_fbheight, g_fbwidth, g_fbpitch, g_fbaddr);
+        framebuf_setfg(g_fbcolor);
+    } else {
+        vgatext_init();
+    }
+    console_init();
+    console_printf("Wheel Operating System (%s %s)\n", __DATE__, __TIME__);
 
     // 内存中的关键数据已备份，可以放开 early-rw 增长限制
     early_rw_unlock();
@@ -239,7 +258,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 加载正式页表，此后 CONST 变为只读
     write_cr3(g_kernel_vm.table);
-    if (g_fgcolor) {
+    if (g_fbcolor) {
         framebuf_remap_wc(); // 重映射为 Write-Combined，提升写显存速度
     }
 
@@ -303,6 +322,8 @@ static void root_proc() {
 
     // 回收 init section
     reclaim_init();
+
+    // TODO root task 不必退出，可以加载 ELF 进入 ring3，开始执行进程
 }
 
 //------------------------------------------------------------------------------

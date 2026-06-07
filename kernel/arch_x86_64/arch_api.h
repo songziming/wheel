@@ -25,5 +25,10 @@ static inline void cpu_rwfence() { ASMV("mfence" ::: "memory"); }
 int arch_unwind_from(size_t *addrs, int max, uint64_t rbp);
 int arch_unwind(size_t *addrs, int max);
 
+//------------------------------------------------------------------------------
+// PCI(e) support
+//------------------------------------------------------------------------------
+
+INIT_TEXT void arch_pci_init();
 
 #endif // ARCH_X86_64_ARCH_API_H

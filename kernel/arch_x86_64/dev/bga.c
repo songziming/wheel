@@ -13,7 +13,7 @@
 
 
 #include "bga.h"
-#include "pci.h"
+#include <pci.h>
 
 #include <cpu/rw.h>
 #include <arch_config.h>
@@ -94,22 +94,18 @@ INIT_TEXT int bga_check() {
     return 0;
 }
 
-// 扫描 bus 0 寻找 BGA 设备，读取 BAR0 返回 framebuffer 物理地址。
-// 未找到返回 0，调用方应回退到 BGA_FB_FALLBACK。
+// 扫描 bus 0 寻找 BGA 设备，读取 BAR0 返回 framebuffer 物理地址
+// 未找到返回 0，调用方应回退到 BGA_FB_FALLBACK
 INIT_TEXT uint32_t bga_get_address() {
-    for (int dev = 0; dev < 32; dev++) {
-        uint32_t id = pci_read(0, dev, 0, 0x00);
-        uint16_t vendor = id & 0xffff;
-        uint16_t device = id >> 16;
-        // logk("pci-dev vnd=%x dev=%x\n", vendor, device);
-        if (vendor == BGA_PCI_VENDOR && device == BGA_PCI_DEVICE) {
-            uint32_t bar0 = pci_read(0, dev, 0, 0x10);
-            logk("bga: found at 00:%02x.0, BAR0=0x%x\n", dev, bar0);
-            return bar0 & ~0xfULL;
-        }
+    pci_dev_t *dev = pci_find(BGA_PCI_VENDOR, BGA_PCI_DEVICE);
+    if (NULL == dev) {
+        logk("not found bga in PCI\n");
+        return BGA_FB_FALLBACK;
     }
-    logk("not found bga in PCI\n");
-    return BGA_FB_FALLBACK;
+
+    char is_io;
+    char prefetchable;
+    return pci_get_bar(dev, 0, &is_io, &prefetchable);
 }
 
 // 配置显示模式，返回 1 表示成功

@@ -5,6 +5,9 @@
 #include <spin.h>
 #include <debug.h>
 
+#include <kshell.h>
+#include <console.h>
+
 
 CONST uint32_t g_page_start;
 CONST uint32_t g_page_end;
@@ -352,3 +355,25 @@ INIT_TEXT void pages_add(size_t start, size_t end) {
 
     irq_spin_give(&g_page_spin, key);
 }
+
+//------------------------------------------------------------------------------
+
+#if !defined(UNIT_TEST)
+
+static void show_page(int argc, char *argv[]) {
+    if (argc < 2) {
+        console_printf("usage: %s PFN\n", argv[0]);
+        return;
+    }
+
+    size_t pfn = str2num(argv[1]);
+    uint32_t blk = page_block_head(pfn);
+    uint32_t rank = g_pages[blk].rank;
+    uint32_t end = blk + (1U << rank);
+    console_printf("blk=0x%x(%u), rank=%u, end=0x%x(%u) type=%u\n",
+        blk, blk, rank, end, end, g_pages[blk].type);
+}
+
+KSHELL_CMD("page", show_page);
+
+#endif // !defined(UNIT_TEST)
