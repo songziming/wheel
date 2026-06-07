@@ -279,3 +279,31 @@ static void perform_test(int argc, char *argv[]) {
 }
 
 KSHELL_CMD("test", perform_test);
+
+//------------------------------------------------------------------------------
+// 测试用户模式
+//------------------------------------------------------------------------------
+
+// 这个是用户模式代码使用的栈
+static vmrange_t g_user_code;
+static vmrange_t g_user_stack;
+
+// 用户模式下执行的代码
+static void user_code() {
+    ASMV("int $0x80");
+} __attribute__((naked));
+
+void test_user() {
+    char *code3 = vmspace_alloc(&g_kernel_vm, &g_user_code,
+        PAGE_SIZE, PT_KERNEL, MMU_WRITE|MMU_EXEC|MMU_USER);
+    size_t stack = (size_t)vmspace_alloc(&g_kernel_vm, &g_user_stack,
+        PAGE_SIZE, PT_STACK, MMU_WRITE|MMU_USER);
+
+    console_printf("ring3 code 0x%zx~0x%zx\n", g_user_code.vaddr, g_user_code.vend);
+    console_printf("ring3 stack 0x%zx~0x%zx\n", g_user_stack.vaddr, g_user_stack.vend);
+
+    kmemcpy(code3, user_code, PAGE_SIZE);
+    arch_enter_ring3((size_t)code3, stack + PAGE_SIZE);
+}
+
+KSHELL_CMD("user", test_user);

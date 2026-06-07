@@ -3,7 +3,7 @@
 .global isr_entries
 .global syscall_entry
 .global arch_task_switch
-.global arch_task_entry
+.global arch_enter_ring3
 
 .extern g_int_depth
 .extern g_int_stack_top
@@ -124,10 +124,10 @@ isr_\vec:
 // 异常响应流程，不切换中断栈，不允许重入，不切换任务
 // 异常更像是被动的函数调用，无需保存 callee-save regs，因为调用 C 函数时会自动保存
 exception_stub:
-//     testl   $3, 0x18(%rsp)  // 检查 CS.CPL
-//     jz      exp_from_ring0  // 如果 CS.CPL=0，说明来自 ring0
-//     swapgs                  // 如果来自用户态，需要交换 gsbase
-// exp_from_ring0:
+    testl   $3, 0x18(%rsp)  // 检查 CS.CPL
+    jz      exp_from_ring0  // 如果 CS.CPL=0，说明来自 ring0
+    swapgs                  // 如果来自用户态，需要交换 gsbase
+exp_from_ring0:
 
     push_8_caller_saved_regs // 这些函数会被 ISR 破坏，需要保存
     subq    $48, %rsp       // 跳过 6 个 callee-saved regs，ISR 自己会保存
@@ -147,20 +147,20 @@ exception_stub:
     pop_9_caller_saved_regs
     addq    $8, %rsp        // 跳过错误码
 
-//     testl   $3, 8(%rsp)     // 检查 CS.RPL
-//     jz      exp_to_ring0    // 返回到内核态
-//     swapgs                  // 返回到用户态
-// exp_to_ring0:
+    testl   $3, 8(%rsp)     // 检查 CS.RPL
+    jz      exp_to_ring0    // 返回到内核态
+    swapgs                  // 返回到用户态
+exp_to_ring0:
     iretq
 
 // 中断响应流程，需要切换中断栈，可能切换任务
 // 需要保存全部寄存器（不含浮点寄存器）
 // 中断内部可能异常，但我们不允许中断重入（为了安全，还是检查一下）
 interrupt_stub:
-//     testl   $3, 0x18(%rsp)  // 检查 CS.CPL
-//     jz      int_from_ring0  // 如果 CS.CPL=0，说明来自 ring0
-//     swapgs                  // 如果来自用户态，需要交换 gsbase
-// int_from_ring0:
+    testl   $3, 0x18(%rsp)  // 检查 CS.CPL
+    jz      int_from_ring0  // 如果 CS.CPL=0，说明来自 ring0
+    swapgs                  // 如果来自用户态，需要交换 gsbase
+int_from_ring0:
 
     push_8_caller_saved_regs
     push_6_callee_saved_regs
@@ -215,11 +215,10 @@ iret_nested:
     pop_9_caller_saved_regs
     addq    $8, %rsp        // 跳过错误码
 
-//     testl   $3, 8(%rsp)     // 检查 CS.RPL
-//     jz      iret_to_ring0    // 返回到内核态
-//     int $3
-//     swapgs                  // 返回到用户态
-// iret_to_ring0:
+    testl   $3, 8(%rsp)     // 检查 CS.RPL
+    jz      iret_to_ring0   // 返回到内核态
+    swapgs                  // 返回到用户态
+iret_to_ring0:
     iretq
 
 
@@ -273,3 +272,16 @@ resume:
 // 使用 syscall 命令跳转
 syscall_entry:
     sysret
+
+
+// 跳转到 ring3
+// rdi 表示目标用户态代码入口地址
+// rsi 表示用户栈的栈顶地址
+arch_enter_ring3:
+    pushq   $0x23   // SS = 0x20 | 3
+    pushq   %rsi
+    pushq   $0x202  // IF=1
+    pushq   $0x2b   // CS = 0x28 | 3
+    pushq   %rdi
+    swapgs
+    iretq

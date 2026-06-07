@@ -109,6 +109,10 @@ static void handle_pf(int vec UNUSED, regs_t *f) {
     }
 }
 
+static void handle_syscall(int vec UNUSED, regs_t *f UNUSED) {
+    logk("processing syscall\n");
+}
+
 // 每个 cpu 都要执行此函数
 // 在 TSS 中设置 IST，在 IDT 里面填入 IST-idx
 INIT_TEXT void int_init() {
@@ -117,6 +121,10 @@ INIT_TEXT void int_init() {
         irq_handlers[i] = handle_irq;
     }
     irq_handlers[14] = handle_pf;
+
+    // 0x80 可以用于系统调用
+    idt_set_isr(0x80, isr_entries[0x80], 3);
+    irq_handlers[0x80] = handle_syscall;
 
     idt_set_ist(2,  1); // NMI
     idt_set_ist(8,  2); // #DF
