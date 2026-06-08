@@ -57,13 +57,15 @@ INIT_TEXT void gdt_init() {
     int ncpu = cpu_count();
     ASSERT(0 != ncpu);
 
+    // 每个 descriptor 都要设置 access=1，否则访问这个段会产生写内存操作
+    // 要么就把 GDT 放在可读可写内存中，但这样更危险
     g_gdt = (uint64_t*)early_alloc_ro((6 + ncpu * 2) * sizeof(uint64_t));
     g_gdt[0] = 0UL;                   // dummy
-    g_gdt[1] = 0x00a0980000000000UL;  // 内核代码段
-    g_gdt[2] = 0x00c0920000000000UL;  // 内核数据段
+    g_gdt[1] = 0x00a0990000000000UL;  // 内核代码段
+    g_gdt[2] = 0x00c0930000000000UL;  // 内核数据段
     g_gdt[3] = 0UL;                   // 保留
-    g_gdt[4] = 0x00c0f20000000000UL;  // 用户数据段
-    g_gdt[5] = 0x00a0f80000000000UL;  // 用户代码段
+    g_gdt[4] = 0x00c0f30000000000UL;  // 用户数据段
+    g_gdt[5] = 0x00a0f90000000000UL;  // 用户代码段
 }
 
 INIT_TEXT void gdt_load() {

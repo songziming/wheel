@@ -282,29 +282,20 @@ syscall_entry:
     swapgs
     popq    %r11
     popq    %rcx
-    sysret
+    sysretq
 
 
 // 跳转到 ring3
 // rdi 表示目标用户态代码入口地址
 // rsi 表示用户栈的栈顶地址
 arch_enter_ring3:
-    pushq   $0x23   // SS = 0x20 | 3
-    pushq   %rsi
-    pushq   $0x202  // IF=1
-    pushq   $0x2b   // CS = 0x28 | 3
-    pushq   %rdi
-    swapgs
-    iretq
-
-
-// 使用 sysret 跳转到用户态
-// 在用户栈上建立全新的 frame
-ret_ring3:
+    // 也可以模拟中断返回（iretq）
+    // 但我们使用 sysret，自己切换到用户栈，建立新的 frame
     pushfq
+    cli                 // 关中断，防止swapgs之后中断
     popq    %r11        // r11 = ring3-rflags
     movq    %rdi, %rcx  // rcx = ring3-rip
     movq    %rsi, %rsp
     pushq   $0          // dummy return addr
     swapgs
-    sysret
+    sysretq

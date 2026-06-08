@@ -164,6 +164,10 @@ INIT_TEXT void int_init_local() {
     THISCPU_SET(g_int_stack_top, thiscpu_int_stack());
 
     // 设置系统调用相关 MSR（只允许 64-bit 模式下的系统调用入口）
+    // syscall CS = STAR[47:32]
+    // syscall SS = STAR[47:32] + 8
+    // sysret CS = STAR[63:48] + 16
+    // sysret SS = STAR[63:48] + 8
     write_msr(MSR_EFER, read_msr(MSR_EFER) | 1);    // enable syscall
     write_msr(MSR_STAR, 0x001b0008UL << 32);        // STAR
     write_msr(MSR_LSTAR, (uint64_t)syscall_entry);  // LSTAR

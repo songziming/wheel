@@ -16,3 +16,9 @@ sysret 从内核态切换到用户态，syscall 从用户态切换到内核态�
 
 使用快速指令 syscall/sysret
 这个指令不会操作栈，调用之后仍处于用户栈。
+
+### GDT 不能只读
+
+第一次访问一个 section descriptor，CPU 会将 access 设为 1。
+这会产生一个 memory write operation。
+如果GDT所在的虚拟地址恰好不可写，就会产生 page fault。

@@ -303,8 +303,10 @@ void test_user() {
         PAGE_SIZE, PT_STACK, MMU_WRITE|MMU_USER);
 
     // logk("copy code from %p to %p\n", user_code, code3);
-    logk("ring3 code 0x%zx~0x%zx\n", g_user_code.vaddr, g_user_code.vend);
+    logk("ring3 code 0x%zx~0x%zx, len=0x%zx\n", g_user_code.vaddr, g_user_code.vend, len);
     logk("ring3 stack 0x%zx~0x%zx\n", g_user_stack.vaddr, g_user_stack.vend);
+
+    write_msr(MSR_KGSBASE, 0);
 
     g_user_code.desc = "ring3 code&data";
     g_user_stack.desc = "ring3 stack";
