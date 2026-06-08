@@ -39,9 +39,9 @@ typedef struct tbl_ptr {
 
 
 
-static CONST        uint64_t *g_gdt = NULL;
-static CONST        idt_ent_t g_idt[256];
-static PERCPU_DATA  tss_t     g_tss = {0};
+static CONST uint64_t *g_gdt = NULL;
+static CONST idt_ent_t g_idt[256];
+PERCPU_DATA  tss_t     g_tss = {0};
 
 // gdt_idt_tss.S
 void load_gdtr(tbl_ptr_t *ptr);
@@ -124,23 +124,6 @@ INIT_TEXT void thistss_init_load(int cpu) {
 INIT_TEXT void thistss_set_ist(int ist, uint64_t addr) {
     ASSERT(ist > 0);
     ASSERT(ist < 8);
-
-    // tss_t *tss = PERCPU(cpu, &g_tss);
-    // tss->ist[ist].lower = addr & 0xffffffff;
-    // tss->ist[ist].upper = (addr >> 32) & 0xffffffff;
     THISCPU_SET(g_tss.ist[ist].lower, (uint32_t)addr & 0xffffffff);
     THISCPU_SET(g_tss.ist[ist].upper, (uint32_t)(addr >> 32) & 0xffffffff);
-}
-
-// 跨优先级中断时，自动切换到哪个栈
-// 一般设为当前进程的内核栈顶
-void thistss_set_rsp(int ring, uint64_t addr) {
-    ASSERT(ring >= 0);
-    ASSERT(ring < 3);
-
-    // tss_t *tss = PERCPU(cpu, &g_tss);
-    // tss->rsp[ring].lower = addr & 0xffffffff;
-    // tss->rsp[ring].upper = (addr >> 32) & 0xffffffff;
-    THISCPU_SET(g_tss.rsp[ring].lower, (uint32_t)addr & 0xffffffff);
-    THISCPU_SET(g_tss.rsp[ring].upper, (uint32_t)(addr >> 32) & 0xffffffff);
 }

@@ -8,10 +8,12 @@
 .extern g_int_depth
 .extern g_int_stack_top
 .extern g_preempt_depth
+.extern g_tss       // from gdt_idt_tss.c
 .extern g_tid_prev
 .extern g_tid_next
 .extern irq_handlers
 .extern work_flush
+.extern handle_syscall
 
 .altmacro // 需要在 macro 和循环里使用变量
 
@@ -207,8 +209,10 @@ int_enter_nested:
     // 切换到新任务的栈顶（也可能是同一个任务）
     movq    %gs:(g_tid_next), %rdi
 iret_to_task:
-    movq    (%rdi), %rsp // rsp = g_tid_next->stack_top
-    movq    %rdi, %gs:(g_tid_prev) // prev_task = next_task
+    movq    8(%rdi), %rax           // rax = g_tid_next->stack0
+    movq    %rax, %gs:(g_tss+4)     // tss->rsp0 = rax
+    movq    (%rdi), %rsp            // rsp = g_tid_next->stack_top
+    movq    %rdi, %gs:(g_tid_prev)  // prev_task = next_task
 iret_nested:
     decl    %gs:(g_int_depth)
     pop_6_callee_saved_regs
@@ -250,27 +254,34 @@ arch_task_switch:
     pushq   $0x08           // cs
     pushq   $resume         // rip 从这里恢复
     subq    $80, %rsp       // errcode, rdi, and other 8 caller-saved regs
-    // subq    $16, %rsp       // errcode, rdi
-    // push_8_caller_saved_regs
     push_6_callee_saved_regs
     movq    %rsp, (%rsi)    // tid_prev->regs = rsp
 
     incl    %gs:(g_int_depth)
-    // movq    %gs:(g_int_stack_top), %rsp // 切换到中断栈，因为要执行 work_flush
-    // movl    $0, %gs:(g_preempt_depth) // arch_task_switch开抢占
-    // jmp     flush_and_switch
     jmp     iret_to_task
 
 noswitch:
-    // pushq   %rax
     popfq
 resume:
     ret
 
 
-// 系统调用入口，类似
-// 使用 syscall 命令跳转
+// 系统调用入口，使用 syscall 跳转而来
+// rip 保存在 rcx
+// rflags 保存在 r11
+// 这两个寄存器都是 scratch-regs
+// 不会自己切换内核栈
+// 可以看作 ring3 调用一个内核函数
 syscall_entry:
+    // 仍然处在用户栈
+    // 主动切换到内核栈？
+    pushq   %rcx
+    pushq   %r11
+    swapgs
+    call    handle_syscall
+    swapgs
+    popq    %r11
+    popq    %rcx
     sysret
 
 
@@ -285,3 +296,15 @@ arch_enter_ring3:
     pushq   %rdi
     swapgs
     iretq
+
+
+// 使用 sysret 跳转到用户态
+// 在用户栈上建立全新的 frame
+ret_ring3:
+    pushfq
+    popq    %r11        // r11 = ring3-rflags
+    movq    %rdi, %rcx  // rcx = ring3-rip
+    movq    %rsi, %rsp
+    pushq   $0          // dummy return addr
+    swapgs
+    sysret

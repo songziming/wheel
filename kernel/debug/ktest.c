@@ -6,6 +6,7 @@
 #include <debug.h>
 
 #include <apic/apic.h>
+#include <cpu/gdt_idt_tss.h>
 
 #include <console.h>
 #include <kshell.h>
@@ -288,22 +289,31 @@ KSHELL_CMD("test", perform_test);
 static vmrange_t g_user_code;
 static vmrange_t g_user_stack;
 
-// 用户模式下执行的代码
-static void user_code() {
-    ASMV("int $0x80");
-} __attribute__((naked));
+extern char _binary_hello3_bin_start;
+extern char _binary_hello3_bin_end;
 
 void test_user() {
-    char *code3 = vmspace_alloc(&g_kernel_vm, &g_user_code,
-        PAGE_SIZE, PT_KERNEL, MMU_WRITE|MMU_EXEC|MMU_USER);
+    char *from = &_binary_hello3_bin_start;
+    size_t len = (size_t)(&_binary_hello3_bin_end - from);
+
+    size_t paged_size = (len + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    vmspace_alloc_at(&g_kernel_vm, &g_user_code, 0x400000,
+        paged_size, PT_KERNEL, MMU_WRITE|MMU_EXEC|MMU_USER);
     size_t stack = (size_t)vmspace_alloc(&g_kernel_vm, &g_user_stack,
         PAGE_SIZE, PT_STACK, MMU_WRITE|MMU_USER);
 
-    console_printf("ring3 code 0x%zx~0x%zx\n", g_user_code.vaddr, g_user_code.vend);
-    console_printf("ring3 stack 0x%zx~0x%zx\n", g_user_stack.vaddr, g_user_stack.vend);
+    // logk("copy code from %p to %p\n", user_code, code3);
+    logk("ring3 code 0x%zx~0x%zx\n", g_user_code.vaddr, g_user_code.vend);
+    logk("ring3 stack 0x%zx~0x%zx\n", g_user_stack.vaddr, g_user_stack.vend);
 
-    kmemcpy(code3, user_code, PAGE_SIZE);
-    arch_enter_ring3((size_t)code3, stack + PAGE_SIZE);
+    g_user_code.desc = "ring3 code&data";
+    g_user_stack.desc = "ring3 stack";
+
+    // 将 flat binary 的代码和数据拷贝到目标地址
+    size_t code3 = g_user_code.vaddr;
+    kmemcpy((char*)code3, from, len);
+
+    arch_enter_ring3(code3, stack + PAGE_SIZE);
 }
 
 KSHELL_CMD("user", test_user);

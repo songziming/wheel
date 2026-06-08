@@ -193,8 +193,65 @@ void *vmspace_alloc(vmspace_t *space, vmrange_t *rng, size_t size,
     return (void*)rng->vaddr;
 }
 
+// TODO 没有检查地址范围是否有冲突
+void vmspace_alloc_at(vmspace_t *space, vmrange_t *rng,
+        size_t addr, size_t size, page_type_t type, mmu_attr_t attrs) {
+    rng->vaddr = addr;
+    rng->vend = addr + size;
+    rng->attrs = attrs;
+
+    int key = irq_spin_take(&space->lock);
+    vmspace_insert_nolock(space, rng);
+
+    if (size <= PAGE_SIZE) {
+        rng->paddr = page_alloc(0, type);
+        if (0 == rng->paddr) {
+            irq_spin_give(&space->lock, key);
+            return;
+        }
+        mmu_map(space->table, rng->vaddr, rng->vend, rng->paddr, attrs);
+    } else {
+        size += PAGE_SIZE - 1;
+        pagelist_alloc(&rng->pages, size >> PAGE_SHIFT, type);
+        rng->paddr = 0;
+        // TODO 检查pagelist申请是否成功
+        size_t va = rng->vaddr;
+        for (uint32_t blk = rng->pages.head; blk; blk = g_pages[blk].next) {
+            size_t blksize = PAGE_SIZE << g_pages[blk].rank;
+            mmu_map(space->table, va, va + blksize, (size_t)blk << PAGE_SHIFT, attrs);
+            va += blksize;
+        }
+    }
+
+    irq_spin_give(&space->lock, key);
+}
+
 void *vmspace_alloc_stack(vmspace_t *space, vmrange_t *rng) {
     return vmspace_alloc(space, rng, PAGE_SIZE, PT_STACK, MMU_WRITE);
+}
+
+// 映射地址不变，仅改变属性
+// TODO 换成更底层的 mmu_remap，仅遍历页表，仅修改属性，不分裂大页
+void vmspace_remap(vmspace_t *space, vmrange_t *rng, mmu_attr_t attrs) {
+    int key = irq_spin_take(&space->lock);
+    ASSERT(dl_contains(&space->head, &rng->dl));
+
+    rng->attrs = attrs;
+    mmu_unmap(space->table, rng->vaddr, rng->vend);
+    if (0 != rng->paddr) {
+        // 物理地址是连续的
+        mmu_map(space->table, rng->vaddr, rng->vend, rng->paddr, attrs);
+    } else {
+        // 物理地址是不连续的，需要遍历 page-list
+        size_t va = rng->vaddr;
+        for (uint32_t blk = rng->pages.head; blk; blk = g_pages[blk].next) {
+            size_t blksize = PAGE_SIZE << g_pages[blk].rank;
+            mmu_map(space->table, va, va + blksize, (size_t)blk << PAGE_SHIFT, attrs);
+            va += blksize;
+        }
+    }
+
+    irq_spin_give(&space->lock, key);
 }
 
 void vmspace_remove(vmspace_t *space, vmrange_t *rng) {

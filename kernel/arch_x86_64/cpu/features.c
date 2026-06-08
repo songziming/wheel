@@ -499,11 +499,13 @@ INIT_TEXT void cpu_features_enable() {
 
     // 设置 efer
     uint64_t efer = read_msr(MSR_EFER);
-    efer |= (1UL <<  0); // SCE，启用快速系统调用指令 syscall/sysret
+    efer |= 1UL; // SCE，启用快速系统调用指令 syscall/sysret
     if (CPU_FEATURE_NX & g_cpu_features) {
         efer |= 1UL << 11;  // NXE
     }
     write_msr(MSR_EFER, efer);
+
+    // 系统调用相关的 MSR 在 arch_int.c 里面配置
 }
 
 // arch-api func

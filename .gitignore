@@ -9,5 +9,7 @@ Thumbs.db
 .gdb_history
 
 *.bak
+*.bin
+*.ko
 *.profraw
 *.profdata

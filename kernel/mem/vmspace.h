@@ -44,8 +44,12 @@ void *vmspace_alloc_block(vmspace_t *space, vmrange_t *rng, uint32_t rank,
 // 分配不连续的物理内存，映射到连续的虚拟地址范围
 void *vmspace_alloc(vmspace_t *space, vmrange_t *rng, size_t size,
         page_type_t type, mmu_attr_t attrs);
-
+void vmspace_alloc_at(vmspace_t *space, vmrange_t *rng,
+        size_t addr, size_t size, page_type_t type, mmu_attr_t attrs);
 void *vmspace_alloc_stack(vmspace_t *space, vmrange_t *rng);
+
+// 仅改变映射的属性
+void vmspace_remap(vmspace_t *space, vmrange_t *rng, mmu_attr_t attrs);
 
 void vmspace_remove(vmspace_t *space, vmrange_t *rng);
 

@@ -22,7 +22,7 @@ uint64_t isr_entries[1];
 // void task_entry() {}
 void syscall_entry() {}
 void arch_task_switch() {}
-void arch_entry_ring3(size_t entry, size_t stack_top) {
+void arch_enter_ring3(size_t entry, size_t stack_top) {
     (void)entry;
     (void)stack_top;
 }

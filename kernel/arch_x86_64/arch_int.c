@@ -109,8 +109,29 @@ static void handle_pf(int vec UNUSED, regs_t *f) {
     }
 }
 
-static void handle_syscall(int vec UNUSED, regs_t *f UNUSED) {
-    logk("processing syscall\n");
+// 使用 syscall 发起的系统调用，此时处于用户栈
+uint64_t handle_syscall(uint64_t rdi, uint64_t rsi) {
+    logk("syscall %zu %zu\n", rdi, rsi);
+
+    uint64_t rsp;
+    ASMV("movq %%rsp, %0" : "=r"(rsp));
+    logk("current rsp=0x%zx\n", rsp);
+
+    if (rdi == 123) {
+        logk("print: `%s`\n", (char*)rsi);
+    }
+
+    return rdi + 1;
+}
+
+// 使用软中断发起的系统调用
+static void handle_syscall_80(int vec, regs_t *f) {
+    logk("processing syscall-%d eax=%zu\n", vec, f->rax);
+    logk("rip=%zx rsp=%zx rbp=%zx frame=%p\n", f->rip, f->rsp, f->rbp, f);
+    // if (f->rax == 123) {
+    //     logk("print: %s\n", (char*)f->rdi);
+    // }
+    handle_syscall(f->rdi, f->rsi);
 }
 
 // 每个 cpu 都要执行此函数
@@ -124,7 +145,7 @@ INIT_TEXT void int_init() {
 
     // 0x80 可以用于系统调用
     idt_set_isr(0x80, isr_entries[0x80], 3);
-    irq_handlers[0x80] = handle_syscall;
+    irq_handlers[0x80] = handle_syscall_80;
 
     idt_set_ist(2,  1); // NMI
     idt_set_ist(8,  2); // #DF
@@ -143,7 +164,8 @@ INIT_TEXT void int_init_local() {
     THISCPU_SET(g_int_stack_top, thiscpu_int_stack());
 
     // 设置系统调用相关 MSR（只允许 64-bit 模式下的系统调用入口）
-    write_msr(MSR_STAR, 0x001b0008UL << 32);    // STAR
-    write_msr(MSR_LSTAR, (uint64_t)syscall_entry); // LSTAR
+    write_msr(MSR_EFER, read_msr(MSR_EFER) | 1);    // enable syscall
+    write_msr(MSR_STAR, 0x001b0008UL << 32);        // STAR
+    write_msr(MSR_LSTAR, (uint64_t)syscall_entry);  // LSTAR
     write_msr(MSR_SFMASK, 0UL);
 }

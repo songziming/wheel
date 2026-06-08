@@ -53,6 +53,8 @@ ALLOBJS := $(KOBJS) $(LOBJS) $(TOBJS)
 OBJDIRS := $(sort $(dir $(ALLOBJS)))
 OBJDEPS := $(patsubst %,%.d,$(ALLOBJS))
 
+DATAOBJS := $(shell find user -name "*.ko")
+
 
 #-------------------------------------------------------------------------------
 # 编译链接选项
@@ -110,11 +112,15 @@ include $(KERNEL)/arch_$(ARCH)/config.mk
 # 构建规则
 #-------------------------------------------------------------------------------
 
-.PHONY: elf iso unit cov clean
+.PHONY: elf iso unit user cov clean
 
 elf: $(OUT_ELF)
 iso: $(OUT_ISO)
 unit: $(UNIT_BIN)
+
+user:
+	$(MAKE) -C user clean
+	$(MAKE) -C user
 
 clean:
 	rm -rf $(OUT_DIR)
@@ -132,7 +138,7 @@ $(OUT_DIR)/%.S.ko: $(KERNEL)/%.S
 	$(KCC) $(KCFLAGS) $(GENDEP) -DS_FILE -o $@ $<
 $(OUT_DIR)/%.c.ko: $(KERNEL)/%.c
 	$(KCC) $(KCFLAGS) $(GENDEP) -DC_FILE -o $@ $<
-$(OUT_ELF): $(KOBJS)
+$(OUT_ELF): $(KOBJS) $(DATAOBJS)
 	$(KLD) $(KLFLAGS) -o $@ $^
 
 # 内核库，单元测试用，只包括 C 代码，使用默认工具链
