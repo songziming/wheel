@@ -11,6 +11,7 @@
 #include <dllist.h>
 #include <kstring.h>
 #include <heap.h>
+#include <pool_slub.h>
 #include <debug.h>
 #include <kshell.h>
 #include <console.h>
@@ -35,8 +36,9 @@ static _Atomic uint64_t g_idle_mask = 0UL;
 static _Atomic uint32_t g_next_cpu = 0U;
 
 // 将所有的 TCB 串联在一起
-static spin_t g_task_list_lock = SPIN_INIT;
-static dlnode_t g_task_list_head;
+static pool_t g_tcb_pool;
+static spin_t g_tcb_list_lock = SPIN_INIT;
+static dlnode_t g_tcb_head;
 
 
 //------------------------------------------------------------------------------
@@ -116,7 +118,7 @@ INIT_TEXT void sched_init() {
     int cpu = cpu_index();
     if (0 == cpu) {
         // 第一个CPU启动任务之前初始化队列
-        dl_init_circular(&g_task_list_head);
+        dl_init_circular(&g_tcb_head);
     }
 
     prioq_t *q = THISCPU(&g_rdyq);
@@ -161,9 +163,9 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
     tid->affinity = -1;
     lockdep_task_init(&tid->lockdep); // tid->lockdep  = LOCKDEP_TASK_INIT;
 
-    int key = irq_spin_take(&g_task_list_lock);
-    dl_insert_before(&tid->objnode, &g_task_list_head);
-    irq_spin_give(&g_task_list_lock, key);
+    int key = irq_spin_take(&g_tcb_list_lock);
+    dl_insert_before(&tid->objnode, &g_tcb_head);
+    irq_spin_give(&g_tcb_list_lock, key);
 
     vmspace_alloc_stack(&g_kernel_vm, &tid->stack);
     tid->stack.desc = name;
@@ -341,9 +343,9 @@ static void task_free(work_t *wk) {
     vmspace_remove(&g_kernel_vm, &tid->stack);
     tid->state = TS_DELETED;
 
-    raw_spin_take(&g_task_list_lock);
+    raw_spin_take(&g_tcb_list_lock);
     dl_remove(&tid->objnode);
-    raw_spin_give(&g_task_list_lock);
+    raw_spin_give(&g_tcb_list_lock);
 }
 
 // 全程必须关闭中断，防止被抢占，否则 work 没来得及注册，任务无法回收
@@ -438,13 +440,13 @@ static NORETURN void proc_idle() {
 #if !defined(UNIT_TEST)
 
 static void show_tasks() {
-    int key = irq_spin_take(&g_task_list_lock);
-    for (dlnode_t *dl = g_task_list_head.next; dl != &g_task_list_head; dl = dl->next) {
+    int key = irq_spin_take(&g_tcb_list_lock);
+    for (dlnode_t *dl = g_tcb_head.next; dl != &g_tcb_head; dl = dl->next) {
         task_t *tid = containerof(dl, task_t, objnode);
         console_printf(" - task prio=%d, state=%d, name=%s\n",
             tid->priority, tid->state, tid->name);
     }
-    irq_spin_give(&g_task_list_lock, key);
+    irq_spin_give(&g_tcb_list_lock, key);
 }
 
 KSHELL_CMD("tasks", show_tasks);

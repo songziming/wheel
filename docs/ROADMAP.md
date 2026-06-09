@@ -45,6 +45,7 @@
 
 - [ ] TCB、sema、mutex 这些对象都改成动态分配，可以强制删除，处于阻塞状态的task立即结束阻塞状态并返回错误码
 - [ ] TCB 内部也包含一个event，任务结束的时候 signal_all，可以用 task_join 等待任务结束
+- [ ] 优化 lockdep，无需侵入 TCB，信息保存在 percpu-var 里面
 
 # 远期优化点
 
