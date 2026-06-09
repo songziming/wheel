@@ -109,6 +109,7 @@ static void handle_pf(int vec UNUSED, regs_t *f) {
     }
 }
 
+#if 0
 // 使用 syscall 发起的系统调用，此时处于用户栈
 uint64_t handle_syscall(uint64_t rdi, uint64_t rsi) {
     logk("syscall %zu %zu\n", rdi, rsi);
@@ -133,6 +134,7 @@ static void handle_syscall_80(int vec, regs_t *f) {
     // }
     handle_syscall(f->rdi, f->rsi);
 }
+#endif
 
 // 每个 cpu 都要执行此函数
 // 在 TSS 中设置 IST，在 IDT 里面填入 IST-idx
@@ -143,9 +145,9 @@ INIT_TEXT void int_init() {
     }
     irq_handlers[14] = handle_pf;
 
-    // 0x80 可以用于系统调用
-    idt_set_isr(0x80, isr_entries[0x80], 3);
-    irq_handlers[0x80] = handle_syscall_80;
+    // // 0x80 可以用于系统调用
+    // idt_set_isr(0x80, isr_entries[0x80], 3);
+    // irq_handlers[0x80] = handle_syscall_80;
 
     idt_set_ist(2,  1); // NMI
     idt_set_ist(8,  2); // #DF
@@ -171,5 +173,5 @@ INIT_TEXT void int_init_local() {
     write_msr(MSR_EFER, read_msr(MSR_EFER) | 1);    // enable syscall
     write_msr(MSR_STAR, 0x001b0008UL << 32);        // STAR
     write_msr(MSR_LSTAR, (uint64_t)syscall_entry);  // LSTAR
-    write_msr(MSR_SFMASK, 0UL);
+    write_msr(MSR_SFMASK, 0x200UL); // clear IF
 }

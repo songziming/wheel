@@ -12,13 +12,15 @@ void mutex_init(mutex_t *mut) {
 
 static void mutex_timeout(wdog_t *tmr) {
     waiter_t *waiter = containerof(tmr, waiter_t, timer);
-    // mutex_t *mut = containerof(waiter->wq, mutex_t, wq);
     mutex_t *mut = (mutex_t*)waiter->user;
     raw_spin_take(&mut->lock);
     task_wake_timeout(&mut->wq, waiter);
     raw_spin_give(&mut->lock);
 }
 
+// 返回 1 表示成功得到锁
+// 返回 0 表示未得到锁，超时
+// TODO 返回 -1 表示锁被删除
 int mutex_take(mutex_t *mut, int timeout) {
     ASSERT(0 == cpu_int_depth());
 
@@ -63,3 +65,7 @@ void mutex_give(mutex_t *mut) {
     irq_spin_give(&mut->lock, key);
     arch_task_switch();
 }
+
+// TODO mutex_destroy 删除一个互斥锁
+//  按照 posix，只有当 mutex_destroy 没有阻塞者的时候才能释放，否则返回 EBUSY
+//  我们可以支持两种模式，safe_destroy 和 force_destroy

@@ -31,16 +31,21 @@ enum task_state {
     TS_DELETED = 4, // 资源已经回收，TCB 可以复用
 };
 
+typedef struct process process_t;
+
 typedef struct task {
     void       *stack_top;  // regs_t
     void       *stack0;     // stack_top when syscall
-    dlnode_t    objnode;    // node in tasklist
+    void       *stack3;     // saved by syscall
+    dlnode_t    objnode;    // node in tasklist (in process)
     dlnode_t    dl;         // node in ready-queue
     uint32_t    state;
     int16_t     affinity;
     int16_t     priority;
     const char *name;
-    vmrange_t   stack;
+    process_t  *process;    // parent process (NULL if kernel thread)
+    vmrange_t   stack;      // kernel stack
+    vmrange_t   user_stack; // user stack
     lockdep_task_t lockdep;
 } task_t;
 

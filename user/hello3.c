@@ -6,16 +6,17 @@
 uint64_t syscall64(uint64_t rdi, uint64_t rsi);
 uint64_t syscall80(uint64_t rdi, uint64_t rsi);
 
-#define SYSCALL syscall80
+#define SYSCALL syscall64
 
 void sys_print(const char *ptr);
 
 
-void _start() {
+void main() {
     sys_print("hello from ring3");
     SYSCALL(5, 0);
     SYSCALL(3, 0);
     SYSCALL(4, 0);
+    SYSCALL(0, 1);
     while (1) {
         __asm__ volatile("pause");
     }

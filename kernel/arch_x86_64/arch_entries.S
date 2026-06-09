@@ -13,7 +13,7 @@
 .extern g_tid_next
 .extern irq_handlers
 .extern work_flush
-.extern handle_syscall
+.extern do_syscall
 
 .altmacro // 需要在 macro 和循环里使用变量
 
@@ -266,26 +266,31 @@ resume:
     ret
 
 
-// 系统调用入口，使用 syscall 跳转而来
-// rip 保存在 rcx
-// rflags 保存在 r11
-// 这两个寄存器都是 scratch-regs
-// 不会自己切换内核栈
-// 可以看作 ring3 调用一个内核函数
+// 系统调用入口，使用 syscall 跳转而来，此时中断关闭，处于用户栈
+// rip 保存在 rcx，rflags 保存在 r11（这两个都是 scratch-regs，需要保存）
 syscall_entry:
-    // 仍然处在用户栈
-    // 主动切换到内核栈？
     pushq   %rcx
     pushq   %r11
     swapgs
-    call    handle_syscall
+    movq    %gs:(g_tid_prev), %r11
+    movq    %rsp, 16(%r11)  // save user stack
+    movq    8(%r11), %rsp   // switch to kernel stack
+
+    // 执行系统调用，中间可能切换任务
+    sti
+    call    do_syscall
+    cli
+
+    // 回到用户栈，返回用户态
+    movq    %gs:(g_tid_prev), %r11
+    movq    16(%r11), %rsp
     swapgs
     popq    %r11
     popq    %rcx
     sysretq
 
 
-// 跳转到 ring3
+// 主动跳转到 ring3，用于新进程启动
 // rdi 表示目标用户态代码入口地址
 // rsi 表示用户栈的栈顶地址
 arch_enter_ring3:
