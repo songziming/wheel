@@ -7,7 +7,7 @@
 #include <vmspace.h>
 
 typedef struct msgq {
-    spin_t      lock;
+    spinlock_t      lock;
     vmrange_t   rng;        // 分配两倍大小的虚拟空间
     fifo_t      fifo;
     prioq_t     readers;    // 阻塞的读者

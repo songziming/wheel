@@ -10,12 +10,12 @@
 // 记录spinlock持有栈，即当前CPU持有了多少自旋锁
 // 自旋锁是短时锁，不可能持有锁的时候切换任务（但允许持有锁的时候中断，但这仍是相同CPU）
 // 所以，记录持有锁完全可以使用 percpu-var，切换任务的时候还可以检查 held_size 是否为零
-PERCPU_DATA int g_held_size = 0;
 
 
 #ifdef DEBUG
 
 #define MAX_LOCK_ALLOWED 8
+static PERCPU_DATA int g_held_size = 0;
 static PERCPU_BSS mcs_node_t *g_held[MAX_LOCK_ALLOWED];
 static CONST int lockdep_on = 0;
 
@@ -27,7 +27,7 @@ INIT_TEXT void enable_lockdep() {
 
 
 
-void mcs_lock_take(mcs_lock_t *lock, mcs_node_t *node) {
+void mcs_lock_take(spinlock_t *lock, mcs_node_t *node) {
     node->next = 0;
     node->lock = lock;
 
@@ -51,23 +51,25 @@ void mcs_lock_take(mcs_lock_t *lock, mcs_node_t *node) {
             panic("held lock overflow!\n");
         }
         for (int i = 0; i < depth; ++i) {
-            if (g_held[i]->lock == lock) {
+            if (THISCPU_GET(g_held[i])->lock == lock) {
                 panic("already has same lock\n");
             }
         }
-        g_held[depth] = node;
+        THISCPU_SET(g_held[depth], node);
     }
 #endif
 }
 
 void mcs_lock_give(mcs_node_t *node) {
 #ifdef DEBUG
-    int depth = THISCPU_XADD(g_held_size, -1) - 1;
-    if ((depth >= 0) && (g_held[depth]->lock != node->lock)) {
-        panic("release wrong lock\n");
+    if (lockdep_on) {
+        int depth = THISCPU_XADD(g_held_size, -1) - 1;
+        if ((depth >= 0) && (THISCPU_GET(g_held[depth])->lock != node->lock)) {
+            panic("release wrong lock\n");
+        }
     }
 #endif
-    mcs_lock_t *lock = node->lock;
+    spinlock_t *lock = node->lock;
     size_t expected = (size_t)node;
     if (!atomic_compare_exchange_strong(&lock->tail, &expected, 0)) {
 

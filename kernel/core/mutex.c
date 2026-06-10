@@ -5,7 +5,7 @@
 // 不能跨线程获取/释放，也不能在 ISR 里面使用
 
 void mutex_init(mutex_t *mut) {
-    mut->lock = SPIN_INIT;
+    mut->lock = SPINLOCK_INIT;
     prioq_init(&mut->wq);
     mut->owner = NULL;
 }
@@ -13,9 +13,10 @@ void mutex_init(mutex_t *mut) {
 static void mutex_timeout(wdog_t *tmr) {
     waiter_t *waiter = containerof(tmr, waiter_t, timer);
     mutex_t *mut = (mutex_t*)waiter->user;
-    raw_spin_take(&mut->lock);
-    task_wake_timeout(&mut->wq, waiter);
-    raw_spin_give(&mut->lock);
+    {
+        RAW_LOCK_SCOPED(&mut->lock);
+        task_wake_timeout(&mut->wq, waiter);
+    }
 }
 
 // 返回 1 表示成功得到锁
@@ -25,25 +26,22 @@ int mutex_take(mutex_t *mut, int timeout) {
     ASSERT(0 == cpu_int_depth());
 
     task_t *self = current_task();
-
-    int key = irq_spin_take(&mut->lock);
-    ASSERT(self != mut->owner); // 不许重入
-    if (NULL == mut->owner) {
-        mut->owner = self;
-        irq_spin_give(&mut->lock, key);
-        return 1;
-    }
-
-    if (NOWAIT == timeout) {
-        irq_spin_give(&mut->lock, key);
-        return 0;
-    }
-
-    // 没有得到，需要阻塞
     waiter_t pender;
-    pender.user = mut;
-    task_pend(&mut->wq, &pender, timeout, mutex_timeout);
-    irq_spin_give(&mut->lock, key);
+
+    {
+        IRQ_LOCK_SCOPED(&mut->lock);
+        ASSERT(self != mut->owner); // 不许重入
+        if (NULL == mut->owner) {
+            mut->owner = self;
+            return 1;
+        }
+        if (NOWAIT == timeout) {
+            return 0;
+        }
+        // 没有得到，需要阻塞
+        pender.user = mut;
+        task_pend(&mut->wq, &pender, timeout, mutex_timeout);
+    }
     arch_task_switch();
 
     // 恢复运行，检查是否因为超时而唤醒
@@ -53,16 +51,14 @@ int mutex_take(mutex_t *mut, int timeout) {
 
 void mutex_give(mutex_t *mut) {
     ASSERT(0 == cpu_int_depth());
-
-    int key = irq_spin_take(&mut->lock);
-    task_t *self = current_task();
-    if (self != mut->owner) {
-        panic("release mutex from %p, owner=%p\n", self, mut->owner);
+    {
+        IRQ_LOCK_SCOPED(&mut->lock);
+        task_t *self = current_task();
+        if (self != mut->owner) {
+            panic("release mutex from %p, owner=%p\n", self, mut->owner);
+        }
+        mut->owner = task_unpend_one(&mut->wq); // 唤醒一个阻塞线程
     }
-
-    // 尝试唤醒一个阻塞线程
-    mut->owner = task_unpend_one(&mut->wq);
-    irq_spin_give(&mut->lock, key);
     arch_task_switch();
 }
 

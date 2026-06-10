@@ -624,7 +624,7 @@ void mmu_unmap(size_t tbl, size_t va, size_t end) {
 // TLB 不像 L1/L2 cache，硬件不会自动保证一致
 // OS 需要发送 IPI，所有 CPU 都执行 invlpg
 
-static spin_t g_shootdown_lock = SPIN_INIT;
+static spinlock_t g_shootdown_lock = SPINLOCK_INIT;
 static _Atomic int g_shootdown_cnt;
 static size_t g_shootdown_vstart;
 static size_t g_shootdown_vend;
@@ -644,18 +644,19 @@ void tlb_shootdown(size_t vstart, size_t vend) {
     ASSERT(0 == cpu_int_depth());
 
     preempt_lock();
-    raw_spin_take(&g_shootdown_lock);
-    atomic_store(&g_shootdown_cnt, cpu_count() - 1);
-    g_shootdown_vstart = vstart;
-    g_shootdown_vend = vend;
-    arch_send_ipi(IPI_ALL_EXCLUDING_SELF, VEC_IPI_INVLPG); // all except self
+    {
+        RAW_LOCK_SCOPED(&g_shootdown_lock);
+        atomic_store(&g_shootdown_cnt, cpu_count() - 1);
+        g_shootdown_vstart = vstart;
+        g_shootdown_vend = vend;
+        arch_send_ipi(IPI_ALL_EXCLUDING_SELF, VEC_IPI_INVLPG); // all except self
 
-    // 等待过程保持中断开启，当时禁用抢占
-    // 如果另一个 cpu 发来 shootdown-IPI，我们也能处理
-    while (atomic_load(&g_shootdown_cnt) > 0) {
-        cpu_pause();
+        // 等待过程保持中断开启，当时禁用抢占
+        // 如果另一个 cpu 发来 shootdown-IPI，我们也能处理
+        while (atomic_load(&g_shootdown_cnt) > 0) {
+            cpu_pause();
+        }
     }
-    raw_spin_give(&g_shootdown_lock);
     preempt_unlock();
 }
 

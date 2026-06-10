@@ -17,13 +17,13 @@
 #include <console.h>
 
 
-static INIT_BSS task_t g_dummy_tcb = {.lockdep={.depth=0}};
+static INIT_BSS task_t g_dummy_tcb;
 static PERCPU_BSS task_t g_idle_tcb;
 static NORETURN void task_entry(void (*real)());
 static NORETURN void proc_idle();
 
 // ready queue
-static PERCPU_DATA spin_t g_rdy_lock = SPIN_INIT;
+static PERCPU_DATA spinlock_t g_rdy_lock = SPINLOCK_INIT;
 static PERCPU_BSS prioq_t g_rdyq;
 
 // task switch
@@ -37,7 +37,7 @@ static _Atomic uint32_t g_next_cpu = 0U;
 
 // 将所有的 TCB 串联在一起
 static pool_t g_tcb_pool;
-static spin_t g_tcb_list_lock = SPIN_INIT;
+static spinlock_t g_tcb_list_lock = SPINLOCK_INIT;
 static dlnode_t g_tcb_head;
 
 
@@ -133,7 +133,6 @@ INIT_TEXT void sched_init() {
     g_idle_mask |= 1UL << cpu;
 
     g_dummy_tcb.priority = 33; // 确保能被抢占
-    lockdep_task_init(&g_dummy_tcb.lockdep);
     THISCPU_SET(g_tid_prev, &g_dummy_tcb);
     THISCPU_SET(g_tid_next, idle);
 }
@@ -142,14 +141,10 @@ INIT_TEXT void sched_init() {
 // 只负责轮转，不抢占（抢占通过 arch_task_switch 触发）
 void sched_process() {
     ASSERT(cpu_int_depth() > 0);
-    spin_t *lock = THISCPU(&g_rdy_lock);
-    raw_spin_take(lock);
-
+    RAW_LOCK_SCOPED(THISCPU(&g_rdy_lock));
     task_t *prev = THISCPU_GET(g_tid_next);
     task_t *next = containerof(prev->dl.next, task_t, dl);
     THISCPU_SET(g_tid_next, next);
-
-    raw_spin_give(lock);
 }
 
 //------------------------------------------------------------------------------
@@ -161,11 +156,11 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
     tid->name     = name;
     tid->priority = prio;
     tid->affinity = -1;
-    lockdep_task_init(&tid->lockdep); // tid->lockdep  = LOCKDEP_TASK_INIT;
 
-    int key = irq_spin_take(&g_tcb_list_lock);
-    dl_insert_before(&tid->objnode, &g_tcb_head);
-    irq_spin_give(&g_tcb_list_lock, key);
+    {
+        IRQ_LOCK_SCOPED(&g_tcb_list_lock);
+        dl_insert_before(&tid->objnode, &g_tcb_head);
+    }
 
     vmspace_alloc_stack(&g_kernel_vm, &tid->stack);
     tid->stack.desc = name;
@@ -184,18 +179,17 @@ void task_pend(prioq_t *wq, waiter_t *pender, int timeout, wdog_cb_t cb) {
 
     task_t *self = THISCPU_GET(g_tid_prev);
     prioq_t *q = THISCPU(&g_rdyq);
-    spin_t *lock = THISCPU(&g_rdy_lock);
 
     self->state |= TS_PENDING;
 
-    raw_spin_take(lock);
-    prioq_remove(q, &self->dl, self->priority);
-    task_t *next = containerof(prioq_head(q), task_t, dl);
-    if (31 == next->priority) {
-        atomic_fetch_or(&g_idle_mask, 1UL << cpu_index());
+    { RAW_LOCK_SCOPED(THISCPU(&g_rdy_lock));
+      prioq_remove(q, &self->dl, self->priority);
+      task_t *next = containerof(prioq_head(q), task_t, dl);
+      if (31 == next->priority) {
+          atomic_fetch_or(&g_idle_mask, 1UL << cpu_index());
+      }
+      THISCPU_SET(g_tid_next, next);
     }
-    THISCPU_SET(g_tid_next, next);
-    raw_spin_give(lock);
 
     pender->expired = 0;
     pender->tid = self;
@@ -211,31 +205,25 @@ void task_pend(prioq_t *wq, waiter_t *pender, int timeout, wdog_cb_t cb) {
 //------------------------------------------------------------------------------
 
 static void _cont_this(task_t *tid) {
-    spin_t *lock = THISCPU(&g_rdy_lock);
     prioq_t *q = THISCPU(&g_rdyq);
-    int key = irq_spin_take(lock);
-
-    prioq_insert(q, &tid->dl, tid->priority);
-    if (tid->priority < THISCPU_GET(g_tid_next)->priority) {
-        THISCPU_SET(g_tid_next, tid);
+    { IRQ_LOCK_SCOPED(THISCPU(&g_rdy_lock));
+      prioq_insert(q, &tid->dl, tid->priority);
+      if (tid->priority < THISCPU_GET(g_tid_next)->priority) {
+          THISCPU_SET(g_tid_next, tid);
+      }
+      atomic_fetch_and(&g_idle_mask, ~(1UL << cpu_index()));
     }
-    atomic_fetch_and(&g_idle_mask, ~(1UL << cpu_index()));
-
-    irq_spin_give(lock, key);
 }
 
 static void _cont_cpu(task_t *tid, int cpu) {
-    spin_t *lock = THISCPU(&g_rdy_lock);
     prioq_t *q = PERCPU(cpu, &g_rdyq);
-    int key = irq_spin_take(lock);
-
-    prioq_insert(q, &tid->dl, tid->priority);
-    if (tid->priority < (*PERCPU(cpu, &g_tid_next))->priority) {
-        *PERCPU(cpu, &g_tid_next) = tid;
+    { IRQ_LOCK_SCOPED(THISCPU(&g_rdy_lock));
+      prioq_insert(q, &tid->dl, tid->priority);
+      if (tid->priority < (*PERCPU(cpu, &g_tid_next))->priority) {
+          *PERCPU(cpu, &g_tid_next) = tid;
+      }
+      atomic_fetch_and(&g_idle_mask, ~(1UL << cpu));
     }
-    atomic_fetch_and(&g_idle_mask, ~(1UL << cpu));
-
-    irq_spin_give(lock, key);
 }
 
 // 恢复运行这个 task，返回需要切换任务的 CPU-mask
@@ -343,9 +331,10 @@ static void task_free(work_t *wk) {
     vmspace_remove(&g_kernel_vm, &tid->stack);
     tid->state = TS_DELETED;
 
-    raw_spin_take(&g_tcb_list_lock);
-    dl_remove(&tid->objnode);
-    raw_spin_give(&g_tcb_list_lock);
+    {
+        RAW_LOCK_SCOPED(&g_tcb_list_lock);
+        dl_remove(&tid->objnode);
+    }
 }
 
 // 全程必须关闭中断，防止被抢占，否则 work 没来得及注册，任务无法回收
@@ -356,7 +345,6 @@ void task_exit() {
 
     task_t *self = THISCPU_GET(g_tid_prev);
     prioq_t *q = THISCPU(&g_rdyq);
-    spin_t *lock = THISCPU(&g_rdy_lock);
 
     // 发送 IPI，让其他 cpu 清除此任务的栈
     // 这样只剩当前 cpu 还保留 mapping，留到 work 里面删除
@@ -364,20 +352,20 @@ void task_exit() {
 
     self->state |= TS_STOPPED;
 
-    int key = irq_spin_take(lock);
-    prioq_remove(q, &self->dl, self->priority);
-    task_t *next = containerof(prioq_head(q), task_t, dl);
-    if (31 == next->priority) {
-        atomic_fetch_or(&g_idle_mask, 1UL << cpu_index());
+    {
+        IRQ_LOCK_SCOPED(THISCPU(&g_rdy_lock));
+        prioq_remove(q, &self->dl, self->priority);
+        task_t *next = containerof(prioq_head(q), task_t, dl);
+        if (31 == next->priority) {
+            atomic_fetch_or(&g_idle_mask, 1UL << cpu_index());
+        }
+        THISCPU_SET(g_tid_next, next);
+
+        // 注册 work，此时中断关闭，确保 work 不会触发
+        freework_t freework;
+        freework.tid = self;
+        work_defer(&freework.wk, task_free, "freetask");
     }
-    THISCPU_SET(g_tid_next, next);
-
-    // 注册 work，此时中断关闭，确保 work 不会触发
-    freework_t freework;
-    freework.tid = self;
-    work_defer(&freework.wk, task_free, "freetask");
-
-    irq_spin_give(lock, key);
     arch_task_switch();
 }
 
@@ -440,13 +428,12 @@ static NORETURN void proc_idle() {
 #ifndef UNIT_TEST
 
 static void show_tasks() {
-    int key = irq_spin_take(&g_tcb_list_lock);
+    IRQ_LOCK_SCOPED(&g_tcb_list_lock);
     for (dlnode_t *dl = g_tcb_head.next; dl != &g_tcb_head; dl = dl->next) {
         task_t *tid = containerof(dl, task_t, objnode);
         console_printf(" - task prio=%d, state=%d, name=%s\n",
             tid->priority, tid->state, tid->name);
     }
-    irq_spin_give(&g_tcb_list_lock, key);
 }
 
 KSHELL_CMD("tasks", show_tasks);

@@ -238,9 +238,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     thiscpu_init(0);
     ASSERT(cpu_index() == 0);
 
-    // 开启死锁检查（依赖 thiscpu 和 tid_prev）
-    // tid_prev 已经指向 dummy_tcb，且 TCB 里面的 lockdep 也已配置好
-    lockdep_enable();
+    // 开启死锁检查（依赖 thiscpu）
+    enable_lockdep();
 
     thistss_init_load(0); // 依赖 thiscpu，需要放在 thiscpu_init 之后
     int_init(); // 初始化中断管理机制

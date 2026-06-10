@@ -117,7 +117,7 @@ void pool_init(pool_t *slub, size_t obj_size) {
     }
     ASSERT(order < PAGE_BLOCK_RANK_NUM);
 
-    slub->lock       = SPIN_INIT;
+    slub->lock       = SPINLOCK_INIT;
     slub->obj_size   = (uint16_t)obj_size;
     slub->slab_order = (uint8_t)order;
     slub->empty      = (pglist_t){0, 0};
@@ -126,8 +126,7 @@ void pool_init(pool_t *slub, size_t obj_size) {
 }
 
 void pool_destroy(pool_t *slub) {
-    raw_spin_take(&slub->lock);
-
+    RAW_LOCK_SCOPED(&slub->lock);
     uint32_t pfn;
     while (0 != (pfn = slub->empty.head)) {
         pglist_remove(&slub->empty, pfn);
@@ -141,20 +140,15 @@ void pool_destroy(pool_t *slub) {
         pglist_remove(&slub->full, pfn);
         page_free((size_t)pfn << PAGE_SHIFT);
     }
-
-    raw_spin_give(&slub->lock);
 }
 
 void pool_shrink(pool_t *slub) {
-    raw_spin_take(&slub->lock);
-
+    RAW_LOCK_SCOPED(&slub->lock);
     uint32_t pfn;
     while (0 != (pfn = slub->full.head)) {
         pglist_remove(&slub->full, pfn);
         page_free((size_t)pfn << PAGE_SHIFT);
     }
-
-    raw_spin_give(&slub->lock);
 }
 
 //------------------------------------------------------------------------------
@@ -162,7 +156,7 @@ void pool_shrink(pool_t *slub) {
 //------------------------------------------------------------------------------
 
 void *pool_alloc(pool_t *slub) {
-    raw_spin_take(&slub->lock);
+    RAW_LOCK_SCOPED(&slub->lock);
 
     // partial 为空时，从 empty 取 slab 或创建新的
     if (0 == slub->partial.head) {
@@ -173,7 +167,6 @@ void *pool_alloc(pool_t *slub) {
         } else {
             pfn = slab_create(slub->slab_order, slub->obj_size);
             if (0 == pfn) {
-                raw_spin_give(&slub->lock);
                 return NULL;
             }
         }
@@ -191,12 +184,11 @@ void *pool_alloc(pool_t *slub) {
         pglist_push_head(&slub->full, pfn);
     }
 
-    raw_spin_give(&slub->lock);
     return obj;
 }
 
 void pool_free(pool_t *slub, void *obj) {
-    raw_spin_take(&slub->lock);
+    RAW_LOCK_SCOPED(&slub->lock);
 
     uint32_t pfn = page_block_head(virt_to_pfn(obj));
     uint32_t was_full = (NO_OBJ == g_pages[pfn].objects);
@@ -207,7 +199,6 @@ void pool_free(pool_t *slub, void *obj) {
     if (0 == inuse) {
         pglist_remove(&slub->partial, pfn);
         pglist_push_head(&slub->empty, pfn);
-        raw_spin_give(&slub->lock);
         return;
     }
 
@@ -215,7 +206,6 @@ void pool_free(pool_t *slub, void *obj) {
     if (was_full) {
         pglist_remove(&slub->full, pfn);
         pglist_push_tail(&slub->partial, pfn);
-        raw_spin_give(&slub->lock);
         return;
     }
 
@@ -228,7 +218,6 @@ void pool_free(pool_t *slub, void *obj) {
 
         // 位置已正确，无需移动
         if (prev == g_pages[pfn].prev) {
-            raw_spin_give(&slub->lock);
             return;
         }
 
@@ -247,6 +236,4 @@ void pool_free(pool_t *slub, void *obj) {
             }
         }
     }
-
-    raw_spin_give(&slub->lock);
 }

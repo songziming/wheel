@@ -4,7 +4,7 @@
 #include "task.h"
 
 typedef struct sema {
-    spin_t  lock;
+    spinlock_t  lock;
     prioq_t wq;
     int     value;  // guarded by wq.lock
     int     limit;  // guarded by wq.lock

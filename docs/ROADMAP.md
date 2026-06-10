@@ -40,12 +40,14 @@
 - [x] 优化 vmspace-unmap TLB-shootdown，向其他 CPU 发送 IPI 清除缓存
 
 - [x] 更好的内存分配，不再限制大小为2的幂，不再要求物理内存连续
+- [x] 优化 lockdep，无需侵入 TCB，信息保存在 percpu-var 里面
+- [ ] 将 prioq、vmspace 改造成纯粹的数据结构，放在 lib，增加单元测试
+- [ ] 命名优化：cpu_int_disable/cpu_int_restore/cpu_preempt_disable/cpu_preempt_restore
 - [ ] 启用 SLUB 内存池，用来分配 TCB、fsnode、file_handle 这类对象
 - [ ] 更好的对象管理，能遍历所有的 TCB，所有的 file_handle，file_handle 可以保存在 process_t 里面
 
 - [ ] TCB、sema、mutex 这些对象都改成动态分配，可以强制删除，处于阻塞状态的task立即结束阻塞状态并返回错误码
 - [ ] TCB 内部也包含一个event，任务结束的时候 signal_all，可以用 task_join 等待任务结束
-- [ ] 优化 lockdep，无需侵入 TCB，信息保存在 percpu-var 里面
 
 # 远期优化点
 

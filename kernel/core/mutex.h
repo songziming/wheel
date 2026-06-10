@@ -4,7 +4,7 @@
 #include "task.h"
 
 typedef struct mutex {
-    spin_t  lock;
+    spinlock_t  lock;
     prioq_t wq;
     task_t *owner;  // guarded by wq.lock, NULL if not locked
 } mutex_t;

@@ -2,29 +2,31 @@
 #define SPINLOCK_H
 
 #include <wheel.h>
-#include <spin.h>
+#include <arch_api.h>
 
 typedef struct mcs_lock {
     _Atomic size_t tail; // 指向最后一个等待者
-} mcs_lock_t;
+} spinlock_t;
+
+#define SPINLOCK_INIT (spinlock_t){0}
 
 // 代表一个锁的获取者/等待者，持有状态也位于链表中
 typedef struct mcs_node {
     _Atomic size_t  next; // 最低 bit 用来自旋，=0 表示未得到锁，=1 表示得到锁
-    mcs_lock_t     *lock;
+    spinlock_t     *lock;
     int             irqkey;
     int         line;
     const char *file;
 } mcs_node_t;
 
 
-extern PERCPU_DATA int g_held_size;
-
 #ifdef DEBUG
 INIT_TEXT void enable_lockdep();
+#else
+#define enable_lockdep()
 #endif
 
-void mcs_lock_take(mcs_lock_t *lock, mcs_node_t *node);
+void mcs_lock_take(spinlock_t *lock, mcs_node_t *node);
 void mcs_lock_give(mcs_node_t *node);
 
 #define IRQ_SPINLOCK_TAKE(lock, node)       \
@@ -48,13 +50,13 @@ void mcs_lock_give(mcs_node_t *node);
 #define GUARD_NAME CONCAT(__guard_node, __LINE__)
 
 #define RAW_LOCK_SCOPED(lock) \
-    mcs_node_t GUARD_NAME __attribute__((__cleanup__(mcs_lock_give),unused)); \
+    mcs_node_t GUARD_NAME __attribute__((cleanup(mcs_lock_give),unused)); \
     GUARD_NAME.file = __FILE__; \
     GUARD_NAME.line = __LINE__; \
     RAW_SPINLOCK_TAKE(lock, &GUARD_NAME)
 
 #define IRQ_LOCK_SCOPED(lock) \
-    mcs_node_t GUARD_NAME __attribute__((__cleanup__(mcs_lock_give),unused)); \
+    mcs_node_t GUARD_NAME __attribute__((cleanup(mcs_lock_give),unused)); \
     GUARD_NAME.file = __FILE__; \
     GUARD_NAME.line = __LINE__; \
     IRQ_SPINLOCK_TAKE(lock, &GUARD_NAME)

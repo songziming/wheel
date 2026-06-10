@@ -9,7 +9,7 @@ void msgq_init(msgq_t *q) {
         panic("cannot create msgq\n");
     }
     q->rng.desc = "msgq";
-    q->lock = SPIN_INIT;
+    q->lock = SPINLOCK_INIT;
     prioq_init(&q->readers);
     prioq_init(&q->writers);
     fifo_init(&q->fifo, va, PAGE_SIZE);
@@ -18,17 +18,15 @@ void msgq_init(msgq_t *q) {
 static void writer_timeout(wdog_t *wd) {
     waiter_t *waiter = containerof(wd, waiter_t, timer);
     msgq_t *q = (msgq_t*)waiter->user;
-    raw_spin_take(&q->lock);
+    RAW_LOCK_SCOPED(&q->lock);
     task_wake_timeout(&q->writers, waiter);
-    raw_spin_give(&q->lock);
 }
 
 static void reader_timeout(wdog_t *wd) {
     waiter_t *waiter = containerof(wd, waiter_t, timer);
     msgq_t *q = (msgq_t*)waiter->user;
-    raw_spin_take(&q->lock);
+    RAW_LOCK_SCOPED(&q->lock);
     task_wake_timeout(&q->readers, waiter);
-    raw_spin_give(&q->lock);
 }
 
 size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout) {
@@ -38,10 +36,12 @@ size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout) {
     pender.user = q;
     pender.expired = 0;
 
+    mcs_node_t node;
+
     while (1) {
-        int key = irq_spin_take(&q->lock);
+        IRQ_SPINLOCK_TAKE(&q->lock, &node);
         if (pender.expired) { // 持有锁才能检查超时
-            irq_spin_give(&q->lock, key);
+            SPINLOCK_GIVE(&node);
             return 0; // 超时则直接返回
         }
 
@@ -49,21 +49,21 @@ size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout) {
         if (wrote) {
             task_onresume(&pender); // 删除 timeout wdog
             task_unpend_one(&q->readers);
-            irq_spin_give(&q->lock, key);
+            SPINLOCK_GIVE(&node);
             arch_task_switch();
             return wrote;
         }
 
         // 没有写入数据
         if (NOWAIT == timeout) {
-            irq_spin_give(&q->lock, key);
+            SPINLOCK_GIVE(&node);
             return 0;
         }
 
         // 需要阻塞
         task_pend(&q->writers, &pender, timeout, writer_timeout);
         timeout = FOREVER;
-        irq_spin_give(&q->lock, key);
+        SPINLOCK_GIVE(&node);
         arch_task_switch();
 
         // 被唤醒，但是数据还是在 fifo 里面，并没有读取出来，需要重试
@@ -71,10 +71,11 @@ size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout) {
 }
 
 void msgq_send_force(msgq_t *q, void *msg, size_t len) {
-    int key = irq_spin_take(&q->lock);
-    fifo_force_write(&q->fifo, msg, len);
-    task_unpend_one(&q->readers);
-    irq_spin_give(&q->lock, key);
+    {
+        IRQ_LOCK_SCOPED(&q->lock);
+        fifo_force_write(&q->fifo, msg, len);
+        task_unpend_one(&q->readers);
+    }
     arch_task_switch();
 }
 
@@ -85,10 +86,12 @@ size_t msgq_recv(msgq_t *q, void *dst, size_t len, int timeout) {
     pender.user = q;
     pender.expired = 0;
 
+    mcs_node_t node;
+
     while (1) {
-        int key = irq_spin_take(&q->lock);
+        IRQ_SPINLOCK_TAKE(&q->lock, &node);
         if (pender.expired) {
-            irq_spin_give(&q->lock, key);
+            SPINLOCK_GIVE(&node);
             return 0; // 超时则直接返回
         }
 
@@ -96,21 +99,21 @@ size_t msgq_recv(msgq_t *q, void *dst, size_t len, int timeout) {
         if (got) {
             task_onresume(&pender); // 将上次的 wdog 删除
             task_unpend_one(&q->writers);
-            irq_spin_give(&q->lock, key);
+            SPINLOCK_GIVE(&node);
             arch_task_switch();
             return got;
         }
 
         // 未读取数据
         if (NOWAIT == timeout) {
-            irq_spin_give(&q->lock, key);
+            SPINLOCK_GIVE(&node);
             return 0;
         }
 
         // 需要阻塞等待
         task_pend(&q->readers, &pender, timeout, reader_timeout);
         timeout = FOREVER; // 下次阻塞不再注册 wdog
-        irq_spin_give(&q->lock, key);
+        SPINLOCK_GIVE(&node);
         arch_task_switch();
 
         // 被唤醒，但数据还在 fifo 里面，没有读取出来

@@ -3,7 +3,7 @@
 
 static pool_t g_pcb_pool;
 
-static spin_t g_pcb_list_lock = SPIN_INIT;
+static spinlock_t g_pcb_list_lock = SPINLOCK_INIT;
 static dlnode_t g_pcb_head; // 管理所有 PCB
 
 INIT_TEXT void process_init() {
@@ -13,20 +13,22 @@ INIT_TEXT void process_init() {
 
 process_t *process_create() {
     process_t *proc = pool_alloc(&g_pcb_pool);
-    proc->lock = SPIN_INIT;
+    proc->lock = SPINLOCK_INIT;
     dl_init_circular(&proc->tasks_head);
     vmspace_init(&proc->vm, 0x100000, 1UL << 32);
 
-    int key = irq_spin_take(&g_pcb_list_lock);
-    dl_insert_before(&proc->objnode, &g_pcb_head);
-    irq_spin_give(&g_pcb_list_lock, key);
+    {
+        IRQ_LOCK_SCOPED(&g_pcb_list_lock);
+        dl_insert_before(&proc->objnode, &g_pcb_head);
+    }
 
     return proc;
 }
 
 void process_destroy(process_t *proc) {
-    int key = irq_spin_take(&g_pcb_list_lock);
-    dl_remove(&proc->objnode);
-    irq_spin_give(&g_pcb_list_lock, key);
+    {
+        IRQ_LOCK_SCOPED(&g_pcb_list_lock);
+        dl_remove(&proc->objnode);
+    }
     pool_free(&g_pcb_pool, proc);
 }

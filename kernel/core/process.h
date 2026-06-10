@@ -6,7 +6,7 @@
 #include <vmspace.h>
 
 typedef struct process {
-    spin_t      lock;
+    spinlock_t      lock;
     dlnode_t    objnode;    // item in process-table
     const char *name;
     dlnode_t    tasks_head; // list of tasks

@@ -13,7 +13,7 @@ CONST uint32_t g_page_start;
 CONST uint32_t g_page_end;
 CONST page_t *g_pages;
 
-static spin_t g_page_spin = SPIN_INIT;
+static spinlock_t g_page_spin = SPINLOCK_INIT;
 static pglist_t g_blocks[PAGE_BLOCK_RANK_NUM];
 
 
@@ -234,10 +234,8 @@ split_into_smaller:
 
 size_t page_alloc_color(uint32_t rank, page_type_t type,
         uint32_t period, uint32_t phase) {
-    int key = irq_spin_take(&g_page_spin);
-    uint32_t blk = block_alloc_nolock(rank, period, phase, type);
-    irq_spin_give(&g_page_spin, key);
-    return (size_t)blk << PAGE_SHIFT;
+    IRQ_LOCK_SCOPED(&g_page_spin);
+    return (size_t)block_alloc_nolock(rank, period, phase, type) << PAGE_SHIFT;
 }
 
 size_t page_alloc(uint32_t rank, page_type_t type) {
@@ -245,44 +243,37 @@ size_t page_alloc(uint32_t rank, page_type_t type) {
 }
 
 void page_free(size_t pa) {
-    int key = irq_spin_take(&g_page_spin);
-    uint32_t blk = (uint32_t)(pa >> PAGE_SHIFT);
-    block_free_nolock(blk);
-    irq_spin_give(&g_page_spin, key);
+    IRQ_LOCK_SCOPED(&g_page_spin);
+    block_free_nolock((uint32_t)(pa >> PAGE_SHIFT));
 }
 
 
 void pagelist_alloc(pglist_t *pl, uint32_t num, page_type_t type) {
-    int key = irq_spin_take(&g_page_spin);
+    IRQ_LOCK_SCOPED(&g_page_spin);
     pagelist_alloc_nolock(pl, num, type);
-    irq_spin_give(&g_page_spin, key);
 }
 
 void pagelist_free(pglist_t *pl) {
-    int key = irq_spin_take(&g_page_spin);
-
+    IRQ_LOCK_SCOPED(&g_page_spin);
     for (uint32_t blk = pl->head; blk; ) {
         uint32_t next = g_pages[blk].next; // 必须先得到后继页块
         block_free_nolock(blk); // 这会修改 g_pages
         blk = next;
     }
-
-    irq_spin_give(&g_page_spin, key);
     pl->head = 0;
     pl->tail = 0;
 }
 
 
 uint32_t page_free_count() {
-    int key = irq_spin_take(&g_page_spin);
     uint32_t npages = 0;
+    IRQ_LOCK_SCOPED(&g_page_spin);
     for (int rank = 0; rank < PAGE_BLOCK_RANK_NUM; ++rank) {
         uint32_t blksize = 1U << rank;
         for (uint32_t pfn = g_blocks[rank].head; 0 != pfn; pfn = g_pages[pfn].next) {
             npages += blksize;
         }
     }
-    irq_spin_give(&g_page_spin, key);
     return npages;
 }
 
@@ -331,29 +322,28 @@ INIT_TEXT void pages_add(size_t start, size_t end) {
         return;
     }
 
-    int key = irq_spin_take(&g_page_spin);
+    {
+        IRQ_LOCK_SCOPED(&g_page_spin);
+        // 这一段内存不一定是按块对齐的，尽可能使用更大的块
+        while (start < end) {
+            int rank = __builtin_ctz(start);
+            if (rank >= PAGE_BLOCK_RANK_NUM) {
+                rank = PAGE_BLOCK_RANK_NUM - 1;
+            }
 
-    // 这一段内存不一定是按块对齐的，尽可能使用更大的块
-    while (start < end) {
-        int rank = __builtin_ctz(start);
-        if (rank >= PAGE_BLOCK_RANK_NUM) {
-            rank = PAGE_BLOCK_RANK_NUM - 1;
+            uint32_t size = 1U << rank;
+            while (start + size > end) {
+                size >>= 1;
+                rank--;
+            }
+
+            // 创建一个块，并将其回收
+            g_pages[start].head = 1;
+            g_pages[start].rank = rank;
+            block_free_nolock(start);
+            start += size;
         }
-
-        uint32_t size = 1U << rank;
-        while (start + size > end) {
-            size >>= 1;
-            rank--;
-        }
-
-        // 创建一个块，并将其回收
-        g_pages[start].head = 1;
-        g_pages[start].rank = rank;
-        block_free_nolock(start);
-        start += size;
     }
-
-    irq_spin_give(&g_page_spin, key);
 }
 
 //------------------------------------------------------------------------------

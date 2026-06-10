@@ -254,7 +254,7 @@ void heap_init(heap_t *heap, void *buff, size_t size) {
 
     kmemset(heap, 0, sizeof(heap_t));
     // spin_init(&heap->spin);
-    heap->spin = SPIN_INIT;
+    heap->spin = SPINLOCK_INIT;
     // heap->sizetree = RBTREE_INIT;
     heap->buff = (char*)start;
     heap->end  = (char*)end;
@@ -270,10 +270,11 @@ MALLOC void *heap_alloc(heap_t *heap, size_t size) {
     }
     size = ROUND_UP(size);
 
-    int key = irq_spin_take(&heap->spin);
-    chunk_t *chk = chunk_alloc(heap, size);
-    irq_spin_give(&heap->spin, key);
-
+    chunk_t *chk;
+    {
+        IRQ_LOCK_SCOPED(&heap->spin);
+        chk = chunk_alloc(heap, size);
+    }
     if (NULL == chk) {
         return NULL;
     }
@@ -291,9 +292,10 @@ void heap_free(heap_t *heap, void *ptr) {
         return;
     }
 
-    int key = irq_spin_take(&heap->spin);
-    chunk_free(heap, chk);
-    irq_spin_give(&heap->spin, key);
+    {
+        IRQ_LOCK_SCOPED(&heap->spin);
+        chunk_free(heap, chk);
+    }
 }
 
 

@@ -46,7 +46,6 @@ typedef struct task {
     process_t  *process;    // parent process (NULL if kernel thread)
     vmrange_t   stack;      // kernel stack
     vmrange_t   user_stack; // user stack
-    lockdep_task_t lockdep;
 } task_t;
 
 void prioq_init(prioq_t *q);

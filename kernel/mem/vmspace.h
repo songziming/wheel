@@ -19,7 +19,7 @@ typedef struct vmrange {
 
 // 代表一个虚拟地址空间
 typedef struct vmspace {
-    spin_t   lock;
+    spinlock_t   lock;
     size_t   dyn_start; // 动态分配范围开始
     size_t   dyn_end;   // 动态分配范围结束
     dlnode_t head;  // vmrange 链表头节点
