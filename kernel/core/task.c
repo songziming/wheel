@@ -141,7 +141,7 @@ INIT_TEXT void sched_init() {
 // 只负责轮转，不抢占（抢占通过 arch_task_switch 触发）
 void sched_process() {
     ASSERT(cpu_int_depth() > 0);
-    RAW_LOCK_SCOPED(THISCPU(&g_rdy_lock));
+    SPINLOCK_SCOPED(THISCPU(&g_rdy_lock));
     task_t *prev = THISCPU_GET(g_tid_next);
     task_t *next = containerof(prev->dl.next, task_t, dl);
     THISCPU_SET(g_tid_next, next);
@@ -158,7 +158,7 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
     tid->affinity = -1;
 
     {
-        IRQ_LOCK_SCOPED(&g_tcb_list_lock);
+        SPINLOCK_SCOPED(&g_tcb_list_lock);
         dl_insert_before(&tid->objnode, &g_tcb_head);
     }
 
@@ -182,7 +182,7 @@ void task_pend(prioq_t *wq, waiter_t *pender, int timeout, wdog_cb_t cb) {
 
     self->state |= TS_PENDING;
 
-    { RAW_LOCK_SCOPED(THISCPU(&g_rdy_lock));
+    { SPINLOCK_SCOPED(THISCPU(&g_rdy_lock));
       prioq_remove(q, &self->dl, self->priority);
       task_t *next = containerof(prioq_head(q), task_t, dl);
       if (31 == next->priority) {
@@ -206,7 +206,7 @@ void task_pend(prioq_t *wq, waiter_t *pender, int timeout, wdog_cb_t cb) {
 
 static void _cont_this(task_t *tid) {
     prioq_t *q = THISCPU(&g_rdyq);
-    { IRQ_LOCK_SCOPED(THISCPU(&g_rdy_lock));
+    { SPINLOCK_SCOPED(THISCPU(&g_rdy_lock));
       prioq_insert(q, &tid->dl, tid->priority);
       if (tid->priority < THISCPU_GET(g_tid_next)->priority) {
           THISCPU_SET(g_tid_next, tid);
@@ -217,7 +217,7 @@ static void _cont_this(task_t *tid) {
 
 static void _cont_cpu(task_t *tid, int cpu) {
     prioq_t *q = PERCPU(cpu, &g_rdyq);
-    { IRQ_LOCK_SCOPED(THISCPU(&g_rdy_lock));
+    { SPINLOCK_SCOPED(THISCPU(&g_rdy_lock));
       prioq_insert(q, &tid->dl, tid->priority);
       if (tid->priority < (*PERCPU(cpu, &g_tid_next))->priority) {
           *PERCPU(cpu, &g_tid_next) = tid;
@@ -332,7 +332,7 @@ static void task_free(work_t *wk) {
     tid->state = TS_DELETED;
 
     {
-        RAW_LOCK_SCOPED(&g_tcb_list_lock);
+        SPINLOCK_SCOPED(&g_tcb_list_lock);
         dl_remove(&tid->objnode);
     }
 }
@@ -353,7 +353,7 @@ void task_exit() {
     self->state |= TS_STOPPED;
 
     {
-        IRQ_LOCK_SCOPED(THISCPU(&g_rdy_lock));
+        SPINLOCK_SCOPED(THISCPU(&g_rdy_lock));
         prioq_remove(q, &self->dl, self->priority);
         task_t *next = containerof(prioq_head(q), task_t, dl);
         if (31 == next->priority) {
@@ -428,7 +428,7 @@ static NORETURN void proc_idle() {
 #ifndef UNIT_TEST
 
 static void show_tasks() {
-    IRQ_LOCK_SCOPED(&g_tcb_list_lock);
+    SPINLOCK_SCOPED(&g_tcb_list_lock);
     for (dlnode_t *dl = g_tcb_head.next; dl != &g_tcb_head; dl = dl->next) {
         task_t *tid = containerof(dl, task_t, objnode);
         console_printf(" - task prio=%d, state=%d, name=%s\n",

@@ -126,7 +126,7 @@ void pool_init(pool_t *slub, size_t obj_size) {
 }
 
 void pool_destroy(pool_t *slub) {
-    RAW_LOCK_SCOPED(&slub->lock);
+    SPINLOCK_SCOPED(&slub->lock);
     uint32_t pfn;
     while (0 != (pfn = slub->empty.head)) {
         pglist_remove(&slub->empty, pfn);
@@ -143,7 +143,7 @@ void pool_destroy(pool_t *slub) {
 }
 
 void pool_shrink(pool_t *slub) {
-    RAW_LOCK_SCOPED(&slub->lock);
+    SPINLOCK_SCOPED(&slub->lock);
     uint32_t pfn;
     while (0 != (pfn = slub->full.head)) {
         pglist_remove(&slub->full, pfn);
@@ -156,7 +156,7 @@ void pool_shrink(pool_t *slub) {
 //------------------------------------------------------------------------------
 
 void *pool_alloc(pool_t *slub) {
-    RAW_LOCK_SCOPED(&slub->lock);
+    SPINLOCK_SCOPED(&slub->lock);
 
     // partial 为空时，从 empty 取 slab 或创建新的
     if (0 == slub->partial.head) {
@@ -188,7 +188,7 @@ void *pool_alloc(pool_t *slub) {
 }
 
 void pool_free(pool_t *slub, void *obj) {
-    RAW_LOCK_SCOPED(&slub->lock);
+    SPINLOCK_SCOPED(&slub->lock);
 
     uint32_t pfn = page_block_head(virt_to_pfn(obj));
     uint32_t was_full = (NO_OBJ == g_pages[pfn].objects);

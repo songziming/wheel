@@ -18,7 +18,7 @@ void wdog_process() {
     dlnode_t *newhead = NULL;
 
     {
-        IRQ_LOCK_SCOPED(&timer_lock);
+        SPINLOCK_SCOPED(&timer_lock);
         if (dl_is_lastone(&timer_q)) {
             return;
         }
@@ -54,7 +54,7 @@ void wdog_process() {
 }
 
 void wdog_start(wdog_t *tmr, wdog_cb_t func, int tick) {
-    IRQ_LOCK_SCOPED(&timer_lock);
+    SPINLOCK_SCOPED(&timer_lock);
     ASSERT(!dl_contains(&timer_q, &tmr->dl));
 
     dlnode_t *dl;
@@ -74,7 +74,7 @@ void wdog_start(wdog_t *tmr, wdog_cb_t func, int tick) {
 
 // 删除一个节点，需要把 delta 加到后一个节点之上
 void wdog_cancel(wdog_t *tmr) {
-    IRQ_LOCK_SCOPED(&timer_lock);
+    SPINLOCK_SCOPED(&timer_lock);
     for (dlnode_t *dl = timer_q.next; dl != &timer_q; dl = dl->next) {
         if (&tmr->dl != dl) {
             continue;

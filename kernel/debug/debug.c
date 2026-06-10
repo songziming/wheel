@@ -23,7 +23,7 @@ void logk(const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     {
-        IRQ_LOCK_SCOPED(&log_lock);
+        SPINLOCK_SCOPED(&log_lock);
         fifo_vprint(&log_fifo, fmt, args, g_log_func);
     }
     va_end(args);
@@ -45,7 +45,7 @@ NORETURN void panic(const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     {
-        IRQ_LOCK_SCOPED(&log_lock);
+        SPINLOCK_SCOPED(&log_lock);
         fifo_vprint(&log_fifo, fmt, args, g_log_func);
     }
     va_end(args);

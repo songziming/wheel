@@ -272,7 +272,7 @@ MALLOC void *heap_alloc(heap_t *heap, size_t size) {
 
     chunk_t *chk;
     {
-        IRQ_LOCK_SCOPED(&heap->spin);
+        SPINLOCK_SCOPED(&heap->spin);
         chk = chunk_alloc(heap, size);
     }
     if (NULL == chk) {
@@ -293,7 +293,7 @@ void heap_free(heap_t *heap, void *ptr) {
     }
 
     {
-        IRQ_LOCK_SCOPED(&heap->spin);
+        SPINLOCK_SCOPED(&heap->spin);
         chunk_free(heap, chk);
     }
 }

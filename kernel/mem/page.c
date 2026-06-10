@@ -234,7 +234,7 @@ split_into_smaller:
 
 size_t page_alloc_color(uint32_t rank, page_type_t type,
         uint32_t period, uint32_t phase) {
-    IRQ_LOCK_SCOPED(&g_page_spin);
+    SPINLOCK_SCOPED(&g_page_spin);
     return (size_t)block_alloc_nolock(rank, period, phase, type) << PAGE_SHIFT;
 }
 
@@ -243,18 +243,18 @@ size_t page_alloc(uint32_t rank, page_type_t type) {
 }
 
 void page_free(size_t pa) {
-    IRQ_LOCK_SCOPED(&g_page_spin);
+    SPINLOCK_SCOPED(&g_page_spin);
     block_free_nolock((uint32_t)(pa >> PAGE_SHIFT));
 }
 
 
 void pagelist_alloc(pglist_t *pl, uint32_t num, page_type_t type) {
-    IRQ_LOCK_SCOPED(&g_page_spin);
+    SPINLOCK_SCOPED(&g_page_spin);
     pagelist_alloc_nolock(pl, num, type);
 }
 
 void pagelist_free(pglist_t *pl) {
-    IRQ_LOCK_SCOPED(&g_page_spin);
+    SPINLOCK_SCOPED(&g_page_spin);
     for (uint32_t blk = pl->head; blk; ) {
         uint32_t next = g_pages[blk].next; // 必须先得到后继页块
         block_free_nolock(blk); // 这会修改 g_pages
@@ -267,7 +267,7 @@ void pagelist_free(pglist_t *pl) {
 
 uint32_t page_free_count() {
     uint32_t npages = 0;
-    IRQ_LOCK_SCOPED(&g_page_spin);
+    SPINLOCK_SCOPED(&g_page_spin);
     for (int rank = 0; rank < PAGE_BLOCK_RANK_NUM; ++rank) {
         uint32_t blksize = 1U << rank;
         for (uint32_t pfn = g_blocks[rank].head; 0 != pfn; pfn = g_pages[pfn].next) {
@@ -323,7 +323,7 @@ INIT_TEXT void pages_add(size_t start, size_t end) {
     }
 
     {
-        IRQ_LOCK_SCOPED(&g_page_spin);
+        SPINLOCK_SCOPED(&g_page_spin);
         // 这一段内存不一定是按块对齐的，尽可能使用更大的块
         while (start < end) {
             int rank = __builtin_ctz(start);

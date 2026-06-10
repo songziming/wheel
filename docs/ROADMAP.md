@@ -42,6 +42,7 @@
 - [x] 更好的内存分配，不再限制大小为2的幂，不再要求物理内存连续
 - [x] 优化 lockdep，无需侵入 TCB，信息保存在 percpu-var 里面
 - [ ] 将 prioq、vmspace 改造成纯粹的数据结构，放在 lib，增加单元测试
+- [ ] 优化 mmu 模块，unmap/remap 不需要考虑拆分大页的情况，使用者保证地址边界一致
 - [ ] 命名优化：cpu_int_disable/cpu_int_restore/cpu_preempt_disable/cpu_preempt_restore
 - [ ] 启用 SLUB 内存池，用来分配 TCB、fsnode、file_handle 这类对象
 - [ ] 更好的对象管理，能遍历所有的 TCB，所有的 file_handle，file_handle 可以保存在 process_t 里面
@@ -59,7 +60,7 @@
       还可以让 fs 缓存和 page-alloc 结合，凡是未分配的页面都能用来缓存 fs
 
 并发与调度
-- [ ] 使用更好的自旋锁方案（MCS-lock、qspin），降低 cache-bouncing
+- [x] 使用更好的自旋锁方案（MCS-lock、qspin），降低 cache-bouncing
 - [ ] 实现读写锁，允许多个 reader 同时执行。调度器使用 read-lock，负载均衡使用 write-lock
 - [ ] 识别处理器拓扑结构，改进调度算法
 

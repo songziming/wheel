@@ -55,7 +55,7 @@ static void _console_puts(const char *s, size_t n) {
 }
 
 void console_puts(const char *s, size_t n) {
-    IRQ_LOCK_SCOPED(&console_lock);
+    SPINLOCK_SCOPED(&console_lock);
     g_display->draw_char(' ', caret_x, caret_y); // 清除当前光标
     _console_puts(s, n);
     g_display->draw_caret(caret_x, caret_y); // 绘制新的光标
@@ -70,7 +70,7 @@ static void print_flush(void *user UNUSED, const char **s, size_t *len) {
 void console_printf(const char *fmt, ...) {
     char tmp[256];
 
-    IRQ_LOCK_SCOPED(&console_lock);
+    SPINLOCK_SCOPED(&console_lock);
     g_display->draw_char(' ', caret_x, caret_y); // 清除前一次的光标
 
     va_list va;

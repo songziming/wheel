@@ -7,18 +7,18 @@
 #include <debug.h>
 
 
-// 记录spinlock持有栈，即当前CPU持有了多少自旋锁
-// 自旋锁是短时锁，不可能持有锁的时候切换任务（但允许持有锁的时候中断，但这仍是相同CPU）
-// 所以，记录持有锁完全可以使用 percpu-var，切换任务的时候还可以检查 held_size 是否为零
-
-
 #ifdef DEBUG
 
+// 记录spinlock持有栈，即当前CPU持有了多少自旋锁
+// 自旋锁是短时锁，不可能持有锁的同时切换任务，也不能中断
+// 所以，记录持有锁完全可以使用 percpu-var
 #define MAX_LOCK_ALLOWED 8
 static PERCPU_DATA int g_held_size = 0;
-static PERCPU_BSS mcs_node_t *g_held[MAX_LOCK_ALLOWED];
-static CONST int lockdep_on = 0;
+static PERCPU_BSS spinlock_node_t *g_held[MAX_LOCK_ALLOWED];
 
+// lockdep 需要用到 percpu-var，不是开机就能使用的
+// 需要等 percpu/thiscpu 配置好，才能开启 lockdep
+static CONST int lockdep_on = 0;
 INIT_TEXT void enable_lockdep() {
     lockdep_on = 1;
 }
@@ -27,11 +27,12 @@ INIT_TEXT void enable_lockdep() {
 
 
 
-void mcs_lock_take(spinlock_t *lock, mcs_node_t *node) {
+void spinlock_take(spinlock_t *lock, spinlock_node_t *node) {
     node->next = 0;
     node->lock = lock;
+    node->irqkey = cpu_int_lock();
 
-    mcs_node_t *prev = (mcs_node_t*)atomic_exchange(&lock->tail, (size_t)node);
+    spinlock_node_t *prev = (spinlock_node_t*)atomic_exchange(&lock->tail, (size_t)node);
     if (NULL != prev) {
         // 有前驱节点，把自己连接到前驱之后，注意不能触碰最低 bit
         atomic_fetch_or(&prev->next, (size_t)node);
@@ -50,34 +51,41 @@ void mcs_lock_take(spinlock_t *lock, mcs_node_t *node) {
         if (depth >= MAX_LOCK_ALLOWED) {
             panic("held lock overflow!\n");
         }
+        THISCPU_SET(g_held[depth], node);
+
         for (int i = 0; i < depth; ++i) {
             if (THISCPU_GET(g_held[i])->lock == lock) {
-                panic("already has same lock\n");
+                panic("already has same lock, taken at %s:%d\n",
+                    THISCPU_GET(g_held[i])->file,
+                    THISCPU_GET(g_held[i])->line);
             }
         }
-        THISCPU_SET(g_held[depth], node);
     }
 #endif
 }
 
-void mcs_lock_give(mcs_node_t *node) {
+void spinlock_give(spinlock_node_t *node) {
 #ifdef DEBUG
     if (lockdep_on) {
         int depth = THISCPU_XADD(g_held_size, -1) - 1;
-        if ((depth >= 0) && (THISCPU_GET(g_held[depth])->lock != node->lock)) {
-            panic("release wrong lock\n");
+        if (depth < 0) {
+            panic("not holding any lock!\n");
+        } else if (THISCPU_GET(g_held[depth])->lock != node->lock) {
+            panic("release wrong lock, last lock at %s:%d\n",
+                THISCPU_GET(g_held[depth])->file,
+                THISCPU_GET(g_held[depth])->line);
         }
     }
 #endif
+
     spinlock_t *lock = node->lock;
     size_t expected = (size_t)node;
     if (!atomic_compare_exchange_strong(&lock->tail, &expected, 0)) {
-
         // 自己不是最后节点，需要通知后继
         // 后继线程更新 lock->tail 和 node->next 是两步执行的
         // 可能刚刚更新 tail，尚未更新 next。所以我们需要等待
-        mcs_node_t *next;
-        while (NULL == (next = (mcs_node_t*)atomic_load(&node->next))) {
+        spinlock_node_t *next;
+        while (NULL == (next = (spinlock_node_t*)atomic_load(&node->next))) {
             cpu_pause();
         }
 

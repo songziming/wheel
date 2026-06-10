@@ -624,8 +624,7 @@ void mmu_unmap(size_t tbl, size_t va, size_t end) {
 // TLB 不像 L1/L2 cache，硬件不会自动保证一致
 // OS 需要发送 IPI，所有 CPU 都执行 invlpg
 
-static spinlock_t g_shootdown_lock = SPINLOCK_INIT;
-static _Atomic int g_shootdown_cnt;
+static _Atomic int g_shootdown_cnt = 0;
 static size_t g_shootdown_vstart;
 static size_t g_shootdown_vend;
 
@@ -642,21 +641,27 @@ void on_ipi_invlpg() {
 // vmspace_remove 函数中，会执行 invlpg 删除当前 cpu 的映射
 void tlb_shootdown(size_t vstart, size_t vend) {
     ASSERT(0 == cpu_int_depth());
-
     preempt_lock();
-    {
-        RAW_LOCK_SCOPED(&g_shootdown_lock);
-        atomic_store(&g_shootdown_cnt, cpu_count() - 1);
-        g_shootdown_vstart = vstart;
-        g_shootdown_vend = vend;
-        arch_send_ipi(IPI_ALL_EXCLUDING_SELF, VEC_IPI_INVLPG); // all except self
 
-        // 等待过程保持中断开启，当时禁用抢占
-        // 如果另一个 cpu 发来 shootdown-IPI，我们也能处理
-        while (atomic_load(&g_shootdown_cnt) > 0) {
-            cpu_pause();
-        }
+    // 使用 cas-loop 而不是自旋锁，因为自旋锁会屏蔽中断，我们需要中断开启
+    // 中断开启才能收到其他 CPU 发来的 TLB-shootdown-IPI，否则会死锁
+    int expected = 0;
+    int desired = cpu_count() - 1;
+    while (!atomic_compare_exchange_strong(&g_shootdown_cnt, &expected, desired)) {
+        cpu_pause();
+        expected = 0;
     }
+
+    // 此时已进入临界区，可安全使用共享变量
+    g_shootdown_vstart = vstart;
+    g_shootdown_vend = vend;
+    arch_send_ipi(IPI_ALL_EXCLUDING_SELF, VEC_IPI_INVLPG);
+
+    // 等待其他 CPU 接收 IPI，执行 invlpg 完成
+    while (atomic_load(&g_shootdown_cnt) > 0) {
+        cpu_pause();
+    }
+
     preempt_unlock();
 }
 

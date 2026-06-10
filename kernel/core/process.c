@@ -18,7 +18,7 @@ process_t *process_create() {
     vmspace_init(&proc->vm, 0x100000, 1UL << 32);
 
     {
-        IRQ_LOCK_SCOPED(&g_pcb_list_lock);
+        SPINLOCK_SCOPED(&g_pcb_list_lock);
         dl_insert_before(&proc->objnode, &g_pcb_head);
     }
 
@@ -27,7 +27,7 @@ process_t *process_create() {
 
 void process_destroy(process_t *proc) {
     {
-        IRQ_LOCK_SCOPED(&g_pcb_list_lock);
+        SPINLOCK_SCOPED(&g_pcb_list_lock);
         dl_remove(&proc->objnode);
     }
     pool_free(&g_pcb_pool, proc);

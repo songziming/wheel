@@ -28,7 +28,7 @@ static void serial_putc(char c) {
 }
 
 void serial_puts(const char *s, size_t n) {
-    IRQ_LOCK_SCOPED(&g_serial_spin);
+    SPINLOCK_SCOPED(&g_serial_spin);
     for (size_t i = 0; i < n; ++i) {
         serial_putc(s[i]);
     }

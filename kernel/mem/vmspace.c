@@ -24,7 +24,7 @@ vmrange_t *vmspace_find(vmspace_t *space, size_t addr) {
     ASSERT(NULL != space);
 
     vmrange_t *found = NULL;
-    { IRQ_LOCK_SCOPED(&space->lock);
+    { SPINLOCK_SCOPED(&space->lock);
       for (dlnode_t *i = space->head.next; &space->head != i; i = i->next) {
           vmrange_t *rng = containerof(i, vmrange_t, dl);
           if ((rng->vaddr <= addr) && (addr < rng->vend)) {
@@ -61,7 +61,7 @@ void vmspace_insert(vmspace_t *space, vmrange_t *rng) {
     ASSERT(rng->vaddr < rng->vend);
     ASSERT(0 == (rng->vaddr & (PAGE_SIZE - 1)));
 
-    { IRQ_LOCK_SCOPED(&space->lock);
+    { SPINLOCK_SCOPED(&space->lock);
       vmspace_insert_nolock(space, rng);
     }
 }
@@ -100,7 +100,7 @@ void *vmspace_alloc_nomap(vmspace_t *space, vmrange_t *rng, size_t size) {
     ASSERT(NULL != space);
     ASSERT(NULL != rng);
 
-    { IRQ_LOCK_SCOPED(&space->lock);
+    { SPINLOCK_SCOPED(&space->lock);
       ASSERT(!dl_contains(&space->head, &rng->dl));
 
       if (0 == find_vmrange_no_lock(space, rng, size)) {
@@ -125,7 +125,7 @@ void *vmspace_alloc_block(vmspace_t *space, vmrange_t *rng,
 
     size_t size = PAGE_SIZE << rank;
 
-    { IRQ_LOCK_SCOPED(&space->lock);
+    { SPINLOCK_SCOPED(&space->lock);
       ASSERT(!dl_contains(&space->head, &rng->dl));
 
       if (0 == find_vmrange_no_lock(space, rng, size)) {
@@ -157,7 +157,7 @@ void *vmspace_alloc(vmspace_t *space, vmrange_t *rng, size_t size,
     size &= ~(PAGE_SIZE - 1);
 
     {
-        IRQ_LOCK_SCOPED(&space->lock);
+        SPINLOCK_SCOPED(&space->lock);
         ASSERT(!dl_contains(&space->head, &rng->dl));
 
         if (0 == find_vmrange_no_lock(space, rng, size)) {
@@ -197,7 +197,7 @@ void vmspace_alloc_at(vmspace_t *space, vmrange_t *rng,
     rng->attrs = attrs;
 
     {
-        IRQ_LOCK_SCOPED(&space->lock);
+        SPINLOCK_SCOPED(&space->lock);
         vmspace_insert_nolock(space, rng);
 
         if (size <= PAGE_SIZE) {
@@ -228,7 +228,7 @@ void *vmspace_alloc_stack(vmspace_t *space, vmrange_t *rng) {
 // 映射地址不变，仅改变属性
 // TODO 换成更底层的 mmu_remap，仅遍历页表，仅修改属性，不分裂大页
 void vmspace_remap(vmspace_t *space, vmrange_t *rng, mmu_attr_t attrs) {
-    IRQ_LOCK_SCOPED(&space->lock);
+    SPINLOCK_SCOPED(&space->lock);
     ASSERT(dl_contains(&space->head, &rng->dl));
 
     rng->attrs = attrs;
@@ -251,7 +251,7 @@ void vmspace_remove(vmspace_t *space, vmrange_t *rng) {
     ASSERT(NULL != space);
     ASSERT(NULL != rng);
 
-    IRQ_LOCK_SCOPED(&space->lock);
+    SPINLOCK_SCOPED(&space->lock);
     ASSERT(dl_contains(&space->head, &rng->dl));
 
     if (space->table) {
@@ -272,7 +272,7 @@ void vmspace_remove(vmspace_t *space, vmrange_t *rng) {
 
 static void vmspace_show() {
     vmspace_t *vm = &g_kernel_vm;
-    IRQ_LOCK_SCOPED(&vm->lock);
+    SPINLOCK_SCOPED(&vm->lock);
     console_printf("kernel vmspace:\n");
     for (dlnode_t *i = vm->head.next; &vm->head != i; i = i->next) {
         vmrange_t *rng = containerof(i, vmrange_t, dl);

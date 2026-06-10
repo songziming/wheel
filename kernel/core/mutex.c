@@ -13,10 +13,8 @@ void mutex_init(mutex_t *mut) {
 static void mutex_timeout(wdog_t *tmr) {
     waiter_t *waiter = containerof(tmr, waiter_t, timer);
     mutex_t *mut = (mutex_t*)waiter->user;
-    {
-        RAW_LOCK_SCOPED(&mut->lock);
-        task_wake_timeout(&mut->wq, waiter);
-    }
+    SPINLOCK_SCOPED(&mut->lock);
+    task_wake_timeout(&mut->wq, waiter);
 }
 
 // 返回 1 表示成功得到锁
@@ -29,7 +27,7 @@ int mutex_take(mutex_t *mut, int timeout) {
     waiter_t pender;
 
     {
-        IRQ_LOCK_SCOPED(&mut->lock);
+        SPINLOCK_SCOPED(&mut->lock);
         ASSERT(self != mut->owner); // 不许重入
         if (NULL == mut->owner) {
             mut->owner = self;
@@ -52,7 +50,7 @@ int mutex_take(mutex_t *mut, int timeout) {
 void mutex_give(mutex_t *mut) {
     ASSERT(0 == cpu_int_depth());
     {
-        IRQ_LOCK_SCOPED(&mut->lock);
+        SPINLOCK_SCOPED(&mut->lock);
         task_t *self = current_task();
         if (self != mut->owner) {
             panic("release mutex from %p, owner=%p\n", self, mut->owner);
