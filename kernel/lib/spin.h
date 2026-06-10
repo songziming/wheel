@@ -16,6 +16,7 @@ void raw_spin_give(spin_t *spin);
 int  irq_spin_take(spin_t *spin);
 void irq_spin_give(spin_t *spin, int key);
 
+#if 0
 
 typedef struct rwspin {
     spin_t spin;
@@ -33,4 +34,5 @@ int  irqrw_take_reader(rwspin_t *rw);
 void irqrw_give_writer(rwspin_t *rw, int key);
 void irqrw_give_reader(rwspin_t *rw, int key);
 
+#endif
 #endif // SPIN_H

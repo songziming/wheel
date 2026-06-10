@@ -517,7 +517,7 @@ size_t arch_cacheline_size() {
 // 调试命令
 //------------------------------------------------------------------------------
 
-#if !defined(UNIT_TEST)
+#ifndef UNIT_TEST
 
 static void cpu_features_show() {
     console_printf("cpu info:\n");
@@ -574,4 +574,4 @@ static void cpu_features_show() {
 
 KSHELL_CMD("cpu", cpu_features_show);
 
-#endif // !defined(UNIT_TEST)
+#endif // UNIT_TEST

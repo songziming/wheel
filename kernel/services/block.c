@@ -38,7 +38,7 @@ void block_write(block_dev_t *dev, const void *src, uint64_t sec, uint64_t nsecs
 
 //------------------------------------------------------------------------------
 
-#if !defined(UNIT_TEST)
+#ifndef UNIT_TEST
 
 static void show_blocks() {
     console_printf("block devices:\n");
@@ -51,4 +51,4 @@ static void show_blocks() {
 
 KSHELL_CMD("blocks", show_blocks);
 
-#endif // !defined(UNIT_TEST)
+#endif // UNIT_TEST

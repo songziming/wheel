@@ -104,7 +104,7 @@ uint64_t pci_get_bar(pci_dev_t *dev, int idx, char *isio, char *prefetch) {
 
 //------------------------------------------------------------------------------
 
-#if !defined(UNIT_TEST)
+#ifndef UNIT_TEST
 
 static void pci_show_dev(const pci_dev_t *dev) {
     ASSERT(NULL != dev);
@@ -197,4 +197,4 @@ static void show_pci() {
 
 KSHELL_CMD("pci", show_pci);
 
-#endif // !defined(UNIT_TEST)
+#endif // UNIT_TEST

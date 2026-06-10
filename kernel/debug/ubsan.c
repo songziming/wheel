@@ -1,6 +1,6 @@
 // 处理未定义行为（-fsanitize=undefined）
 
-#if !defined(UNIT_TEST)
+#ifndef UNIT_TEST
 
 #include <wheel.h>
 #include <debug.h>

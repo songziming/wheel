@@ -41,6 +41,8 @@ void irq_spin_give(spin_t *spin, int key) {
 // reader-writer spinlock
 //------------------------------------------------------------------------------
 
+#if 0
+
 void rwspin_take_writer(rwspin_t *rw) {
     lockdep_acquire(rw, &rw->dep);
     raw_spin_take(&rw->spin);   // 获取写权限
@@ -95,3 +97,5 @@ void irqrw_give_reader(rwspin_t *rw, int key) {
     lockdep_release(rw, &rw->dep);
     cpu_int_unlock(key);
 }
+
+#endif

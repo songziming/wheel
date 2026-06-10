@@ -348,7 +348,7 @@ char *kernel_heap_mkstr(const char *fmt, ...) {
 // 调试命令，显示堆状态
 //------------------------------------------------------------------------------
 
-#if !defined(UNIT_TEST)
+#ifndef UNIT_TEST
 
 static void dump_heap_state() {
     size_t used_cnt = 0;
@@ -380,4 +380,4 @@ static void dump_heap_state() {
 
 KSHELL_CMD("heap", dump_heap_state);
 
-#endif // !defined(UNIT_TEST)
+#endif // UNIT_TEST

@@ -1,4 +1,4 @@
-#if !defined(UNIT_TEST) // 单元测试无法混合链接 32-bit 代码
+#ifndef UNIT_TEST // 单元测试无法混合链接 32-bit 代码
 
 #include "multiboot1.h"
 #include "multiboot2.h"
@@ -250,4 +250,4 @@ init_stack:
     .skip   INIT_STACK_SIZE
 init_stack_top:
 
-#endif // !defined(UNIT_TEST)
+#endif // UNIT_TEST

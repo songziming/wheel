@@ -358,7 +358,7 @@ INIT_TEXT void pages_add(size_t start, size_t end) {
 
 //------------------------------------------------------------------------------
 
-#if !defined(UNIT_TEST)
+#ifndef UNIT_TEST
 
 static void show_page(int argc, char *argv[]) {
     if (argc < 2) {
@@ -376,4 +376,4 @@ static void show_page(int argc, char *argv[]) {
 
 KSHELL_CMD("page", show_page);
 
-#endif // !defined(UNIT_TEST)
+#endif // UNIT_TEST

@@ -437,7 +437,7 @@ static NORETURN void proc_idle() {
 
 //------------------------------------------------------------------------------
 
-#if !defined(UNIT_TEST)
+#ifndef UNIT_TEST
 
 static void show_tasks() {
     int key = irq_spin_take(&g_tcb_list_lock);
@@ -451,4 +451,4 @@ static void show_tasks() {
 
 KSHELL_CMD("tasks", show_tasks);
 
-#endif // !defined(UNIT_TEST)
+#endif // UNIT_TEST

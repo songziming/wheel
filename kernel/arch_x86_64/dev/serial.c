@@ -1,4 +1,5 @@
 // UART 串口输出
+// 用于模拟器输出调试信息
 
 #include "serial.h"
 #include <arch_api.h>
@@ -23,9 +24,7 @@ INIT_TEXT void serial_init() {
 static void serial_putc(char c) {
     while ((in8(COM1_PORT + 5) & 0x20) == 0) {}
     out8(COM1_PORT, c);
-#if defined(DEBUG)
     out8(BOCHS_PORT, c);
-#endif
 }
 
 void serial_puts(const char *s, size_t n) {

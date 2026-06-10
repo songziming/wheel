@@ -19,46 +19,65 @@
 // 告知编译器内存可能发生修改
 
 #define _THISCPU_GET(op, var) ({ \
-     __typeof__(var) dst; \
-     ASMV(op " %%gs:%1,%0" : "=r"(dst) : "m"(var)); \
-     dst; \
+    __typeof__(var) dst; \
+    ASMV(op " %%gs:%1,%0" : "=r"(dst) : "m"(var)); \
+    dst; \
 })
 #define _THISCPU_SET(op, var, val) ({ \
-     ASMV(op " %0,%%gs:%1" :: "r"(val), "m"(var) : "memory"); \
+    ASMV(op " %1,%%gs:%0" : "+m"(var) : "r"(val) : "memory"); \
+})
+#define _THISCPU_XADD(op, var, val) ({ \
+    __typeof__(var) old = val; \
+    ASMV(op " %0,%%gs:%1" : "+r"(old), "+m"(var) :: "memory"); \
+    old; \
 })
 
 #define THISCPU_GET(var) _Generic((var), \
-     int8_t:  _THISCPU_GET("movb", var), \
+    int8_t:   _THISCPU_GET("movb", var), \
     uint8_t:  _THISCPU_GET("movb", var), \
-     int16_t: _THISCPU_GET("movw", var), \
+    int16_t:  _THISCPU_GET("movw", var), \
     uint16_t: _THISCPU_GET("movw", var), \
-     int32_t: _THISCPU_GET("movl", var), \
+    int32_t:  _THISCPU_GET("movl", var), \
     uint32_t: _THISCPU_GET("movl", var), \
-     int64_t: _THISCPU_GET("movq", var), \
+    int64_t:  _THISCPU_GET("movq", var), \
     uint64_t: _THISCPU_GET("movq", var), \
     default:  _THISCPU_GET("movq", var)  \
 )
 #define THISCPU_SET(var, val) _Generic((var), \
-     int8_t:  _THISCPU_SET("movb", var, val), \
+    int8_t:   _THISCPU_SET("movb", var, val), \
     uint8_t:  _THISCPU_SET("movb", var, val), \
-     int16_t: _THISCPU_SET("movw", var, val), \
+    int16_t:  _THISCPU_SET("movw", var, val), \
     uint16_t: _THISCPU_SET("movw", var, val), \
-     int32_t: _THISCPU_SET("movl", var, val), \
+    int32_t:  _THISCPU_SET("movl", var, val), \
     uint32_t: _THISCPU_SET("movl", var, val), \
-     int64_t: _THISCPU_SET("movq", var, val), \
+    int64_t:  _THISCPU_SET("movq", var, val), \
     uint64_t: _THISCPU_SET("movq", var, val), \
     default:  _THISCPU_SET("movq", var, val)  \
 )
 #define THISCPU_ADD(var, val) _Generic((var), \
-     int8_t:  _THISCPU_SET("addb", var, val), \
+    int8_t:   _THISCPU_SET("addb", var, val), \
     uint8_t:  _THISCPU_SET("addb", var, val), \
-     int16_t: _THISCPU_SET("addw", var, val), \
+    int16_t:  _THISCPU_SET("addw", var, val), \
     uint16_t: _THISCPU_SET("addw", var, val), \
-     int32_t: _THISCPU_SET("addl", var, val), \
+    int32_t:  _THISCPU_SET("addl", var, val), \
     uint32_t: _THISCPU_SET("addl", var, val), \
-     int64_t: _THISCPU_SET("addq", var, val), \
+    int64_t:  _THISCPU_SET("addq", var, val), \
     uint64_t: _THISCPU_SET("addq", var, val), \
     default:  _THISCPU_SET("addq", var, val)  \
+)
+
+// thiscpu-var 不会与其他 cpu 竞争，不需要 lock 前缀
+// 只会和中断竞争，单个指令总是原子的
+#define THISCPU_XADD(var, val) _Generic((var), \
+    int8_t:   _THISCPU_XADD("xaddb", var, val), \
+    uint8_t:  _THISCPU_XADD("xaddb", var, val), \
+    int16_t:  _THISCPU_XADD("xaddw", var, val), \
+    uint16_t: _THISCPU_XADD("xaddw", var, val), \
+    int32_t:  _THISCPU_XADD("xaddl", var, val), \
+    uint32_t: _THISCPU_XADD("xaddl", var, val), \
+    int64_t:  _THISCPU_XADD("xaddq", var, val), \
+    uint64_t: _THISCPU_XADD("xaddq", var, val), \
+    default:  _THISCPU_XADD("xaddq", var, val)  \
 )
 
 #endif // ARCH_X86_64_MEM_THISCPU_RW_H

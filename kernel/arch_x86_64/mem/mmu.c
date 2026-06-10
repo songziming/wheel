@@ -663,7 +663,7 @@ void tlb_shootdown(size_t vstart, size_t vend) {
 // 调试命令，计算某个地址映射的物理地址
 //------------------------------------------------------------------------------
 
-#if !defined(UNIT_TEST)
+#ifndef UNIT_TEST
 
 void show_mapping(int argc, char *argv[]) {
     if (argc < 2) {
@@ -692,4 +692,4 @@ void show_mapping(int argc, char *argv[]) {
 
 KSHELL_CMD("page", show_mapping);
 
-#endif // !defined(UNIT_TEST)
+#endif // UNIT_TEST
