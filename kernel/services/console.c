@@ -2,7 +2,7 @@
 #include "keyboard.h"
 #include <kstring.h>
 #include <format.h>
-#include <spin.h>
+#include <spinlock.h>
 #include <debug.h>
 
 

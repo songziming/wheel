@@ -1,5 +1,5 @@
 #include "wdog.h"
-#include <spin.h>
+#include <spinlock.h>
 #include <debug.h>
 
 

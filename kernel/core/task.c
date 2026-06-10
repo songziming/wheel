@@ -7,7 +7,7 @@
 #include "task.h"
 #include "work.h"
 #include <arch_api.h>
-#include <spin.h>
+#include <spinlock.h>
 #include <dllist.h>
 #include <kstring.h>
 #include <heap.h>

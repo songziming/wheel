@@ -6,7 +6,7 @@
 #include <arch_api.h>
 #include <cpu/rw.h>
 #include <kstring.h>
-#include <spin.h>
+#include <spinlock.h>
 #include <early_alloc.h>
 #include <vmspace.h>
 

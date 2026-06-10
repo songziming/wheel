@@ -3,7 +3,7 @@
 #include <kstring.h>
 #include <format.h>
 
-#include <spin.h>
+#include <spinlock.h>
 #include <fifo.h>
 
 log_func_t g_log_func = NULL;

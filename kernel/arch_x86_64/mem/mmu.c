@@ -2,7 +2,7 @@
 #include <page.h>
 #include <task.h>
 #include <kstring.h>
-#include <spin.h>
+#include <spinlock.h>
 #include <debug.h>
 #include <cpu/features.h>
 

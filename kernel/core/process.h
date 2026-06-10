@@ -1,7 +1,7 @@
 #ifndef PROCESS_H
 #define PROCESS_H
 
-#include <spin.h>
+#include <spinlock.h>
 #include <dllist.h>
 #include <vmspace.h>
 

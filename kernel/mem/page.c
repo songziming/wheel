@@ -2,7 +2,7 @@
 #include "early_alloc.h"
 #include <arch_api.h>
 #include <kstring.h>
-#include <spin.h>
+#include <spinlock.h>
 #include <debug.h>
 
 #include <kshell.h>

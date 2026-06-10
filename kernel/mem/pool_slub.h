@@ -2,7 +2,7 @@
 #define POOL_SLUB_H
 
 #include <wheel.h>
-#include <spin.h>
+#include <spinlock.h>
 #include <page.h>
 
 typedef struct pool {

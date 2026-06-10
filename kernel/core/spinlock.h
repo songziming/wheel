@@ -2,6 +2,7 @@
 #define SPINLOCK_H
 
 #include <wheel.h>
+#include <spin.h>
 
 typedef struct mcs_lock {
     _Atomic size_t tail; // 指向最后一个等待者
@@ -26,6 +27,16 @@ INIT_TEXT void enable_lockdep();
 void mcs_lock_take(mcs_lock_t *lock, mcs_node_t *node);
 void mcs_lock_give(mcs_node_t *node);
 
+#define IRQ_SPINLOCK_TAKE(lock, node)       \
+    (node)->irqkey = cpu_int_lock();    \
+    mcs_lock_take(lock, node)
+
+#define RAW_SPINLOCK_TAKE(lock, node)   \
+    (node)->irqkey = 0; \
+    mcs_lock_take(lock, node)
+
+#define SPINLOCK_GIVE(node) \
+    mcs_lock_give(node)
 
 /*
 使用 cleanup attribute，局部变量退出 scope 的时候，自动执行 lock-give 函数
@@ -37,17 +48,15 @@ void mcs_lock_give(mcs_node_t *node);
 #define GUARD_NAME CONCAT(__guard_node, __LINE__)
 
 #define RAW_LOCK_SCOPED(lock) \
-    mcs_node_t GUARD_NAME __attribute__(__cleanup__(mcs_lock_give));  \
+    mcs_node_t GUARD_NAME __attribute__((__cleanup__(mcs_lock_give),unused)); \
     GUARD_NAME.file = __FILE__; \
     GUARD_NAME.line = __LINE__; \
-    GUARD_NAME.irqkey = 0; \
-    SPIN_TAKE(lock, &GUARD_NAME)
+    RAW_SPINLOCK_TAKE(lock, &GUARD_NAME)
 
 #define IRQ_LOCK_SCOPED(lock) \
-    mcs_node_t GUARD_NAME __attribute__(__cleanup__(mcs_lock_give));  \
+    mcs_node_t GUARD_NAME __attribute__((__cleanup__(mcs_lock_give),unused)); \
     GUARD_NAME.file = __FILE__; \
     GUARD_NAME.line = __LINE__; \
-    GUARD_NAME.irqkey = cpu_int_lock(); \
-    SPIN_TAKE(lock, &GUARD_NAME)
+    IRQ_SPINLOCK_TAKE(lock, &GUARD_NAME)
 
 #endif // SPINLOCK_H

@@ -1,7 +1,7 @@
 #ifndef VMSPACE_H
 #define VMSPACE_H
 
-#include <spin.h>
+#include <spinlock.h>
 #include "page.h"
 #include <dllist.h>
 #include <arch_api.h>

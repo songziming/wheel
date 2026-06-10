@@ -3,7 +3,7 @@
 
 #include "serial.h"
 #include <arch_api.h>
-#include <spin.h>
+#include <spinlock.h>
 
 
 #define COM1_PORT 0x3f8

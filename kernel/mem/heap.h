@@ -1,7 +1,7 @@
 #ifndef HEAP_H
 #define HEAP_H
 
-#include <spin.h>
+#include <spinlock.h>
 #include <rbtree.h>
 
 typedef struct heap {

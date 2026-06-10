@@ -3,7 +3,7 @@
 
 #include "task.h"
 #include <fifo.h>
-#include <spin.h>
+#include <spinlock.h>
 #include <vmspace.h>
 
 typedef struct msgq {

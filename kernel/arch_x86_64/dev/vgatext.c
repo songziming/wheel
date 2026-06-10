@@ -1,6 +1,6 @@
 #include "vgatext.h"
 #include <arch_api.h>
-#include <spin.h>
+#include <spinlock.h>
 #include <kstring.h>
 #include <console.h>
 

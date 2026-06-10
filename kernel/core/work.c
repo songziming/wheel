@@ -1,6 +1,6 @@
 #include "work.h"
 #include <arch_api.h>
-#include <spin.h>
+#include <spinlock.h>
 #include <debug.h>
 
 // 类似于 wdog，也是异步执行函数，也是在中断返回流程里执行
