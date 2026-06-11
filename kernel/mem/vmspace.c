@@ -24,14 +24,15 @@ vmrange_t *vmspace_find(vmspace_t *space, size_t addr) {
     ASSERT(NULL != space);
 
     vmrange_t *found = NULL;
-    { SPINLOCK_SCOPED(&space->lock);
-      for (dlnode_t *i = space->head.next; &space->head != i; i = i->next) {
-          vmrange_t *rng = containerof(i, vmrange_t, dl);
-          if ((rng->vaddr <= addr) && (addr < rng->vend)) {
-              found = rng;
-              return found;
-          }
-      }
+    {
+        SPINLOCK_SCOPED(&space->lock);
+        for (dlnode_t *i = space->head.next; &space->head != i; i = i->next) {
+            vmrange_t *rng = containerof(i, vmrange_t, dl);
+            if ((rng->vaddr <= addr) && (addr < rng->vend)) {
+                found = rng;
+                return found;
+            }
+        }
     }
     return NULL;
 }

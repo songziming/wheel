@@ -36,8 +36,8 @@ static _Atomic uint64_t g_idle_mask = 0UL;
 static _Atomic uint32_t g_next_cpu = 0U;
 
 // 将所有的 TCB 串联在一起
+static spinlock_t g_tcb_lock = SPINLOCK_INIT;
 static pool_t g_tcb_pool;
-static spinlock_t g_tcb_list_lock = SPINLOCK_INIT;
 static dlnode_t g_tcb_head;
 
 
@@ -127,7 +127,14 @@ INIT_TEXT void sched_init() {
 
     // 创建 idle-task
     // task_t *idle = THISCPU(&g_idle_tcb);
-    task_t *idle = pool_alloc(&g_tcb_pool);
+    task_t *idle;
+    {
+        SPINLOCK_SCOPED(&g_tcb_lock);
+        idle = pool_alloc_nolock(&g_tcb_pool);
+    }
+    if (NULL == idle) {
+        panic("cannot alloc for TCB idle\n");
+    }
     task_create(idle, kernel_heap_mkstr("idle-%d", cpu), 31, proc_idle);
     idle->affinity = cpu;
     idle->state = TS_READY;
@@ -160,7 +167,7 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
     tid->affinity = -1;
 
     {
-        SPINLOCK_SCOPED(&g_tcb_list_lock);
+        SPINLOCK_SCOPED(&g_tcb_lock);
         dl_insert_before(&tid->objnode, &g_tcb_head);
     }
 
@@ -334,7 +341,7 @@ static void task_free(work_t *wk) {
     tid->state = TS_DELETED;
 
     {
-        SPINLOCK_SCOPED(&g_tcb_list_lock);
+        SPINLOCK_SCOPED(&g_tcb_lock);
         dl_remove(&tid->objnode);
     }
 }
@@ -430,7 +437,7 @@ static NORETURN void proc_idle() {
 #ifndef UNIT_TEST
 
 static void show_tasks() {
-    SPINLOCK_SCOPED(&g_tcb_list_lock);
+    SPINLOCK_SCOPED(&g_tcb_lock);
     for (dlnode_t *dl = g_tcb_head.next; dl != &g_tcb_head; dl = dl->next) {
         task_t *tid = containerof(dl, task_t, objnode);
         console_printf(" - task prio=%d, state=%d, name=%s\n",

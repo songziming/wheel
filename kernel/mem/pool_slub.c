@@ -3,12 +3,7 @@
 #include <arch_api.h>
 #include <debug.h>
 
-// 单元测试，模仿虚拟地址和物理地址的转换
-#if defined(UNIT_TEST)
-extern uint64_t g_direct_map_base;
-#undef IDENTITY_MAP_ADDR
-#define IDENTITY_MAP_ADDR g_direct_map_base
-#endif
+
 
 // 基于 SLUB 实现的内存池，可以实现相同大小对象的高效分配回收
 
@@ -16,9 +11,12 @@ extern uint64_t g_direct_map_base;
 // object 大小是 2 的幂，紧凑排列
 // object 有已分配和未分配两种状态，未分配对象也称 free-object，组成一个链表（freelist）
 
-// SLAB 将元数据保存在 block 开头，这就破坏了 object 布局
-// SLUB 将元数据保存在 page_t 里面，对象布局更整齐
-// 为节省空间，freelist 不使用指针，而是用 object 编号，uint16 就够了
+
+// 一个内存池包含多个 slab，一个 slab 就是一个页
+// 每个 slab 划分为若干固定大小的 object，free-object 组成单链表
+// free-object 开头两字节就是 next-free，不是指针，而是相对 slab 的偏移量
+// slab 只有一个页，因此使用 uint16 表示偏移量就足够了
+// 页描述符里面，objects 指向第一个 free-object
 
 // slab 按占用情况分属三个链表：
 //  - empty   : 全部未分配，ent_num==0
@@ -30,60 +28,49 @@ extern uint64_t g_direct_map_base;
 // 链表以维持这个顺序。empty 和 full 链表不分顺序。
 
 
-// SLUB 元数据保存在 page_t，容不下复杂的信息
-// 所以只能直接映射在 direct-map 区域，无法动态分配虚拟地址，也无法实现 guard page
 
 
-#define NO_OBJ          0xFFFFU
+#define NO_OBJ 0xFFFFU
 
 static inline size_t align_up(size_t x, size_t align) {
     return (x + align - 1) & ~(align - 1);
 }
 
-// static inline void *pfn_to_virt(uint32_t pfn) {
-//     return (void*)(IDENTITY_MAP_ADDR + ((size_t)pfn << PAGE_SHIFT));
-// }
-
-// static inline uint32_t virt_to_pfn(void *va) {
-//     return (uint32_t)(((size_t)va - IDENTITY_MAP_ADDR) >> PAGE_SHIFT);
-// }
-
 //------------------------------------------------------------------------------
 // slab 级别：对象分配与释放
 //------------------------------------------------------------------------------
 
-static uint32_t slab_create(uint8_t order, size_t obj_size) {
-    size_t slab_size = PAGE_SIZE << order;
-    uint32_t obj_count = (uint32_t)(slab_size / obj_size);
-
-    size_t pa = page_alloc(order, PT_POOL);
+static uint32_t slab_create(size_t obj_size) {
+    size_t pa = page_alloc(0, PT_POOL);
     if (0 == pa) {
         return 0;
     }
 
-    uint32_t pfn = (uint32_t)(pa >> PAGE_SHIFT);
-    size_t addr = GUARDED_IDMAP_ADDR + pa * 2;
-    mmu_map(g_kernel_vm.table, addr, addr + slab_size, pa, MMU_WRITE);
+    size_t va = GUARDED_IDMAP_ADDR + pa * 2;
+    mmu_map(g_kernel_vm.table, va, va + PAGE_SIZE, pa, MMU_WRITE);
 
     // page_alloc 已正确设置 head / rank / type，
     // 但 ent_num / objects 可能残留旧值，显式初始化
+    uint32_t pfn = (uint32_t)(pa >> PAGE_SHIFT);
     g_pages[pfn].ent_num = 0;
-    g_pages[pfn].objects = 0;
+    g_pages[pfn].objects = 0; // 指向第一个 object
 
     // 嵌入式 freelist：每个对象开头 2 字节存下一个对象偏移
-    for (uint32_t i = 0; i < obj_count; ++i) {
-        uint16_t next = (i + 1 < obj_count) ? (uint16_t)((i + 1) * obj_size) : NO_OBJ;
-        *(uint16_t*)(addr + i * obj_size) = next;
+    uint32_t obj_count = (uint32_t)(PAGE_SIZE / obj_size);
+    for (uint32_t i = 1, off = obj_size; i < obj_count; ++i) {
+        *(uint16_t*)va = off;
+        va += obj_size;
+        off += obj_size;
     }
+    *(uint16_t*)va = NO_OBJ;
 
     return pfn;
 }
 
-static void slab_release(uint32_t slab, uint8_t order) {
+static void slab_release(uint32_t slab) {
     size_t va = GUARDED_IDMAP_ADDR + (slab << (PAGE_SHIFT + 1));
-    size_t vend = va + ((size_t)PAGE_SIZE << order);
-    tlb_shootdown(va, vend);
-    mmu_unmap(g_kernel_vm.table, va, vend);
+    tlb_shootdown(va, va + PAGE_SIZE);
+    mmu_unmap(g_kernel_vm.table, va, va + PAGE_SIZE);
     page_free((size_t)slab << PAGE_SHIFT);
 }
 
@@ -121,46 +108,46 @@ static void slab_obj_free(uint32_t slab, void *obj) {
 void pool_init(pool_t *slub, size_t obj_size) {
     obj_size = align_up(obj_size, arch_cacheline_size());
 
-    // 寻找能容纳至少 8 个对象的最小 slab 阶数
-    uint32_t order = 0;
-    for (; order < PAGE_BLOCK_RANK_NUM; ++order) {
-        if ((8 * obj_size) <= ((size_t)PAGE_SIZE << order)) {
-            break;
-        }
-    }
-    ASSERT(order < PAGE_BLOCK_RANK_NUM);
+    // // 寻找能容纳至少 8 个对象的最小 slab 阶数
+    // uint32_t order = 0;
+    // for (; order < PAGE_BLOCK_RANK_NUM; ++order) {
+    //     if ((8 * obj_size) <= ((size_t)PAGE_SIZE << order)) {
+    //         break;
+    //     }
+    // }
+    // ASSERT(order < PAGE_BLOCK_RANK_NUM);
 
-    slub->lock       = SPINLOCK_INIT;
+    // slub->lock       = SPINLOCK_INIT;
     slub->obj_size   = (uint16_t)obj_size;
-    slub->slab_order = (uint8_t)order;
+    // slub->slab_order = (uint8_t)order;
     slub->empty      = (pglist_t){0, 0};
     slub->partial    = (pglist_t){0, 0};
     slub->full       = (pglist_t){0, 0};
 }
 
-void pool_destroy(pool_t *slub) {
-    SPINLOCK_SCOPED(&slub->lock);
+void pool_destroy_nolock(pool_t *slub) {
+    // SPINLOCK_SCOPED(&slub->lock);
     uint32_t pfn;
     while (0 != (pfn = slub->empty.head)) {
         pglist_remove(&slub->empty, pfn);
-        slab_release(pfn, slub->slab_order);
+        slab_release(pfn);
     }
     while (0 != (pfn = slub->partial.head)) {
         pglist_remove(&slub->partial, pfn);
-        slab_release(pfn, slub->slab_order);
+        slab_release(pfn);
     }
     while (0 != (pfn = slub->full.head)) {
         pglist_remove(&slub->full, pfn);
-        slab_release(pfn, slub->slab_order);
+        slab_release(pfn);
     }
 }
 
-void pool_shrink(pool_t *slub) {
-    SPINLOCK_SCOPED(&slub->lock);
+void pool_shrink_nolock(pool_t *slub) {
+    // SPINLOCK_SCOPED(&slub->lock);
     uint32_t pfn;
     while (0 != (pfn = slub->full.head)) {
         pglist_remove(&slub->full, pfn);
-        slab_release(pfn, slub->slab_order);
+        slab_release(pfn);
     }
 }
 
@@ -168,8 +155,8 @@ void pool_shrink(pool_t *slub) {
 // 缓存级别：对象分配与释放
 //------------------------------------------------------------------------------
 
-void *pool_alloc(pool_t *slub) {
-    SPINLOCK_SCOPED(&slub->lock);
+void *pool_alloc_nolock(pool_t *slub) {
+    // SPINLOCK_SCOPED(&slub->lock);
 
     // partial 为空时，从 empty 取 slab 或创建新的
     if (0 == slub->partial.head) {
@@ -178,7 +165,7 @@ void *pool_alloc(pool_t *slub) {
             pfn = slub->empty.head;
             pglist_remove(&slub->empty, pfn);
         } else {
-            pfn = slab_create(slub->slab_order, slub->obj_size);
+            pfn = slab_create(slub->obj_size);
             if (0 == pfn) {
                 return NULL;
             }
@@ -200,8 +187,8 @@ void *pool_alloc(pool_t *slub) {
     return obj;
 }
 
-void pool_free(pool_t *slub, void *obj) {
-    SPINLOCK_SCOPED(&slub->lock);
+void pool_free_nolock(pool_t *slub, void *obj) {
+    // SPINLOCK_SCOPED(&slub->lock);
 
     // uint32_t pfn = page_block_head(virt_to_pfn(obj));
     uint32_t objpg = ((size_t)obj - GUARDED_IDMAP_ADDR) >> (PAGE_SHIFT + 1);

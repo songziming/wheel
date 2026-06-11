@@ -229,7 +229,9 @@ INIT_TEXT void framebuf_remap_wc() {
     vend &= ~(PAGE_SIZE - 1);
     logk("remapping 0x%zx~0x%zx as WC\n", va, vend);
 
-    tlb_shootdown(va, vend);
+    // 执行此函数时，尚未启动多核，刚刚创建正式页表
+    // 不能发送 TLB-shootdown，否则等不到其他 CPU 响应
+    // tlb_shootdown(va, vend);
     mmu_unmap(g_kernel_vm.table, va, vend);
     mmu_map(g_kernel_vm.table, va, vend, pa, MMU_WRITE|MMU_WC);
 }
