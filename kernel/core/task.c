@@ -18,7 +18,7 @@
 
 
 static INIT_BSS task_t g_dummy_tcb;
-static PERCPU_BSS task_t g_idle_tcb;
+// static PERCPU_BSS task_t g_idle_tcb;
 static NORETURN void task_entry(void (*real)());
 static NORETURN void proc_idle();
 
@@ -94,12 +94,12 @@ static dlnode_t *prioq_head(prioq_t *q) {
 // 禁用抢占但允许中断
 //------------------------------------------------------------------------------
 
-inline void preempt_lock() {
+inline void cpu_preempt_disable() {
     THISCPU_ADD(g_preempt_depth, 1);
 }
 
 // 解除抢占锁，但不会立即切换任务，需要调用 arch_task_switch 才能触发
-inline void preempt_unlock() {
+inline void cpu_preempt_restore() {
     THISCPU_ADD(g_preempt_depth, -1);
 }
 
@@ -117,7 +117,8 @@ inline task_t *current_task() {
 INIT_TEXT void sched_init() {
     int cpu = cpu_index();
     if (0 == cpu) {
-        // 第一个CPU启动任务之前初始化队列
+        // 第一个CPU启动任务之前初始化任务池和任务队列
+        pool_init(&g_tcb_pool, sizeof(task_t));
         dl_init_circular(&g_tcb_head);
     }
 
@@ -125,7 +126,8 @@ INIT_TEXT void sched_init() {
     prioq_init(q);
 
     // 创建 idle-task
-    task_t *idle = THISCPU(&g_idle_tcb);
+    // task_t *idle = THISCPU(&g_idle_tcb);
+    task_t *idle = pool_alloc(&g_tcb_pool);
     task_create(idle, kernel_heap_mkstr("idle-%d", cpu), 31, proc_idle);
     idle->affinity = cpu;
     idle->state = TS_READY;

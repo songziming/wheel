@@ -26,21 +26,21 @@ void work_defer(work_t *wk, work_cb_t func, const char *desc) {
     wk->func = func;
     wk->desc = desc;
 
-    int key = cpu_int_lock();
+    int key = cpu_int_disable();
     // spin_t *lock = THISCPU(&g_work_lock);
     // int key = irq_spin_take(lock);
 
     ASSERT(!dl_contains(THISCPU(&g_work_q), &wk->dl));
     dl_insert_before(&wk->dl, THISCPU(&g_work_q));
 
-    cpu_int_unlock(key);
+    cpu_int_restore(key);
     // irq_spin_give(lock, key);
 }
 
 // 在中断返回过程中执行，只有最外层中断返回时执行
 // 此时中断仍禁用，无需获取锁
 void work_flush() {
-    int key = cpu_int_lock();
+    int key = cpu_int_disable();
     // spin_t *lock = THISCPU(&g_work_lock);
     // int key = irq_spin_take(lock);
 
@@ -53,6 +53,6 @@ void work_flush() {
         work->func(work);
     }
 
-    cpu_int_unlock(key);
+    cpu_int_restore(key);
     // irq_spin_give(lock, key);
 }

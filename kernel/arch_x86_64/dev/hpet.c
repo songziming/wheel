@@ -69,7 +69,7 @@ INIT_TEXT void hpet_init() {
         return;
     }
 
-    size_t base = DIRECT_MAP_ADDR + tbl->address.address;
+    size_t base = IDENTITY_MAP_ADDR + tbl->address.address;
     hpet_write(base, GENERAL_CONF, 0); // 确保时钟关闭
 
     uint64_t cap = hpet_read(base, GENERAL_CAP_ID);

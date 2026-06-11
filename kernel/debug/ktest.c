@@ -26,10 +26,10 @@ static void proc_a() {
         // THISCPU_SET(g_tid_next, &tb);
         // arch_task_switch();
         if (30 == i) {
-            preempt_lock();
+            cpu_preempt_disable();
         }
         if (60 == i) {
-            preempt_unlock();
+            cpu_preempt_restore();
         }
         loapic_timer_busywait(8000);
     }
@@ -65,10 +65,10 @@ void test_cooperative() {
     ta.affinity = 0;
     tb.affinity = 0;
 
-    int key = cpu_int_lock();
+    int key = cpu_int_disable();
     task_start(&ta);
     task_start(&tb);
-    cpu_int_unlock(key);
+    cpu_int_restore(key);
     arch_task_switch();
 
     logk("we are back to root");
@@ -117,15 +117,15 @@ void test_smp_tasks() {
     }
 
     // 批量启动多个任务，应该禁用中断
-    preempt_lock();
-    // int key = cpu_int_lock();
+    cpu_preempt_disable();
+    // int key = cpu_int_disable();
     uint64_t cpuset = 0UL;
     for (int i = 0; i < 10; ++i) {
         cpuset |= task_start(&smp_tcbs[i]);
     }
     notify_resched(cpuset);
-    preempt_unlock();
-    // cpu_int_unlock(key);
+    cpu_preempt_restore();
+    // cpu_int_restore(key);
     arch_task_switch();
 
     for (int i = 0; i < 10; ++i) {
@@ -182,12 +182,12 @@ void test_sema() {
 
     // 启动三个消费者，开始不断获取资源
     uint64_t cpus = 0;
-    preempt_lock();
+    cpu_preempt_disable();
     cpus |= task_start(&sa);
     cpus |= task_start(&sb);
     cpus |= task_start(&sc);
     notify_resched(cpus);
-    preempt_unlock();
+    cpu_preempt_restore();
     arch_task_switch();
 
     // 共请求 30 次，提供 28 次，最后两次超时
@@ -244,10 +244,10 @@ void test_msgq() {
 
     msgq_init(&mq);
 
-    preempt_lock();
+    cpu_preempt_disable();
     task_start(&tw);
     task_start(&tr);
-    preempt_unlock();
+    cpu_preempt_restore();
     arch_task_switch();
 
     while (TS_DELETED != tw.state) { cpu_pause(); }

@@ -49,8 +49,8 @@ typedef struct task {
 } task_t;
 
 void prioq_init(prioq_t *q);
-void preempt_lock();
-void preempt_unlock();
+void cpu_preempt_disable();
+void cpu_preempt_restore();
 task_t *current_task();
 
 INIT_TEXT void sched_init();

@@ -22,13 +22,13 @@ inline int cpu_int_depth() {
     return THISCPU_GET(g_int_depth);
 }
 
-inline int cpu_int_lock() {
+inline int cpu_int_disable() {
     uint64_t key;
     ASMV("pushfq; cli; popq %0" : "=r"(key));
     return (key & 0x200) ? 1 : 0;
 }
 
-inline void cpu_int_unlock(int key) {
+inline void cpu_int_restore(int key) {
     if (key) {
         ASMV("sti");
     }

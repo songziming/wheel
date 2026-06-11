@@ -22,6 +22,7 @@ static vmrange_t g_kernel_rodata;
 static vmrange_t g_kernel_data;
 static vmrange_t g_kernel_heap;
 static vmrange_t g_kernel_idmap; // 不拥有物理页，所有内存映射到 canonical hole 之下
+static vmrange_t g_guarded_idmap;
 
 
 
@@ -34,8 +35,10 @@ INIT_TEXT void kspace_add(vmrange_t *rng, size_t va, size_t end, const char *des
     rng->attrs = attrs;
     if (va >= KERNEL_TEXT_ADDR) {
         rng->paddr = va - KERNEL_TEXT_ADDR;
-    } else if (va >= DIRECT_MAP_ADDR) {
-        rng->paddr = va - DIRECT_MAP_ADDR;
+    } else if (va >= GUARDED_IDMAP_ADDR) {
+        rng->paddr = va - GUARDED_IDMAP_ADDR;
+    } else if (va >= IDENTITY_MAP_ADDR) {
+        rng->paddr = va - IDENTITY_MAP_ADDR;
     } else {
         panic("do not support address 0x%zx\n", va);
     }
@@ -115,10 +118,13 @@ INIT_TEXT void mem_init() {
 
     // 把全部物理内存映射到 canonical hole 之后
     // MMIO 范围可能在可用内存范围之外，也要映射
-    if (pa_end < (1UL << 32)) {
-        pa_end = 1UL << 32;
+    size_t idmap_end = pa_end;
+    if (idmap_end < (1UL << 32)) {
+        idmap_end = 1UL << 32;
     }
-    kspace_add(&g_kernel_idmap, DIRECT_MAP_ADDR, DIRECT_MAP_ADDR + pa_end, "idmap", MMU_WRITE);
+    kspace_add(&g_kernel_idmap,
+        IDENTITY_MAP_ADDR, IDENTITY_MAP_ADDR + idmap_end,
+        "idmap", MMU_WRITE);
 
     // 创建内核页表，根据 vmspace 添加映射
     g_kernel_vm.table = mmu_create();
@@ -127,6 +133,12 @@ INIT_TEXT void mem_init() {
         size_t va_end = (rng->vend + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
         mmu_map(g_kernel_vm.table, rng->vaddr, va_end, rng->paddr, rng->attrs);
     }
+
+    // 所有物理页都可以映射到这里，offset = 2*paddr
+    // 连续的物理页之间也有 guard-page
+    kspace_add(&g_guarded_idmap,
+        GUARDED_IDMAP_ADDR, GUARDED_IDMAP_ADDR + pa_end * 2,
+        "guarded-idmap", MMU_NONE);
 }
 
 

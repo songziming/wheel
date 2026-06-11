@@ -97,13 +97,13 @@ enum loapic_reg {
 
 static uint32_t x_read(uint32_t reg) {
     ASSERT(REG_SELF_IPI != reg);
-    size_t map = DIRECT_MAP_ADDR + g_loapic_addr + (reg << 4);
+    size_t map = IDENTITY_MAP_ADDR + g_loapic_addr + (reg << 4);
     return *(volatile uint32_t*)map;
 }
 
 static void x_write(uint32_t reg, uint32_t val) {
     ASSERT(REG_SELF_IPI != reg);
-    size_t map = DIRECT_MAP_ADDR + g_loapic_addr + ((size_t)reg << 4);
+    size_t map = IDENTITY_MAP_ADDR + g_loapic_addr + ((size_t)reg << 4);
     *(volatile uint32_t*)map = val;
 }
 

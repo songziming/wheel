@@ -232,6 +232,7 @@ void vmspace_remap(vmspace_t *space, vmrange_t *rng, mmu_attr_t attrs) {
     ASSERT(dl_contains(&space->head, &rng->dl));
 
     rng->attrs = attrs;
+    tlb_shootdown(rng->vaddr, rng->vend);
     mmu_unmap(space->table, rng->vaddr, rng->vend);
     if (0 != rng->paddr) {
         // 物理地址是连续的

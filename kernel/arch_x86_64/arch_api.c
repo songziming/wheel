@@ -121,7 +121,7 @@ INIT_TEXT void arch_pci_init() {
         for (int i = 0; i < num; i++) {
             if (0 == entries[i].segment_group) {
                 // 通过 direct-map 将 ECAM 物理地址映射到虚拟地址
-                g_ecam_base = (char*)(DIRECT_MAP_ADDR + entries[i].base_address);
+                g_ecam_base = (char*)(IDENTITY_MAP_ADDR + entries[i].base_address);
                 g_pci_read  = pci_read_mmio;
                 g_pci_write = pci_write_mmio;
                 logk("PCIe ECAM base=0x%lx, bus %d-%d\n",

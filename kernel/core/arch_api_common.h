@@ -22,8 +22,8 @@ void *thiscpu_ptr(void *p);
 
 // 中断
 int cpu_int_depth();
-int cpu_int_lock();
-void cpu_int_unlock(int key);
+int cpu_int_disable();
+void cpu_int_restore(int key);
 void arch_send_ipi(int cpu, int vec);
 
 // 页表操作

@@ -30,7 +30,7 @@ INIT_TEXT void enable_lockdep() {
 void spinlock_take(spinlock_t *lock, spinlock_node_t *node) {
     node->next = 0;
     node->lock = lock;
-    node->irqkey = cpu_int_lock();
+    node->irqkey = cpu_int_disable();
 
     spinlock_node_t *prev = (spinlock_node_t*)atomic_exchange(&lock->tail, (size_t)node);
     if (NULL != prev) {
@@ -93,5 +93,5 @@ void spinlock_give(spinlock_node_t *node) {
         atomic_fetch_or(&next->next, 1);
     }
 
-    cpu_int_unlock(node->irqkey);
+    cpu_int_restore(node->irqkey);
 }
