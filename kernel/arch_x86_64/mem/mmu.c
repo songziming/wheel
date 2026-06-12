@@ -56,7 +56,7 @@ extern uint64_t g_direct_map_base;
 
 
 // 分配一张页表
-static uint64_t alloc_table(int tag UNUSED) {
+static uint64_t alloc_table() {
     uint64_t pa = page_alloc(0, PT_PGTBL);
     if (0 == pa) {
         panic("cannot alloc for mmu");
@@ -163,14 +163,14 @@ static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint
 
         if (0 == (tbl[i] & MMU_P)) {
             ++info->ent_num;
-            pt = alloc_table(__LINE__);
+            pt = alloc_table();
         } else if (tbl[i] & MMU_PS) {
             // 将现有的 2M-page 拆分，如果头尾还剩 mapping，需要重新映射
             uint64_t va2m = va - OFFSET_2M(va);
             uint64_t pa2m = pt;
             ASSERT(0 == OFFSET_2M(pa2m));
 
-            pt = alloc_table(__LINE__);
+            pt = alloc_table();
             uint64_t split_bits = tbl[i] & MMU_ATTRS;
             int      split_pat  = (tbl[i] & MMU_PAT_2M) != 0;
             if (va2m != va) {
@@ -229,7 +229,7 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
             uint64_t pa2m = pt;
             ASSERT(0 == OFFSET_2M(pa2m));
 
-            pt = alloc_table(__LINE__);
+            pt = alloc_table();
             uint64_t split_bits = tbl[i] & MMU_ATTRS;
             int      split_pat  = (tbl[i] & MMU_PAT_2M) != 0;
             if (va2m != va) {
@@ -313,14 +313,14 @@ static uint64_t pdp_map(uint64_t pdp, uint64_t va, uint64_t end, uint64_t pa, ui
 
         if (0 == (tbl[i] & MMU_P)) {
             ++info->ent_num;
-            pd = alloc_table(__LINE__);
+            pd = alloc_table();
         } else if (tbl[i] & MMU_PS) {
             // 将 1G-page 拆分
             uint64_t va1g = va - OFFSET_1G(va);
             uint64_t pa1g = pd;
             ASSERT(0 == OFFSET_1G(pa1g));
 
-            pd = alloc_table(__LINE__);
+            pd = alloc_table();
             uint64_t split_bits = tbl[i] & MMU_ATTRS;
             int      split_pat  = (tbl[i] & MMU_PAT_2M) != 0;
             if (va1g != va) {
@@ -379,7 +379,7 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
             uint64_t pa1g = pd;
             ASSERT(0 == OFFSET_1G(pa1g));
 
-            pd = alloc_table(__LINE__);
+            pd = alloc_table();
             uint64_t split_bits = tbl[i] & MMU_ATTRS;
             int      split_pat  = (tbl[i] & MMU_PAT_2M) != 0;
             if (va1g != va) {
@@ -445,7 +445,7 @@ static uint64_t pml4_map(uint64_t pml4, uint64_t va, uint64_t end, uint64_t pa, 
 
         if (0 == (tbl[i] & MMU_P)) {
             ++info->ent_num;
-            pdp = alloc_table(__LINE__);
+            pdp = alloc_table();
         }
 
         tbl[i] = (pdp & MMU_ADDR) | MMU_P | MMU_US | MMU_RW;
@@ -510,13 +510,35 @@ static void pml4_free(uint64_t pml4) {
 // public funcs
 //------------------------------------------------------------------------------
 
+// 创建内核的页表，准备好 256 个 PDP，占据 1M
+// 这样 PML4 后半部分永远不会改变
+INIT_TEXT size_t mmu_create_kernel() {
+    size_t tbl = alloc_table();
+    g_pages[tbl >> PAGE_SHIFT].ent_num = 256;
+    uint64_t *pml4 = (uint64_t*)(IDENTITY_MAP_ADDR + tbl);
+
+    for (int i = 256; i < 512; ++i) {
+        size_t pdp = alloc_table();
+        pml4[i] = (pdp & MMU_ADDR) | MMU_P | MMU_US | MMU_RW;
+    }
+
+    return tbl;
+}
+
 // 创建一个全新页表，不包含内核空间
 size_t mmu_create() {
-    return alloc_table(__LINE__);
+    return alloc_table();
 }
 
 void mmu_delete(size_t tbl) {
     pml4_free(tbl);
+}
+
+// 复制 from 的内核部分
+size_t mmu_copykernel(size_t tbl, size_t from) {
+    uint64_t *src = (uint64_t*)(IDENTITY_MAP_ADDR + from);
+    uint64_t *dst = (uint64_t*)(IDENTITY_MAP_ADDR + tbl);
+    kmemcpy(dst+256, src+256, 256*sizeof(uint64_t));
 }
 
 static mmu_attr_t bits_to_attrs(uint64_t bits, int pat) {

@@ -20,7 +20,7 @@ void vmspace_init(vmspace_t *space, size_t start, size_t end) {
     space->dyn_end = end & ~(PAGE_SIZE - 1);
 }
 
-vmrange_t *vmspace_find(vmspace_t *space, size_t addr) {
+vmrange_t *vmspace_lookup(vmspace_t *space, size_t addr) {
     ASSERT(NULL != space);
 
     vmrange_t *found = NULL;
@@ -257,6 +257,7 @@ void vmspace_remove(vmspace_t *space, vmrange_t *rng) {
     ASSERT(dl_contains(&space->head, &rng->dl));
 
     if (space->table) {
+        // tlb_shootdown(rng->vaddr, rng->vend);
         mmu_unmap(space->table, rng->vaddr, rng->vend);
     }
 

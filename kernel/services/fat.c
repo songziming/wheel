@@ -267,6 +267,7 @@ fat32_handle_t *fat32_open(fat32_volumn_t *vol, const fs_entry_t *ent) {
 // 关闭文件，如果有尚未同步的缓存，此时应该写入磁盘
 void fat32_close(fat32_volumn_t *vol, fat32_handle_t *h) {
     (void)vol;
+    tlb_shootdown(h->cluster_cache.vaddr, h->cluster_cache.vend);
     vmspace_remove(&g_kernel_vm, &h->cluster_cache);
     kernel_heap_free(h);
 }

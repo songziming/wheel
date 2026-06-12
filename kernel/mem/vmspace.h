@@ -31,7 +31,7 @@ extern vmspace_t g_kernel_vm;
 
 
 void vmspace_init(vmspace_t *space, size_t start, size_t end);
-vmrange_t *vmspace_find(vmspace_t *space, size_t addr);
+vmrange_t *vmspace_lookup(vmspace_t *space, size_t addr);
 void vmspace_insert(vmspace_t *space, vmrange_t *rng);
 
 // 仅申请一段虚拟内存，不映射物理内存

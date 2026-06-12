@@ -27,6 +27,9 @@ typedef struct section {
 } section_t;
 
 
+extern process_t g_kernel_proc;
+
+
 INIT_TEXT void process_init();
 process_t *process_create();
 void process_destroy(process_t *proc);

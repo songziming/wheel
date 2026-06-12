@@ -79,7 +79,7 @@ int vmspace_alloc_at(vmspace_t *space, vmrange_t *rng, size_t va, size_t size) {
 }
 
 // 寻找虚拟地址 va 所在的 range
-vmrange_t *vmspace_find(vmspace_t *space, size_t va) {
+vmrange_t *vmspace_lookup(vmspace_t *space, size_t va) {
     for (dlnode_t *i = space->next; space != i; i = i->next) {
         vmrange_t *rng = containerof(i, vmrange_t, dl);
         if ((rng->vaddr <= va) && (va < rng->vend)) {

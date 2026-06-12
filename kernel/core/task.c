@@ -356,7 +356,9 @@ void task_exit() {
     prioq_t *q = THISCPU(&g_rdyq);
 
     // 发送 IPI，让其他 cpu 清除此任务的栈
-    // 这样只剩当前 cpu 还保留 mapping，留到 work 里面删除
+    // shootdown 不能在 ISR 里面执行，所以在这里调用
+    // 但是任务栈还在使用（当前代码），还不能回收
+    // 只剩当前 cpu 还保留 mapping，留到 work 里面删除
     tlb_shootdown(self->stack.vaddr, self->stack.vend);
 
     self->state |= TS_STOPPED;

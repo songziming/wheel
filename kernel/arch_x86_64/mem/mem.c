@@ -127,7 +127,7 @@ INIT_TEXT void mem_init() {
         "idmap", MMU_WRITE);
 
     // 创建内核页表，根据 vmspace 添加映射
-    g_kernel_vm.table = mmu_create();
+    g_kernel_vm.table = mmu_create_kernel();
     for (dlnode_t *i = g_kernel_vm.head.next; i != &g_kernel_vm.head; i = i->next) {
         vmrange_t *rng = containerof(i, vmrange_t, dl);
         size_t va_end = (rng->vend + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
@@ -153,9 +153,8 @@ void reclaim_init() {
     pages_add(g_kernel_init.vaddr - KERNEL_TEXT_ADDR, vend - KERNEL_TEXT_ADDR);
 
     // 删除映射，之后再访问 init 就会出错
+    // 但是 vmrange 还留着，占位
     tlb_shootdown(g_kernel_init.vaddr, vend);
     mmu_unmap(g_kernel_vm.table, g_kernel_init.vaddr, vend);
-
-    // vmrange 还留在 kernel-vm 里面
     g_kernel_init.paddr = 0;
 }
