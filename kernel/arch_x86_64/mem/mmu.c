@@ -535,7 +535,7 @@ void mmu_delete(size_t tbl) {
 }
 
 // 复制 from 的内核部分
-size_t mmu_copykernel(size_t tbl, size_t from) {
+void mmu_copykernel(size_t tbl, size_t from) {
     uint64_t *src = (uint64_t*)(IDENTITY_MAP_ADDR + from);
     uint64_t *dst = (uint64_t*)(IDENTITY_MAP_ADDR + tbl);
     kmemcpy(dst+256, src+256, 256*sizeof(uint64_t));

@@ -101,22 +101,22 @@ void *vmspace_alloc_nomap(vmspace_t *space, vmrange_t *rng, size_t size) {
     ASSERT(NULL != space);
     ASSERT(NULL != rng);
 
-    { SPINLOCK_SCOPED(&space->lock);
-      ASSERT(!dl_contains(&space->head, &rng->dl));
+    SPINLOCK_SCOPED(&space->lock);
+    ASSERT(!dl_contains(&space->head, &rng->dl));
 
-      if (0 == find_vmrange_no_lock(space, rng, size)) {
-          // 找不到合适的虚拟地址范围，直接退出
-          return NULL;
-      }
-
-      rng->paddr = 0;
-      rng->pages.head = 0;
-      rng->pages.tail = 0;
-      vmspace_insert_nolock(space, rng);
+    if (0 == find_vmrange_no_lock(space, rng, size)) {
+        // 找不到合适的虚拟地址范围，直接退出
+        return NULL;
     }
+
+    // rng->paddr = 0;
+    rng->pages.head = 0;
+    rng->pages.tail = 0;
+    vmspace_insert_nolock(space, rng);
     return (void*)rng->vaddr;
 }
 
+#if 0
 // 在地址空间中寻找一段范围，页对齐，前后留出 guard page
 // 并且分配物理内存，在页表中添加映射
 void *vmspace_alloc_block(vmspace_t *space, vmrange_t *rng,
@@ -148,6 +148,7 @@ void *vmspace_alloc_block(vmspace_t *space, vmrange_t *rng,
     }
     return (void*)rng->vaddr;
 }
+#endif
 
 void *vmspace_alloc(vmspace_t *space, vmrange_t *rng, size_t size,
         page_type_t type, mmu_attr_t attrs) {
@@ -166,22 +167,23 @@ void *vmspace_alloc(vmspace_t *space, vmrange_t *rng, size_t size,
             return NULL;
         }
 
-        // 如果只申请一个页，则使用块分配接口
-        if (PAGE_SIZE == size) {
-            rng->paddr = page_alloc(0, type);
-            if (0 == rng->paddr) {
-                return NULL;
-            }
-            mmu_map(space->table, rng->vaddr, rng->vend, rng->paddr, attrs);
-        } else {
-            pagelist_alloc(&rng->pages, size >> PAGE_SHIFT, type);
-            // TODO 检查pagelist申请是否成功
-            size_t va = rng->vaddr;
-            for (uint32_t blk = rng->pages.head; blk; blk = g_pages[blk].next) {
-                size_t blksize = PAGE_SIZE << g_pages[blk].rank;
-                mmu_map(space->table, va, va + blksize, (size_t)blk << PAGE_SHIFT, attrs);
-                va += blksize;
-            }
+        // // 如果只申请一个页，则使用块分配接口
+        // if (PAGE_SIZE == size) {
+        //     rng->paddr = page_alloc(0, type);
+        //     if (0 == rng->paddr) {
+        //         return NULL;
+        //     }
+        //     mmu_map(space->table, rng->vaddr, rng->vend, rng->paddr, attrs);
+        // }
+        rng->pages.head = 0;
+        rng->pages.tail = 0;
+        pagelist_alloc(&rng->pages, size >> PAGE_SHIFT, type);
+        // TODO 检查pagelist申请是否成功
+        size_t va = rng->vaddr;
+        for (uint32_t blk = rng->pages.head; blk; blk = g_pages[blk].next) {
+            size_t blksize = PAGE_SIZE << g_pages[blk].rank;
+            mmu_map(space->table, va, va + blksize, (size_t)blk << PAGE_SHIFT, attrs);
+            va += blksize;
         }
 
         rng->attrs = attrs;
@@ -201,23 +203,24 @@ void vmspace_alloc_at(vmspace_t *space, vmrange_t *rng,
         SPINLOCK_SCOPED(&space->lock);
         vmspace_insert_nolock(space, rng);
 
-        if (size <= PAGE_SIZE) {
-            rng->paddr = page_alloc(0, type);
-            if (0 == rng->paddr) {
-                return;
-            }
-            mmu_map(space->table, rng->vaddr, rng->vend, rng->paddr, attrs);
-        } else {
-            size += PAGE_SIZE - 1;
-            pagelist_alloc(&rng->pages, size >> PAGE_SHIFT, type);
-            rng->paddr = 0;
-            // TODO 检查pagelist申请是否成功
-            size_t va = rng->vaddr;
-            for (uint32_t blk = rng->pages.head; blk; blk = g_pages[blk].next) {
-                size_t blksize = PAGE_SIZE << g_pages[blk].rank;
-                mmu_map(space->table, va, va + blksize, (size_t)blk << PAGE_SHIFT, attrs);
-                va += blksize;
-            }
+        // if (size <= PAGE_SIZE) {
+        //     rng->paddr = page_alloc(0, type);
+        //     if (0 == rng->paddr) {
+        //         return;
+        //     }
+        //     mmu_map(space->table, rng->vaddr, rng->vend, rng->paddr, attrs);
+        // }
+        size += PAGE_SIZE - 1;
+        rng->pages.head = 0U;
+        rng->pages.tail = 0U;
+        pagelist_alloc(&rng->pages, size >> PAGE_SHIFT, type);
+        // rng->paddr = 0;
+        // TODO 检查pagelist申请是否成功
+        size_t va = rng->vaddr;
+        for (uint32_t blk = rng->pages.head; blk; blk = g_pages[blk].next) {
+            size_t blksize = PAGE_SIZE << g_pages[blk].rank;
+            mmu_map(space->table, va, va + blksize, (size_t)blk << PAGE_SHIFT, attrs);
+            va += blksize;
         }
     }
 }
@@ -235,17 +238,16 @@ void vmspace_remap(vmspace_t *space, vmrange_t *rng, mmu_attr_t attrs) {
     rng->attrs = attrs;
     tlb_shootdown(rng->vaddr, rng->vend);
     mmu_unmap(space->table, rng->vaddr, rng->vend);
-    if (0 != rng->paddr) {
-        // 物理地址是连续的
-        mmu_map(space->table, rng->vaddr, rng->vend, rng->paddr, attrs);
-    } else {
-        // 物理地址是不连续的，需要遍历 page-list
-        size_t va = rng->vaddr;
-        for (uint32_t blk = rng->pages.head; blk; blk = g_pages[blk].next) {
-            size_t blksize = PAGE_SIZE << g_pages[blk].rank;
-            mmu_map(space->table, va, va + blksize, (size_t)blk << PAGE_SHIFT, attrs);
-            va += blksize;
-        }
+    // if (0 != rng->paddr) {
+    //     // 物理地址是连续的
+    //     mmu_map(space->table, rng->vaddr, rng->vend, rng->paddr, attrs);
+    // }
+    // 物理地址是不连续的，需要遍历 page-list
+    size_t va = rng->vaddr;
+    for (uint32_t blk = rng->pages.head; blk; blk = g_pages[blk].next) {
+        size_t blksize = PAGE_SIZE << g_pages[blk].rank;
+        mmu_map(space->table, va, va + blksize, (size_t)blk << PAGE_SHIFT, attrs);
+        va += blksize;
     }
 }
 
@@ -261,9 +263,6 @@ void vmspace_remove(vmspace_t *space, vmrange_t *rng) {
         mmu_unmap(space->table, rng->vaddr, rng->vend);
     }
 
-    if (0 != rng->paddr) {
-        page_free(rng->paddr);
-    }
     pagelist_free(&rng->pages);
 
     dl_remove(&rng->dl);
@@ -279,8 +278,8 @@ static void vmspace_show() {
     console_printf("kernel vmspace:\n");
     for (dlnode_t *i = vm->head.next; &vm->head != i; i = i->next) {
         vmrange_t *rng = containerof(i, vmrange_t, dl);
-        console_printf("  - vm %016zx~%016zx -> pa %8zx : %s\n",
-            rng->vaddr, rng->vend, rng->paddr, rng->desc);
+        console_printf("  - vm %016zx~%016zx -> first page 0x%x : %s\n",
+            rng->vaddr, rng->vend, rng->pages.head, rng->desc);
     }
 }
 

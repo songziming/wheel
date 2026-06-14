@@ -33,12 +33,15 @@ INIT_TEXT void kspace_add(vmrange_t *rng, size_t va, size_t end, const char *des
     rng->vend  = end;
     rng->desc  = desc;
     rng->attrs = attrs;
+
+    // 将映射的物理地址记录下来
+    // 注意，这种使用 pages 的方式不标准，操作这些 range 可能会出错
     if (va >= KERNEL_TEXT_ADDR) {
-        rng->paddr = va - KERNEL_TEXT_ADDR;
+        rng->pages.head = (uint32_t)((va - KERNEL_TEXT_ADDR) >> PAGE_SHIFT);
     } else if (va >= GUARDED_IDMAP_ADDR) {
-        rng->paddr = va - GUARDED_IDMAP_ADDR;
+        rng->pages.head = (uint32_t)((va - GUARDED_IDMAP_ADDR) >> PAGE_SHIFT);
     } else if (va >= IDENTITY_MAP_ADDR) {
-        rng->paddr = va - IDENTITY_MAP_ADDR;
+        rng->pages.head = (uint32_t)((va - IDENTITY_MAP_ADDR) >> PAGE_SHIFT);
     } else {
         panic("do not support address 0x%zx\n", va);
     }
@@ -131,7 +134,8 @@ INIT_TEXT void mem_init() {
     for (dlnode_t *i = g_kernel_vm.head.next; i != &g_kernel_vm.head; i = i->next) {
         vmrange_t *rng = containerof(i, vmrange_t, dl);
         size_t va_end = (rng->vend + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-        mmu_map(g_kernel_vm.table, rng->vaddr, va_end, rng->paddr, rng->attrs);
+        size_t paddr = (size_t)rng->pages.head << PAGE_SHIFT;
+        mmu_map(g_kernel_vm.table, rng->vaddr, va_end, paddr, rng->attrs);
     }
 
     // 所有物理页都可以映射到这里，offset = 2*paddr
@@ -156,5 +160,5 @@ void reclaim_init() {
     // 但是 vmrange 还留着，占位
     tlb_shootdown(g_kernel_init.vaddr, vend);
     mmu_unmap(g_kernel_vm.table, g_kernel_init.vaddr, vend);
-    g_kernel_init.paddr = 0;
+    // g_kernel_init.paddr = 0;
 }

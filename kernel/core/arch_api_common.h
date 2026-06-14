@@ -41,7 +41,7 @@ typedef enum mmu_attr {
 INIT_TEXT size_t mmu_create_kernel();
 size_t mmu_create();
 void   mmu_delete(size_t tbl);
-size_t mmu_copykernel(size_t tbl, size_t from);
+void   mmu_copykernel(size_t tbl, size_t from);
 size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs);
 void   mmu_map(size_t tbl, size_t va, size_t end, size_t pa, mmu_attr_t attrs);
 void   mmu_unmap(size_t tbl, size_t va, size_t end);

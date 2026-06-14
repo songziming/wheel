@@ -11,7 +11,7 @@ typedef struct vmrange {
     dlnode_t    dl;
     size_t      vaddr;
     size_t      vend;
-    size_t      paddr;  // 非零表示映射到连续的物理内存
+//     size_t      paddr;  // 非零表示映射到连续的物理内存
     pglist_t    pages;  // 映射到不连续的物理内存
     mmu_attr_t  attrs;
     const char *desc;

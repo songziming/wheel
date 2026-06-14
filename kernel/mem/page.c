@@ -169,6 +169,9 @@ static void pagelist_alloc_nolock(pglist_t *pl, uint32_t num, page_type_t type) 
     // TODO 首先检查剩余 page 数量是否满足
     //      如果剩余内存太少则直接退出
 
+    pl->head = 0U; // 清楚原本的内容
+    pl->tail = 0U;
+
     for (rank = 0; rank < PAGE_BLOCK_RANK_NUM; ++rank) {
         size = 1U << rank;
 
