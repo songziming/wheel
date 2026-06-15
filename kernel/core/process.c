@@ -1,6 +1,12 @@
 #include "process.h"
 #include <pool_slub.h>
+#include <task.h>
 #include <debug.h>
+
+
+
+// 不是进程拥有任务，而是任务共享进程（类似于 Linux mm_struct）
+// PCB 是一种共享资源，多个线程可以使用同一个 PCB
 
 
 static spinlock_t g_pcb_lock = SPINLOCK_INIT;
@@ -8,31 +14,16 @@ static pool_t     g_pcb_pool;
 static dlnode_t   g_pcb_head; // 管理所有 PCB
 
 
-static spinlock_t g_sec_lock = SPINLOCK_INIT;
-static pool_t     g_sec_pool;
-
-
-process_t g_kernel_proc;
-
-
-// 如果是内核进程，则需要传入页表，而不是自己创建
-static void process_setup(process_t *pid) {
-    pid->lock = SPINLOCK_INIT;
-    dl_init_circular(&pid->tasks_head);
-    vmspace_init(&pid->vm, 0x100000, 1UL << 32);
-    pid->pgtbl = mmu_create();
-}
+// 用户态的地址空间需要动态分配 vmrange
+static spinlock_t g_rng_lock = SPINLOCK_INIT;
+static pool_t     g_rng_pool;
 
 
 
 INIT_TEXT void process_init() {
     pool_init(&g_pcb_pool, sizeof(process_t));
     dl_init_circular(&g_pcb_head);
-    pool_init(&g_sec_pool, sizeof(section_t));
-
-    // 内核进程不能删除
-    process_setup(&g_kernel_proc);
-    g_kernel_proc.name = "kernel";
+    pool_init(&g_rng_pool, sizeof(vmrange_t));
 }
 
 process_t *process_create() {
@@ -46,44 +37,78 @@ process_t *process_create() {
         dl_insert_before(&pid->objnode, &g_pcb_head);
     }
 
-    process_setup(pid);
+    pid->lock = SPINLOCK_INIT;
+
+    dl_init_circular(&pid->tasks_head);
+    pid->task_num = 0;
+
+    vmspace_init(&pid->vm, 0x100000, 1UL << 32);
+    pid->vm.table = mmu_create();
+    mmu_copykernel(pid->vm.table, g_kernel_vm.table);
+
     return pid;
 }
 
 void process_destroy(process_t *pid) {
-    SPINLOCK_SCOPED(&g_pcb_lock);
-    dl_remove(&pid->objnode);
-    pool_free_nolock(&g_pcb_pool, pid);
-}
+    // 属于这个进程的所有vmrange都是动态分配的，需要遍历将其删除
+    dlnode_t *dl = pid->vm.head.next;
+    while (dl != &pid->vm.head) {
+        vmrange_t *rng = containerof(dl, vmrange_t, dl);
+        dl = dl->next;
+        {
+            SPINLOCK_SCOPED(&g_rng_lock);
+            pool_free_nolock(&g_rng_pool, rng);
+        }
+    }
 
+    // 删除地址空间
+    // 注意，当前可能正在使用此页表，最好先切到内核页表，或者在 ISR 里执行此函数
+    mmu_delete(pid->vm.table);
 
-// 注册一个存在的 section，但这个 section 不是自己创建的
-// 用于 kernel 添加现有布局
-// 用于进程映射一段共享内存
-// 同时编辑页表，创建映射
-void process_map_section(process_t *pid, section_t *sec) {
-    SPINLOCK_SCOPED(&pid->lock);
-    vmspace_insert(&pid->vm, &sec->rng);
-
-    size_t va = sec->rng.vaddr;
-    for (uint32_t blk = sec->pages.head; blk; blk = g_pages[blk].next) {
-        size_t size = PAGE_SIZE << g_pages[blk].rank;
-        mmu_map(pid->pgtbl, va, va + size, (size_t)blk << PAGE_SHIFT, MMU_WRITE);
-        va += size;
+    // 将PCB也删除
+    {
+        SPINLOCK_SCOPED(&g_pcb_lock);
+        dl_remove(&pid->objnode);
+        pool_free_nolock(&g_pcb_pool, pid);
     }
 }
 
 
-void process_unmap(process_t *pid, section_t *sec) {
+// 将当前任务迁移到进程
+void task_enter_process(process_t *pid) {
+    task_t *tid = current_task();
+    ASSERT(NULL == tid->process);
+
+    task_take_from_kernel(tid);
     {
         SPINLOCK_SCOPED(&pid->lock);
-        vmspace_remove(&pid->vm, &sec->rng);
-        mmu_unmap(pid->pgtbl, sec->rng.vaddr, sec->rng.vend);
+        dl_insert_before(&tid->objnode, &pid->tasks_head);
+        ++pid->task_num;
     }
 
-    // 只有当前地址空间才需要 shootdown
-    // 如果进程即将退出，则无需 shootdown（检查进程状态）
-    tlb_shootdown(sec->rng.vaddr, sec->rng.vend);
+    tid->process = pid;
+    tid->pgtbl = pid->vm.table;
+    mmu_usetable(tid->pgtbl);
+}
+
+// 将当前任务移出进程，回到内核任务
+// 移出之后任务还可以继续运行
+void task_leave_process(process_t *pid) {
+    task_t *tid = current_task();
+    ASSERT(pid == tid->process);
+
+    SPINLOCK_SCOPED(&pid->lock);
+    --pid->task_num;
+    dl_remove(&tid->objnode);
+
+    // TODO 用户栈需要删除
+
+    // 重新切换到内核页表
+    tid->process = NULL;
+    tid->pgtbl = g_kernel_vm.table;
+    mmu_usetable(tid->pgtbl);
+
+    // TODO 检查进程是否引用计数归零，回收PCB
 }
 
 
@@ -93,17 +118,17 @@ void process_unmap(process_t *pid, section_t *sec) {
 
 // 为这个进程的地址空间分配一段虚拟地址
 void process_valloc(process_t *pid, size_t size) {
-    section_t *sec;
+    vmrange_t *rng;
     {
-        SPINLOCK_SCOPED(&g_sec_lock);
-        sec = pool_alloc_nolock(&g_sec_pool);
+        SPINLOCK_SCOPED(&g_rng_lock);
+        rng = pool_alloc_nolock(&g_rng_pool);
     }
-    if (NULL == sec) {
+    if (NULL == rng) {
         panic("cannot allocate section\n");
     }
-
     {
         SPINLOCK_SCOPED(&pid->lock);
-        vmspace_alloc(&pid->vm, &sec->rng, size, PT_KERNEL, MMU_WRITE);
+        vmspace_alloc(&pid->vm, rng, size, PT_KERNEL, MMU_WRITE);
     }
+    rng->desc = "process dynamic";
 }

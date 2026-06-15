@@ -19,6 +19,5 @@ extern int        g_pmrange_num;
 extern pmrange_t *g_pmranges;
 
 pmrange_t *pmrange_at(size_t pa);
-void pmlayout_show();
 
 #endif // PMLAYOUT_H

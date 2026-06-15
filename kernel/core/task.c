@@ -5,9 +5,10 @@
 
 
 #include "task.h"
+#include "process.h"
 #include "work.h"
 #include <arch_api.h>
-#include <spinlock.h>
+#include "spinlock.h"
 #include <dllist.h>
 #include <kstring.h>
 #include <heap.h>
@@ -166,15 +167,25 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
     tid->priority = prio;
     tid->affinity = -1;
 
+    tid->stack3  = 0; // 没有用户栈（尚未分配）
+    tid->pgtbl   = g_kernel_vm.table; // 默认使用内核页表，之后可以替换
+    tid->process = NULL; // 不属于任何进程，之后可以替换
+
+    vmspace_alloc_stack(&g_kernel_vm, &tid->stack);
+    tid->stack.desc = name;
+    tid->stack0 = tid->stack.vend;
+    arch_task_init(tid, (size_t)task_entry, tid->stack0, (size_t)func,0,0,0);
+
     {
         SPINLOCK_SCOPED(&g_tcb_lock);
         dl_insert_before(&tid->objnode, &g_tcb_head);
     }
+}
 
-    vmspace_alloc_stack(&g_kernel_vm, &tid->stack);
-    tid->stack.desc = name;
-    tid->stack0 = (void*)tid->stack.vend;
-    arch_task_init(tid, (size_t)task_entry, tid->stack.vend, (size_t)func,0,0,0);
+// 将任务从内核任务列表中取出
+void task_take_from_kernel(task_t *tid) {
+    SPINLOCK_SCOPED(&g_tcb_lock);
+    dl_remove(&tid->objnode);
 }
 
 //------------------------------------------------------------------------------
@@ -191,13 +202,14 @@ void task_pend(prioq_t *wq, waiter_t *pender, int timeout, wdog_cb_t cb) {
 
     self->state |= TS_PENDING;
 
-    { SPINLOCK_SCOPED(THISCPU(&g_rdy_lock));
-      prioq_remove(q, &self->dl, self->priority);
-      task_t *next = containerof(prioq_head(q), task_t, dl);
-      if (31 == next->priority) {
-          atomic_fetch_or(&g_idle_mask, 1UL << cpu_index());
-      }
-      THISCPU_SET(g_tid_next, next);
+    {
+        SPINLOCK_SCOPED(THISCPU(&g_rdy_lock));
+        prioq_remove(q, &self->dl, self->priority);
+        task_t *next = containerof(prioq_head(q), task_t, dl);
+        if (31 == next->priority) {
+            atomic_fetch_or(&g_idle_mask, 1UL << cpu_index());
+        }
+        THISCPU_SET(g_tid_next, next);
     }
 
     pender->expired = 0;
@@ -214,25 +226,23 @@ void task_pend(prioq_t *wq, waiter_t *pender, int timeout, wdog_cb_t cb) {
 //------------------------------------------------------------------------------
 
 static void _cont_this(task_t *tid) {
+    SPINLOCK_SCOPED(THISCPU(&g_rdy_lock));
     prioq_t *q = THISCPU(&g_rdyq);
-    { SPINLOCK_SCOPED(THISCPU(&g_rdy_lock));
-      prioq_insert(q, &tid->dl, tid->priority);
-      if (tid->priority < THISCPU_GET(g_tid_next)->priority) {
-          THISCPU_SET(g_tid_next, tid);
-      }
-      atomic_fetch_and(&g_idle_mask, ~(1UL << cpu_index()));
+    prioq_insert(q, &tid->dl, tid->priority);
+    if (tid->priority < THISCPU_GET(g_tid_next)->priority) {
+        THISCPU_SET(g_tid_next, tid);
     }
+    atomic_fetch_and(&g_idle_mask, ~(1UL << cpu_index()));
 }
 
 static void _cont_cpu(task_t *tid, int cpu) {
     prioq_t *q = PERCPU(cpu, &g_rdyq);
-    { SPINLOCK_SCOPED(THISCPU(&g_rdy_lock));
-      prioq_insert(q, &tid->dl, tid->priority);
-      if (tid->priority < (*PERCPU(cpu, &g_tid_next))->priority) {
-          *PERCPU(cpu, &g_tid_next) = tid;
-      }
-      atomic_fetch_and(&g_idle_mask, ~(1UL << cpu));
+    SPINLOCK_SCOPED(THISCPU(&g_rdy_lock));
+    prioq_insert(q, &tid->dl, tid->priority);
+    if (tid->priority < (*PERCPU(cpu, &g_tid_next))->priority) {
+        *PERCPU(cpu, &g_tid_next) = tid;
     }
+    atomic_fetch_and(&g_idle_mask, ~(1UL << cpu));
 }
 
 // 恢复运行这个 task，返回需要切换任务的 CPU-mask
@@ -340,10 +350,6 @@ static void task_free(work_t *wk) {
     vmspace_remove(&g_kernel_vm, &tid->stack);
     tid->state = TS_DELETED;
 
-    {
-        SPINLOCK_SCOPED(&g_tcb_lock);
-        dl_remove(&tid->objnode);
-    }
 }
 
 // 全程必须关闭中断，防止被抢占，否则 work 没来得及注册，任务无法回收
@@ -362,6 +368,13 @@ void task_exit() {
     tlb_shootdown(self->stack.vaddr, self->stack.vend);
 
     self->state |= TS_STOPPED;
+
+    if (self->process) {
+        task_leave_process(self->process);
+    } else {
+        SPINLOCK_SCOPED(&g_tcb_lock);
+        dl_remove(&self->objnode);
+    }
 
     {
         SPINLOCK_SCOPED(THISCPU(&g_rdy_lock));

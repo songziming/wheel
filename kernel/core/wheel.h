@@ -3,9 +3,7 @@
 
 #include <stddef.h>
 #include <stdarg.h>
-#include <limits.h>
 #include <stdint.h>
-// #include <stdbool.h>
 #include <stdatomic.h>
 
 #define UNUSED      __attribute__((unused))
@@ -32,10 +30,6 @@
 #define INIT_BSS    SECTION(".init.bss")
 #define PERCPU_DATA SECTION(".percpu.data")
 #define PERCPU_BSS  SECTION(".percpu.bss")
-
-// #ifndef offsetof
-// #define offsetof(t,m) ((size_t)&((t*)0)->m)
-// #endif
 
 #ifndef containerof
 #define containerof(p,t,m) ((t*)((size_t)(p) - __builtin_offsetof(t,m)))

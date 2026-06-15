@@ -534,6 +534,10 @@ void mmu_delete(size_t tbl) {
     pml4_free(tbl);
 }
 
+void mmu_usetable(size_t tbl) {
+    write_cr3(tbl);
+}
+
 // 复制 from 的内核部分
 void mmu_copykernel(size_t tbl, size_t from) {
     uint64_t *src = (uint64_t*)(IDENTITY_MAP_ADDR + from);

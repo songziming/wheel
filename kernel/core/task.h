@@ -34,16 +34,17 @@ enum task_state {
 typedef struct process process_t;
 
 typedef struct task {
-    void       *stack_top;  // regs_t
-    void       *stack0;     // stack_top when syscall
-    void       *stack3;     // saved by syscall
+    size_t      stack_top;  // regs_t
+    size_t      stack0;     // stack_top when syscall
+    size_t      stack3;     // saved by syscall
+    size_t      pgtbl;      // 就是 process->vm.table，放在这里便于访问
+    process_t  *process;    // parent process (NULL if kernel thread)
     dlnode_t    objnode;    // node in tasklist (in process)
     dlnode_t    dl;         // node in ready-queue
     uint32_t    state;
     int16_t     affinity;
     int16_t     priority;
     const char *name;
-    process_t  *process;    // parent process (NULL if kernel thread)
     vmrange_t   stack;      // kernel stack
     vmrange_t   user_stack; // user stack
 } task_t;
@@ -57,6 +58,8 @@ INIT_TEXT void sched_init();
 void sched_process();
 
 void task_create(task_t *tid, const char *name, int prio, void *func);
+
+void task_take_from_kernel(task_t *tid);
 
 void task_pend(prioq_t *wq, waiter_t *pender, int timeout, wdog_cb_t cb);
 task_t *task_unpend_one(prioq_t *wq);

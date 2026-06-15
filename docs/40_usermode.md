@@ -22,3 +22,34 @@ sysret 从内核态切换到用户态，syscall 从用户态切换到内核态�
 第一次访问一个 section descriptor，CPU 会将 access 设为 1。
 这会产生一个 memory write operation。
 如果GDT所在的虚拟地址恰好不可写，就会产生 page fault。
+
+---
+
+# 线程与进程的关系
+
+常规想法是，process 包含 thread，Windows 和 BSD 也是这么设计的。
+我们仍保留 task 作为主体，process 是多个 task 共享的资源。类似 Linux 的设计。
+
+同一进程的线程，本质上就是不同的task，只是共享同一地址空间。
+它们操作地址空间的时候，需要防止竞争，除此之外不应该有区别。
+
+内核态的地址空间属于内核，vmrange由内核管理
+任务的两个栈——内核栈与用户栈——属于任务，vmrange放在TCB里面
+其他的section都是属于进程的，应该由PCB管理
+
+# task、process创建与执行过程——线程迁移
+
+1. 创建task，默认属于kernel，使用内核页表
+2. 创建一个process，创建一个新的页表，不拥有任何task
+3. 将task迁移到目标进程，切换到目标页表
+4. 创建用户栈，记录在进程的地址空间里，vmrange 放在TCB
+5. 动态分配用户态 section，包括代码段、数据段
+6. 跳转到 ring3 开支执行
+7. 用户态代码结束，将task移出进程，回收用户栈，task重新成为内核任务，切换回内核页表
+8. 将 process 删除
+
+我们支持线程迁移，也就是task可以动态切换进程。这个机制可以用于RPC。
+进程A发起RPC，调用进程B，相当于任务原本属于进程A，换到了进程B。
+调度过程不受影响，运行的始终是同一个任务，只是这个任务所在的地址空间变了。
+
+L4 就是这么设计的，IPC sender 变身成了 receiver。换一个地址空间继续执行代码。

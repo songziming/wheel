@@ -168,5 +168,5 @@ void arch_task_init(task_t *task, size_t entry, size_t stack_top,
     regs->rdx = arg3;
     regs->rcx = arg4;
 
-    task->stack_top = regs;
+    task->stack_top = (size_t)regs;
 }

@@ -10,29 +10,17 @@ typedef struct process {
     dlnode_t    objnode;    // item in process-table
     const char *name;
     dlnode_t    tasks_head; // list of tasks
+    int         task_num;
     vmspace_t   vm;
-    size_t      pgtbl;  // 页表
 } process_t;
-
-// TODO vmspace 去掉锁，去掉页表操作，vmrange 去掉物理页和名称
-//      vmspace 模块只维护虚拟地址空间，页表的操作交给 process
-//      pool 也去掉锁，由使用者防止竞争
-
-// 代表地址空间中的一段
-typedef struct section {
-    vmrange_t   rng;
-    const char *name;
-    pglist_t    pages;
-    mmu_attr_t  attrs;
-} section_t;
-
-
-extern process_t g_kernel_proc;
 
 
 INIT_TEXT void process_init();
 process_t *process_create();
-void process_destroy(process_t *proc);
+void process_destroy(process_t *pid);
+
+void task_enter_process(process_t *pid);
+void task_leave_process(process_t *pid);
 
 
 #endif // PROCESS_H
