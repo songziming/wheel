@@ -3,9 +3,7 @@
 
 ARCH    ?= x86_64
 DEBUG   ?= 1
-
-# BUILD_DIR: 独立调用时默认 = build/，顶层调用时传入 ../build
-BUILD_DIR ?= build
+OUTDIR  ?= build
 
 # toolchain
 KCC := $(TOOLCHAIN)clang
@@ -26,13 +24,13 @@ else
 endif
 
 # output files
-OUT_ELF  := $(BUILD_DIR)/wheel.elf
-OUT_MAP  := $(BUILD_DIR)/wheel.map
-UNIT_LIB := $(BUILD_DIR)/libwheel.so
-UNIT_BIN := $(BUILD_DIR)/unit
-UNIT_RAW := $(BUILD_DIR)/unit.profraw
-UNIT_DAT := $(BUILD_DIR)/unit.profdata
-UNIT_COV := $(BUILD_DIR)/coverage
+OUT_ELF  := $(OUTDIR)/wheel.elf
+OUT_MAP  := $(OUTDIR)/wheel.map
+UNIT_LIB := $(OUTDIR)/libwheel.so
+UNIT_BIN := $(OUTDIR)/unit
+UNIT_RAW := $(OUTDIR)/unit.profraw
+UNIT_DAT := $(OUTDIR)/unit.profdata
+UNIT_COV := $(OUTDIR)/coverage
 
 # source files and objects
 KERNEL := .
@@ -41,9 +39,9 @@ AFILES := $(shell find $(KDIRS) -name "*.S")
 CFILES := $(shell find $(KDIRS) -name "*.c")
 XFILES := $(shell find $(KDIRS) -name "*.cc")
 
-KOBJS := $(patsubst %, $(BUILD_DIR)/%.ko, $(AFILES) $(CFILES))
-LOBJS := $(patsubst %, $(BUILD_DIR)/%.to, $(CFILES))
-TOBJS := $(patsubst %, $(BUILD_DIR)/%.to, $(XFILES))
+KOBJS := $(patsubst %,$(OUTDIR)/%.ko,$(AFILES) $(CFILES))
+LOBJS := $(patsubst %,$(OUTDIR)/%.to,$(CFILES))
+TOBJS := $(patsubst %,$(OUTDIR)/%.to,$(XFILES))
 
 ALLOBJS := $(KOBJS) $(LOBJS) $(TOBJS)
 OBJDIRS := $(sort $(dir $(ALLOBJS)))
@@ -104,7 +102,7 @@ include $(KERNEL)/arch_$(ARCH)/config.mk
 # 构建规则
 #-------------------------------------------------------------------------------
 
-.PHONY: all kernel unit cov clean loc
+.PHONY: all kernel unit cov clean
 
 all: kernel
 
@@ -113,10 +111,7 @@ kernel: $(OUT_ELF)
 unit: $(UNIT_BIN)
 
 clean:
-	rm -rf $(BUILD_DIR)
-
-loc:
-	find $(KERNEL) -name "*.S" -o -name "*.c" -o -name "*.h" | xargs wc -l
+	rm -rf $(OUTDIR)
 
 # 创建目标文件所在目录
 $(ALLOBJS) : | $(OBJDIRS)
@@ -124,24 +119,24 @@ $(OBJDIRS):
 	mkdir -p $@
 
 # 编译内核
-$(BUILD_DIR)/%.S.ko: $(KERNEL)/%.S
+$(OUTDIR)/%.S.ko: $(KERNEL)/%.S
 	$(KCC) $(KCFLAGS) $(GENDEP) -DS_FILE -o $@ $<
-$(BUILD_DIR)/%.c.ko: $(KERNEL)/%.c
+$(OUTDIR)/%.c.ko: $(KERNEL)/%.c
 	$(KCC) $(KCFLAGS) $(GENDEP) -DC_FILE -o $@ $<
 $(OUT_ELF): $(KOBJS) $(EMBED_USER)
 	$(KLD) $(KLFLAGS) -o $@ $^
 
 # 内核库，单元测试用，只包括 C 代码，使用默认工具链
-$(BUILD_DIR)/%.c.to: $(KERNEL)/%.c
+$(OUTDIR)/%.c.to: $(KERNEL)/%.c
 	$(TCC) $(LCFLAGS) $(GENDEP) -DC_FILE -o $@ $<
 $(UNIT_LIB): $(LOBJS)
 	$(TXX) $(LLFLAGS) -o $@ $^
 
 # 编译单元测试程序，使用默认工具链
-$(BUILD_DIR)/%.cc.to: $(KERNEL)/%.cc
+$(OUTDIR)/%.cc.to: $(KERNEL)/%.cc
 	$(TXX) $(TXFLAGS) $(GENDEP) -DC_FILE -o $@ $<
 $(UNIT_BIN): $(TOBJS) | $(UNIT_LIB)
-	$(TXX) -o $@ $^ -L$(BUILD_DIR) -lwheel $(TLFLAGS) -Wl,-rpath,".:$(BUILD_DIR)"
+	$(TXX) -o $@ $^ -L$(OUTDIR) -lwheel $(TLFLAGS) -Wl,-rpath,".:$(OUTDIR)"
 
 # 运行单元测试，生成代码覆盖率报告
 $(UNIT_RAW): $(UNIT_BIN) $(UNIT_LIB)

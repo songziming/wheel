@@ -1,5 +1,4 @@
-.global syscall64
-.global syscall80
+.global _syscall
 .global _start
 .extern main
 
@@ -17,10 +16,6 @@ _start:
 .text
 .code64
 
-syscall64:
+_syscall:
     syscall
-    ret
-
-syscall80:
-    int $0x80
     ret

@@ -2,9 +2,14 @@
 
 ![test status](https://github.com/songziming/wheel/actions/workflows/kernel-unit-test.yml/badge.svg)
 
-Wheel is an operating system, written from scratch.
+Wheel is an operating system, written from scratch, reinvented multiple times.
 
-64-bit higher half kernel, multiprocessor support, preemptive scheduling, ring-0 only, simple kernel shell.
+Features:
+- 64-bit higher half kernel
+- multiprocessor support
+- preemptive scheduling
+- semaphore, mutex, message-queue
+- simple kernel shell
 
 ![kernel shell, fat32, dump vmspace layout](./docs/kshell_fat32_vm.png)
 

@@ -153,7 +153,8 @@ static void fmt_number(fmt_context_t *ctx, uint64_t abs, int base, uint32_t flag
     // 判断是否打印前缀
     // 十六进制前缀 0x/0X 不属于数字，不占 precision
     // 但八进制前缀 0 属于数字，占一位 precision
-    char prefix[3] = { 0, 0, 0 };
+    char prefix[3]; // = { 0, 0, 0 };
+    kmemset(prefix, 0, sizeof(prefix));
     if (flags & FLG_PREFIX) {
         if (bits && (16 == base)) {
             // 前缀不能独立存在
