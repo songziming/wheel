@@ -96,6 +96,8 @@ static uint64_t pt_map(uint64_t pt, uint64_t va, uint64_t end, uint64_t pa, uint
     for (int i = IDX_4K(va); (i < 512) && (va + 0x1000 <= end); ++i) {
         if (0 == (tbl[i] & MMU_P)) {
             ++info->ent_num;
+        } else {
+            INVLPG(va);
         }
         tbl[i] = (pa & MMU_ADDR) | MMU_P | bits;
         va += SIZE_4K;
@@ -124,6 +126,15 @@ static uint64_t pt_unmap(uint64_t pt, uint64_t va, uint64_t end) {
     return va - start;
 }
 
+static void pt_invlpg(uint64_t pt, uint64_t va) {
+    uint64_t *tbl = (uint64_t*)(pt + IDENTITY_MAP_ADDR);
+    for (int i = 0; i < 512; ++i, va += SIZE_4K) {
+        if (tbl[i] & MMU_P) {
+            INVLPG(va);
+        }
+    }
+}
+
 static void pt_free(uint64_t pt) {
     free_table(pt);
 }
@@ -145,7 +156,10 @@ static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint
             if (0 == (tbl[i] & MMU_P)) {
                 ++info->ent_num;
             } else if (0 == (tbl[i] & MMU_PS)) {
+                pt_invlpg(tbl[i] & MMU_ADDR, va);
                 pt_free(tbl[i] & MMU_ADDR);
+            } else {
+                INVLPG(va); // 清除这个 2M-entry
             }
 
             uint64_t pde = (pa & MMU_ADDR) | MMU_P | MMU_PS | bits;
@@ -180,6 +194,8 @@ static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint
                 size_t end_pa = pa2m + (end - va2m);
                 pt_map(pt, end, va2m + SIZE_2M, end_pa, split_bits, split_pat);
             }
+
+            INVLPG(va2m);
         }
 
         tbl[i] = (pt & MMU_ADDR) | MMU_P | MMU_RW | MMU_US;
@@ -211,6 +227,7 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
         // 如果 unmap 范围涵盖了完整 2M
         if ((0 == OFFSET_2M(va)) && (va + SIZE_2M <= end)) {
             if (0 == (tbl[i] & MMU_PS)) {
+                pt_invlpg(tbl[i] & MMU_ADDR, va);
                 pt_free(tbl[i] & MMU_ADDR);
             }
             --info->ent_num;
@@ -272,6 +289,20 @@ static void pd_free(uint64_t pd) {
     free_table(pd);
 }
 
+static void pd_invlpg(uint64_t pd, uint64_t va) {
+    uint64_t *tbl = (uint64_t*)(pd + IDENTITY_MAP_ADDR);
+    for (int i = 0; i < 512; ++i, va += SIZE_2M) {
+        if (0 == (tbl[i] & MMU_P)) {
+            continue;
+        }
+        if (tbl[i] & MMU_PS) {
+            INVLPG(va);
+        } else {
+            pt_invlpg(tbl[i] & MMU_ADDR, va);
+        }
+    }
+}
+
 
 //------------------------------------------------------------------------------
 // page directory pointer，表项可以指向 PD，也可以直接映射 1G
@@ -295,7 +326,10 @@ static uint64_t pdp_map(uint64_t pdp, uint64_t va, uint64_t end, uint64_t pa, ui
             if (0 == (tbl[i] & MMU_P)) {
                 ++info->ent_num;
             } else if (0 == (tbl[i] & MMU_PS)) {
+                pd_invlpg(tbl[i] & MMU_ADDR, va);
                 pd_free(tbl[i] & MMU_ADDR);
+            } else {
+                INVLPG(va); // 清除已有的 1g-entry
             }
 
             uint64_t pdpe = (pa & MMU_ADDR) | MMU_P | MMU_PS | bits;
@@ -330,6 +364,8 @@ static uint64_t pdp_map(uint64_t pdp, uint64_t va, uint64_t end, uint64_t pa, ui
                 size_t end_pa = pa1g + (end - va1g);
                 pd_map(pd, end, va1g + SIZE_1G, end_pa, split_bits, split_pat);
             }
+
+            INVLPG(va1g);
         }
 
         tbl[i] = (pd & MMU_ADDR) | MMU_P | MMU_RW | MMU_US;
@@ -361,11 +397,13 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
         // 如果 unmap 范围涵盖了完整 1G
         if ((0 == OFFSET_1G(va)) && (va + SIZE_1G <= end)) {
             if (0 == (tbl[i] & MMU_PS)) {
+                pd_invlpg(tbl[i] & MMU_ADDR, va);
                 pd_free(tbl[i] & MMU_ADDR);
+            } else {
+                INVLPG(va);
             }
             tbl[i] = 0;
             --info->ent_num;
-            INVLPG(va);
             va += SIZE_1G;
             continue;
         }
