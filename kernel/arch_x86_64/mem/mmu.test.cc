@@ -14,12 +14,11 @@ extern "C" {
 #define M (1024L*K)
 #define G (1024L*M)
 
-class MmuTest : public PageMock {
+class MmuTest : public ::testing::Test {
 protected:
-    MmuTest() : PageMock(16 * K) {}
+    PageContext pc_{16 * K};
 
     void SetUp() override {
-        PageMock::SetUp();
         g_cpu_features |= CPU_FEATURE_1G | CPU_FEATURE_NX;
     }
 };

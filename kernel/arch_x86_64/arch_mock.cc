@@ -19,7 +19,6 @@ void load_tr() {}
 
 // arch_entries.S
 uint64_t isr_entries[1];
-// void task_entry() {}
 void syscall_entry() {}
 void arch_task_switch() {}
 void arch_enter_ring3(size_t entry, size_t stack_top) {
@@ -27,8 +26,13 @@ void arch_enter_ring3(size_t entry, size_t stack_top) {
     (void)stack_top;
 }
 
+// cpu/features.c
 size_t arch_cacheline_size() {
     return 64;
 }
+
+// user
+char _binary_users_tar_start = '1';
+char _binary_users_tar_end = '1';
 
 } // extern "C"

@@ -286,7 +286,7 @@ end:
 static void root_proc() {
     // 将实模式代码复制到 1M 以下
     char *from = &_real_addr;
-    char *to = (char*)KERNEL_REAL_ADDR + IDENTITY_MAP_ADDR;
+    char *to = idmap_at(KERNEL_REAL_ADDR);
     kmemcpy(to, from, &_real_end - from);
     logk("copy trampoline code from %p to %p\n", from, to);
 

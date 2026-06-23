@@ -156,7 +156,7 @@ $(KUNIT_LIB): $(LIBK_OBJS)
 	$(TXX) $(LLFLAGS) -o $@ $^
 
 # 编译单元测试程序，使用默认工具链
-$(OUTDIR)/%.cc.to: $(KERNEL_BASE)/%.cc
+$(OUTDIR)/k/%.cc.to: $(KERNEL_BASE)/%.cc
 	$(TXX) $(TXFLAGS) $(GENDEP) -DC_FILE -o $@ $<
 $(KUNIT_BIN): $(KUNIT_OBJS) | $(KUNIT_LIB)
 	$(TXX) -o $@ $^ -L$(OUTDIR) -lwheel $(TLFLAGS) -Wl,-rpath,".:$(OUTDIR)"

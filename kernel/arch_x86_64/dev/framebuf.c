@@ -199,7 +199,7 @@ INIT_TEXT void framebuf_init(uint32_t rows, uint32_t cols, uint32_t pitch, uint3
     g_pitch = pitch;
 
     // TODO 映射到 Write-Combined region
-    g_addr = (uint8_t*)(IDENTITY_MAP_ADDR + addr);
+    g_addr = (uint8_t*)idmap_at(addr);
     g_disp_top = 0;
 
     // 如果没有 BGA，则需要另一个离屏缓冲区

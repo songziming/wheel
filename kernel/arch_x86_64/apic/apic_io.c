@@ -41,13 +41,13 @@
 
 
 static uint32_t ioapic_read(const ioapic_t *io, uint32_t reg) {
-    *(volatile uint32_t*)(io->addr + IDENTITY_MAP_ADDR + IO_REG_SEL) = reg;
-    return *(volatile uint32_t*)(io->addr + IDENTITY_MAP_ADDR + IO_REG_WIN);
+    *(volatile uint32_t*)(idmap_at(io->addr) + IO_REG_SEL) = reg;
+    return *(volatile uint32_t*)(idmap_at(io->addr) + IO_REG_WIN);
 }
 
 static void ioapic_write(const ioapic_t *io, uint32_t reg, uint32_t val) {
-    *(volatile uint32_t*)(io->addr + IDENTITY_MAP_ADDR + IO_REG_SEL) = reg;
-    *(volatile uint32_t*)(io->addr + IDENTITY_MAP_ADDR + IO_REG_WIN) = val;
+    *(volatile uint32_t*)(idmap_at(io->addr) + IO_REG_SEL) = reg;
+    *(volatile uint32_t*)(idmap_at(io->addr) + IO_REG_WIN) = val;
 }
 
 
@@ -170,6 +170,6 @@ void ioapic_send_eoi(int vec) {
 
     ioapic_t *io = ioapic_for_gsi(vec - VEC_GSI_BASE);
     if (io && (io->ver >= 0x20)) {
-        *(volatile uint32_t*)(io->addr + IDENTITY_MAP_ADDR + IO_REG_EOI) = vec;
+        *(volatile uint32_t*)(idmap_at(io->addr) + IO_REG_EOI) = vec;
     }
 }

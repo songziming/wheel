@@ -54,7 +54,7 @@ INIT_TEXT void vgatext_init() {
     }
 
     // 映射到 higher half，启动完成后低地址会取消映射
-    g_vram = (uint16_t*)(IDENTITY_MAP_ADDR + 0xb8000);
+    g_vram = (uint16_t*)idmap_at(0xb8000);
     kmemcpy(g_vram, g_vbuf, ROWS*COLS * sizeof(uint16_t));
 
     ops.width = COLS;

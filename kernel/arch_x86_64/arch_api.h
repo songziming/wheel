@@ -19,6 +19,23 @@ static inline void cpu_wfence() { ASMV("sfence" ::: "memory"); }
 static inline void cpu_rwfence() { ASMV("mfence" ::: "memory"); }
 
 //------------------------------------------------------------------------------
+// identity-map 物理地址转换
+//------------------------------------------------------------------------------
+
+// 将物理地址转换为 identity map 区域的虚拟地址
+// 单元测试中重定向到 mmap 的内存
+#ifdef UNIT_TEST
+extern uint64_t g_idmap_base;
+static inline char *idmap_at(size_t pa) {
+    return (char*)(g_idmap_base + pa);
+}
+#else
+static inline char *idmap_at(size_t pa) {
+    return (char*)(IDENTITY_MAP_ADDR + pa);
+}
+#endif
+
+//------------------------------------------------------------------------------
 // debug helper
 //------------------------------------------------------------------------------
 

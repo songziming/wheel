@@ -45,14 +45,8 @@
 #define OFFSET_1G(x)    ((x) & (SIZE_1G - 1))
 
 
-#define INVLPG(va)  ASMV("invlpg (%0)" :: "r"(va) : "memory")
 
-// 单元测试，模仿虚拟地址和物理地址的转换
-#if defined(UNIT_TEST)
-extern uint64_t g_direct_map_base;
-#undef IDENTITY_MAP_ADDR
-#define IDENTITY_MAP_ADDR g_direct_map_base
-#endif
+#define INVLPG(va)  ASMV("invlpg (%0)" :: "r"(va) : "memory")
 
 
 // 分配一张页表
@@ -63,7 +57,7 @@ static uint64_t alloc_table() {
         return 0;
     }
     g_pages[pa >> PAGE_SHIFT].ent_num = 0;
-    kmemset((char*)pa + IDENTITY_MAP_ADDR, 0, PAGE_SIZE);
+    kmemset(idmap_at(pa), 0, PAGE_SIZE);
     return pa;
 }
 
@@ -85,7 +79,7 @@ static void free_table(uint64_t tbl) {
 //------------------------------------------------------------------------------
 
 static uint64_t pt_map(uint64_t pt, uint64_t va, uint64_t end, uint64_t pa, uint64_t bits, int pat) {
-    uint64_t *tbl = (uint64_t*)(IDENTITY_MAP_ADDR + pt);
+    uint64_t *tbl = (uint64_t*)idmap_at(pt);
     page_t *info = &g_pages[pt >> PAGE_SHIFT];
 
     if (pat) {
@@ -109,7 +103,7 @@ static uint64_t pt_map(uint64_t pt, uint64_t va, uint64_t end, uint64_t pa, uint
 
 
 static uint64_t pt_unmap(uint64_t pt, uint64_t va, uint64_t end) {
-    uint64_t *tbl = (uint64_t*)(IDENTITY_MAP_ADDR + pt);
+    uint64_t *tbl = (uint64_t*)idmap_at(pt);
     page_t *info = &g_pages[pt >> PAGE_SHIFT];
 
     uint64_t start = va;
@@ -127,7 +121,7 @@ static uint64_t pt_unmap(uint64_t pt, uint64_t va, uint64_t end) {
 }
 
 static void pt_invlpg(uint64_t pt, uint64_t va) {
-    uint64_t *tbl = (uint64_t*)(pt + IDENTITY_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)idmap_at(pt);
     for (int i = 0; i < 512; ++i, va += SIZE_4K) {
         if (tbl[i] & MMU_P) {
             INVLPG(va);
@@ -147,7 +141,7 @@ static void pt_free(uint64_t pt) {
 static uint64_t pd_map(uint64_t pd, uint64_t va, uint64_t end, uint64_t pa, uint64_t bits, int pat) {
     ASSERT(0 == OFFSET_4K(pd));
 
-    uint64_t *tbl = (uint64_t*)(IDENTITY_MAP_ADDR + pd);
+    uint64_t *tbl = (uint64_t*)idmap_at(pd);
     page_t *info = &g_pages[pd >> PAGE_SHIFT];
 
     uint64_t start = va;
@@ -213,7 +207,7 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
     ASSERT(0 == OFFSET_4K(end));
     ASSERT(va <= end);
 
-    uint64_t *tbl = (uint64_t*)(pd + IDENTITY_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)idmap_at(pd);
     page_t *info = &g_pages[pd >> PAGE_SHIFT];
 
     uint64_t start = va;
@@ -279,7 +273,7 @@ uint64_t pd_unmap(uint64_t pd, uint64_t va, uint64_t end) {
 static void pd_free(uint64_t pd) {
     ASSERT(0 == OFFSET_4K(pd));
 
-    uint64_t *tbl = (uint64_t*)(pd + IDENTITY_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)idmap_at(pd);
     for (int i = 0; i < 512; ++i) {
         if ((tbl[i] & MMU_P) && !(tbl[i] & MMU_PS)) {
             pt_free(tbl[i] & MMU_ADDR);
@@ -290,7 +284,7 @@ static void pd_free(uint64_t pd) {
 }
 
 static void pd_invlpg(uint64_t pd, uint64_t va) {
-    uint64_t *tbl = (uint64_t*)(pd + IDENTITY_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)idmap_at(pd);
     for (int i = 0; i < 512; ++i, va += SIZE_2M) {
         if (0 == (tbl[i] & MMU_P)) {
             continue;
@@ -316,7 +310,7 @@ static uint64_t pdp_map(uint64_t pdp, uint64_t va, uint64_t end, uint64_t pa, ui
     ASSERT(0 == OFFSET_4K(pa));
     ASSERT(0 == (bits & ~MMU_ATTRS));
 
-    uint64_t *tbl = (uint64_t*)(pdp + IDENTITY_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)idmap_at(pdp);
     page_t *info = &g_pages[pdp >> PAGE_SHIFT];
 
     uint64_t start = va;
@@ -383,7 +377,7 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
     ASSERT(0 == OFFSET_4K(end));
     ASSERT(va <= end);
 
-    uint64_t *tbl = (uint64_t*)(pdp + IDENTITY_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)idmap_at(pdp);
     page_t *info = &g_pages[pdp >> PAGE_SHIFT];
 
     uint64_t start = va;
@@ -451,7 +445,7 @@ uint64_t pdp_unmap(uint64_t pdp, uint64_t va, uint64_t end) {
 static void pdp_free(uint64_t pdp) {
     ASSERT(0 == OFFSET_4K(pdp));
 
-    uint64_t *tbl = (uint64_t*)(pdp + IDENTITY_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)idmap_at(pdp);
     for (int i = 0; i < 512; ++i) {
         if ((tbl[i] & MMU_P) && !(tbl[i] & MMU_PS)) {
             pd_free(tbl[i] & MMU_ADDR);
@@ -474,7 +468,7 @@ static uint64_t pml4_map(uint64_t pml4, uint64_t va, uint64_t end, uint64_t pa, 
     ASSERT(0 == OFFSET_4K(pa));
     ASSERT(0 == (bits & ~MMU_ATTRS));
 
-    uint64_t *tbl = (uint64_t*)(pml4 + IDENTITY_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)idmap_at(pml4);
     page_t *info = &g_pages[pml4 >> PAGE_SHIFT];
 
     uint64_t start = va;
@@ -501,7 +495,7 @@ static uint64_t pml4_unmap(uint64_t pml4, uint64_t va, uint64_t end) {
     ASSERT(0 == OFFSET_4K(end));
     ASSERT(va <= end);
 
-    uint64_t *tbl = (uint64_t*)(pml4 + IDENTITY_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)idmap_at(pml4);
     page_t *info = &g_pages[pml4 >> PAGE_SHIFT];
 
     uint64_t start = va;
@@ -532,7 +526,7 @@ static uint64_t pml4_unmap(uint64_t pml4, uint64_t va, uint64_t end) {
 static void pml4_free(uint64_t pml4) {
     ASSERT(0 == OFFSET_4K(pml4));
 
-    uint64_t *tbl = (uint64_t*)(pml4 + IDENTITY_MAP_ADDR);
+    uint64_t *tbl = (uint64_t*)idmap_at(pml4);
     for (int i = 0; i < 512; ++i) {
         // 如果带有 global 标记，说明被所有进程共享，不能删除
         if ((tbl[i] & MMU_P) && !(tbl[i] & MMU_G)) {
@@ -553,7 +547,7 @@ static void pml4_free(uint64_t pml4) {
 INIT_TEXT size_t mmu_create_kernel() {
     size_t tbl = alloc_table();
     g_pages[tbl >> PAGE_SHIFT].ent_num = 256;
-    uint64_t *pml4 = (uint64_t*)(IDENTITY_MAP_ADDR + tbl);
+    uint64_t *pml4 = (uint64_t*)idmap_at(tbl);
 
     for (int i = 256; i < 512; ++i) {
         size_t pdp = alloc_table();
@@ -578,8 +572,8 @@ void mmu_usetable(size_t tbl) {
 
 // 复制 from 的内核部分
 void mmu_copykernel(size_t tbl, size_t from) {
-    uint64_t *src = (uint64_t*)(IDENTITY_MAP_ADDR + from);
-    uint64_t *dst = (uint64_t*)(IDENTITY_MAP_ADDR + tbl);
+    uint64_t *src = (uint64_t*)idmap_at(from);
+    uint64_t *dst = (uint64_t*)idmap_at(tbl);
     kmemcpy(dst+256, src+256, 256*sizeof(uint64_t));
 }
 
@@ -604,13 +598,13 @@ size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs) {
     ASSERT(0 == OFFSET_4K(tbl));
     ASSERT(NULL != attrs);
 
-    uint64_t *pml4 = (uint64_t*)(tbl + IDENTITY_MAP_ADDR);
+    uint64_t *pml4 = (uint64_t*)idmap_at(tbl);
     uint64_t pml4e = pml4[IDX_PML4(va)];
     if (0 == (pml4e & MMU_P)) {
         return 0;
     }
 
-    uint64_t *pdp = (uint64_t*)((pml4e & MMU_ADDR) + IDENTITY_MAP_ADDR);
+    uint64_t *pdp = (uint64_t*)idmap_at(pml4e & MMU_ADDR);
     uint64_t pdpe = pdp[IDX_1G(va)];
     if (0 == (pdpe & MMU_P)) {
         return 0;
@@ -623,7 +617,7 @@ size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs) {
         return (pdpe & MMU_ADDR) | OFFSET_1G(va);
     }
 
-    uint64_t *pd = (uint64_t*)((pdpe & MMU_ADDR) + IDENTITY_MAP_ADDR);
+    uint64_t *pd = (uint64_t*)idmap_at(pdpe & MMU_ADDR);
     uint64_t pde = pd[IDX_2M(va)];
     if (0 == (pde & MMU_P)) {
         return 0;
@@ -636,7 +630,7 @@ size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs) {
         return (pde & MMU_ADDR) | OFFSET_2M(va);
     }
 
-    uint64_t *pt = (uint64_t*)((pde & MMU_ADDR) + IDENTITY_MAP_ADDR);
+    uint64_t *pt = (uint64_t*)idmap_at(pde & MMU_ADDR);
     uint64_t pte = pt[IDX_4K(va)];
     if (0 == (pte & MMU_P)) {
         return 0;
