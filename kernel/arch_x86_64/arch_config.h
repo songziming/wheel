@@ -42,6 +42,8 @@
 #define INIT_STACK_SIZE     0x1000      // 启动使用的临时栈
 #define INT_STACK_SIZE      0x1000      // 中断栈
 #define KERNEL_HEAP_SIZE    0x8000      // 内核堆
+#define KSTACK_SIZE         0x2000      // 内核栈
+#define USTACK_SIZE         0x2000      // 用户栈
 
 //------------------------------------------------------------------------------
 // 中断向量号

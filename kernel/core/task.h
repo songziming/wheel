@@ -57,7 +57,7 @@ task_t *current_task();
 INIT_TEXT void sched_init();
 void sched_process();
 
-void task_create(task_t *tid, const char *name, int prio, void *func);
+task_t *task_create(const char *name, int prio, void *func);
 
 void task_take_from_kernel(task_t *tid);
 

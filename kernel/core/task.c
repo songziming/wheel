@@ -127,16 +127,10 @@ INIT_TEXT void sched_init() {
     prioq_init(q);
 
     // 创建 idle-task
-    // task_t *idle = THISCPU(&g_idle_tcb);
-    task_t *idle;
-    {
-        SPINLOCK_SCOPED(&g_tcb_lock);
-        idle = pool_alloc_nolock(&g_tcb_pool);
-    }
+    task_t *idle = task_create(kernel_heap_mkstr("idle-%d", cpu), 31, proc_idle);
     if (NULL == idle) {
         panic("cannot alloc for TCB idle\n");
     }
-    task_create(idle, kernel_heap_mkstr("idle-%d", cpu), 31, proc_idle);
     idle->affinity = cpu;
     idle->state = TS_READY;
     prioq_insert(q, &idle->dl, 31);
@@ -161,7 +155,17 @@ void sched_process() {
 // 创建任务，处于 STOPPED 状态，需要使用 task_start 启动
 //------------------------------------------------------------------------------
 
-void task_create(task_t *tid, const char *name, int prio, void *func) {
+task_t *task_create(const char *name, int prio, void *func) {
+    task_t *tid;
+    {
+        SPINLOCK_SCOPED(&g_tcb_lock);
+        tid = pool_alloc_nolock(&g_tcb_pool);
+        if (NULL == tid) {
+            return NULL;
+        }
+        dl_insert_before(&tid->objnode, &g_tcb_head);
+    }
+
     tid->state    = TS_STOPPED;
     tid->name     = name;
     tid->priority = prio;
@@ -171,15 +175,12 @@ void task_create(task_t *tid, const char *name, int prio, void *func) {
     tid->pgtbl   = g_kernel_vm.table; // 默认使用内核页表，之后可以替换
     tid->process = NULL; // 不属于任何进程，之后可以替换
 
-    vmspace_alloc_stack(&g_kernel_vm, &tid->stack);
+    vmspace_alloc_kstack(&g_kernel_vm, &tid->stack);
     tid->stack.desc = name;
     tid->stack0 = tid->stack.vend;
     arch_task_init(tid, (size_t)task_entry, tid->stack0, (size_t)func,0,0,0);
 
-    {
-        SPINLOCK_SCOPED(&g_tcb_lock);
-        dl_insert_before(&tid->objnode, &g_tcb_head);
-    }
+    return tid;
 }
 
 // 将任务从内核任务列表中取出

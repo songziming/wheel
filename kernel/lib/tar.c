@@ -18,7 +18,7 @@ static size_t tar_oct2int(const char *s, int len) {
 }
 
 
-void tar_iterate(const void *data_base, size_t tar_size) {
+void tar_iterate(const void *data_base, size_t tar_size, tar_cb cb, void *user) {
     const char *ptr = (const char*)data_base;
     const char *end = ptr + tar_size;
 
@@ -41,7 +41,10 @@ void tar_iterate(const void *data_base, size_t tar_size) {
             break;
         }
 
-        logk("tar-entry name=`%s`, size=%zu, ptr=%p\n", name, fsize, data);
+        if (0 == cb(name, data, fsize, user)) {
+            return;
+        }
+        // logk("tar-entry name=`%s`, size=%zu, ptr=%p\n", name, fsize, data);
 
         // 跳到下一个 entry：header + data（512 对齐）
         fsize += TAR_BLKSZ - 1;

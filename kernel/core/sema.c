@@ -9,8 +9,8 @@ void sema_init(sema_t *sema, int initial, int limit) {
     sema->limit = limit;
 }
 
-static void sema_timeout(wdog_t *tmr) {
-    waiter_t *waiter = containerof(tmr, waiter_t, timer);
+static void sema_timeout(wdog_t *wd) {
+    waiter_t *waiter = containerof(wd, waiter_t, timer);
     sema_t *sema = (sema_t*)waiter->user;
     SPINLOCK_SCOPED(&sema->lock);
     task_wake_timeout(&sema->wq, waiter);

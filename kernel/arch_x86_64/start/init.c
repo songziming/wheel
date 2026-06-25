@@ -48,7 +48,7 @@ static INIT_BSS uint32_t g_fbwidth;
 static INIT_BSS uint32_t g_fbpitch;
 
 // 根任务不能放在 init，需要在这里回收 init-section
-static task_t g_root_tcb;
+static task_t *g_root_tcb;
 static void root_proc();
 
 static INIT_DATA int g_cpu_started = 1;
@@ -267,9 +267,9 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     sched_init();
 
     // 创建根任务并开始运行，优先级 30，仅高于 idle
-    task_create(&g_root_tcb, "root", 30, root_proc);
-    g_root_tcb.affinity = 0;
-    task_start_now(&g_root_tcb);
+    g_root_tcb = task_create("root", 30, root_proc);
+    g_root_tcb->affinity = 0;
+    task_start_now(g_root_tcb);
     // 之后的代码不再运行
 
 end:

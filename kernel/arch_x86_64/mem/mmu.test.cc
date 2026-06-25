@@ -84,11 +84,6 @@ TEST_F(MmuTest, MapUnmapNormal) {
 }
 
 
-// // 解除映射 2M-page，同时删除 PT
-// TEST_F(MmuTest, UnmapFreeSubtree2M) {
-// }
-
-
 // 建立映射，破环原本的 2M/1G-page，检查原 mapping 能否保留
 TEST_F(MmuTest, RemapBreakBig) {
     size_t pgtbl = mmu_create();

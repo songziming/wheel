@@ -16,8 +16,8 @@
 // 两个线程相互轮转
 //------------------------------------------------------------------------------
 
-static task_t ta;
-static task_t tb;
+static task_t *ta;
+static task_t *tb;
 
 static void proc_a() {
     task_t *self = current_task();
@@ -59,24 +59,24 @@ static void proc_b() {
 
 // called from init code
 void test_cooperative() {
-    task_create(&ta, "ta", 10, proc_a);
-    task_create(&tb, "tb", 10, proc_b);
+    ta = task_create("ta", 10, proc_a);
+    tb = task_create("tb", 10, proc_b);
 
-    ta.affinity = 0;
-    tb.affinity = 0;
+    ta->affinity = 0;
+    tb->affinity = 0;
 
     int key = cpu_int_disable();
-    task_start(&ta);
-    task_start(&tb);
+    task_start(ta);
+    task_start(tb);
     cpu_int_restore(key);
     arch_task_switch();
 
     logk("we are back to root");
 
-    while (TS_DELETED != ta.state) {
+    while (TS_DELETED != ta->state) {
         cpu_pause();
     }
-    while (TS_DELETED != tb.state) {
+    while (TS_DELETED != tb->state) {
         cpu_pause();
     }
     logk("TCB safely deleted\n");
@@ -86,7 +86,7 @@ void test_cooperative() {
 // 测试多个 CPU 上同时运行
 //------------------------------------------------------------------------------
 
-static task_t smp_tcbs[10];
+static task_t *smp_tcbs[10];
 static char smp_names[10][32];
 
 static void proc_smp() {
@@ -94,7 +94,7 @@ static void proc_smp() {
 
     char tok = 'A';
     for (int i = 0; i < 10; ++i) {
-        if (&smp_tcbs[i] == self) {
+        if (smp_tcbs[i] == self) {
             tok += i;
             break;
         }
@@ -112,7 +112,7 @@ void test_smp_tasks() {
     for (int i = 0; i < 10; ++i) {
         kmemcpy(smp_names[i], "smpX", 5);
         smp_names[i][3] = 'A' + i;
-        task_create(&smp_tcbs[i], smp_names[i], 10, proc_smp);
+        smp_tcbs[i] = task_create(smp_names[i], 10, proc_smp);
         // smp_tcbs[i].affinity = 0;
     }
 
@@ -121,7 +121,7 @@ void test_smp_tasks() {
     // int key = cpu_int_disable();
     uint64_t cpuset = 0UL;
     for (int i = 0; i < 10; ++i) {
-        cpuset |= task_start(&smp_tcbs[i]);
+        cpuset |= task_start(smp_tcbs[i]);
     }
     notify_resched(cpuset);
     cpu_preempt_restore();
@@ -129,7 +129,7 @@ void test_smp_tasks() {
     arch_task_switch();
 
     for (int i = 0; i < 10; ++i) {
-        while (TS_DELETED != smp_tcbs[i].state) {
+        while (TS_DELETED != smp_tcbs[i]->state) {
             cpu_pause();
         }
     }
@@ -141,9 +141,9 @@ void test_smp_tasks() {
 //------------------------------------------------------------------------------
 
 static sema_t g_sem;
-static task_t sa;
-static task_t sb;
-static task_t sc;
+static task_t *sa;
+static task_t *sb;
+static task_t *sc;
 
 static void proc_consumer_a() {
     for (int i = 0; i < 10; ++i) {
@@ -174,18 +174,18 @@ static void proc_consumer_c() {
 
 
 void test_sema() {
-    task_create(&sa, "sema-A", 10, proc_consumer_a);
-    task_create(&sb, "sema-B", 10, proc_consumer_b);
-    task_create(&sc, "sema-C", 10, proc_consumer_c);
+    sa = task_create("sema-A", 10, proc_consumer_a);
+    sb = task_create("sema-B", 10, proc_consumer_b);
+    sc = task_create("sema-C", 10, proc_consumer_c);
 
     sema_init(&g_sem, 0, 1000);
 
     // 启动三个消费者，开始不断获取资源
     uint64_t cpus = 0;
     cpu_preempt_disable();
-    cpus |= task_start(&sa);
-    cpus |= task_start(&sb);
-    cpus |= task_start(&sc);
+    cpus |= task_start(sa);
+    cpus |= task_start(sb);
+    cpus |= task_start(sc);
     notify_resched(cpus);
     cpu_preempt_restore();
     arch_task_switch();
@@ -196,9 +196,9 @@ void test_sema() {
         sema_give(&g_sem);
     }
 
-    while (TS_DELETED != sa.state) { cpu_pause(); }
-    while (TS_DELETED != sb.state) { cpu_pause(); }
-    while (TS_DELETED != sc.state) { cpu_pause(); }
+    while (TS_DELETED != sa->state) { cpu_pause(); }
+    while (TS_DELETED != sb->state) { cpu_pause(); }
+    while (TS_DELETED != sc->state) { cpu_pause(); }
     logk("consumers exited\n");
 }
 
@@ -206,8 +206,8 @@ void test_sema() {
 // 测试消息队列
 //------------------------------------------------------------------------------
 
-static task_t tw;
-static task_t tr;
+static task_t *tw;
+static task_t *tr;
 static msgq_t mq;
 
 static void q_writer() {
@@ -237,21 +237,21 @@ static void q_reader() {
 }
 
 void test_msgq() {
-    task_create(&tw, "writer", 10, q_writer);
-    task_create(&tr, "reader", 10, q_reader);
-    tw.affinity = 0;
-    tr.affinity = 0;
+    tw = task_create("writer", 10, q_writer);
+    tr = task_create("reader", 10, q_reader);
+    tw->affinity = 0;
+    tr->affinity = 0;
 
     msgq_init(&mq);
 
     cpu_preempt_disable();
-    task_start(&tw);
-    task_start(&tr);
+    task_start(tw);
+    task_start(tr);
     cpu_preempt_restore();
     arch_task_switch();
 
-    while (TS_DELETED != tw.state) { cpu_pause(); }
-    while (TS_DELETED != tr.state) { cpu_pause(); }
+    while (TS_DELETED != tw->state) { cpu_pause(); }
+    while (TS_DELETED != tr->state) { cpu_pause(); }
 
     // TODO msgq_destroy
 }

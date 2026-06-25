@@ -36,6 +36,7 @@ INIT_TEXT void kspace_add(vmrange_t *rng, size_t va, size_t end, const char *des
 
     // 将映射的物理地址记录下来
     // 注意，这种使用 pages 的方式不标准，操作这些 range 可能会出错
+    rng->pages.tail = 0;
     if (va >= KERNEL_TEXT_ADDR) {
         rng->pages.head = (uint32_t)((va - KERNEL_TEXT_ADDR) >> PAGE_SHIFT);
     } else if (va >= GUARDED_IDMAP_ADDR) {
@@ -43,7 +44,7 @@ INIT_TEXT void kspace_add(vmrange_t *rng, size_t va, size_t end, const char *des
     } else if (va >= IDENTITY_MAP_ADDR) {
         rng->pages.head = (uint32_t)((va - IDENTITY_MAP_ADDR) >> PAGE_SHIFT);
     } else {
-        panic("do not support address 0x%zx\n", va);
+        panic("vmrng %s do not support address 0x%zx\n", desc, va);
     }
     vmspace_insert(&g_kernel_vm, rng);
 }
