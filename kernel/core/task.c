@@ -287,6 +287,7 @@ static int task_cont(task_t *tid, uint32_t bits) {
 // 任务获取到资源，按正常流程唤醒下一个等待的任务
 // 由上一个owner调用，可能在 ISR 里面调用
 // 返回1表示启动了一个任务，返回0表示没有阻塞的线程
+// TODO 如果设定有超时时间，这个函数也应该将 wdog 删除，这样线程恢复运行之后无需处理
 task_t *task_unpend_one(prioq_t *wq) {
     dlnode_t *dl = prioq_head(wq);
     if (NULL == dl) {

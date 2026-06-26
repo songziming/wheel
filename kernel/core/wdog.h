@@ -8,6 +8,7 @@ typedef struct wdog wdog_t;
 typedef void (*wdog_cb_t)(wdog_t*);
 struct wdog {
     dlnode_t    dl;
+    _Atomic int state;
     int         delta;  // 和前一个 job 相差多少个 tick
     wdog_cb_t   func;
 };
