@@ -64,7 +64,6 @@ void task_take_from_kernel(task_t *tid);
 void task_pend(prioq_t *wq, waiter_t *pender, int timeout, wdog_cb_t cb);
 task_t *task_unpend_one(prioq_t *wq);
 void task_wake_timeout(prioq_t *wq, waiter_t *pender);
-void task_onresume(waiter_t *pender);
 
 void task_exit();
 

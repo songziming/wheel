@@ -40,10 +40,8 @@ int mutex_take(mutex_t *mut, int timeout) {
         pender.user = mut;
         task_pend(&mut->wq, &pender, timeout, mutex_timeout);
     }
-    arch_task_switch();
 
-    // 恢复运行，检查是否因为超时而唤醒
-    task_onresume(&pender);
+    arch_task_switch();
     return pender.got;
 }
 

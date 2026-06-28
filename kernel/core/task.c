@@ -294,10 +294,13 @@ task_t *task_unpend_one(prioq_t *wq) {
         return NULL;
     }
 
-    // 存在阻塞者，将其唤醒，并将其设为新的 owner
+    // 存在阻塞者，移出阻塞队列，取消超时定时器
     waiter_t *w = containerof(dl, waiter_t, dl);
     w->got = 1;
     prioq_remove(wq, dl, w->tid->priority);
+    wdog_cancel(&w->timer);
+
+    // 将任务唤醒
     int cpu = task_cont(w->tid, TS_PENDING);
     if (cpu_index() != cpu) {
         arch_send_ipi(cpu, VEC_IPI_RESCHED);
@@ -322,14 +325,6 @@ void task_wake_timeout(prioq_t *wq, waiter_t *pender) {
     if ((cpu >= 0) && (cpu_index() != cpu)) {
         arch_send_ipi(cpu, VEC_IPI_RESCHED);
     }
-}
-
-// 从阻塞状态恢复，需要删除 wdog
-// pender 通常位于函数栈，任务恢复之后 pender 即将析构，wdog 也即将析构
-// 未注册 wdog 也可以删除，不会出错
-void task_onresume(waiter_t *pender) {
-    ASSERT(0 == cpu_int_depth());
-    wdog_cancel(&pender->timer);
 }
 
 //------------------------------------------------------------------------------

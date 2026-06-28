@@ -47,7 +47,6 @@ size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout) {
 
         size_t wrote = fifo_write(&q->fifo, msg, len, len);
         if (wrote) {
-            task_onresume(&pender); // 删除 timeout wdog
             task_unpend_one(&q->readers);
             spinlock_give(&node);
             arch_task_switch();
@@ -97,7 +96,6 @@ size_t msgq_recv(msgq_t *q, void *dst, size_t len, int timeout) {
 
         size_t got = fifo_read(&q->fifo, dst, len, len);
         if (got) {
-            task_onresume(&pender); // 将上次的 wdog 删除
             task_unpend_one(&q->writers);
             spinlock_give(&node);
             arch_task_switch();

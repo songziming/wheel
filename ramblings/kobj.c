@@ -126,17 +126,11 @@ void kobj_drop(kclass_t *cls, kobj_t *obj) {
         if (--obj->refcnt > 0) {
             return; // 还不能释放
         }
-
-        // 其他线程可能在等待，将它们唤醒
-        // 被唤醒的线程还需要取消 wdog
-        while (task_unpend_one(&obj->waitq)) {}
     }
 
-    // TODO 以将执行 task_join 的线程唤醒，这些线程唤醒之后会执行 wdog_cancel，取消超时定时器
-    //      但是在 wdog_cancel 执行之前，wdog 可能已经超时，可能执行 join_timeout 函数
-    //      超时函数里面，需要访问 obj，将任务从 obj->waitq 取出
-    //  也就是，此时此刻，另一个CPU可能也在访问这个obj，存在 use-after-free 的风险
-    // TODO 最好在 unpend_all 之前，首先把所有的 wdog 清除，这就要求我们将 wdog 也记录在 waitq 里面
+    // 其他线程可能在等待，将它们唤醒
+    // 可能超时，timeout callback 里面也要锁 obj，所以这里不能持有锁
+    while (task_unpend_one(&obj->waitq)) {}
 
     // 运行到这里，引用数为零，说明只有我们在访问这个对象
     // 等待删除的线程也已经恢复，没有其他代码使用这个对象
@@ -181,9 +175,5 @@ int kobj_join(kclass_t *cls, kobj_t *obj, int timeout) {
     }
 
     arch_task_switch();
-
-    // 恢复运行，检查是否因为超时而唤醒
-    // 从这里开始，不能再访问 obj，可能已经是野指针了
-    task_onresume(&waiter);
     return waiter.got;
 }

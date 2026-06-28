@@ -36,10 +36,8 @@ int sema_take(sema_t *sema, int timeout) {
         pender.user = sema;
         task_pend(&sema->wq, &pender, timeout, sema_timeout);
     }
-    arch_task_switch();
 
-    // 恢复运行，检查是否因为超时而唤醒
-    task_onresume(&pender);
+    arch_task_switch();
     return pender.got;
 }
 

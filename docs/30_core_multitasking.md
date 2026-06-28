@@ -42,3 +42,68 @@ task_stop 可以强行停止另一个任务，可以用来强行结束一个卡�
 新的任务切换到 ready，有可能抢占，有可能触发任务切换，有可能需要中断。
 既然需要中断，还不如无条件发送 IPI，这样 ready-q 总是由当前 CPU 处理，代码更简单。
 
+---
+
+### 阻塞一个任务
+
+许多地方需要阻塞/恢复任务，例如等待获取mutex、等待kobj释放、等待task结束。
+使用阻塞队列/等待队列记录所有阻塞状态的任务。
+每个阻塞任务还可以设定超时时间，如果超时就不再等待，将阻塞线程提前唤醒。
+如果等待条件得到满足，则唤醒一个或全部阻塞线程。
+还有一种恢复任务的情况，那就是等待的对象需要销毁，例如删除semaphore/mutex，所有等待的线程都要结束阻塞，返回错误码
+
+这里涉及到三个线程、三个函数：
+- 被阻塞线程 A，调用 task_pend 将自己放入 pend-queue，设定一个超时 wdog
+- 超时线程 T，在 CPU0 wdog ISR 里面调用 task_wake_timeout，将 A 移出阻塞队列并唤醒
+- 唤醒者线程 B，检测到条件满足，调用 task_unpend_one 将 A 移出阻塞队列并唤醒，其中包括调用 wdog_cancel，取消超时 wdog
+
+这三个线程的三个函数需要防止竞争，需要锁住 wait-queue。
+删除定时器的时候需要等待 timeout callback 结束，两个线程
+
+~~~
+// 超时线程 T，在 isr 里面执行
+void pend_timeout(wdog_t *wd) {
+  pender_t *pender = containerof(wd, pender_t, wd);
+  kobj_t *obj = pender->user;
+  {
+    lock_guard guard(obj->lock);
+    // wdog 已经触发，不用 cancel
+    pender->expired = true;
+    obj->waitq.dequeue(pender);
+    task_cont(pender->tid);
+  }
+}
+
+
+// 被阻塞线程 A，等待 obj 释放
+void task_A(kobj_t *obj) {
+  pender_t pender;
+
+  {
+    lock_guard guard(obj->lock);
+    wdog_start(pender.wd, timeout, pend_timeout);
+    pender.tid = this_task;
+    pender.user = obj;
+    obj->waitq.enqueue(pender);
+  }
+  arch_task_switch();
+
+  // 已恢复
+}
+
+
+// 唤醒者线程 B，释放对象 obj，并且唤醒 A
+void task_B(kobj_t *obj) {
+  {
+    lock_guard guard(obj->lock);
+    foreach (pender_t *pender : obj->waitq) {
+      wdog_cancel(pender->wd); // 这需要等 wdog-callback 执行结束（忙等待）
+      pender->expired = false;
+      obj->waitq.dequeue(pender);
+      task_cont(pender->tid);
+    }
+  }
+}
+~~~
+
+### 特殊处理：唤醒一个线程/唤醒所有线程
