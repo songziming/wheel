@@ -60,21 +60,10 @@ task_stop 可以强行停止另一个任务，可以用来强行结束一个卡�
 这三个线程的三个函数需要防止竞争，需要锁住 wait-queue。
 删除定时器的时候需要等待 timeout callback 结束，两个线程
 
+obj 可能被删除，唤醒后访问可能不安全，需要上锁。
+wdog 定义在阻塞线程的栈上，必然安全
+
 ~~~
-// 超时线程 T，在 isr 里面执行
-void pend_timeout(wdog_t *wd) {
-  pender_t *pender = containerof(wd, pender_t, wd);
-  kobj_t *obj = pender->user;
-  {
-    lock_guard guard(obj->lock);
-    // wdog 已经触发，不用 cancel
-    pender->expired = true;
-    obj->waitq.dequeue(pender);
-    task_cont(pender->tid);
-  }
-}
-
-
 // 被阻塞线程 A，等待 obj 释放
 void task_A(kobj_t *obj) {
   pender_t pender;
@@ -88,7 +77,35 @@ void task_A(kobj_t *obj) {
   }
   arch_task_switch();
 
-  // 已恢复
+  // 已恢复，检查 pender.state，判断恢复的原因（对象已删除？超时？）
+  if (pender.is_timeout) {
+    // 如果是超时，obj 可能未删除，也可能已经删除，都不确定
+    // pender 还在队列里面
+    // 后面 obj 真的释放时，本线程会被再次唤醒一次
+    // 如果本线程后面又休眠，恰好赶上 obj 真的释放，本线程会被错误唤醒
+  }
+}
+
+
+// 超时线程 T，在 isr 里面执行
+// 本函数执行的时候，对象可能已经删除
+// 访问 wdog 一定是安全的，wdog->tid 也是安全的
+// 可以通过 wdog 字段返回唤醒状态
+void pend_timeout(wdog_t *wd) {
+  pender_t *pender = containerof(wd, pender_t, wd);
+  kobj_t *obj = pender->user;
+
+  pender->is_timeout = true;
+  task_cont(pender->tid);
+  // pender 还留在 obj.waitq 里面（obj 可能已经没了）
+
+  <!-- {
+    lock_guard guard(obj->lock);
+    // wdog 已经触发，不用 cancel
+    pender->expired = true;
+    obj->waitq.dequeue(pender);
+    task_cont(pender->tid);
+  } -->
 }
 
 
@@ -96,11 +113,13 @@ void task_A(kobj_t *obj) {
 void task_B(kobj_t *obj) {
   {
     lock_guard guard(obj->lock);
-    foreach (pender_t *pender : obj->waitq) {
-      wdog_cancel(pender->wd); // 这需要等 wdog-callback 执行结束（忙等待）
-      pender->expired = false;
-      obj->waitq.dequeue(pender);
-      task_cont(pender->tid);
+    if (0 == --obj->refcnt) {
+      foreach (pender_t *pender : obj->waitq) {
+        wdog_cancel(pender->wd); // 这需要等 wdog-callback 执行结束（忙等待）
+        pender->expired = false;
+        obj->waitq.dequeue(pender);
+        task_cont(pender->tid);
+      }
     }
   }
 }
