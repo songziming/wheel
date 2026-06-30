@@ -108,7 +108,9 @@ kobj_t *kobj_find(kclass_t *cls, const char *name) {
 // 只有一个owner访问对象才能调用此函数
 static void kobj_release_nolock(kclass_t *cls, kobj_t *obj) {
     // 唤醒所有等待此对象释放的线程
-    while (task_unpend_one(&obj->waitq)) {}
+    // task_unpend_one 每次 claim 自带 obj->lock，wdog_cancel 在锁外等回调跑完
+    // 循环结束意味着所有 wdog 已 cancel，回调不会再触发，obj 可安全释放
+    while (task_unpend_one(&obj->waitq, &obj->lock)) {}
 
     // 释放对象
     {
@@ -128,23 +130,10 @@ void kobj_drop(kclass_t *cls, kobj_t *obj) {
         }
     }
 
-    // 其他线程可能在等待，将它们唤醒
-    // 可能超时，timeout callback 里面也要锁 obj，所以这里不能持有锁
-    while (task_unpend_one(&obj->waitq)) {}
-
-    // 运行到这里，引用数为零，说明只有我们在访问这个对象
-    // 等待删除的线程也已经恢复，没有其他代码使用这个对象
+    // 引用数为零，唤醒等待者并释放
+    // 不再需要在这里先唤醒一次：kobj_release_nolock 会做，且新协议下
+    // task_unpend_one 自带锁 + 锁外 wdog_cancel，不再有"持锁调 wdog_cancel"的死锁
     kobj_release_nolock(cls, obj);
-}
-
-
-// TODO 有一种可能，超时 ISR 触发的时候，目标对象恰好被删除了
-// cancel-wdog 之后，timeout ISR 还可能触发，也就是本函数执行时可能对象已经释放
-static void join_timeout(wdog_t *wd) {
-    waiter_t *waiter = containerof(wd, waiter_t, timer);
-    kobj_t *obj = (kobj_t*)waiter->user; // 可能是野指针
-    SPINLOCK_SCOPED(&obj->lock);
-    task_wake_timeout(&obj->waitq, waiter);
 }
 
 
@@ -152,28 +141,24 @@ static void join_timeout(wdog_t *wd) {
 // 这个函数可以用于 task_join
 // 等到了对象释放则返回 1，超时退出则返回 0
 int kobj_join(kclass_t *cls, kobj_t *obj, int timeout) {
+    task_t *self = current_task();
     int remain;
-    waiter_t waiter;
 
     {
         SPINLOCK_SCOPED(&obj->lock);
         remain = --obj->refcnt;
         if (remain != 0) {
             // 不能立即释放，将自己放入阻塞队列
-            waiter.user = obj;
-            task_pend(&obj->waitq, &waiter, timeout, join_timeout);
-        } else {
-            // 需要删除对象，将等待的线程唤醒（持有锁）
-            // 被唤醒的线程可能执行 wdog timeout ISR
-            while (task_unpend_one(&obj->waitq)) {}
+            task_pend(&obj->waitq, &obj->lock, timeout);
         }
     }
 
     if (0 == remain) {
+        // 引用数为零，唤醒所有等待者并释放对象
         kobj_release_nolock(cls, obj);
         return 1;
     }
 
     arch_task_switch();
-    return waiter.got;
+    return self->got;
 }

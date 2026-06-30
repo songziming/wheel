@@ -15,40 +15,27 @@ void msgq_init(msgq_t *q) {
     fifo_init(&q->fifo, va, PAGE_SIZE);
 }
 
-static void writer_timeout(wdog_t *wd) {
-    waiter_t *waiter = containerof(wd, waiter_t, timer);
-    msgq_t *q = (msgq_t*)waiter->user;
-    SPINLOCK_SCOPED(&q->lock);
-    task_wake_timeout(&q->writers, waiter);
-}
-
-static void reader_timeout(wdog_t *wd) {
-    waiter_t *waiter = containerof(wd, waiter_t, timer);
-    msgq_t *q = (msgq_t*)waiter->user;
-    SPINLOCK_SCOPED(&q->lock);
-    task_wake_timeout(&q->readers, waiter);
-}
-
 size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout) {
     ASSERT(cpu_int_depth() == 0);
 
-    waiter_t pender;
-    pender.user = q;
-    pender.expired = 0;
-
+    task_t *self = current_task();
     spinlock_node_t node;
 
     while (1) {
         SPINLOCK_TAKE(&q->lock, &node);
-        if (pender.expired) { // 持有锁才能检查超时
+        if (self->expired) { // 持有锁才能检查超时
             spinlock_give(&node);
             return 0; // 超时则直接返回
         }
 
         size_t wrote = fifo_write(&q->fifo, msg, len, len);
         if (wrote) {
-            task_unpend_one(&q->readers);
+            // 锁内 claim 一个阻塞的读者，锁外再唤醒
+            task_t *reader = task_unpend_claim_nolock(&q->readers);
             spinlock_give(&node);
+            if (reader) {
+                task_unpend_finish(reader);
+            }
             arch_task_switch();
             return wrote;
         }
@@ -59,9 +46,9 @@ size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout) {
             return 0;
         }
 
-        // 需要阻塞
-        task_pend(&q->writers, &pender, timeout, writer_timeout);
-        timeout = FOREVER;
+        // 需要阻塞（调用方持锁）
+        task_pend(&q->writers, &q->lock, timeout);
+        timeout = FOREVER; // 下次阻塞不再注册 wdog，保持原有语义
         spinlock_give(&node);
         arch_task_switch();
 
@@ -70,10 +57,14 @@ size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout) {
 }
 
 void msgq_send_force(msgq_t *q, void *msg, size_t len) {
+    task_t *reader;
     {
         SPINLOCK_SCOPED(&q->lock);
         fifo_force_write(&q->fifo, msg, len);
-        task_unpend_one(&q->readers);
+        reader = task_unpend_claim_nolock(&q->readers);
+    }
+    if (reader) {
+        task_unpend_finish(reader);
     }
     arch_task_switch();
 }
@@ -81,23 +72,24 @@ void msgq_send_force(msgq_t *q, void *msg, size_t len) {
 size_t msgq_recv(msgq_t *q, void *dst, size_t len, int timeout) {
     ASSERT(cpu_int_depth() == 0);
 
-    waiter_t pender;
-    pender.user = q;
-    pender.expired = 0;
-
+    task_t *self = current_task();
     spinlock_node_t node;
 
     while (1) {
         SPINLOCK_TAKE(&q->lock, &node);
-        if (pender.expired) {
+        if (self->expired) {
             spinlock_give(&node);
             return 0; // 超时则直接返回
         }
 
         size_t got = fifo_read(&q->fifo, dst, len, len);
         if (got) {
-            task_unpend_one(&q->writers);
+            // 锁内 claim 一个阻塞的写者，锁外再唤醒
+            task_t *writer = task_unpend_claim_nolock(&q->writers);
             spinlock_give(&node);
+            if (writer) {
+                task_unpend_finish(writer);
+            }
             arch_task_switch();
             return got;
         }
@@ -108,14 +100,13 @@ size_t msgq_recv(msgq_t *q, void *dst, size_t len, int timeout) {
             return 0;
         }
 
-        // 需要阻塞等待
-        task_pend(&q->readers, &pender, timeout, reader_timeout);
+        // 需要阻塞等待（调用方持锁）
+        task_pend(&q->readers, &q->lock, timeout);
         timeout = FOREVER; // 下次阻塞不再注册 wdog
         spinlock_give(&node);
         arch_task_switch();
 
         // 被唤醒，但数据还在 fifo 里面，没有读取出来
         // 需要重新锁住 msgq，尝试读取，如果读取失败还要继续阻塞
-        // 保持 wdog 在队列里面，这样重新阻塞就无需重新设置超时了
     }
 }

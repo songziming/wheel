@@ -132,7 +132,7 @@ INIT_TEXT void sched_init() {
         panic("cannot alloc for TCB idle\n");
     }
     idle->affinity = cpu;
-    idle->state = TS_READY;
+    atomic_store(&idle->state, TS_READY);
     prioq_insert(q, &idle->dl, 31);
     g_idle_mask |= 1UL << cpu;
 
@@ -166,7 +166,7 @@ task_t *task_create(const char *name, int prio, void *func) {
         dl_insert_before(&tid->objnode, &g_tcb_head);
     }
 
-    tid->state    = TS_STOPPED;
+    atomic_store(&tid->state, TS_STOPPED);
     tid->name     = name;
     tid->priority = prio;
     tid->affinity = -1;
@@ -174,6 +174,15 @@ task_t *task_create(const char *name, int prio, void *func) {
     tid->stack3  = 0; // 没有用户栈（尚未分配）
     tid->pgtbl   = g_kernel_vm.table; // 默认使用内核页表，之后可以替换
     tid->process = NULL; // 不属于任何进程，之后可以替换
+
+    // 阻塞相关字段初始化（timer.state 必须 WDOG_IDLE，否则 wdog_start 会断言失败）
+    atomic_store(&tid->timer.state, WDOG_IDLE);
+    tid->timer.dl.prev = &tid->timer.dl;
+    tid->timer.dl.next = &tid->timer.dl;
+    tid->wait_wq   = NULL;
+    tid->wait_lock = NULL;
+    tid->got       = 0;
+    tid->expired   = 0;
 
     vmspace_alloc_kstack(&g_kernel_vm, &tid->stack);
     tid->stack.desc = name;
@@ -193,15 +202,24 @@ void task_take_from_kernel(task_t *tid) {
 // 任务停止运行，只能停止当前任务
 //------------------------------------------------------------------------------
 
-// 调用者需要持有 waitq 所在对象的锁，中断关闭
-// 超时回调函数需要锁住同步对象，我们不知道同步对象是什么
-void task_pend(prioq_t *wq, waiter_t *pender, int timeout, wdog_cb_t cb) {
+// wdog 超时回调：通过 wdog 反查到 TCB，再从 TCB 取出 wait_wq / wait_lock
+// 持 wait_lock 后调用 task_wake_timeout，由后者复核是否仍在 waitq 中
+static void task_timeout(wdog_t *wd) {
+    task_t *tid = containerof(wd, task_t, timer);
+    SPINLOCK_SCOPED(tid->wait_lock);
+    task_wake_timeout(tid);
+}
+
+// 阻塞当前任务：置 PENDING，从就绪队列摘除自己，插入 waitq，可选启动超时定时器
+// 调用者必须持有 `lock`（waitq 所属对象的锁），中断关闭
+// `lock` 与 `wq` 记录进 TCB，供超时回调使用
+void task_pend(prioq_t *wq, spinlock_t *lock, int timeout) {
     ASSERT(0 == cpu_int_depth());
 
     task_t *self = THISCPU_GET(g_tid_prev);
     prioq_t *q = THISCPU(&g_rdyq);
 
-    self->state |= TS_PENDING;
+    atomic_fetch_or(&self->state, TS_PENDING);
 
     {
         SPINLOCK_SCOPED(THISCPU(&g_rdy_lock));
@@ -213,12 +231,15 @@ void task_pend(prioq_t *wq, waiter_t *pender, int timeout, wdog_cb_t cb) {
         THISCPU_SET(g_tid_next, next);
     }
 
-    pender->expired = 0;
-    pender->tid = self;
+    // 以下字段由调用者持有的 `lock` 保护（超时回调也持同一把锁读取）
+    self->wait_wq   = wq;
+    self->wait_lock = lock;
+    self->got       = 0;
+    self->expired   = 0;
 
-    prioq_insert(wq, &pender->dl, self->priority);
+    prioq_insert(wq, &self->dl, self->priority);
     if (FOREVER != timeout) {
-        wdog_start(&pender->timer, cb, timeout);
+        wdog_start(&self->timer, task_timeout, timeout);
     }
 }
 
@@ -250,10 +271,12 @@ static void _cont_cpu(task_t *tid, int cpu) {
 // 启动任务、semaphore/fence 恢复任务时调用此函数
 // 如果任务恢复运行，返回目标 cpu 的编号，未运行则返回 -1
 static int task_cont(task_t *tid, uint32_t bits) {
-    ASSERT(TS_READY != tid->state);
+    uint32_t old = atomic_load(&tid->state);
+    ASSERT(old != TS_READY);
 
-    tid->state &= ~bits;
-    if (TS_READY != tid->state) {
+    // 原子清位：每位由各自的唤醒路径清除，最后一位清完者使 state==READY
+    uint32_t newv = atomic_fetch_and(&tid->state, ~bits) & ~bits;
+    if (newv != TS_READY) {
         return -1; // still no ready
     }
 
@@ -284,43 +307,59 @@ static int task_cont(task_t *tid, uint32_t bits) {
     return cpu;
 }
 
-// 任务获取到资源，按正常流程唤醒下一个等待的任务
-// 由上一个owner调用，可能在 ISR 里面调用
-// 返回1表示启动了一个任务，返回0表示没有阻塞的线程
-// TODO 如果设定有超时时间，这个函数也应该将 wdog 删除，这样线程恢复运行之后无需处理
-task_t *task_unpend_one(prioq_t *wq) {
+// 从 waitq 头部摘取一个阻塞任务，置 got=1
+// 调用者必须已持有 waitq 所属对象的锁；本函数不取消定时器、不唤醒任务
+// 用于需要"锁内原子判断空/非空并做其他操作"的场景
+task_t *task_unpend_claim_nolock(prioq_t *wq) {
     dlnode_t *dl = prioq_head(wq);
     if (NULL == dl) {
         return NULL;
     }
+    task_t *tid = containerof(dl, task_t, dl);
+    tid->got = 1;
+    prioq_remove(wq, dl, tid->priority);
+    return tid;
+}
 
-    // 存在阻塞者，移出阻塞队列，取消超时定时器
-    waiter_t *w = containerof(dl, waiter_t, dl);
-    w->got = 1;
-    prioq_remove(wq, dl, w->tid->priority);
-    wdog_cancel(&w->timer);
-
-    // 将任务唤醒
-    int cpu = task_cont(w->tid, TS_PENDING);
+// 完成一个已 claim 的任务的唤醒
+// 必须在 waitq 所属对象的锁之外调用：否则 wdog_cancel 持锁自旋等待回调，
+// 而回调又要获取同一把锁，形成死锁
+// 顺序：先 wdog_cancel 再 task_cont，保证被唤醒任务在 cancel 完成前不会跑起来
+void task_unpend_finish(task_t *tid) {
+    wdog_cancel(&tid->timer);
+    int cpu = task_cont(tid, TS_PENDING);
     if (cpu_index() != cpu) {
         arch_send_ipi(cpu, VEC_IPI_RESCHED);
     }
-    return w->tid;
 }
 
-// 在超时回调ISR里执行
-// caller 需要锁住同步对象
-void task_wake_timeout(prioq_t *wq, waiter_t *pender) {
+// 便利封装：持锁 claim -> 释放锁 -> finish
+// 适合不需要"锁内原子判断空"的单纯唤醒一个任务的场景
+task_t *task_unpend_one(prioq_t *wq, spinlock_t *lock) {
+    task_t *tid;
+    {
+        SPINLOCK_SCOPED(lock);
+        tid = task_unpend_claim_nolock(wq);
+    }
+    if (tid) {
+        task_unpend_finish(tid);
+    }
+    return tid;
+}
+
+// 在超时回调 ISR 里执行，调用者（task_timeout）已持有 wait_lock
+// 复核任务仍在 waitq 中后才摘除并唤醒，避免与正常唤醒重复
+void task_wake_timeout(task_t *tid) {
     ASSERT(0 != cpu_int_depth());
 
-    task_t *tid = pender->tid;
-    if (!prioq_contains(wq, &pender->dl, tid->priority)) {
-        // 已经移除了阻塞队列，可能是timer触发之后任务被正常恢复
+    prioq_t *wq = tid->wait_wq;
+    if (!prioq_contains(wq, &tid->dl, tid->priority)) {
+        // 已经移出 waitq，说明被正常唤醒，超时回调无需再做任何事
         return;
     }
 
-    pender->expired = 1; // 标记 pend 状态已超时
-    prioq_remove(wq, &pender->dl, tid->priority);
+    tid->expired = 1; // 标记本次唤醒为超时
+    prioq_remove(wq, &tid->dl, tid->priority);
     int cpu = task_cont(tid, TS_PENDING);
     if ((cpu >= 0) && (cpu_index() != cpu)) {
         arch_send_ipi(cpu, VEC_IPI_RESCHED);
@@ -345,7 +384,7 @@ static void task_free(work_t *wk) {
     freework_t *work = containerof(wk, freework_t, wk);
     task_t *tid = work->tid;
     vmspace_remove(&g_kernel_vm, &tid->stack);
-    tid->state = TS_DELETED;
+    atomic_store(&tid->state, TS_DELETED);
 
 }
 
@@ -364,7 +403,7 @@ void task_exit() {
     // 只剩当前 cpu 还保留 mapping，留到 work 里面删除
     tlb_shootdown(self->stack.vaddr, self->stack.vend);
 
-    self->state |= TS_STOPPED;
+    atomic_fetch_or(&self->state, TS_STOPPED);
 
     if (self->process) {
         task_leave_process(self->process);
@@ -453,7 +492,7 @@ static void show_tasks() {
     for (dlnode_t *dl = g_tcb_head.next; dl != &g_tcb_head; dl = dl->next) {
         task_t *tid = containerof(dl, task_t, objnode);
         console_printf(" - task prio=%d, state=%d, name=%s\n",
-            tid->priority, tid->state, tid->name);
+            tid->priority, (int)atomic_load(&tid->state), tid->name);
     }
 }
 

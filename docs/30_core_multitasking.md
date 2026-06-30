@@ -125,4 +125,116 @@ void task_B(kobj_t *obj) {
 }
 ~~~
 
-### 特殊处理：唤醒一个线程/唤醒所有线程
+---
+
+### 现在的阻塞/恢复/超时机制
+
+#### 数据结构：waiter 合入 TCB
+
+`waiter_t` 已删除，阻塞相关字段直接放进 `task_t`：
+
+```c
+typedef struct task {
+    ...
+    dlnode_t    dl;          // 复用：在 readyq 中（就绪/运行）或在 waitq 中（阻塞）
+    _Atomic uint32_t state;  // TS_READY/TS_STOPPED/TS_PENDING/TS_DELETED 位掩码
+    ...
+    wdog_t      timer;       // 超时定时器，触发后调用 task_timeout
+    prioq_t    *wait_wq;     // 阻塞在哪个 waitq（给 timeout callback 用）
+    spinlock_t *wait_lock;   // 该 waitq 的锁（给 timeout callback 用）
+    int         got;         // 是否被正常唤醒（非超时）
+    int         expired;     // 是否因超时被唤醒
+} task_t;
+```
+
+要点：
+
+- `dl` 同一时刻只在一个队列里：就绪/运行时在 readyq，阻塞时在 waitq，暂停/将退出时都不在。`TS_PENDING` 的语义就是"dl 位于某个 waitq 中"。
+- `timer`/`wait_wq`/`wait_lock`/`got`/`expired` 仅当 `state` 含 `TS_PENDING` 时有效，由该 waitq 所属对象的锁保护。
+- wdog 在 TCB 里（不在栈上），TCB 在 task_free 之前一直有效，而阻塞着的任务不可能跑 task_free——所以 timeout callback 访问 `&tid->timer` 永远有效，没有栈生命周期问题。
+
+#### 三个参与者、三个原语
+
+一次阻塞-唤醒涉及三方：
+
+- **被阻塞线程 A**：调 `task_pend(wq, lock, timeout)` 把自己放入 waitq 并 arm wdog。
+- **唤醒者 B**：条件满足时调 `task_unpend_one(wq, lock)`（或 `task_unpend_claim_nolock` + `task_unpend_finish`）把 A 摘出 waitq、cancel wdog、唤醒。
+- **超时回调 T**：在 CPU0 的 wdog ISR 里，由泛型 `task_timeout` 调 `task_wake_timeout(tid)` 把 A 摘出 waitq 并唤醒。
+
+关键拆分：`task_unpend_one` = `task_unpend_claim_nolock`（锁内摘头、置 got）+ `task_unpend_finish`（锁外 wdog_cancel + task_cont + IPI）。`task_wake_timeout` 在回调里、持 `wait_lock` 执行。
+
+#### 锁的职责划分
+
+- **obj->lock（waitq 所属对象的锁）**：保护 waitq 链表结构 + TCB 的 wait 字段（got/expired/wait_wq/wait_lock）+ "谁是唯一唤醒者"的 claim。sema/mutex/msgq/kobj 各自的 lock 就是这把。
+- **g_rdy_lock（percpu）**：保护 readyq 成员关系。
+- **wdog CAS 状态机 + timer_lock**：保护定时器队列与 callback 的执行权。
+
+obj->lock **不**保护 TCB 的生命周期，只保护 waitq 相关字段；TCB 生命周期由"线程是否阻塞"保证。
+
+#### 需要考虑的竞争与规避
+
+**竞争 1：B 与 T 同时唤醒同一个 A（双重唤醒）**
+
+B 和 T 都可能拿到 A 的 TCB（B 通过 waitq 头，T 通过 wdog 反查）。若两者都 `task_cont`，A 被插入 readyq 两次、state 被清两次（断言失败/数据结构损坏）。
+
+规避：**waitq 摘除是锁内唯一的 wake claim**。两条路径都必须先在 obj->lock 下从 waitq 摘掉 A 的 dl，才能 `task_cont`：
+
+- B 路径：`task_unpend_claim_nolock` 在锁内摘除。
+- T 路径：`task_wake_timeout` 在锁内用 `prioq_contains` 复核"还在不在 waitq"，在才摘除并唤醒；不在就早返回。
+
+因为摘除在锁内互斥，只有一个赢家。wdog"找到 TCB"不等于"唤醒"——`prioq_contains` 复核是这道闸门，不能省。
+
+**竞争 2：wdog_cancel 持对象锁 → 与 timeout callback 死锁**
+
+若 B 在持 obj->lock 的状态下调 `wdog_cancel`，而 T 的 callback 又要获取 obj->lock 才能安全操作 waitq，则：B 持锁等 callback 结束，callback 等 B 的锁，循环等待。系统级后果还会把 timer_lock 也一起卡死（wdog_cancel 自旋期间持有 timer_lock），CPU0 的 wdog_process 停摆。
+
+规避：**claim/finish 拆分，wdog_cancel 与 task_cont 都在 obj->lock 之外执行**。`task_unpend_claim_nolock` 在锁内只做"摘除 + 置 got"，出锁后 `task_unpend_finish` 才 `wdog_cancel` + `task_cont`。这样 callback 能拿到锁跑完，wdog_cancel 的自旋立刻结束，无环。
+
+需要"锁内原子判断空并做别的操作"的场景（如 `sema_give` 的"空则 value++、非空则唤醒一个"、`mutex_give` 的"交接 owner"）用 `task_unpend_claim_nolock` 在锁内 claim，出锁后 `task_unpend_finish`。
+
+**竞争 3：waiter/wdog 的 use-after-free**
+
+若 A 被 `task_cont` 唤醒后立刻在另一 CPU 跑起来、从 `sema_take` 返回并销毁局部量，而 B 还在访问它 → UAF。
+
+规避：wdog 不再在栈上，而是 TCB 字段，TCB 在 task_free 前一直有效。同时 `task_unpend_finish` 严格 **先 `wdog_cancel` 再 `task_cont`**——A 在 cancel 完成前不会跑起来，wait 字段一定有效。
+
+**竞争 4：kobj 被 free 后 timeout callback 访问它（UAF）**
+
+timeout callback 通过 `tid->wait_wq`/`wait_lock` 找到 obj 并取锁。若 obj 已被 `kobj_release_nolock` 释放，回调拿到野指针。
+
+规避：**obj 在所有 wdog cancel 之前不释放**。`kobj_release_nolock` 的唤醒循环 `while (task_unpend_one(&obj->waitq, &obj->lock))` 每次迭代都会 `wdog_cancel`（在 `task_unpend_finish` 里），而 `wdog_cancel` 会等正在跑的 callback 结束才返回。所以循环结束时没有任何 callback 还会触发，obj 才被 `pool_free`。callback 访问 obj 时 obj 必然还活着。
+
+**竞争 5：stale wdog_cancel 误清新的 re-arm**
+
+A 被唤醒后可能再次阻塞（msgq 的循环重试），重新 `wdog_start(&tid->timer)`。若旧的 `wdog_cancel` 还没结束就 re-arm，会误清新 arm 的 wdog。
+
+规避：**ordering 保证**。`task_unpend_finish` 里 `wdog_cancel` 在 `task_cont` 之前完成，A 要等 `task_cont` 才能跑起来，所以 A 跑起来、可能再次 pend 时，旧 cancel 已结束。加之 wdog 状态机要求 `WDOG_IDLE` 才能 arm（被 cancel 置 IDLE、被 fire 跑完也置 IDLE），re-arm 时 wdog 必然是 IDLE。
+
+**竞争 6：state 字段的并发读写**
+
+`task_t->state` 是位掩码，被 A 自己（task_pend 置 TS_PENDING、task_exit 置 TS_STOPPED）和唤醒路径（task_cont 清位）读写。
+
+规避：`state` 改 `_Atomic`，置位用 `atomic_fetch_or`、清位用 `atomic_fetch_and`、整体赋值用 `atomic_store`、读取用 `atomic_load`。由于竞争 1 已保证"每次唤醒只有一方 task_cont"，清位不会并发冲突；原子操作把这条不变量从隐式契约变成显式语义。
+
+#### wdog 状态机与 cancel 保证
+
+```
+WDOG_IDLE ──[wdog_start]──→ WDOG_ARMED ──[wdog_process]──→ WDOG_FIRED ──[callback done]──→ WDOG_IDLE
+    ↑                          │                                │
+    └─────[wdog_cancel]────────┘                                │
+    ↑                                                           │
+    └──────────────[wdog_cancel: spin-wait]─────────────────────┘
+```
+
+核心保证：**`wdog_cancel` 返回 ⇒ callback 不会（再）被调用**。这是 kobj/sema 等动态对象能安全释放的前提。实现上：
+
+- 若 wdog 仍 `WDOG_ARMED`（在队列）：CAS 置 `WDOG_IDLE` 并从队列摘除，callback 永不执行。
+- 若 wdog 已被 `wdog_process` 摘下（不在队列）：CAS 失败，说明 callback 正在执行（`WDOG_FIRED`）或已结束（`WDOG_IDLE`）。此时无需操作链表，**放掉 timer_lock 再自旋**等 `WDOG_FIRED→WDOG_IDLE`，避免持 timer_lock 自旋卡死 CPU0 的 `wdog_process`。
+
+`wdog_process` 在 CPU0 的 local-APIC timer ISR 里推进全局队列；其余 CPU 的 timer ISR 只跑 `sched_process`。
+
+#### 跨 CPU 唤醒
+
+`task_cont` 选定目标 CPU 后，把 A 插入目标 CPU 的 readyq，若跨 CPU 则发 `VEC_IPI_RESCHED` IPI。IPI handler 只需 EOI——真正的切换发生在目标 CPU 中断返回路径的 `iret_to_task` 读 `g_tid_next`。所以"readyq 总由目标 CPU 自己处理"，唤醒方只负责入队 + 发 IPI。
+
+

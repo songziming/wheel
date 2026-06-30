@@ -144,9 +144,7 @@ TEST_F(DLListTest, Init) {
 TEST(DLList, RemoveLast) {
     dlnode_t myhead;
     dl_init_circular(&myhead);
-    dl_remove(&myhead);
-    EXPECT_EQ(NULL, myhead.prev);
-    EXPECT_EQ(NULL, myhead.next);
+    EXPECT_EQ(NULL, dl_remove(&myhead));
 }
 
 TEST_F(DLListTest, Remove) {

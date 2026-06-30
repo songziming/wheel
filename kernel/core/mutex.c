@@ -10,13 +10,6 @@ void mutex_init(mutex_t *mut) {
     mut->owner = NULL;
 }
 
-static void mutex_timeout(wdog_t *tmr) {
-    waiter_t *waiter = containerof(tmr, waiter_t, timer);
-    mutex_t *mut = (mutex_t*)waiter->user;
-    SPINLOCK_SCOPED(&mut->lock);
-    task_wake_timeout(&mut->wq, waiter);
-}
-
 // 返回 1 表示成功得到锁
 // 返回 0 表示未得到锁，超时
 // TODO 返回 -1 表示锁被删除
@@ -24,7 +17,6 @@ int mutex_take(mutex_t *mut, int timeout) {
     ASSERT(0 == cpu_int_depth());
 
     task_t *self = current_task();
-    waiter_t pender;
 
     {
         SPINLOCK_SCOPED(&mut->lock);
@@ -36,24 +28,30 @@ int mutex_take(mutex_t *mut, int timeout) {
         if (NOWAIT == timeout) {
             return 0;
         }
-        // 没有得到，需要阻塞
-        pender.user = mut;
-        task_pend(&mut->wq, &pender, timeout, mutex_timeout);
+        // 没有得到，阻塞当前任务
+        task_pend(&mut->wq, &mut->lock, timeout);
     }
 
     arch_task_switch();
-    return pender.got;
+    return self->got;
 }
 
 void mutex_give(mutex_t *mut) {
     ASSERT(0 == cpu_int_depth());
+    task_t *tid;
     {
+        // 锁内原子地 claim 下一个等待者并交接 owner
         SPINLOCK_SCOPED(&mut->lock);
         task_t *self = current_task();
         if (self != mut->owner) {
             panic("release mutex from %p, owner=%p\n", self, mut->owner);
         }
-        mut->owner = task_unpend_one(&mut->wq); // 唤醒一个阻塞线程
+        tid = task_unpend_claim_nolock(&mut->wq);
+        mut->owner = tid; // NULL 表示无人等待
+    }
+    // 锁外唤醒
+    if (tid) {
+        task_unpend_finish(tid);
     }
     arch_task_switch();
 }
