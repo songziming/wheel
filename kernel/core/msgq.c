@@ -31,7 +31,7 @@ size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout) {
         size_t wrote = fifo_write(&q->fifo, msg, len, len);
         if (wrote) {
             // 锁内 claim 一个阻塞的读者，锁外再唤醒
-            task_t *reader = task_unpend_claim_nolock(&q->readers);
+            task_t *reader = task_unpend_one_nolock(&q->readers);
             spinlock_give(&node);
             if (reader) {
                 task_unpend_finish(reader);
@@ -61,7 +61,7 @@ void msgq_send_force(msgq_t *q, void *msg, size_t len) {
     {
         SPINLOCK_SCOPED(&q->lock);
         fifo_force_write(&q->fifo, msg, len);
-        reader = task_unpend_claim_nolock(&q->readers);
+        reader = task_unpend_one_nolock(&q->readers);
     }
     if (reader) {
         task_unpend_finish(reader);
@@ -85,7 +85,7 @@ size_t msgq_recv(msgq_t *q, void *dst, size_t len, int timeout) {
         size_t got = fifo_read(&q->fifo, dst, len, len);
         if (got) {
             // 锁内 claim 一个阻塞的写者，锁外再唤醒
-            task_t *writer = task_unpend_claim_nolock(&q->writers);
+            task_t *writer = task_unpend_one_nolock(&q->writers);
             spinlock_give(&node);
             if (writer) {
                 task_unpend_finish(writer);

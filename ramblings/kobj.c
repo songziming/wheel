@@ -108,9 +108,19 @@ kobj_t *kobj_find(kclass_t *cls, const char *name) {
 // 只有一个owner访问对象才能调用此函数
 static void kobj_release_nolock(kclass_t *cls, kobj_t *obj) {
     // 唤醒所有等待此对象释放的线程
-    // task_unpend_one 每次 claim 自带 obj->lock，wdog_cancel 在锁外等回调跑完
+    // 每次 claim 自带 obj->lock，wdog_cancel 在锁外等回调跑完
     // 循环结束意味着所有 wdog 已 cancel，回调不会再触发，obj 可安全释放
-    while (task_unpend_one(&obj->waitq, &obj->lock)) {}
+    while (1) {
+        task_t *tid;
+        {
+            SPINLOCK_SCOPED(&obj->lock);
+            tid = task_unpend_one_nolock(&obj->waitq);
+        }
+        if (NULL == tid) {
+            break;
+        }
+        task_unpend_finish(tid);
+    }
 
     // 释放对象
     {
@@ -132,7 +142,8 @@ void kobj_drop(kclass_t *cls, kobj_t *obj) {
 
     // 引用数为零，唤醒等待者并释放
     // 不再需要在这里先唤醒一次：kobj_release_nolock 会做，且新协议下
-    // task_unpend_one 自带锁 + 锁外 wdog_cancel，不再有"持锁调 wdog_cancel"的死锁
+    // task_unpend_one_nolock + task_unpend_finish 自带锁 + 锁外 wdog_cancel，
+    // 不再有"持锁调 wdog_cancel"的死锁
     kobj_release_nolock(cls, obj);
 }
 

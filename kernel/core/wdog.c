@@ -9,15 +9,23 @@
 //
 // 一个 wdog 的生命周期由 _Atomic state 字段管理，CAS 无锁协议决定 callback 的执行权。
 // 状态可循环，wdog 可以重复使用。
-//
-//   WDOG_IDLE ──[wdog_start]──→ WDOG_ARMED ──[wdog_process]──→ WDOG_FIRED ──[callback done]──→ WDOG_IDLE
-//     ↑                      │                         │
-//     └────[wdog_cancel]─────┘                         │
-//     ↑                                                │
-//     └────────────[wdog_cancel: spin-wait]────────────┘
-//
+
+//  WDOG_IDLE ←------------+----------------+
+//      |                  |                |
+//      | (wdog_start)     | (wdog_cancel)  |
+//      ↓                  |                |
+//  WDOG_ARMED ------------┘                | (wdog_cancel: spin-wait)
+//      |                                   |
+//      | (wdog_process)                    |
+//      ↓                                   |
+//  WDOG_FIRED -----------------------------+
+//      |
+//      | (callback done)
+//      ↓
+//  WDOG_IDLE
+
 // 并发协议（关键保证）：
-//   - wdog_process 从队列摘下 wdog 后，CAS(WDOG_ARMED, WDOG_FIRED) 决定谁执行 callback。
+//   - wdog_process 从队列摘下 wdog 后，CAS(WDOG_ARMED, WDOG_FIRED) 决定是否执行 callback。
 //   - wdog_cancel 从队列移除 wdog 后，CAS(WDOG_ARMED, WDOG_IDLE) 阻止 callback 执行。
 //   - 如果 wdog_cancel 发现 wdog 已被摘下（不在队列中），说明 wdog_process 正在处理：
 //        CAS(WDOG_ARMED, WDOG_IDLE) 成功 → 抢在 callback 前取消，callback 不会执行。

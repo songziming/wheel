@@ -46,7 +46,7 @@ void mutex_give(mutex_t *mut) {
         if (self != mut->owner) {
             panic("release mutex from %p, owner=%p\n", self, mut->owner);
         }
-        tid = task_unpend_claim_nolock(&mut->wq);
+        tid = task_unpend_one_nolock(&mut->wq);
         mut->owner = tid; // NULL 表示无人等待
     }
     // 锁外唤醒

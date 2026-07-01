@@ -35,9 +35,8 @@ void sema_give(sema_t *sema) {
     task_t *tid;
     {
         // 锁内原子地判断：有阻塞者则 claim，否则 value++
-        // 不能用 task_unpend_one（它在 value++ 前会释放锁，留下竞态）
         SPINLOCK_SCOPED(&sema->lock);
-        tid = task_unpend_claim_nolock(&sema->wq);
+        tid = task_unpend_one_nolock(&sema->wq);
         if (NULL == tid) {
             sema->value++;
             if (sema->value > sema->limit) {

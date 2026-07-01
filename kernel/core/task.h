@@ -40,8 +40,8 @@ typedef struct task {
     // 阻塞相关字段：仅当 state 含 TS_PENDING 时有效
     // 由该任务所阻塞的 waitq 所属对象的锁保护
     wdog_t      timer;      // 超时定时器，触发后调用 task_timeout
-    prioq_t    *wait_wq;    // 阻塞在哪个 waitq（给 timeout callback 用）
-    spinlock_t *wait_lock;  // 该 waitq 的锁（给 timeout callback 用）
+    spinlock_t *wait_lock;  // 该 waitq 的锁（给 timeout callback 用），确认 wdog 删除之后再清除
+    prioq_t    *wait_wq;    // 所在的阻塞队列，不在阻塞队列则取值 NULL（guarded by wait_lock）
     int         got;        // 是否被正常唤醒（非超时）
     int         expired;    // 是否因超时被唤醒
 } task_t;
@@ -63,22 +63,12 @@ void task_take_from_kernel(task_t *tid);
 // `lock` 会被记录到 TCB，供超时回调使用
 void task_pend(prioq_t *wq, spinlock_t *lock, int timeout);
 
-// 从 waitq 头部摘取一个阻塞任务，置 got=1，返回该任务
-// 调用者必须已持有 waitq 所属对象的锁；本函数不取消定时器、不唤醒任务
-// 用于需要"锁内原子判断空/非空并做其他操作"的场景（如 sema_give、mutex_give）
-task_t *task_unpend_claim_nolock(prioq_t *wq);
-
-// 完成一个已 claim 的任务的唤醒：取消定时器、置就绪、按需发送 IPI
-// 必须在 waitq 所属对象的锁之外调用，否则与超时回调死锁
+// 恢复一个任务的运行需要分两步：
+// 1. 持有对象锁，取出 waitq 里面的一个任务
+// 2. 不持有锁，等待这个任务的恢复，删除这个任务的 wdog
+task_t *task_unpend_one_nolock(prioq_t *wq);
 void task_unpend_finish(task_t *tid);
 
-// 便利封装：持锁 claim -> 释放锁 -> finish
-// 适合不需要"锁内原子判断空"的单纯唤醒一个任务的场景
-task_t *task_unpend_one(prioq_t *wq, spinlock_t *lock);
-
-// 超时回调专用：在 wdog ISR 里、由 task_timeout 持 wait_lock 调用
-// 复核任务仍在 waitq 中后才摘除并唤醒，避免与正常唤醒重复
-void task_wake_timeout(task_t *tid);
 
 void task_exit();
 
