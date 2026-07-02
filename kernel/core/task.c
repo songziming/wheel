@@ -370,7 +370,6 @@ static void task_free(work_t *wk) {
     task_t *tid = work->tid;
     vmspace_remove(&g_kernel_vm, &tid->stack);
     atomic_store(&tid->state, TS_DELETED);
-
 }
 
 // 全程必须关闭中断，防止被抢占，否则 work 没来得及注册，任务无法回收

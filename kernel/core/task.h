@@ -43,7 +43,7 @@ typedef struct task {
     spinlock_t *wait_lock;  // 该 waitq 的锁（给 timeout callback 用），确认 wdog 删除之后再清除
     prioq_t    *wait_wq;    // 所在的阻塞队列，不在阻塞队列则取值 NULL（guarded by wait_lock）
     int         got;        // 是否被正常唤醒（非超时）
-    int         expired;    // 是否因超时被唤醒
+    int         expired;    // 是否因超时被唤醒（TODO 未使用）
 } task_t;
 
 void prioq_init(prioq_t *q);
