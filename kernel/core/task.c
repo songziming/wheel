@@ -206,7 +206,9 @@ void task_pend(prioq_t *wq, spinlock_t *lock, int timeout) {
     task_t *self = THISCPU_GET(g_tid_prev);
     prioq_t *q = THISCPU(&g_rdyq);
 
-    atomic_fetch_or(&self->state, TS_PENDING);
+    uint32_t old = atomic_fetch_or(&self->state, TS_PENDING);
+    ASSERT(TS_READY == old);
+    (void)old;
 
     {
         SPINLOCK_SCOPED(THISCPU(&g_rdy_lock));
