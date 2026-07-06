@@ -47,6 +47,6 @@ void sema_give(sema_t *sema) {
     // 锁外唤醒：避免 wdog_cancel 与超时回调死锁
     if (tid) {
         task_unpend_finish(tid);
+        arch_task_switch();
     }
-    arch_task_switch();
 }

@@ -52,8 +52,8 @@ void mutex_give(mutex_t *mut) {
     // 锁外唤醒
     if (tid) {
         task_unpend_finish(tid);
+        arch_task_switch();
     }
-    arch_task_switch();
 }
 
 // TODO mutex_destroy 删除一个互斥锁

@@ -30,8 +30,8 @@ size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout) {
             spinlock_give(&node);
             if (reader) {
                 task_unpend_finish(reader);
+                arch_task_switch();
             }
-            arch_task_switch();
             return wrote;
         }
 
@@ -60,8 +60,8 @@ void msgq_send_force(msgq_t *q, void *msg, size_t len) {
     }
     if (reader) {
         task_unpend_finish(reader);
+        arch_task_switch();
     }
-    arch_task_switch();
 }
 
 size_t msgq_recv(msgq_t *q, void *dst, size_t len, int timeout) {
@@ -79,8 +79,8 @@ size_t msgq_recv(msgq_t *q, void *dst, size_t len, int timeout) {
             spinlock_give(&node);
             if (writer) {
                 task_unpend_finish(writer);
+                arch_task_switch();
             }
-            arch_task_switch();
             return got;
         }
 
