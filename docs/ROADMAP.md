@@ -51,7 +51,7 @@
 - [ ] TCB 内部也包含一个event，任务结束的时候 signal_all，可以用 task_join 等待任务结束
 
 - [ ] wdog_cancel 返回状态码，表示 wdog 是否成功取消，还是已经触发，避免执行无效的 task_cont
-- [ ] TCB 里面保存阻塞超时的 wdog，记录自己所在的waitq
+- [x] TCB 里面保存阻塞超时的 wdog，记录自己所在的waitq
 
 # 远期优化点
 
