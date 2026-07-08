@@ -36,12 +36,12 @@
 
 // 定时任务队列
 static spinlock_t timer_lock = SPINLOCK_INIT;
-static dlnode_t timer_q;
+static DEFINE_DL_HEAD(timer_q);
 
 
-INIT_TEXT void wdog_init() {
-    dl_init_circular(&timer_q);
-}
+// INIT_TEXT void wdog_init() {
+//     dl_init_circular(&timer_q);
+// }
 
 // 挑出队列开头 delta==0 的节点，执行这些节点中的函数
 void wdog_process() {

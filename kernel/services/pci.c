@@ -11,7 +11,7 @@ CONST pci_reader_t g_pci_read = NULL;
 CONST pci_writer_t g_pci_write = NULL;
 
 // 启动之后，设备链表就固定了，不会动态增删
-static CONST dlnode_t g_pci_head;
+static CONST DEFINE_DL_HEAD(g_pci_head);
 
 // 我们不支持 PCIe 热插拔，分配只读即可
 static void add_device(uint8_t bus, uint8_t slot, uint8_t func, uint32_t reg0) {
@@ -39,7 +39,7 @@ INIT_TEXT void pci_probe() {
     uint8_t buses[256]; // LIFO, next buses to probe
     buses[0] = 0;
 
-    dl_init_circular(&g_pci_head);
+    // dl_init_circular(&g_pci_head);
 
     while (num > 0) {
         uint8_t bus = buses[--num];

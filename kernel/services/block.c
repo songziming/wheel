@@ -6,13 +6,13 @@
 
 
 // 管理所有块设备
-static dlnode_t g_block_head;
+static DEFINE_DL_HEAD(g_block_head);
 
 
 
-INIT_TEXT void block_dev_init() {
-    dl_init_circular(&g_block_head);
-}
+// INIT_TEXT void block_dev_init() {
+//     dl_init_circular(&g_block_head);
+// }
 
 void add_block_dev(block_dev_t *dev) {
     dl_insert_before(&dev->dl, &g_block_head);

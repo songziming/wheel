@@ -24,7 +24,7 @@ enum wdog_state {
     WDOG_FIRED = 2,
 };
 
-INIT_TEXT void wdog_init();
+// INIT_TEXT void wdog_init();
 void wdog_process();
 void wdog_start(wdog_t *wd, wdog_cb_t cb, int tick);
 void wdog_cancel(wdog_t *wd);

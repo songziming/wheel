@@ -263,7 +263,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 初始化任务调度
     work_init_this();
-    wdog_init();
+    // wdog_init();
     sched_init();
 
     // 创建根任务并开始运行，优先级 30，仅高于 idle
@@ -284,6 +284,8 @@ end:
 //------------------------------------------------------------------------------
 
 static void root_proc() {
+    task_drop(g_root_tcb);
+
     // 将实模式代码复制到 1M 以下
     char *from = &_real_addr;
     char *to = idmap_at(KERNEL_REAL_ADDR);
@@ -310,7 +312,7 @@ static void root_proc() {
     // 系统中间件初始化（console 已经在启动早期初始化）
     // TODO 这部分代码与硬件平台无关，可以提取出来
     keyboard_init();
-    block_dev_init();
+    // block_dev_init();
 
     // 设备初始化（这些设备依赖前面的系统中间件）
     i8042_init();

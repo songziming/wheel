@@ -29,7 +29,7 @@ struct WDogTest : public ::testing::Test {
 };
 
 void WDogTest::SetUp() {
-    wdog_init();
+    // wdog_init();
     for (int i = 0; i < 10; ++i) {
         // m_timers[i].base.func = timer_fire;
         m_timers[i].test = this;

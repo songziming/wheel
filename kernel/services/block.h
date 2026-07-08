@@ -22,7 +22,7 @@ struct block_dev {
     uint64_t sec_num;
 };
 
-INIT_TEXT void block_dev_init();
+// INIT_TEXT void block_dev_init();
 void add_block_dev(block_dev_t *dev);
 block_dev_t *find_block_by_name(const char *name);
 

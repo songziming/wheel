@@ -18,7 +18,7 @@ void msgq_init(msgq_t *q) {
 size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout) {
     ASSERT(cpu_int_depth() == 0);
 
-    task_t *self = current_task();
+    // task_t *self = current_task();
     spinlock_node_t node;
 
     while (1) {
@@ -67,7 +67,7 @@ void msgq_send_force(msgq_t *q, void *msg, size_t len) {
 size_t msgq_recv(msgq_t *q, void *dst, size_t len, int timeout) {
     ASSERT(cpu_int_depth() == 0);
 
-    task_t *self = current_task();
+    // task_t *self = current_task();
     spinlock_node_t node;
 
     while (1) {

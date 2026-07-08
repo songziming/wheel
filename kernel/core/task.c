@@ -37,9 +37,10 @@ static _Atomic uint64_t g_idle_mask = 0UL;
 static _Atomic uint32_t g_next_cpu = 0U;
 
 // 将所有的 TCB 串联在一起
-static spinlock_t g_tcb_lock = SPINLOCK_INIT;
-static pool_t g_tcb_pool;
-static dlnode_t g_tcb_head;
+// static spinlock_t g_tcb_lock = SPINLOCK_INIT;
+// static pool_t g_tcb_pool;
+// static dlnode_t g_tcb_head;
+static kclass_t g_tcb_class;
 
 
 //------------------------------------------------------------------------------
@@ -80,6 +81,9 @@ static void prioq_remove(prioq_t *q, dlnode_t *dl, int prio) {
 }
 
 static dlnode_t *prioq_head(prioq_t *q) {
+    if (0 == q->priorities) {
+        return NULL;
+    }
     int prio = __builtin_ctz(q->priorities);
     return q->heads[prio];
 }
@@ -107,13 +111,16 @@ inline task_t *current_task() {
 // 任务调度
 //------------------------------------------------------------------------------
 
+static void task_cleanup(void *obj);
+
 // 初始化调度器
 INIT_TEXT void sched_init() {
     int cpu = cpu_index();
     if (0 == cpu) {
         // 第一个CPU启动任务之前初始化任务池和任务队列
-        pool_init(&g_tcb_pool, sizeof(task_t));
-        dl_init_circular(&g_tcb_head);
+        // pool_init(&g_tcb_pool, sizeof(task_t));
+        // dl_init_circular(&g_tcb_head);
+        kclass_register(&g_tcb_class, "tid", sizeof(task_t), task_cleanup);
     }
 
     prioq_t *q = THISCPU(&g_rdyq);
@@ -149,24 +156,11 @@ void sched_process() {
 //------------------------------------------------------------------------------
 
 task_t *task_create(const char *name, int prio, void *func) {
-    task_t *tid;
-    {
-        SPINLOCK_SCOPED(&g_tcb_lock);
-        tid = pool_alloc_nolock(&g_tcb_pool);
-        if (NULL == tid) {
-            return NULL;
-        }
-        dl_insert_before(&tid->objnode, &g_tcb_head);
-    }
+    task_t *tid = (task_t*)kobj_make(&g_tcb_class, name);
 
     atomic_store(&tid->state, TS_STOPPED);
-    tid->name     = name;
     tid->priority = prio;
     tid->affinity = -1;
-
-    tid->stack3  = 0; // 没有用户栈（尚未分配）
-    tid->pgtbl   = g_kernel_vm.table; // 默认使用内核页表，之后可以替换
-    tid->process = NULL; // 不属于任何进程，之后可以替换
 
     // 阻塞相关字段初始化（timer.state 必须 WDOG_IDLE，否则 wdog_start 会断言失败）
     atomic_store(&tid->timer.state, WDOG_IDLE);
@@ -177,18 +171,37 @@ task_t *task_create(const char *name, int prio, void *func) {
     tid->got       = 0;
     tid->expired   = 0;
 
+    tid->join_lock = SPINLOCK_INIT;
+    prioq_init(&tid->join_q);
+
+    // 分配内核栈空间
+    tid->pgtbl   = g_kernel_vm.table; // 默认使用内核页表，之后可以替换
+    tid->process = NULL; // 不属于任何进程，之后可以替换
     vmspace_alloc_kstack(&g_kernel_vm, &tid->stack);
     tid->stack.desc = name;
-    tid->stack0 = tid->stack.vend;
+
+    tid->stack0 = tid->stack.vend; // 记录下内核栈
+    tid->stack3  = 0; // 没有用户栈（尚未分配）
     arch_task_init(tid, (size_t)task_entry, tid->stack0, (size_t)func,0,0,0);
 
+    // 此时任务尚未运行，refcnt==1，只有父线程一个引用持有者
     return tid;
+}
+
+// 析构函数，释放对象的时候调用
+// 此时线程已经停止运行，不能在当前线程里调用
+static void task_cleanup(void *obj) {
+    task_t *tid = (task_t*)obj;
+    logk("cleanup task-%s\n", kobj_name(obj));
+    vmspace_remove(&g_kernel_vm, &tid->stack);
+    atomic_store(&tid->state, TS_DELETED);
 }
 
 // 将任务从内核任务列表中取出
 void task_take_from_kernel(task_t *tid) {
-    SPINLOCK_SCOPED(&g_tcb_lock);
-    dl_remove(&tid->objnode);
+    (void)tid;
+    // SPINLOCK_SCOPED(&g_tcb_lock);
+    // dl_remove(&tid->objnode);
 }
 
 //------------------------------------------------------------------------------
@@ -327,7 +340,6 @@ void task_unpend_finish(task_t *tid) {
     }
 }
 
-
 // wdog 超时回调：通过 wdog 反查到 TCB，持 wait_lock
 // 复核任务仍在 waitq 中后才摘除并唤醒，避免与正常唤醒重复
 // 可能与正常的 unpend 竞争，都在尝试恢复线程
@@ -370,37 +382,49 @@ static void task_free(work_t *wk) {
 
     freework_t *work = containerof(wk, freework_t, wk);
     task_t *tid = work->tid;
-    vmspace_remove(&g_kernel_vm, &tid->stack);
-    atomic_store(&tid->state, TS_DELETED);
+    kobj_drop(&g_tcb_class, tid);
 }
 
 // 全程必须关闭中断，防止被抢占，否则 work 没来得及注册，任务无法回收
-// 大致逻辑与 task_stop 类似
 void task_exit() {
     ASSERT(cpu_int_depth() == 0);
     ASSERT(THISCPU_GET(g_preempt_depth) == 0);
 
-    task_t *self = THISCPU_GET(g_tid_prev);
+    task_t *tid = THISCPU_GET(g_tid_prev);
     prioq_t *q = THISCPU(&g_rdyq);
 
     // 发送 IPI，让其他 cpu 清除此任务的栈
     // shootdown 不能在 ISR 里面执行，所以在这里调用
     // 但是任务栈还在使用（当前代码），还不能回收
     // 只剩当前 cpu 还保留 mapping，留到 work 里面删除
-    tlb_shootdown(self->stack.vaddr, self->stack.vend);
+    tlb_shootdown(tid->stack.vaddr, tid->stack.vend);
 
-    atomic_fetch_or(&self->state, TS_STOPPED);
-
-    if (self->process) {
-        task_leave_process(self->process);
-    } else {
-        SPINLOCK_SCOPED(&g_tcb_lock);
-        dl_remove(&self->objnode);
+    // 任务状态变为 STOPPED，此时可以唤醒等待这个任务结束的线程
+    // 将所有正在执行 task_join 的线程唤醒
+    atomic_fetch_or(&tid->state, TS_STOPPED);
+    while (1) {
+        task_t *joiner;
+        {
+            SPINLOCK_SCOPED(&tid->join_lock);
+            joiner = task_unpend_one_nolock(&tid->join_q);
+        }
+        if (NULL == joiner) {
+            break;
+        }
+        task_unpend_finish(joiner);
     }
+
+    if (tid->process) {
+        task_leave_process(tid->process);
+    }
+
+    // 到这里，thread 生命周期已经结束
+    // 应该减少 kobj.refcnt，减到零再删除
+    // TODO 我们可以在 work-func 里面减小 refcnt 数量，这可以保证执行析构安全
 
     {
         SPINLOCK_SCOPED(THISCPU(&g_rdy_lock));
-        prioq_remove(q, &self->dl, self->priority);
+        prioq_remove(q, &tid->dl, tid->priority);
         task_t *next = containerof(prioq_head(q), task_t, dl);
         if (31 == next->priority) {
             atomic_fetch_or(&g_idle_mask, 1UL << cpu_index());
@@ -409,18 +433,25 @@ void task_exit() {
 
         // 注册 work，此时中断关闭，确保 work 不会触发
         freework_t freework;
-        freework.tid = self;
+        freework.tid = tid;
         work_defer(&freework.wk, task_free, "freetask");
     }
+
+    // 触发任务切换，这次切换不执行 work，下次中断再执行 work
     arch_task_switch();
 }
 
 
 //------------------------------------------------------------------------------
-
 // 启动任务并立即切换
+//------------------------------------------------------------------------------
+
+// 运行起来的新任务也引用自己的 kobj，需要增加一个计数器
+
 // 适合只启动一个任务，无需禁用抢占，启动之后立即可切换
 void task_start_now(task_t *tid) {
+    // task_t *tid = containerof(tid, task_t, task);
+    kobj_keep(tid);
     int cpu = task_cont(tid, TS_STOPPED);
     if (cpu_index() == cpu) {
         arch_task_switch();
@@ -432,6 +463,8 @@ void task_start_now(task_t *tid) {
 // 启动任务但暂时不要切换
 // 如果批量启动任务，顺序是：禁用抢占，启动任务，发送 ipi，启用抢占，切换
 uint64_t task_start(task_t *tid) {
+    // task_t *tid = containerof(tid, task_t, task);
+    kobj_keep(tid);
     int cpu = task_cont(tid, TS_STOPPED);
     return (cpu >= 0) ? (1UL << cpu) : 0UL;
 }
@@ -449,13 +482,38 @@ void notify_resched(uint64_t cpumask) {
 }
 
 //------------------------------------------------------------------------------
+// 等待任务结束/减少引用数
+//------------------------------------------------------------------------------
+
+// 等待任务结束生命周期（达到 STOPPED 状态）
+// 同时减小一个计数器
+void task_join(task_t *tid) {
+    // task_t *tid = containerof(tid, task_t, task);
+    {
+        SPINLOCK_SCOPED(&tid->join_lock);
+        task_pend(&tid->join_q, &tid->join_lock, FOREVER);
+    }
+    arch_task_switch();
+
+    // 执行到这里，说明目标任务已经结束，但我们还持有一个引用
+    // 去掉这个引用
+    kobj_drop(&g_tcb_class, tid);
+}
+
+// 不等待子线程结束，直接放弃引用
+void task_drop(task_t *tid) {
+    // task_t *tid = containerof(tid, task_t, task);
+    kobj_drop(&g_tcb_class, tid);
+}
+
+//------------------------------------------------------------------------------
 
 static NORETURN void task_entry(void (*real)()) {
     task_t *self = THISCPU_GET(g_tid_prev);
     real();
-    logk("task %s exit\n", self->name);
+    logk("task %s exit\n", kobj_name(self));
     task_exit();
-    logk("task %s still running!\n", self->name);
+    logk("task %s still running!\n", kobj_name(self));
     while (1) {
         cpu_pause();
         cpu_halt();
@@ -468,20 +526,3 @@ static NORETURN void proc_idle() {
         cpu_halt();
     }
 }
-
-//------------------------------------------------------------------------------
-
-#ifndef UNIT_TEST
-
-static void show_tasks() {
-    SPINLOCK_SCOPED(&g_tcb_lock);
-    for (dlnode_t *dl = g_tcb_head.next; dl != &g_tcb_head; dl = dl->next) {
-        task_t *tid = containerof(dl, task_t, objnode);
-        console_printf(" - task prio=%d, state=%d, name=%s\n",
-            tid->priority, (int)atomic_load(&tid->state), tid->name);
-    }
-}
-
-KSHELL_CMD("tasks", show_tasks);
-
-#endif // UNIT_TEST

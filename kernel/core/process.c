@@ -11,7 +11,8 @@
 
 static spinlock_t g_pcb_lock = SPINLOCK_INIT;
 static pool_t     g_pcb_pool;
-static dlnode_t   g_pcb_head; // 管理所有 PCB
+// static dlnode_t   g_pcb_head; // 管理所有 PCB
+static DEFINE_DL_HEAD(g_pcb_head);
 
 
 // 用户态的地址空间需要动态分配 vmrange
@@ -22,7 +23,7 @@ static pool_t     g_rng_pool;
 
 INIT_TEXT void process_init() {
     pool_init(&g_pcb_pool, sizeof(process_t));
-    dl_init_circular(&g_pcb_head);
+    // dl_init_circular(&g_pcb_head);
     pool_init(&g_rng_pool, sizeof(vmrange_t));
 }
 
@@ -82,7 +83,7 @@ void task_enter_process(process_t *pid) {
     task_take_from_kernel(tid);
     {
         SPINLOCK_SCOPED(&pid->lock);
-        dl_insert_before(&tid->objnode, &pid->tasks_head);
+        // dl_insert_before(&tid->objnode, &pid->tasks_head);
         ++pid->task_num;
     }
 
@@ -99,7 +100,7 @@ void task_leave_process(process_t *pid) {
 
     SPINLOCK_SCOPED(&pid->lock);
     --pid->task_num;
-    dl_remove(&tid->objnode);
+    // dl_remove(&tid->objnode);
 
     // TODO 用户栈需要删除
 

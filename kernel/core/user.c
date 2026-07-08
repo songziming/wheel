@@ -46,8 +46,8 @@ extern char _binary_users_tar_end;
 // 进程使用的段，应该记录在 process 里面
 static vmrange_t g_user_code;
 
-// 用来运行用户态代码的任务
-static task_t *tcb_user;
+// // 用来运行用户态代码的任务
+// static task_t *tcb_user;
 
 // 为当前任务分配用户栈，启动用户态
 void user_kernel_task() {

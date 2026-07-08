@@ -4,9 +4,7 @@
 #include <spinlock.h>
 #include <pool_slub.h>
 #include <dllist.h>
-#include <task.h>
 
-typedef struct kobj kobj_t;
 typedef void (*kobj_dtor_t)(void *obj);
 
 // 内核对象类，管理相同类型的对象
@@ -21,22 +19,13 @@ typedef struct kclass {
     pool_t      pool;   // guarded by lock
 } kclass_t;
 
-// 代表一个内核对象，自动引用计数，同步控制
-// 类似 linux kernel kref
-typedef struct kobj {
-    dlnode_t    objnode; // protected by kclass->lock
-    const char *name;
-    _Atomic int refcnt;
-    // spinlock_t  lock;   // 也用来保护子类字段
-    // prioq_t     waitq;  // 等待对象删除，guarded by lock
-} kobj_t;
-
 void kclass_register(kclass_t *cls, const char *name, size_t objsize, kobj_dtor_t dtor);
-kobj_t *kobj_make(kclass_t *cls, const char *name);
-kobj_t *kobj_find(kclass_t *cls, const char *name);
-kobj_t *kobj_keep(kobj_t *obj);                 // 引用数 +1
-void    kobj_drop(kclass_t *cls, kobj_t *obj);  // 引用数 -1
-void    kobj_free(kclass_t *cls, kobj_t *obj);  // 释放对象，在析构函数里面调用，可以 defer
-// int     kobj_join(kclass_t *cls, kobj_t *obj, int timeout);
+
+const char *kobj_name(const void *ptr);
+
+void *kobj_make(kclass_t *cls, const char *name);
+void *kobj_find(kclass_t *cls, const char *name);
+void *kobj_keep(void *obj);                 // 引用数 +1
+void  kobj_drop(kclass_t *cls, void *obj);  // 引用数 -1，可能执行析构函数
 
 #endif // KOBJ_H

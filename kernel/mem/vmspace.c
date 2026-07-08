@@ -177,6 +177,8 @@ void *vmspace_alloc_at(vmspace_t *space, vmrange_t *rng,
         mmu_map(space->table, va, va + blksize, (size_t)blk << PAGE_SHIFT, attrs);
         va += blksize;
     }
+
+    return (void*)rng->vaddr;
 }
 
 void *vmspace_alloc_kstack(vmspace_t *space, vmrange_t *rng) {

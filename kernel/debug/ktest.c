@@ -22,7 +22,7 @@ static task_t *tb;
 static void proc_a() {
     task_t *self = current_task();
     for (int i = 0; i < 100; ++i) {
-        logk("(A%s%d)", self->name, i);
+        logk("(A%s%d)", kobj_name(self), i);
         // THISCPU_SET(g_tid_next, &tb);
         // arch_task_switch();
         if (30 == i) {
@@ -44,7 +44,7 @@ static void proc_a() {
 static void proc_b() {
     task_t *self = current_task();
     for (int i = 0; i < 100; ++i) {
-        logk("(B%s%d)", self->name, i);
+        logk("(B%s%d)", kobj_name(self), i);
         // THISCPU_SET(g_tid_next, &ta);
         // arch_task_switch();
         loapic_timer_busywait(8000);
