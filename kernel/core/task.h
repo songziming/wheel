@@ -37,9 +37,9 @@ typedef struct task {
     int16_t     priority;
 
     // 阻塞相关字段：仅当 state 含 TS_PENDING 时有效
-    // 由该任务所阻塞的 waitq 所属对象的锁保护
+    // 由该任务所阻塞的 waitq 所属对象的锁保护（也就是 wait_lock）
     wdog_t      timer;      // 超时定时器，触发后调用 task_timeout
-    spinlock_t *wait_lock;  // 该 waitq 的锁（给 timeout callback 用），确认 wdog 删除之后再清除
+    spinlock_t *wait_lock;  // waitq 所在对象的锁，确认 wdog 删除之后再清除
     prioq_t    *wait_wq;    // 所在的阻塞队列，不在阻塞队列则取值 NULL（guarded by wait_lock）
     int         got;        // 是否被正常唤醒（非超时），阻塞恢复之后读取
     int         expired;    // 是否因超时被唤醒（TODO 未使用）
@@ -63,7 +63,7 @@ task_t *current_task();
 INIT_TEXT void sched_init();
 void sched_process();
 
-task_t *task_create(const char *name, int prio, void *func);
+task_t *task_make(const char *name, int prio, void *func);
 
 void task_take_from_kernel(task_t *tid);
 

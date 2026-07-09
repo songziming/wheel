@@ -1,18 +1,40 @@
 #include "sema.h"
+#include <kobj.h>
+#include <task.h>
+#include <spinlock.h>
 #include <debug.h>
 
 
-void sema_init(sema_t *sema, int initial, int limit) {
+static kclass_t g_sema_class;
+
+// 信号量结构，作为 kobj 的 payload（kobj 头隐藏在前方，使用者不可见）
+typedef struct sema {
+    spinlock_t  lock;
+    prioq_t     wq;
+    int         value;  // guarded by lock
+    int         limit;  // guarded by lock
+} sema_t;
+
+
+INIT_TEXT void sema_init(void) {
+    kclass_register(&g_sema_class, "sema", sizeof(sema_t), NULL);
+}
+
+sema_t *sema_make(const char *name, int initial, int limit) {
+    sema_t *sema = (sema_t*)kobj_make(&g_sema_class, name);
+    if (NULL == sema) {
+        return NULL;
+    }
     sema->lock = SPINLOCK_INIT;
     prioq_init(&sema->wq);
     sema->value = initial;
     sema->limit = limit;
+    return sema;
 }
 
 // 可能阻塞，不能在中断里调用
 int sema_take(sema_t *sema, int timeout) {
     ASSERT(0 == cpu_int_depth());
-
     {
         SPINLOCK_SCOPED(&sema->lock);
         if (sema->value > 0) {
@@ -25,7 +47,6 @@ int sema_take(sema_t *sema, int timeout) {
         // 没有取得信号量，阻塞当前任务
         task_pend(&sema->wq, &sema->lock, timeout);
     }
-
     arch_task_switch();
     return current_task()->got;
 }
@@ -49,4 +70,10 @@ void sema_give(sema_t *sema) {
         task_unpend_finish(tid);
         arch_task_switch();
     }
+}
+
+void sema_drop(sema_t *sema) {
+    // refcnt 归零时 kobj_drop 自动 dl_remove + pool_free
+    // 此时 waitq 必为空（阻塞者必持引用，refcnt 不会归零），无需唤醒
+    kobj_drop(&g_sema_class, sema);
 }

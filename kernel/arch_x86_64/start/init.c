@@ -52,7 +52,7 @@ static task_t *g_root_tcb;
 static void root_proc();
 
 static INIT_DATA int g_cpu_started = 1;
-static INIT_BSS sema_t g_smp_sema;
+static sema_t *g_smp_sema;
 static INIT_BSS work_t g_smp_notifier;
 static INIT_TEXT NORETURN void ap_init(int idx);
 
@@ -265,9 +265,10 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     work_init_this();
     // wdog_init();
     sched_init();
+    sema_init();
 
     // 创建根任务并开始运行，优先级 30，仅高于 idle
-    g_root_tcb = task_create("root", 30, root_proc);
+    g_root_tcb = task_make("root", 30, root_proc);
     g_root_tcb->affinity = 0;
     task_start_now(g_root_tcb);
     // 之后的代码不再运行
@@ -292,7 +293,7 @@ static void root_proc() {
     kmemcpy(to, from, &_real_end - from);
     logk("copy trampoline code from %p to %p\n", from, to);
 
-    sema_init(&g_smp_sema, 0, 1);
+    g_smp_sema = sema_make("smp", 0, 1);
 
     // 启动代码地址页号就是 startup-IPI 的向量号
     int vec = KERNEL_REAL_ADDR >> 12;
@@ -306,8 +307,9 @@ static void root_proc() {
 
         // 当 CPU 开始运行 task，说明初始化已经结束，不再使用 init stack
         // 前一个 CPU 初始化完成才能初始化下一个
-        sema_take(&g_smp_sema, FOREVER);
+        sema_take(g_smp_sema, FOREVER);
     }
+    sema_drop(g_smp_sema);
 
     // 系统中间件初始化（console 已经在启动早期初始化）
     // TODO 这部分代码与硬件平台无关，可以提取出来
@@ -335,7 +337,7 @@ static void root_proc() {
 // BSP 可以启动下一个 AP，或者将 init-stack 回收
 static INIT_TEXT void notify_ap_started(work_t *work UNUSED) {
     ASSERT(cpu_int_depth() > 0);
-    sema_give(&g_smp_sema);
+    sema_give(g_smp_sema);
 }
 
 // AP 启动流程，使用 init-stack

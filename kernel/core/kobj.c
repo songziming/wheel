@@ -90,6 +90,7 @@ void *kobj_find(kclass_t *cls, const char *name) {
         // old-refcnt==0，说明对象已经释放，但仍残留在队列中等待释放
         // 需要将其恢复为 0，防止再次 kobj_find（此时持有 class-lock，是安全的）
         atomic_store(&obj->refcnt, 0);
+        return NULL;
     }
 
     return NULL;

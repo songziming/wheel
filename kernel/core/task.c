@@ -127,7 +127,7 @@ INIT_TEXT void sched_init() {
     prioq_init(q);
 
     // 创建 idle-task
-    task_t *idle = task_create(kernel_heap_mkstr("idle-%d", cpu), 31, proc_idle);
+    task_t *idle = task_make(kernel_heap_mkstr("idle-%d", cpu), 31, proc_idle);
     if (NULL == idle) {
         panic("cannot alloc for TCB idle\n");
     }
@@ -155,7 +155,7 @@ void sched_process() {
 // 创建任务，处于 STOPPED 状态，需要使用 task_start 启动
 //------------------------------------------------------------------------------
 
-task_t *task_create(const char *name, int prio, void *func) {
+task_t *task_make(const char *name, int prio, void *func) {
     task_t *tid = (task_t*)kobj_make(&g_tcb_class, name);
 
     atomic_store(&tid->state, TS_STOPPED);

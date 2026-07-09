@@ -104,7 +104,7 @@ static int tar_start_app(const char *name, const char *data, size_t len, void *u
 
 #if 0
     // 这个字符串是临时数据，但本命令执行过程中一直有效
-    tcb_user = task_create(name, 10, user_kernel_task);
+    tcb_user = task_make(name, 10, user_kernel_task);
     task_start_now(tcb_user);
 
     // 等待线程退出

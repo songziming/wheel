@@ -7,8 +7,8 @@
 #include <vmspace.h>
 
 typedef struct msgq {
-    spinlock_t      lock;
-    vmrange_t   rng;        // 分配两倍大小的虚拟空间
+    spinlock_t  lock;
+    vmrange_t   rng;        // 交换数据用的缓冲区
     fifo_t      fifo;
     prioq_t     readers;    // 阻塞的读者
     prioq_t     writers;    // 阻塞的写者

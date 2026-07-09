@@ -59,8 +59,8 @@ static void proc_b() {
 
 // called from init code
 void test_cooperative() {
-    ta = task_create("ta", 10, proc_a);
-    tb = task_create("tb", 10, proc_b);
+    ta = task_make("ta", 10, proc_a);
+    tb = task_make("tb", 10, proc_b);
 
     ta->affinity = 0;
     tb->affinity = 0;
@@ -112,7 +112,7 @@ void test_smp_tasks() {
     for (int i = 0; i < 10; ++i) {
         kmemcpy(smp_names[i], "smpX", 5);
         smp_names[i][3] = 'A' + i;
-        smp_tcbs[i] = task_create(smp_names[i], 10, proc_smp);
+        smp_tcbs[i] = task_make(smp_names[i], 10, proc_smp);
         // smp_tcbs[i].affinity = 0;
     }
 
@@ -140,7 +140,7 @@ void test_smp_tasks() {
 // 信号量测试
 //------------------------------------------------------------------------------
 
-static sema_t g_sem;
+static sema_t *g_sem;
 static task_t *sa;
 static task_t *sb;
 static task_t *sc;
@@ -148,7 +148,7 @@ static task_t *sc;
 static void proc_consumer_a() {
     for (int i = 0; i < 10; ++i) {
         logk("(a-waiting-%d)", cpu_index());
-        int got = sema_take(&g_sem, SYSTIMER_FREQ);
+        int got = sema_take(g_sem, SYSTIMER_FREQ);
         logk("(a-%d)", got);
     }
     logk("sema-a exit\n");
@@ -157,7 +157,7 @@ static void proc_consumer_a() {
 static void proc_consumer_b() {
     for (int i = 0; i < 10; ++i) {
         logk("(b-waiting-%d)", cpu_index());
-        int got = sema_take(&g_sem, SYSTIMER_FREQ);
+        int got = sema_take(g_sem, SYSTIMER_FREQ);
         logk("(b-%d)", got);
     }
     logk("sema-b exit\n");
@@ -166,7 +166,7 @@ static void proc_consumer_b() {
 static void proc_consumer_c() {
     for (int i = 0; i < 10; ++i) {
         logk("(c-waiting-%d)", cpu_index());
-        int got = sema_take(&g_sem, SYSTIMER_FREQ);
+        int got = sema_take(g_sem, SYSTIMER_FREQ);
         logk("(c-%d)", got);
     }
     logk("sema-c exit\n");
@@ -174,11 +174,11 @@ static void proc_consumer_c() {
 
 
 void test_sema() {
-    sa = task_create("sema-A", 10, proc_consumer_a);
-    sb = task_create("sema-B", 10, proc_consumer_b);
-    sc = task_create("sema-C", 10, proc_consumer_c);
+    sa = task_make("sema-A", 10, proc_consumer_a);
+    sb = task_make("sema-B", 10, proc_consumer_b);
+    sc = task_make("sema-C", 10, proc_consumer_c);
 
-    sema_init(&g_sem, 0, 1000);
+    g_sem = sema_make("test-sem", 0, 1000);
 
     // 启动三个消费者，开始不断获取资源
     uint64_t cpus = 0;
@@ -193,13 +193,14 @@ void test_sema() {
     // 共请求 30 次，提供 28 次，最后两次超时
     for (int i = 0; i < 28; ++i) {
         loapic_timer_busywait(9000);
-        sema_give(&g_sem);
+        sema_give(g_sem);
     }
 
     while (TS_DELETED != sa->state) { cpu_pause(); }
     while (TS_DELETED != sb->state) { cpu_pause(); }
     while (TS_DELETED != sc->state) { cpu_pause(); }
     logk("consumers exited\n");
+    sema_drop(g_sem);
 }
 
 //------------------------------------------------------------------------------
@@ -237,8 +238,8 @@ static void q_reader() {
 }
 
 void test_msgq() {
-    tw = task_create("writer", 10, q_writer);
-    tr = task_create("reader", 10, q_reader);
+    tw = task_make("writer", 10, q_writer);
+    tr = task_make("reader", 10, q_reader);
     tw->affinity = 0;
     tr->affinity = 0;
 
