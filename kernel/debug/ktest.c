@@ -62,6 +62,9 @@ void test_cooperative() {
     ta = task_make("ta", 10, proc_a);
     tb = task_make("tb", 10, proc_b);
 
+    kobj_keep(ta);
+    kobj_keep(tb);
+
     ta->affinity = 0;
     tb->affinity = 0;
 
@@ -73,13 +76,18 @@ void test_cooperative() {
 
     logk("we are back to root");
 
-    while (TS_DELETED != ta->state) {
-        cpu_pause();
-    }
-    while (TS_DELETED != tb->state) {
-        cpu_pause();
-    }
+    // while (TS_DELETED != ta->state) {
+    //     cpu_pause();
+    // }
+    // while (TS_DELETED != tb->state) {
+    //     cpu_pause();
+    // }
+    task_join(ta);
+    task_join(tb);
     logk("TCB safely deleted\n");
+
+    task_drop(ta);
+    task_drop(tb);
 }
 
 //------------------------------------------------------------------------------
@@ -209,31 +217,31 @@ void test_sema() {
 
 static task_t *tw;
 static task_t *tr;
-static msgq_t mq;
+static msgq_t *mq;
 
 static void q_writer() {
     logk("writer running\n");
 
     loapic_timer_busywait(5000);
     logk("writing a...");
-    size_t len = msgq_send(&mq, "AAAAA", 5, FOREVER);
+    size_t len = msgq_send(mq, "AAAAA", 5, FOREVER);
     logk("wrote %zu\n", len);
 
     loapic_timer_busywait(5000);
     logk("writing b...");
-    len = msgq_send(&mq, "BBBBB", 5, FOREVER);
+    len = msgq_send(mq, "BBBBB", 5, FOREVER);
     logk("wrote %zu\n", len);
 
     loapic_timer_busywait(5000);
-    msgq_send(&mq, "CCCCC", 5, FOREVER);
+    msgq_send(mq, "CCCCC", 5, FOREVER);
 }
 
 static void q_reader() {
     logk("reader running\n");
     char dst[1024];
-    size_t got = msgq_recv(&mq, dst, 8, FOREVER);
+    size_t got = msgq_recv(mq, dst, 8, FOREVER);
     logk("got %zu bytes: %.*s\n", got, (int)got, dst);
-    got = msgq_recv(&mq, dst, 5, FOREVER);
+    got = msgq_recv(mq, dst, 5, FOREVER);
     logk("got %zu bytes: %.*s\n", got, (int)got, dst);
 }
 
@@ -243,7 +251,7 @@ void test_msgq() {
     tw->affinity = 0;
     tr->affinity = 0;
 
-    msgq_init(&mq);
+    mq = msgq_make("test-mq");
 
     cpu_preempt_disable();
     task_start(tw);
@@ -254,7 +262,7 @@ void test_msgq() {
     while (TS_DELETED != tw->state) { cpu_pause(); }
     while (TS_DELETED != tr->state) { cpu_pause(); }
 
-    // TODO msgq_destroy
+    msgq_drop(mq);
 }
 
 //------------------------------------------------------------------------------

@@ -1,22 +1,17 @@
 #ifndef MSGQ_H
 #define MSGQ_H
 
-#include "task.h"
-#include <fifo.h>
-#include <spinlock.h>
-#include <vmspace.h>
+#include <wheel.h>
 
-typedef struct msgq {
-    spinlock_t  lock;
-    vmrange_t   rng;        // 交换数据用的缓冲区
-    fifo_t      fifo;
-    prioq_t     readers;    // 阻塞的读者
-    prioq_t     writers;    // 阻塞的写者
-} msgq_t;
+// 消息队列，opaque handle，结构体定义在 msgq.c
+// 由 kobj 动态分配，引用计数管理生命周期
+typedef struct msgq msgq_t;
 
-void msgq_init(msgq_t *q);
-size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout);
-void msgq_send_force(msgq_t *q, void *msg, size_t len);
-size_t msgq_recv(msgq_t *q, void *dst, size_t len, int timeout);
+INIT_TEXT void  msgq_init(void);
+msgq_t *msgq_make(const char *name);
+size_t  msgq_send(msgq_t *q, const void *msg, size_t len, int timeout);
+void    msgq_send_force(msgq_t *q, void *msg, size_t len);
+size_t  msgq_recv(msgq_t *q, void *dst, size_t len, int timeout);
+void    msgq_drop(msgq_t *q);
 
 #endif // MSGQ_H

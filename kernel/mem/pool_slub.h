@@ -7,6 +7,7 @@
 
 typedef struct pool {
     // spinlock_t   lock;
+    uint16_t raw_size;
     uint16_t obj_size;
     // uint8_t  slab_order;        // slab 的页分配 rank
     pglist_t empty;             // 全部空闲

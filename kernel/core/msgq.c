@@ -1,24 +1,57 @@
 #include "msgq.h"
+#include <kobj.h>
+#include <task.h>
+#include <spinlock.h>
+#include <vmspace.h>
 #include <page.h>
+#include <fifo.h>
 #include <debug.h>
 
-void msgq_init(msgq_t *q) {
+
+static kclass_t g_msgq_class;
+
+typedef struct msgq {
+    spinlock_t  lock;
+    vmrange_t   rng;        // 交换数据用的缓冲区
+    fifo_t      fifo;
+    prioq_t     readers;    // 阻塞的读者
+    prioq_t     writers;    // 阻塞的写者
+} msgq_t;
+
+
+// 析构：释放 fifo 的虚拟内存页
+static void msgq_cleanup(void *obj) {
+    msgq_t *q = (msgq_t*)obj;
+    vmspace_remove(&g_kernel_vm, &q->rng);
+}
+
+INIT_TEXT void msgq_init(void) {
+    kclass_register(&g_msgq_class, "msgq", sizeof(msgq_t), msgq_cleanup);
+}
+
+msgq_t *msgq_make(const char *name) {
+    msgq_t *q = (msgq_t*)kobj_make(&g_msgq_class, name);
+    if (NULL == q) {
+        return NULL;
+    }
     void *va = vmspace_alloc(&g_kernel_vm, &q->rng,
         PAGE_SIZE, PT_MSGQ, MMU_WRITE);
     if (NULL == va) {
-        panic("cannot create msgq\n");
+        logk("cannot alloc buffer for msgq-%s\n", name);
+        kobj_free(&g_msgq_class, q);
+        return NULL;
     }
     q->rng.desc = "msgq";
     q->lock = SPINLOCK_INIT;
     prioq_init(&q->readers);
     prioq_init(&q->writers);
     fifo_init(&q->fifo, va, PAGE_SIZE);
+    return q;
 }
 
 size_t msgq_send(msgq_t *q, const void *msg, size_t len, int timeout) {
     ASSERT(cpu_int_depth() == 0);
 
-    // task_t *self = current_task();
     spinlock_node_t node;
 
     while (1) {
@@ -67,7 +100,6 @@ void msgq_send_force(msgq_t *q, void *msg, size_t len) {
 size_t msgq_recv(msgq_t *q, void *dst, size_t len, int timeout) {
     ASSERT(cpu_int_depth() == 0);
 
-    // task_t *self = current_task();
     spinlock_node_t node;
 
     while (1) {
@@ -99,4 +131,8 @@ size_t msgq_recv(msgq_t *q, void *dst, size_t len, int timeout) {
         // 被唤醒，但数据还在 fifo 里面，没有读取出来
         // 需要重新锁住 msgq，尝试读取，如果读取失败还要继续阻塞
     }
+}
+
+void msgq_drop(msgq_t *q) {
+    kobj_drop(&g_msgq_class, q);
 }

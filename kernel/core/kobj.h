@@ -27,5 +27,6 @@ void *kobj_make(kclass_t *cls, const char *name);
 void *kobj_find(kclass_t *cls, const char *name);
 void *kobj_keep(void *obj);                 // 引用数 +1
 void  kobj_drop(kclass_t *cls, void *obj);  // 引用数 -1，可能执行析构函数
+void  kobj_free(kclass_t *cls, void *obj);  // 不析构，直接释放，用于构造失败的清空
 
 #endif // KOBJ_H

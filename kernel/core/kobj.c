@@ -113,11 +113,14 @@ void kobj_drop(kclass_t *cls, void *ptr) {
     if (cls->dtor) {
         cls->dtor(ptr);
     }
-    {
-        SPINLOCK_SCOPED(&cls->lock);
-        dl_remove(&obj->objnode);
-        pool_free_nolock(&cls->pool, obj);
-    }
+    kobj_free(cls, ptr);
+}
+
+void kobj_free(kclass_t *cls, void *ptr) {
+    kobj_t *obj = (kobj_t*)((char*)ptr - sizeof(kobj_t));
+    SPINLOCK_SCOPED(&cls->lock);
+    dl_remove(&obj->objnode);
+    pool_free_nolock(&cls->pool, obj);
 }
 
 //------------------------------------------------------------------------------
@@ -132,7 +135,9 @@ static void show_objs(int argc, char *argv[]) {
         if ((argc > 1) && kstrcmp(cls->name, argv[1])) {
             continue;
         }
-        console_printf("%s:", cls->name);
+        size_t waste = PAGE_SIZE % cls->pool.obj_size;
+        console_printf("%s(%u/%u->%zu):", cls->name,
+            cls->pool.raw_size, cls->pool.obj_size, waste);
         SPINLOCK_SCOPED(&cls->lock);
         for (dlnode_t *j = cls->head.next; j != &cls->head; j = j->next) {
             kobj_t *obj = containerof(j, kobj_t, objnode);

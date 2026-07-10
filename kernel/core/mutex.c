@@ -1,18 +1,38 @@
 #include "mutex.h"
+#include <kobj.h>
+#include <task.h>
+#include <spinlock.h>
 #include <debug.h>
 
 // 二值的信号量，但是更严格，必须由相同的线程获取/释放
 // 不能跨线程获取/释放，也不能在 ISR 里面使用
 
-void mutex_init(mutex_t *mut) {
+static kclass_t g_mutex_class;
+
+typedef struct mutex {
+    spinlock_t  lock;
+    prioq_t     wq;
+    task_t     *owner;  // guarded by lock, NULL if not locked
+} mutex_t;
+
+
+INIT_TEXT void mutex_init(void) {
+    kclass_register(&g_mutex_class, "mutex", sizeof(mutex_t), NULL);
+}
+
+mutex_t *mutex_make(const char *name) {
+    mutex_t *mut = (mutex_t*)kobj_make(&g_mutex_class, name);
+    if (NULL == mut) {
+        return NULL;
+    }
     mut->lock = SPINLOCK_INIT;
     prioq_init(&mut->wq);
     mut->owner = NULL;
+    return mut;
 }
 
 // 返回 1 表示成功得到锁
 // 返回 0 表示未得到锁，超时
-// TODO 返回 -1 表示锁被删除
 int mutex_take(mutex_t *mut, int timeout) {
     ASSERT(0 == cpu_int_depth());
 
@@ -56,6 +76,6 @@ void mutex_give(mutex_t *mut) {
     }
 }
 
-// TODO mutex_destroy 删除一个互斥锁
-//  按照 posix，只有当 mutex_destroy 没有阻塞者的时候才能释放，否则返回 EBUSY
-//  我们可以支持两种模式，safe_destroy 和 force_destroy
+void mutex_drop(mutex_t *mut) {
+    kobj_drop(&g_mutex_class, mut);
+}

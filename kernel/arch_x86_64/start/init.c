@@ -25,6 +25,8 @@
 #include <work.h>
 #include <wdog.h>
 #include <sema.h>
+#include <mutex.h>
+#include <msgq.h>
 
 #include <kstring.h>
 #include <debug.h>
@@ -266,6 +268,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     // wdog_init();
     sched_init();
     sema_init();
+    mutex_init();
+    msgq_init();
 
     // 创建根任务并开始运行，优先级 30，仅高于 idle
     g_root_tcb = task_make("root", 30, root_proc);
@@ -285,8 +289,6 @@ end:
 //------------------------------------------------------------------------------
 
 static void root_proc() {
-    task_drop(g_root_tcb);
-
     // 将实模式代码复制到 1M 以下
     char *from = &_real_addr;
     char *to = idmap_at(KERNEL_REAL_ADDR);

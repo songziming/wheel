@@ -127,10 +127,12 @@ INIT_TEXT void sched_init() {
     prioq_init(q);
 
     // 创建 idle-task
-    task_t *idle = task_make(kernel_heap_mkstr("idle-%d", cpu), 31, proc_idle);
+    task_t *idle = task_make(kernel_heap_mkstr("idle%d", cpu), 31, proc_idle);
     if (NULL == idle) {
         panic("cannot alloc for TCB idle\n");
     }
+
+    // 这里不能用 task_start，需要手动放入就绪队列
     idle->affinity = cpu;
     atomic_store(&idle->state, TS_READY);
     prioq_insert(q, &idle->dl, 31);
@@ -446,12 +448,11 @@ void task_exit() {
 // 启动任务并立即切换
 //------------------------------------------------------------------------------
 
-// 运行起来的新任务也引用自己的 kobj，需要增加一个计数器
+// 运行起来的新任务也引用自己的 kobj
+// 如果父线程还要持有 TCB，需要主动增加一个计数器
 
 // 适合只启动一个任务，无需禁用抢占，启动之后立即可切换
 void task_start_now(task_t *tid) {
-    // task_t *tid = containerof(tid, task_t, task);
-    kobj_keep(tid);
     int cpu = task_cont(tid, TS_STOPPED);
     if (cpu_index() == cpu) {
         arch_task_switch();
@@ -463,8 +464,6 @@ void task_start_now(task_t *tid) {
 // 启动任务但暂时不要切换
 // 如果批量启动任务，顺序是：禁用抢占，启动任务，发送 ipi，启用抢占，切换
 uint64_t task_start(task_t *tid) {
-    // task_t *tid = containerof(tid, task_t, task);
-    kobj_keep(tid);
     int cpu = task_cont(tid, TS_STOPPED);
     return (cpu >= 0) ? (1UL << cpu) : 0UL;
 }
@@ -488,12 +487,20 @@ void notify_resched(uint64_t cpumask) {
 // 等待任务结束生命周期（达到 STOPPED 状态）
 // 同时减小一个计数器
 void task_join(task_t *tid) {
-    // task_t *tid = containerof(tid, task_t, task);
+    int need_switch = 0;
     {
         SPINLOCK_SCOPED(&tid->join_lock);
-        task_pend(&tid->join_q, &tid->join_lock, FOREVER);
+        // 先检查目标任务是否已经退出（TS_STOPPED）
+        // 如果已经退出，跳过阻塞；否则才 pend
+        // 这与 task_exit 的"置 TS_STOPPED + 唤醒 join_q"在 join_lock 上串行，不会丢失唤醒
+        if (!(atomic_load(&tid->state) & TS_STOPPED)) {
+            task_pend(&tid->join_q, &tid->join_lock, FOREVER);
+            need_switch = 1;
+        }
     }
-    arch_task_switch();
+    if (need_switch) {
+        arch_task_switch();
+    }
 
     // 执行到这里，说明目标任务已经结束，但我们还持有一个引用
     // 去掉这个引用
@@ -502,7 +509,6 @@ void task_join(task_t *tid) {
 
 // 不等待子线程结束，直接放弃引用
 void task_drop(task_t *tid) {
-    // task_t *tid = containerof(tid, task_t, task);
     kobj_drop(&g_tcb_class, tid);
 }
 

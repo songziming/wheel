@@ -106,23 +106,11 @@ static void slab_obj_free(uint32_t slab, void *obj) {
 //------------------------------------------------------------------------------
 
 void pool_init(pool_t *slub, size_t obj_size) {
-    obj_size = align_up(obj_size, arch_cacheline_size());
-
-    // // 寻找能容纳至少 8 个对象的最小 slab 阶数
-    // uint32_t order = 0;
-    // for (; order < PAGE_BLOCK_RANK_NUM; ++order) {
-    //     if ((8 * obj_size) <= ((size_t)PAGE_SIZE << order)) {
-    //         break;
-    //     }
-    // }
-    // ASSERT(order < PAGE_BLOCK_RANK_NUM);
-
-    // slub->lock       = SPINLOCK_INIT;
-    slub->obj_size   = (uint16_t)obj_size;
-    // slub->slab_order = (uint8_t)order;
-    slub->empty      = (pglist_t){0, 0};
-    slub->partial    = (pglist_t){0, 0};
-    slub->full       = (pglist_t){0, 0};
+    slub->raw_size  = (uint16_t)obj_size;
+    slub->obj_size  = (uint16_t)align_up(obj_size, arch_cacheline_size());
+    slub->empty     = (pglist_t){0, 0};
+    slub->partial   = (pglist_t){0, 0};
+    slub->full      = (pglist_t){0, 0};
 }
 
 void pool_destroy_nolock(pool_t *slub) {
