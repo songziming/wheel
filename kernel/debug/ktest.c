@@ -68,6 +68,9 @@ void test_cooperative() {
     ta->affinity = 0;
     tb->affinity = 0;
 
+    logk("taska %p\n", ta);
+    logk("taskb %p\n", tb);
+
     int key = cpu_int_disable();
     task_start(ta);
     task_start(tb);
@@ -82,12 +85,12 @@ void test_cooperative() {
     // while (TS_DELETED != tb->state) {
     //     cpu_pause();
     // }
-    task_join(ta);
-    task_join(tb);
-    logk("TCB safely deleted\n");
+    task_join_and_drop(ta);
+    task_join_and_drop(tb);
+    logk("TCB safely deleted, #a=%d, #b=%d\n", kobj_nref(ta), kobj_nref(tb));
 
-    task_drop(ta);
-    task_drop(tb);
+    // task_drop(ta);
+    // task_drop(tb);
 }
 
 //------------------------------------------------------------------------------

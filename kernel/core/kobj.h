@@ -22,6 +22,7 @@ typedef struct kclass {
 void kclass_register(kclass_t *cls, const char *name, size_t objsize, kobj_dtor_t dtor);
 
 const char *kobj_name(const void *ptr);
+int kobj_nref(const void *ptr);
 
 void *kobj_make(kclass_t *cls, const char *name);
 void *kobj_find(kclass_t *cls, const char *name);

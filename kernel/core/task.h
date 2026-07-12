@@ -85,7 +85,7 @@ void task_start_now(task_t *tid);
 uint64_t task_start(task_t *tid);
 void notify_resched(uint64_t cpumask);
 
-void task_join(task_t *tid);
+void task_join_and_drop(task_t *tid);
 void task_drop(task_t *tid);
 
 #endif // TASK_H

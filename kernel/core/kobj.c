@@ -48,6 +48,11 @@ const char *kobj_name(const void *ptr) {
     return obj->name;
 }
 
+int kobj_nref(const void *ptr) {
+    const kobj_t *obj = (const kobj_t*)((const char*)ptr - sizeof(kobj_t));
+    return obj->refcnt;
+}
+
 
 void *kobj_make(kclass_t *cls, const char *name) {
 #ifdef DEBUG
@@ -107,8 +112,12 @@ void *kobj_keep(void *ptr) {
 // 释放对象
 void kobj_drop(kclass_t *cls, void *ptr) {
     kobj_t *obj = (kobj_t*)((char*)ptr - sizeof(kobj_t));
-    if (atomic_fetch_sub(&obj->refcnt, 1) > 1) {
+    int old = atomic_fetch_sub(&obj->refcnt, 1);
+    if (old > 1) {
         return; // 还不能释放
+    }
+    if (old <= 0) {
+        panic("releasing 0-ref obj %s-%s\n", cls->name, obj->name);
     }
     if (cls->dtor) {
         cls->dtor(ptr);

@@ -194,7 +194,7 @@ task_t *task_make(const char *name, int prio, void *func) {
 // 此时线程已经停止运行，不能在当前线程里调用
 static void task_cleanup(void *obj) {
     task_t *tid = (task_t*)obj;
-    logk("cleanup task-%s\n", kobj_name(obj));
+    logk("cleanup task-%s %p\n", kobj_name(obj), obj);
     vmspace_remove(&g_kernel_vm, &tid->stack);
     atomic_store(&tid->state, TS_DELETED);
 }
@@ -486,7 +486,7 @@ void notify_resched(uint64_t cpumask) {
 
 // 等待任务结束生命周期（达到 STOPPED 状态）
 // 同时减小一个计数器
-void task_join(task_t *tid) {
+void task_join_and_drop(task_t *tid) {
     int need_switch = 0;
     {
         SPINLOCK_SCOPED(&tid->join_lock);
