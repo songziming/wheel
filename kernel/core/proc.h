@@ -1,5 +1,5 @@
-#ifndef PROCESS_H
-#define PROCESS_H
+#ifndef PROC_H
+#define PROC_H
 
 #include <spinlock.h>
 #include <dllist.h>
@@ -12,15 +12,14 @@ typedef struct process {
     dlnode_t    tasks_head; // list of tasks
     int         task_num;
     vmspace_t   vm;
-} process_t;
+} proc_t;
 
 
 INIT_TEXT void process_init();
-process_t *process_create();
-void process_destroy(process_t *pid);
+proc_t *proc_make();
 
-void task_enter_process(process_t *pid);
-void task_leave_process(process_t *pid);
+void task_enter_process(proc_t *pid);
+void task_leave_process(proc_t *pid);
 
 
-#endif // PROCESS_H
+#endif // PROC_H

@@ -5,7 +5,7 @@
 
 
 #include "task.h"
-#include "process.h"
+#include "proc.h"
 #include "work.h"
 #include <arch_api.h>
 #include "spinlock.h"
@@ -17,6 +17,8 @@
 #include <kshell.h>
 #include <console.h>
 
+
+static kclass_t g_tcb_class;
 
 static INIT_BSS task_t g_dummy_tcb;
 // static PERCPU_BSS task_t g_idle_tcb;
@@ -35,12 +37,6 @@ PERCPU_DATA int g_preempt_depth = 0;
 // 负载均衡
 static _Atomic uint64_t g_idle_mask = 0UL;
 static _Atomic uint32_t g_next_cpu = 0U;
-
-// 将所有的 TCB 串联在一起
-// static spinlock_t g_tcb_lock = SPINLOCK_INIT;
-// static pool_t g_tcb_pool;
-// static dlnode_t g_tcb_head;
-static kclass_t g_tcb_class;
 
 
 //------------------------------------------------------------------------------
@@ -117,10 +113,7 @@ static void task_cleanup(void *obj);
 INIT_TEXT void sched_init() {
     int cpu = cpu_index();
     if (0 == cpu) {
-        // 第一个CPU启动任务之前初始化任务池和任务队列
-        // pool_init(&g_tcb_pool, sizeof(task_t));
-        // dl_init_circular(&g_tcb_head);
-        kclass_register(&g_tcb_class, "tid", sizeof(task_t), task_cleanup);
+        kclass_register(&g_tcb_class, "TCB", sizeof(task_t), task_cleanup);
     }
 
     prioq_t *q = THISCPU(&g_rdyq);
@@ -197,13 +190,6 @@ static void task_cleanup(void *obj) {
     logk("cleanup task-%s %p\n", kobj_name(obj), obj);
     vmspace_remove(&g_kernel_vm, &tid->stack);
     atomic_store(&tid->state, TS_DELETED);
-}
-
-// 将任务从内核任务列表中取出
-void task_take_from_kernel(task_t *tid) {
-    (void)tid;
-    // SPINLOCK_SCOPED(&g_tcb_lock);
-    // dl_remove(&tid->objnode);
 }
 
 //------------------------------------------------------------------------------
@@ -367,8 +353,46 @@ static void on_task_timeout(wdog_t *wd) {
     }
 }
 
+
 //------------------------------------------------------------------------------
-// 退出自身任务
+// 启动任务并立即切换
+//------------------------------------------------------------------------------
+
+// 运行起来的新任务也引用自己的 kobj
+// 如果父线程还要持有 TCB，需要主动增加一个计数器
+
+// 适合只启动一个任务，无需禁用抢占，启动之后立即可切换
+void task_start_now(task_t *tid) {
+    int cpu = task_cont(tid, TS_STOPPED);
+    if (cpu_index() == cpu) {
+        arch_task_switch();
+    } else if (cpu >= 0) {
+        arch_send_ipi(cpu, VEC_IPI_RESCHED);
+    }
+}
+
+// 启动任务但暂时不要切换
+// 如果批量启动任务，顺序是：禁用抢占，启动任务，发送 ipi，启用抢占，切换
+uint64_t task_start(task_t *tid) {
+    int cpu = task_cont(tid, TS_STOPPED);
+    return (cpu >= 0) ? (1UL << cpu) : 0UL;
+}
+
+// 执行 task_start 之后，调用此函数发送 IPI，通知目标 cpu 切换任务
+// 不操作当前 cpu，调用者应保证禁用抢占
+void notify_resched(uint64_t cpumask) {
+    cpumask &= ~(1UL << cpu_index());
+    while (cpumask) {
+        int cpu = __builtin_ctzll(cpumask);
+        ASSERT(cpu_index() != cpu);
+        cpumask &= cpumask - 1;
+        arch_send_ipi(cpu, VEC_IPI_RESCHED);
+    }
+}
+
+
+//------------------------------------------------------------------------------
+// 退出自身任务/等待任务退出
 //------------------------------------------------------------------------------
 
 typedef struct freework {
@@ -442,47 +466,6 @@ void task_exit() {
     // 触发任务切换，这次切换不执行 work，下次中断再执行 work
     arch_task_switch();
 }
-
-
-//------------------------------------------------------------------------------
-// 启动任务并立即切换
-//------------------------------------------------------------------------------
-
-// 运行起来的新任务也引用自己的 kobj
-// 如果父线程还要持有 TCB，需要主动增加一个计数器
-
-// 适合只启动一个任务，无需禁用抢占，启动之后立即可切换
-void task_start_now(task_t *tid) {
-    int cpu = task_cont(tid, TS_STOPPED);
-    if (cpu_index() == cpu) {
-        arch_task_switch();
-    } else if (cpu >= 0) {
-        arch_send_ipi(cpu, VEC_IPI_RESCHED);
-    }
-}
-
-// 启动任务但暂时不要切换
-// 如果批量启动任务，顺序是：禁用抢占，启动任务，发送 ipi，启用抢占，切换
-uint64_t task_start(task_t *tid) {
-    int cpu = task_cont(tid, TS_STOPPED);
-    return (cpu >= 0) ? (1UL << cpu) : 0UL;
-}
-
-// 执行 task_start 之后，调用此函数发送 IPI，通知目标 cpu 切换任务
-// 不操作当前 cpu，调用者应保证禁用抢占
-void notify_resched(uint64_t cpumask) {
-    cpumask &= ~(1UL << cpu_index());
-    while (cpumask) {
-        int cpu = __builtin_ctzll(cpumask);
-        ASSERT(cpu_index() != cpu);
-        cpumask &= cpumask - 1;
-        arch_send_ipi(cpu, VEC_IPI_RESCHED);
-    }
-}
-
-//------------------------------------------------------------------------------
-// 等待任务结束/减少引用数
-//------------------------------------------------------------------------------
 
 // 等待任务结束生命周期（达到 STOPPED 状态）
 // 同时减小一个计数器
