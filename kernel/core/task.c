@@ -22,7 +22,7 @@ static kclass_t g_tcb_class;
 
 static INIT_BSS task_t g_dummy_tcb;
 // static PERCPU_BSS task_t g_idle_tcb;
-static NORETURN void task_entry(void (*real)());
+// static NORETURN void task_entry(void (*real)());
 static NORETURN void proc_idle();
 
 // ready queue
@@ -120,7 +120,7 @@ INIT_TEXT void sched_init() {
     prioq_init(q);
 
     // 创建 idle-task
-    task_t *idle = task_make(kernel_heap_mkstr("idle%d", cpu), 31, proc_idle);
+    task_t *idle = task_make(kernel_heap_mkstr("idle%d", cpu), 31, proc_idle, NULL);
     if (NULL == idle) {
         panic("cannot alloc for TCB idle\n");
     }
@@ -150,7 +150,7 @@ void sched_process() {
 // 创建任务，处于 STOPPED 状态，需要使用 task_start 启动
 //------------------------------------------------------------------------------
 
-task_t *task_make(const char *name, int prio, void *func) {
+task_t *task_make(const char *name, int prio, void *func, void *arg) {
     task_t *tid = (task_t*)kobj_make(&g_tcb_class, name);
 
     atomic_store(&tid->state, TS_STOPPED);
@@ -177,7 +177,8 @@ task_t *task_make(const char *name, int prio, void *func) {
 
     tid->stack0 = tid->stack.vend; // 记录下内核栈
     tid->stack3  = 0; // 没有用户栈（尚未分配）
-    arch_task_init(tid, (size_t)task_entry, tid->stack0, (size_t)func,0,0,0);
+    // arch_task_init(tid, (size_t)task_entry, tid->stack0, (size_t)func,0,0,0);
+    arch_task_init(tid, (size_t)func, tid->stack0, (size_t)arg, 0,0,0);
 
     // 此时任务尚未运行，refcnt==1，只有父线程一个引用持有者
     return tid;
@@ -441,7 +442,7 @@ void task_exit() {
     }
 
     if (tid->process) {
-        task_leave_process(tid->process);
+        task_leave_process();
     }
 
     // 到这里，thread 生命周期已经结束
@@ -497,17 +498,17 @@ void task_drop(task_t *tid) {
 
 //------------------------------------------------------------------------------
 
-static NORETURN void task_entry(void (*real)()) {
-    task_t *self = THISCPU_GET(g_tid_prev);
-    real();
-    logk("task %s exit\n", kobj_name(self));
-    task_exit();
-    logk("task %s still running!\n", kobj_name(self));
-    while (1) {
-        cpu_pause();
-        cpu_halt();
-    }
-}
+// static NORETURN void task_entry(void (*real)()) {
+//     task_t *self = THISCPU_GET(g_tid_prev);
+//     real();
+//     logk("task %s exit\n", kobj_name(self));
+//     task_exit();
+//     logk("task %s still running!\n", kobj_name(self));
+//     while (1) {
+//         cpu_pause();
+//         cpu_halt();
+//     }
+// }
 
 static NORETURN void proc_idle() {
     while (1) {

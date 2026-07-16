@@ -152,7 +152,7 @@ void arch_task_init(task_t *task, size_t entry, size_t stack_top,
 
     // 写入 dummy-return-addr，防止任务中 backtrace 越界
     stack_top -= 16;
-    *(uint64_t*)stack_top = 0ULL;
+    *(uint64_t*)stack_top = (uint64_t)task_exit;
 
     regs_t *regs = (regs_t*)(stack_top - sizeof(regs_t));
     kmemset(regs, 0, sizeof(regs_t));

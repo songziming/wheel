@@ -59,8 +59,8 @@ static void proc_b() {
 
 // called from init code
 void test_cooperative() {
-    ta = task_make("ta", 10, proc_a);
-    tb = task_make("tb", 10, proc_b);
+    ta = task_make("ta", 10, proc_a, NULL);
+    tb = task_make("tb", 10, proc_b, NULL);
 
     kobj_keep(ta);
     kobj_keep(tb);
@@ -123,7 +123,7 @@ void test_smp_tasks() {
     for (int i = 0; i < 10; ++i) {
         kmemcpy(smp_names[i], "smpX", 5);
         smp_names[i][3] = 'A' + i;
-        smp_tcbs[i] = task_make(smp_names[i], 10, proc_smp);
+        smp_tcbs[i] = task_make(smp_names[i], 10, proc_smp, NULL);
         // smp_tcbs[i].affinity = 0;
     }
 
@@ -185,9 +185,9 @@ static void proc_consumer_c() {
 
 
 void test_sema() {
-    sa = task_make("sema-A", 10, proc_consumer_a);
-    sb = task_make("sema-B", 10, proc_consumer_b);
-    sc = task_make("sema-C", 10, proc_consumer_c);
+    sa = task_make("sema-A", 10, proc_consumer_a, NULL);
+    sb = task_make("sema-B", 10, proc_consumer_b, NULL);
+    sc = task_make("sema-C", 10, proc_consumer_c, NULL);
 
     g_sem = sema_make("test-sem", 0, 1000);
 
@@ -249,8 +249,8 @@ static void q_reader() {
 }
 
 void test_msgq() {
-    tw = task_make("writer", 10, q_writer);
-    tr = task_make("reader", 10, q_reader);
+    tw = task_make("writer", 10, q_writer, NULL);
+    tr = task_make("reader", 10, q_reader, NULL);
     tw->affinity = 0;
     tr->affinity = 0;
 

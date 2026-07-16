@@ -22,7 +22,7 @@ enum task_state {
     TS_DELETED = 4, // 资源已经回收，TCB 可以复用
 };
 
-typedef struct process proc_t;
+typedef struct proc proc_t;
 
 // 调度对象，调度器视角下操作的对象
 // 这是内核线程所需的最小信息
@@ -46,9 +46,8 @@ typedef struct task {
 
     // 所属进程的资源
     size_t      pgtbl;      // 就是 process->vm.table，放在这里便于访问
-    proc_t  *process;    // parent process (NULL if kernel thread)
+    proc_t     *process;    // parent process (NULL if kernel thread)
     vmrange_t   stack;      // kernel stack
-    vmrange_t   user_stack; // user stack
 
     // 等待线程退出的阻塞队列
     spinlock_t  join_lock;
@@ -63,7 +62,7 @@ task_t *current_task();
 INIT_TEXT void sched_init();
 void sched_process();
 
-task_t *task_make(const char *name, int prio, void *func);
+task_t *task_make(const char *name, int prio, void *func, void *arg);
 
 // 阻塞当前任务，将其放入 waitq，可选地启动超时定时器
 // 调用者必须持有 `lock`（即 waitq 所属对象的锁），中断关闭

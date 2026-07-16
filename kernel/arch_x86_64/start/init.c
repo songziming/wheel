@@ -272,7 +272,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     msgq_init();
 
     // 创建根任务并开始运行，优先级 30，仅高于 idle
-    g_root_tcb = task_make("root", 30, root_proc);
+    g_root_tcb = task_make("root", 30, root_proc, NULL);
     g_root_tcb->affinity = 0;
     task_start_now(g_root_tcb);
     // 之后的代码不再运行

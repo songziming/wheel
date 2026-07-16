@@ -40,6 +40,9 @@ static inline size_t align_up(size_t x, size_t align) {
 // slab 级别：对象分配与释放
 //------------------------------------------------------------------------------
 
+// TODO 只分配一个页，可能造成严重的浪费
+//      可以为每个 pool 预留足够大的虚拟地址范围，申请新的页，自动追加到末尾
+//      这样 slub 末尾不会有剩余空间，而且 pool 整体只有一个 freelist
 static uint32_t slab_create(size_t obj_size) {
     size_t pa = page_alloc(0, PT_POOL);
     if (0 == pa) {

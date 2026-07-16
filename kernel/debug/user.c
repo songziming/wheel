@@ -1,38 +1,13 @@
 #include <wheel.h>
 #include <task.h>
+#include <proc.h>
+#include <elf.h>
 
 #include <kstring.h>
 #include <debug.h>
 #include <kshell.h>
 #include <console.h>
 #include <tar.h>
-
-
-// 用户态支持
-
-
-//------------------------------------------------------------------------------
-// 系统调用
-//------------------------------------------------------------------------------
-
-size_t do_syscall(int id, size_t a1, size_t a2, size_t a3, size_t a4) {
-    console_printf("handling syscall #%d\n", id);
-
-    if (123 == id) {
-        console_printf("print: `%s`\n", (char*)a1);
-    }
-
-    if (0 == id) {
-        task_exit();
-    }
-
-    (void)a1;
-    (void)a2;
-    (void)a3;
-    (void)a4;
-
-    return id + 1;
-}
 
 
 //------------------------------------------------------------------------------
@@ -60,19 +35,18 @@ void user_kernel_task() {
     vmspace_alloc_at(&g_kernel_vm, &g_user_code, 0x400000,
         paged_size, PT_KERNEL, MMU_WRITE|MMU_EXEC|MMU_USER);
 
-    size_t stack = (size_t)vmspace_alloc(&g_kernel_vm, &tid->user_stack,
-        PAGE_SIZE, PT_STACK, MMU_WRITE|MMU_USER);
-
-    logk("ring3 code 0x%zx~0x%zx, len=0x%zx\n", g_user_code.vaddr, g_user_code.vend, len);
-    logk("ring3 stack 0x%zx~0x%zx\n", tid->user_stack.vaddr, tid->user_stack.vend);
-    g_user_code.desc = "ring3 code&data";
-    tid->user_stack.desc = "ring3 stack";
+    // size_t stack = (size_t)vmspace_alloc(&g_kernel_vm, &tid->user_stack,
+    //     PAGE_SIZE, PT_STACK, MMU_WRITE|MMU_USER);
+    // logk("ring3 code 0x%zx~0x%zx, len=0x%zx\n", g_user_code.vaddr, g_user_code.vend, len);
+    // logk("ring3 stack 0x%zx~0x%zx\n", tid->user_stack.vaddr, tid->user_stack.vend);
+    // g_user_code.desc = "ring3 code&data";
+    // tid->user_stack.desc = "ring3 stack";
 
     // 将 flat binary 的代码和数据拷贝到目标地址
     size_t code3 = g_user_code.vaddr;
     kmemcpy((char*)code3, from, len);
 
-    arch_enter_ring3(code3, stack + PAGE_SIZE);
+    // arch_enter_ring3(code3, stack + PAGE_SIZE);
 }
 
 
@@ -98,18 +72,35 @@ static int tar_start_app(const char *name, const char *data, size_t len, void *u
 
     // 找到了user app，解析elf，创建任务
     console_printf("found user program %s at %p, size %zu\n", name, data, len);
+    console_printf("file header is '%.4s'\n", data);
 
-#if 0
-    // 这个字符串是临时数据，但本命令执行过程中一直有效
-    tcb_user = task_make(name, 10, user_kernel_task);
-    task_start_now(tcb_user);
-
-    // 等待线程退出
-    while (tcb_user->state != TS_DELETED) {
-        cpu_pause();
+    proc_t *pid = proc_make(name);
+    if (NULL == pid) {
+        console_printf("error: cannot create process\n");
+        return 0;
     }
-    console_printf("user task deleted!\n");
-#endif
+
+    // 当前处于 shell task，临时切换到新进程的地址空间
+    // 目的是加载 ELF，完成后会离开这个地址空间
+    // 加载时，segment 需要允许 write，拷贝完成改为 readonly
+    // 我们不需要使用该地址空间，所以 remap 之后不用 invlpg
+    task_enter_process(pid);
+
+    // 解析 data 指向的 ELF 文件，加载到进程地址空间
+    size_t entry = elf_load(pid, data, len);
+    if (0 == entry) {
+        console_printf("error: failed to load ELF\n");
+        // 加载失败，退出前需要清理
+        task_leave_process();
+        return 0;
+    }
+    console_printf("ELF loaded, entry point: 0x%zx\n", entry);
+
+    // 回到内核页表
+    task_leave_process();
+
+    // TODO 创建一个新线程，入口为 entry，使用 pid
+
     return 0;
 }
 
