@@ -64,6 +64,7 @@ typedef struct {
 #define ET_EXEC     2   // 可执行文件
 
 // e_machine 取值
+// TODO 应该在 arch_config.h 里面定义
 #define EM_X86_64   62  // AMD x86-64
 
 // e_version 取值

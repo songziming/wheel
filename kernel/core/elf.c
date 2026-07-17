@@ -6,6 +6,7 @@
 #include <arch_api.h>
 #include <debug.h>
 
+
 // 将 ELF 的 p_flags 转换为 mmu_attr_t
 static mmu_attr_t elf_to_mmu_attr(Elf64_Word p_flags) {
     mmu_attr_t attrs = MMU_USER;
@@ -22,7 +23,7 @@ size_t elf_load(proc_t *pid, const void *data, size_t len) {
         return 0;
     }
 
-    const Elf64_Ehdr *ehdr = (const Elf64_Ehdr *)data;
+    const Elf64_Ehdr *ehdr = (const Elf64_Ehdr*)data;
 
     // 验证 ELF 魔数
     if (ehdr->e_ident[EI_MAG0] != ELFMAG0 ||
@@ -106,8 +107,11 @@ size_t elf_load(proc_t *pid, const void *data, size_t len) {
 
         // 映射段到目标虚拟地址，初始以可写权限映射（拷贝数据用）
         // vmspace_alloc_at 内部会向上取整到页边界
+        size_t align_size = (size_t)p->p_memsz;
+        align_size += PAGE_SIZE - 1;
+        align_size &= ~(PAGE_SIZE - 1);
         void *vaddr = vmspace_alloc_at(&pid->vm, rng, (size_t)p->p_vaddr,
-            (size_t)p->p_memsz, PT_KERNEL, MMU_WRITE | MMU_USER);
+            align_size, PT_KERNEL, MMU_WRITE);
         if (NULL == vaddr) {
             logk("elf_load: failed to allocate segment at 0x%zx, size 0x%zx\n",
                 (size_t)p->p_vaddr, (size_t)p->p_memsz);

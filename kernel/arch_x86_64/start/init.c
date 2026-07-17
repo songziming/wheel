@@ -22,6 +22,7 @@
 #include <pmlayout.h>
 
 #include <task.h>
+#include <proc.h>
 #include <work.h>
 #include <wdog.h>
 #include <sema.h>
@@ -270,6 +271,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     sema_init();
     mutex_init();
     msgq_init();
+    process_init();
 
     // 创建根任务并开始运行，优先级 30，仅高于 idle
     g_root_tcb = task_make("root", 30, root_proc, NULL);

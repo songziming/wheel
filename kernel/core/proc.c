@@ -15,6 +15,7 @@ static kclass_t g_pcb_class;
 // 只剩最后一个引用，可以安全访问，无需加锁
 static void proc_cleanup(void *ptr) {
     proc_t *pid = (proc_t *)ptr;
+    logk("destroying process %s-%d\n", kobj_name(ptr), pid->id);
 
     dlnode_t *dl = pid->vm.head.next;
     while (dl != &pid->vm.head) {
@@ -34,6 +35,8 @@ INIT_TEXT void process_init() {
     // kclass_register(&g_rng_class, "VM", sizeof(vmrange_t), NULL);
 }
 
+static _Atomic int g_next_id = 0;
+
 proc_t *proc_make(const char *name) {
     proc_t *pid = kobj_make(&g_pcb_class, name);
     if (NULL == pid) {
@@ -45,11 +48,17 @@ proc_t *proc_make(const char *name) {
     // dl_init_circular(&pid->tasks_head);
     // pid->task_num = 0;
 
+    pid->id = atomic_fetch_add(&g_next_id, 1);
+
     vmspace_init(&pid->vm, 0x100000, 1UL << 32);
     pid->vm.table = mmu_create();
     mmu_copykernel(pid->vm.table, g_kernel_vm.table);
 
     return pid;
+}
+
+void proc_drop(proc_t *pid) {
+    kobj_drop(&g_pcb_class, pid);
 }
 
 // 将当前任务迁移到进程，切换到新的地址空间
