@@ -16,6 +16,8 @@ static mmu_attr_t elf_to_mmu_attr(Elf64_Word p_flags) {
     return attrs;
 }
 
+
+// 如果返回 0，表示加载失败，pid->vm 可能残留一些 segment
 size_t elf_load(proc_t *pid, const void *data, size_t len) {
     // 验证文件大小至少能容纳 ELF header
     if (len < sizeof(Elf64_Ehdr)) {
@@ -71,26 +73,9 @@ size_t elf_load(proc_t *pid, const void *data, size_t len) {
     for (int i = 0; i < ehdr->e_phnum; i++) {
         const Elf64_Phdr *p = (const Elf64_Phdr*)(file_base + ehdr->e_phoff + i * ehdr->e_phentsize);
 
-        // 只关心 PT_LOAD 类型的段
-        if (p->p_type != PT_LOAD) {
+        // 只关心 PT_LOAD 类型的段、跳过空段
+        if ((PT_LOAD != p->p_type) || (0 == p->p_memsz)) {
             continue;
-        }
-
-        // 跳过空段
-        if (0 == p->p_memsz) {
-            continue;
-        }
-
-        // 分配一个 vmrange 用于跟踪此段的虚拟内存
-        // 使用 proc_t 内嵌的 code / data 字段，最多支持两个 PT_LOAD 段
-        vmrange_t *rng;
-        if (seg_count == 0) {
-            rng = &pid->code;
-        } else if (seg_count == 1) {
-            rng = &pid->data;
-        } else {
-            logk("elf_load: too many PT_LOAD segments (max 2)\n");
-            return 0;
         }
 
         // 目标虚拟地址应不小于 4K（NULL 页面保护）
@@ -107,35 +92,30 @@ size_t elf_load(proc_t *pid, const void *data, size_t len) {
 
         // 映射段到目标虚拟地址，初始以可写权限映射（拷贝数据用）
         // vmspace_alloc_at 内部会向上取整到页边界
-        size_t align_size = (size_t)p->p_memsz;
-        align_size += PAGE_SIZE - 1;
-        align_size &= ~(PAGE_SIZE - 1);
-        void *vaddr = vmspace_alloc_at(&pid->vm, rng, (size_t)p->p_vaddr,
-            align_size, PT_KERNEL, MMU_WRITE);
-        if (NULL == vaddr) {
+        vmrange_t *rng = proc_valloc(pid, (size_t)p->p_vaddr, (size_t)p->p_memsz, MMU_WRITE);
+        if (NULL == rng) {
             logk("elf_load: failed to allocate segment at 0x%zx, size 0x%zx\n",
                 (size_t)p->p_vaddr, (size_t)p->p_memsz);
             return 0;
         }
+        rng->desc = "elf-load";
 
         // 从文件拷贝段数据
+        // 剩余部分清零（内存大小大于文件大小的部分）
+        char *vaddr = (char*)rng->vaddr;
         if (p->p_filesz > 0) {
             kmemcpy(vaddr, file_base + p->p_offset, (size_t)p->p_filesz);
         }
-
-        // BSS 清零（内存大小大于文件大小的部分）
         if (p->p_memsz > p->p_filesz) {
             size_t bss_start = (size_t)p->p_filesz;
             size_t bss_size = (size_t)(p->p_memsz - p->p_filesz);
-            kmemset((char *)vaddr + bss_start, 0, bss_size);
+            kmemset(vaddr + bss_start, 0, bss_size);
         }
 
         // 根据段标志设置最终页表属性
         // 对于非可写段，移除写权限
         mmu_attr_t final_attrs = elf_to_mmu_attr(p->p_flags);
-        if (!(p->p_flags & PF_W)) {
-            vmspace_remap(&pid->vm, rng, final_attrs);
-        }
+        vmspace_remap(&pid->vm, rng, final_attrs);
 
         seg_count++;
     }

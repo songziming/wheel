@@ -14,6 +14,7 @@
 extern char _binary_users_tar_start;
 extern char _binary_users_tar_end;
 
+void vmspace_show();
 
 // 切换到进程的地址空间，开始执行 ring3 代码
 // 跳入 ring3 之后，内核栈仍然
@@ -22,7 +23,7 @@ void user_task(proc_t *pid) {
     proc_drop(pid); // 只剩下当前一个线程持有引用
 
     // task_t *self = current_task();
-    arch_enter_ring3(pid->entry, pid->ustack.vend);
+    arch_enter_ring3(pid->entry, pid->ustack->vend);
 }
 
 
@@ -60,7 +61,7 @@ static int tar_start_app(const char *name, const char *data, size_t len, void *u
     // 目的是加载 ELF，完成后会离开这个地址空间
     // 加载时，segment 需要允许 write，拷贝完成改为 readonly
     // 我们不需要使用该地址空间，所以 remap 之后不用 invlpg
-    task_enter_process(pid);
+    task_enter_process(pid); // refcnt=2
 
     // 解析 data 指向的 ELF 文件，加载到进程地址空间
     size_t entry = elf_load(pid, data, len);
@@ -74,8 +75,16 @@ static int tar_start_app(const char *name, const char *data, size_t len, void *u
     pid->entry = entry;
 
     // 分配用户栈，可以分配多个栈
-    vmspace_alloc(&pid->vm, &pid->ustack, PAGE_SIZE, PT_STACK, MMU_WRITE|MMU_USER);
-    task_leave_process();
+    pid->ustack = proc_valloc(pid, 0, PAGE_SIZE, MMU_WRITE|MMU_USER);
+    if (NULL == pid->ustack) {
+        console_printf("error: failed to allocate user stack\n");
+        task_leave_process();
+        proc_drop(pid);
+        return 0;
+    }
+    pid->ustack->desc = "user stack";
+    vmspace_show();
+    task_leave_process(); // refcnt=1
 
     // 创建一个新线程，入口为 entry，使用 pid
     logk("starting user program\n");

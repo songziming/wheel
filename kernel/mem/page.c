@@ -367,6 +367,25 @@ static void show_page(int argc, char *argv[]) {
         blk, blk, rank, end, end, g_pages[blk].type);
 }
 
+static void show_buddy() {
+    SPINLOCK_SCOPED(&g_page_spin);
+
+    size_t total_size = 0;
+    for (int rank = 0; rank < PAGE_BLOCK_RANK_NUM; ++rank) {
+        console_printf("block-%02d:", rank);
+        size_t this_size = 1U << rank;
+        uint32_t blk = g_blocks[rank].head;
+        for (; blk; blk = g_pages[blk].next) {
+            console_printf(" %x,", blk);
+            total_size += this_size;
+        }
+        console_printf("\n");
+    }
+
+    console_printf("total free pages: %zu\n", total_size);
+}
+
 KSHELL_CMD("page", show_page);
+KSHELL_CMD("buddy", show_buddy);
 
 #endif // UNIT_TEST

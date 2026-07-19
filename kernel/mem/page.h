@@ -13,6 +13,7 @@ typedef enum page_type {
     PT_POOL    = 5,
     PT_MSGQ    = 6,
     PT_FS      = 7,
+    PT_PROC    = 8,
 } page_type_t;
 
 // rank 合法取值 0~15

@@ -1,6 +1,8 @@
 #include "vmspace.h"
 #include <arch_api.h>
 #include "page.h"
+#include <task.h>
+#include <proc.h>
 #include <debug.h>
 #include <kshell.h>
 #include <console.h>
@@ -225,10 +227,17 @@ void vmspace_remove(vmspace_t *space, vmrange_t *rng) {
 
 #ifndef UNIT_TEST
 
-static void vmspace_show() {
+void vmspace_show() {
+    const char *name = "kernel";
     vmspace_t *vm = &g_kernel_vm;
+    task_t *self = current_task();
+    if (self->process) {
+        name = kobj_name(self->process);
+        vm = &self->process->vm;
+    }
+
     SPINLOCK_SCOPED(&vm->lock);
-    console_printf("kernel vmspace:\n");
+    console_printf("vmspace for %s:\n", name);
     for (dlnode_t *i = vm->head.next; &vm->head != i; i = i->next) {
         vmrange_t *rng = containerof(i, vmrange_t, dl);
         console_printf("vm %-16s %016zx~%016zx -> ", rng->desc, rng->vaddr, rng->vend);

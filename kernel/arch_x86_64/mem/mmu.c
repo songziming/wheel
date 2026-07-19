@@ -526,8 +526,9 @@ static uint64_t pml4_unmap(uint64_t pml4, uint64_t va, uint64_t end) {
 static void pml4_free(uint64_t pml4) {
     ASSERT(0 == OFFSET_4K(pml4));
 
+    // 属于内核地址空间的 mapping 不能动
     uint64_t *tbl = (uint64_t*)idmap_at(pml4);
-    for (int i = 0; i < 512; ++i) {
+    for (int i = 0; i < 256; ++i) {
         // 如果带有 global 标记，说明被所有进程共享，不能删除
         if ((tbl[i] & MMU_P) && !(tbl[i] & MMU_G)) {
             pdp_free(tbl[i] & MMU_ADDR);
