@@ -107,7 +107,7 @@ static uint64_t pt_unmap(uint64_t pt, uint64_t va, uint64_t end) {
     page_t *info = &g_pages[pt >> PAGE_SHIFT];
 
     uint64_t start = va;
-    for (int i = i = IDX_4K(va); (i < 512) && (va + 0x1000 <= end); ++i) {
+    for (int i = IDX_4K(va); (i < 512) && (va + 0x1000 <= end); ++i) {
         if (tbl[i] & MMU_P) {
             --info->ent_num;
         }

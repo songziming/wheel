@@ -85,10 +85,7 @@ proc_t *proc_make(const char *name) {
     }
 
     pid->lock = SPINLOCK_INIT;
-
-    // dl_init_circular(&pid->tasks_head);
-    // pid->task_num = 0;
-
+    pid->ustack = NULL;
     pid->id = atomic_fetch_add(&g_next_id, 1);
 
     vmspace_init(&pid->vm, 0x100000, 1UL << 32);
@@ -111,7 +108,9 @@ void task_enter_process(proc_t *pid) {
     proc_t *old = tid->process;
     tid->process = pid;
     tid->pgtbl = pid->vm.table;
-    tid->stack3 = pid->ustack->vend;
+    if (pid->ustack) {
+        tid->stack3 = pid->ustack->vend;
+    }
     mmu_usetable(tid->pgtbl);
 
     if (old) {

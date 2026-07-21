@@ -58,7 +58,7 @@ size_t page_alloc_color(uint32_t rank, page_type_t type, uint32_t period, uint32
 size_t page_alloc(uint32_t rank, page_type_t type);
 void page_free(size_t pa);
 
-void pagelist_alloc(pglist_t *pl, uint32_t num, page_type_t type);
+int pagelist_alloc(pglist_t *pl, uint32_t num, page_type_t type);
 void pagelist_free(pglist_t *pl);
 
 uint32_t page_free_count();

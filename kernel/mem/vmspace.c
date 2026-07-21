@@ -94,6 +94,7 @@ vmrange_t *vmspace_lookup(vmspace_t *space, size_t addr) {
 }
 
 // 在地址空间中添加一个范围，不操作物理地址
+// 不检测地址冲突，需要使用者保证
 INIT_TEXT void vmspace_insert(vmspace_t *space, vmrange_t *rng) {
     ASSERT(NULL != space);
     ASSERT(NULL != rng);
@@ -140,8 +141,10 @@ void *vmspace_alloc(vmspace_t *space, vmrange_t *rng, size_t size,
 
     rng->pages.head = 0;
     rng->pages.tail = 0;
-    pagelist_alloc(&rng->pages, size >> PAGE_SHIFT, type);
-    // TODO 检查pagelist申请是否成功，如果失败需要删除 rng
+    if (!pagelist_alloc(&rng->pages, size >> PAGE_SHIFT, type)) {
+        dl_remove(&rng->dl);
+        return NULL;
+    }
 
     size_t va = rng->vaddr;
     for (uint32_t blk = rng->pages.head; blk; blk = g_pages[blk].next) {
@@ -154,7 +157,6 @@ void *vmspace_alloc(vmspace_t *space, vmrange_t *rng, size_t size,
     return (void*)rng->vaddr;
 }
 
-// TODO 没有检查地址范围是否有冲突
 void *vmspace_alloc_at(vmspace_t *space, vmrange_t *rng,
         size_t addr, size_t size, page_type_t type, mmu_attr_t attrs) {
     rng->vaddr = addr;
@@ -170,8 +172,10 @@ void *vmspace_alloc_at(vmspace_t *space, vmrange_t *rng,
     rng->pages.head = 0U;
     rng->pages.tail = 0U;
     size += PAGE_SIZE - 1;
-    pagelist_alloc(&rng->pages, size >> PAGE_SHIFT, type);
-    // TODO 检查pagelist申请是否成功
+    if (!pagelist_alloc(&rng->pages, size >> PAGE_SHIFT, type)) {
+        dl_remove(&rng->dl);
+        return NULL;
+    }
 
     size_t va = rng->vaddr;
     for (uint32_t blk = rng->pages.head; blk; blk = g_pages[blk].next) {
