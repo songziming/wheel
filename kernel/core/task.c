@@ -445,9 +445,8 @@ void task_exit() {
         task_leave_process();
     }
 
-    // 到这里，thread 生命周期已经结束
-    // 应该减少 kobj.refcnt，减到零再删除
-    // TODO 我们可以在 work-func 里面减小 refcnt 数量，这可以保证执行析构安全
+    // 到这里，thread 生命周期已经结束，但不能现在析构，此刻仍在使用任务栈
+    // 需要注册一个 work，在 work-func 里面减小 refcnt
 
     {
         SPINLOCK_SCOPED(THISCPU(&g_rdy_lock));

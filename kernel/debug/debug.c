@@ -14,7 +14,6 @@ static fifo_t log_fifo;
 static char log_buff[PAGE_SIZE];
 
 INIT_TEXT void log_init() {
-    // TODO 改成动态申请页，这样才能有 guard page
     fifo_init(&log_fifo, log_buff, sizeof(log_buff));
 }
 

@@ -109,33 +109,6 @@ static void handle_pf(int vec UNUSED, regs_t *f) {
     }
 }
 
-#if 0
-// 使用 syscall 发起的系统调用，此时处于用户栈
-uint64_t handle_syscall(uint64_t rdi, uint64_t rsi) {
-    logk("syscall %zu %zu\n", rdi, rsi);
-
-    uint64_t rsp;
-    ASMV("movq %%rsp, %0" : "=r"(rsp));
-    logk("current rsp=0x%zx\n", rsp);
-
-    if (rdi == 123) {
-        logk("print: `%s`\n", (char*)rsi);
-    }
-
-    return rdi + 1;
-}
-
-// 使用软中断发起的系统调用
-static void handle_syscall_80(int vec, regs_t *f) {
-    logk("processing syscall-%d eax=%zu\n", vec, f->rax);
-    logk("rip=%zx rsp=%zx rbp=%zx frame=%p\n", f->rip, f->rsp, f->rbp, f);
-    // if (f->rax == 123) {
-    //     logk("print: %s\n", (char*)f->rdi);
-    // }
-    handle_syscall(f->rdi, f->rsi);
-}
-#endif
-
 // 每个 cpu 都要执行此函数
 // 在 TSS 中设置 IST，在 IDT 里面填入 IST-idx
 INIT_TEXT void int_init() {

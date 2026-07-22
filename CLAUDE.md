@@ -9,10 +9,11 @@ Wheel is built with LLVM (clang + ld.lld) using GNU Make. The `TOOLCHAIN` env va
 On Windows, all build commands must run inside WSL:
 
 ```bash
+wsl make users        # build user apps
 wsl make              # build kernel ELF (build/wheel.elf)
 wsl make iso          # create bootable ISO (build/cd.iso)
-wsl make unit         # build unit test binary (build/unit)
-wsl make cov          # run unit tests and generate HTML coverage report in build/coverage
+wsl make kunit        # build unit test binary (build/unit)
+wsl make kcov         # run unit tests and generate HTML coverage report in build/coverage
 wsl make clean        # remove build/ directory
 ```
 
@@ -83,8 +84,8 @@ Key test files:
 - `kernel/arch_x86_64/arch_mock.cc` / `kernel/mem/early_alloc.mock.cc` — mock implementations for unit tests
 
 ```bash
-make unit && LD_LIBRARY_PATH=build build/unit   # build and run
-make cov                                         # build + run + HTML coverage
+make kunit && LD_LIBRARY_PATH=build build/kunit # build and run
+make kcov                                       # build + run + HTML coverage
 ```
 
 ## Source conventions

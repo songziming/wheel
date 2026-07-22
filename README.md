@@ -18,10 +18,11 @@ Features:
 Wheel is build using LLVM under Linux, ses [how to build toolchain](./docs/00_build_toolchain.md).
 
 ```bash
-make        # build kernel elf image build/wheel.elf
+make users  # build user apps
+make kernel # build kernel elf image build/wheel.elf
 make iso    # create bootable iso image build/wheel.iso
-make unit   # build unit test binary build/unit
-make cov    # run unit test and generate coverage report in build/coverage
+make kunit  # build unit test binary build/unit
+make kcov   # run unit test and generate coverage report in build/coverage
 ```
 
 ## run in emulator
