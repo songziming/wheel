@@ -1,9 +1,11 @@
 #ifndef LIBC_H
 #define LIBC_H
 
-#include <stdint.h>
+#include <syscall.h>
 
-uint64_t _syscall(uint64_t rdi, uint64_t rsi);
+// // 启动入口
+// void _start(void);
+
 void sys_print(const char *s);
 
 #endif // LIBC_H

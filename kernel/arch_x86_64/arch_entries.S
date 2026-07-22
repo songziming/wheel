@@ -201,14 +201,21 @@ int_enter_nested:
     call    work_flush
     addq    $16, %rsp
 
+    movq    %gs:(g_tid_prev), %rsi
+    movq    %gs:(g_tid_next), %rdi
+
     // 如果禁用抢占被禁用，跳过任务切换
     cmpl    $0, %gs:(g_preempt_depth)
-    cmovne  %gs:(g_tid_prev), %rdi
-    jne     iret_to_task
-
-    // 切换到新任务的栈顶（也可能是同一个任务）
-    movq    %gs:(g_tid_next), %rdi
+    cmovne  %rsi, %rdi  // 禁用抢占，恢复前一个任务
+    cmpq    %rsi, %rdi
+    je      iret_same_pgtbl
 iret_to_task:
+    movq    24(%rsi), %rcx  // tid_prev->pgtbl
+    movq    24(%rdi), %rdx  // tid_next->pgtbl
+    cmpq    %rcx, %rdx
+    je      iret_same_pgtbl
+    movq    %rdx, %cr3      // update page table
+iret_same_pgtbl:
     movq    8(%rdi), %rax           // rax = g_tid_next->stack0
     movq    %rax, %gs:(g_tss+4)     // tss->rsp0 = rax
     movq    (%rdi), %rsp            // rsp = g_tid_next->stack_top
@@ -268,6 +275,7 @@ resume:
 
 // 系统调用入口，使用 syscall 跳转而来，此时中断关闭，处于用户栈
 // rip 保存在 rcx，rflags 保存在 r11（这两个都是 scratch-regs，需要保存）
+// 参数按 syscall ABI：rax=调用号, rdi,rsi,rdx,r10,r8,r9=参数1~6
 syscall_entry:
     pushq   %rcx
     pushq   %r11
@@ -275,6 +283,10 @@ syscall_entry:
     movq    %gs:(g_tid_prev), %r11
     movq    %rsp, 16(%r11)  // save user stack
     movq    8(%r11), %rsp   // switch to kernel stack
+
+    // 将 syscall 参数转成 C 调用约定：rax→rdi(第1参数), 其余寄存器顺延
+    movq    %rax, %rdi      // rdi = 调用号
+    movq    %r10, %rcx      // rcx = 第4参数（替代 r10）
 
     // 执行系统调用，中间可能切换任务
     sti

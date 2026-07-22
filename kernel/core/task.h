@@ -31,6 +31,8 @@ typedef struct task {
     size_t      stack_top;  // regs_t
     size_t      stack0;     // stack_top when syscall
     size_t      stack3;     // saved by syscall
+    size_t      pgtbl;      // 就是 process->vm.table，放在这里便于访问
+
     dlnode_t    dl;         // node in ready-queue OR wait-queue
     _Atomic uint32_t state;
     int16_t     affinity;
@@ -45,7 +47,6 @@ typedef struct task {
     int         expired;    // 是否因超时被唤醒（TODO 未使用）
 
     // 所属进程的资源
-    size_t      pgtbl;      // 就是 process->vm.table，放在这里便于访问
     proc_t     *process;    // parent process (NULL if kernel thread)
     vmrange_t   stack;      // kernel stack
 

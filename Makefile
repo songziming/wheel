@@ -129,7 +129,7 @@ include $(KERNEL_BASE)/arch_$(ARCH)/config.mk
 
 USER_CFLAGS := -target $(ARCH)-none-elf -ffreestanding -nostdlib
 USER_CFLAGS += -fno-stack-protector #-mgeneral-regs-only
-USER_CFLAGS += -I$(USER_BASE)/libc
+USER_CFLAGS += -I$(USER_BASE)/libc -I$(KERNEL_BASE)/api
 ifeq ($(DEBUG),1)
 	USER_CFLAGS += -g
 else
