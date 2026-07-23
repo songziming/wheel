@@ -469,7 +469,10 @@ INIT_TEXT void cpu_features_detect() {
 INIT_TEXT void cpu_features_enable() {
     // 设置 cr0
     uint64_t cr0 = read_cr0();
-    cr0 |=  (1UL << 16); // WP 分页写保护
+    cr0 |=   1UL << 1;  // MP=1，wait/fwait 也要触发 #NM
+    cr0 &= ~(1UL << 2); // EM=0，允许浮点指令
+    cr0 |=   1UL << 5;  // NE=1，使用标准 x87 异常
+    cr0 |= 1UL << 16;   // WP 分页写保护
     write_cr0(cr0);
 
     // 设置 cr4
@@ -477,6 +480,7 @@ INIT_TEXT void cpu_features_enable() {
     cr4 |= 1UL << 2; // time stamp counter
     cr4 |= 1UL << 5; // PAE（应该已经开启了）
     cr4 |= 1UL << 7; // PGE 全局页（标记为 global 的页表项不会从 TLB 中清除）
+    cr4 |= 1UL << 9; // OSFXSR 启用 SSE
     if (CPU_FEATURE_FSGSBASE & g_cpu_features) {
         cr4 |= 1UL << 16; // FSGSBASE 启用读写 fs.base、gs.base 的指令
     }

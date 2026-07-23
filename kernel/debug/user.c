@@ -14,13 +14,16 @@
 extern char _binary_users_tar_start;
 extern char _binary_users_tar_end;
 
-void vmspace_show();
+// void vmspace_show();
 
 // 切换到进程的地址空间，开始执行 ring3 代码
 // 跳入 ring3 之后，内核栈仍然
 void user_task(proc_t *pid) {
     task_enter_process(pid);
     proc_drop(pid); // 只剩下当前一个线程持有引用
+
+    task_t *self = current_task();
+    logk("kernel stack range: %zx~%zx\n", self->stack.vaddr, self->stack.vend);
 
     // task_t *self = current_task();
     arch_enter_ring3(pid->entry, pid->ustack->vend);
@@ -47,9 +50,9 @@ static int tar_start_app(const char *name, const char *data, size_t len, void *u
         return 1;
     }
 
-    // 找到了user app，解析elf，创建任务
-    console_printf("found user program %s at %p, size %zu\n", name, data, len);
-    console_printf("file header is '%.4s'\n", data);
+    // // 找到了user app，解析elf，创建任务
+    // console_printf("found user program %s at %p, size %zu\n", name, data, len);
+    // console_printf("file header is '%.4s'\n", data);
 
     proc_t *pid = proc_make(name);
     if (NULL == pid) {
@@ -83,7 +86,6 @@ static int tar_start_app(const char *name, const char *data, size_t len, void *u
         return 0;
     }
     pid->ustack->desc = "user stack";
-    vmspace_show();
     task_leave_process(); // refcnt=1
 
     // 创建一个新线程，入口为 entry，使用 pid

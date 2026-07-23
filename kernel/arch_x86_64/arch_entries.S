@@ -131,21 +131,24 @@ exception_stub:
     swapgs                  // 如果来自用户态，需要交换 gsbase
 exp_from_ring0:
 
-    push_8_caller_saved_regs // 这些函数会被 ISR 破坏，需要保存
-    subq    $48, %rsp       // 跳过 6 个 callee-saved regs，ISR 自己会保存
+    push_8_caller_saved_regs // 这些函数会被 ISR 破坏，需要保存（不含 rbp）
+    push_6_callee_saved_regs
+    // subq    $48, %rsp       // 跳过 6 个 callee-saved regs，ISR 自己会保存
     movq    %rsp, %rsi      // 参数：当前栈顶/寄存器文件
 
     // 建立一个新的函数栈，连接到发生异常的地方
     // 就像是从异常位置调用了本函数
-    push    0x80(%rsi)  // frame+160, RIP
-    push    %rbp
+    pushq   0x80(%rsi)  // frame+160, RIP
+    pushq   %rbp
     movq    %rsp, %rbp
 
     movq    irq_handlers(,%rdi,8), %rax
     call    *%rax
-    addq    $16, %rsp   // 跳过 dummy-stack-frame
+    popq    %rbp        // 恢复原始 rbp
+    addq    $8, %rsp    // 跳过 dummy-ret-addr
 
-    addq    $48, %rsp       // 跳过 6 个 callee-save regs
+    // addq    $48, %rsp       // 跳过 6 个 callee-save regs
+    pop_6_callee_saved_regs
     pop_9_caller_saved_regs
     addq    $8, %rsp        // 跳过错误码
 
@@ -220,6 +223,9 @@ iret_same_pgtbl:
     movq    %rax, %gs:(g_tss+4)     // tss->rsp0 = rax
     movq    (%rdi), %rsp            // rsp = g_tid_next->stack_top
     movq    %rdi, %gs:(g_tid_prev)  // prev_task = next_task
+    movq    %cr0, %rax
+    orq     $8, %rax    // CR0.TS = 1
+    movq    %rax, %cr0
 iret_nested:
     decl    %gs:(g_int_depth)
     pop_6_callee_saved_regs
@@ -284,12 +290,16 @@ syscall_entry:
     movq    %rsp, 16(%r11)  // save user stack
     movq    8(%r11), %rsp   // switch to kernel stack
 
-    // 将 syscall 参数转成 C 调用约定：rax→rcx(第1参数), 其余寄存器顺延
-    movq    %rax, %rcx      // rax = 第4参数（替代 rcx）
+    // 将 syscall 参数转成 C 调用约定
+    // syscall ABI: rdi=调用号, rsi=a1, rdx=a2, rax=a3, r8=a4, r9=a5, r10=a6
+    // C ABI:       rdi=num,   rsi=a1, rdx=a2, rcx=a3, r8=a4, r9=a5, [stack]=a6
+    movq    %rax, %rcx      // a3 → rcx
+    pushq   %r10            // a6 → stack (C 的第7个参数)
 
     // 执行系统调用，中间可能切换任务
     sti
     call    do_syscall
+    addq    $8, %rsp        // 清理栈上的 a6
     cli
 
     // 回到用户栈，返回用户态

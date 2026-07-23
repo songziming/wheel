@@ -156,6 +156,7 @@ task_t *task_make(const char *name, int prio, void *func, void *arg) {
     atomic_store(&tid->state, TS_STOPPED);
     tid->priority = prio;
     tid->affinity = -1;
+    tid->fpu_state = NULL;
 
     // 阻塞相关字段初始化（timer.state 必须 WDOG_IDLE，否则 wdog_start 会断言失败）
     atomic_store(&tid->timer.state, WDOG_IDLE);
@@ -177,7 +178,6 @@ task_t *task_make(const char *name, int prio, void *func, void *arg) {
 
     tid->stack0 = tid->stack.vend; // 记录下内核栈
     tid->stack3  = 0; // 没有用户栈（尚未分配）
-    // arch_task_init(tid, (size_t)task_entry, tid->stack0, (size_t)func,0,0,0);
     arch_task_init(tid, (size_t)func, tid->stack0, (size_t)arg, 0,0,0);
 
     // 此时任务尚未运行，refcnt==1，只有父线程一个引用持有者

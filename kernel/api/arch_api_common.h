@@ -55,5 +55,7 @@ void arch_task_init(task_t *task, size_t entry, size_t stack_top,
 void arch_task_switch();
 void arch_enter_ring3(size_t entry, size_t stack_top);
 
+void arch_set_stack0(uint64_t rsp0);
+
 
 #endif // ARCH_API_COMMON_H

@@ -113,6 +113,8 @@ void task_enter_process(proc_t *pid) {
     }
     mmu_usetable(tid->pgtbl);
 
+    arch_set_stack0(tid->stack0);
+
     if (old) {
         kobj_drop(&g_pcb_class, old);
     }

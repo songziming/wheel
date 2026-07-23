@@ -8,9 +8,8 @@
 // 遵循 x86_64 syscall ABI：num 来自 rax, a1–a6 来自 rdi,rsi,rdx,r10,r8,r9
 int64_t do_syscall(int64_t num,
         int64_t a1, int64_t a2, int64_t a3,
-        int64_t a4, int64_t a5, int64_t a6)
-{
-    console_printf("handling syscall $zd\n", num);
+        int64_t a4, int64_t a5, int64_t a6) {
+    console_printf("handling syscall %zd\n", num);
 
     (void)a1;
     (void)a2;

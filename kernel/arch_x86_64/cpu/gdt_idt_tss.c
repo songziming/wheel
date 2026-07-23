@@ -129,3 +129,8 @@ INIT_TEXT void thistss_set_ist(int ist, uint64_t addr) {
     THISCPU_SET(g_tss.ist[ist].lower, (uint32_t)addr & 0xffffffff);
     THISCPU_SET(g_tss.ist[ist].upper, (uint32_t)(addr >> 32) & 0xffffffff);
 }
+
+void arch_set_stack0(uint64_t rsp0) {
+    THISCPU_SET(g_tss.rsp[0].lower, (uint32_t)rsp0 & 0xffffffff);
+    THISCPU_SET(g_tss.rsp[0].upper, (uint32_t)(rsp0 >> 32) & 0xffffffff);
+}

@@ -38,6 +38,8 @@ typedef struct task {
     int16_t     affinity;
     int16_t     priority;
 
+    uint8_t    *fpu_state;
+
     // 阻塞相关字段：仅当 state 含 TS_PENDING 时有效
     // 由该任务所阻塞的 waitq 所属对象的锁保护（也就是 wait_lock）
     wdog_t      timer;      // 超时定时器，触发后调用 task_timeout
