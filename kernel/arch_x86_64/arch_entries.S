@@ -284,9 +284,8 @@ syscall_entry:
     movq    %rsp, 16(%r11)  // save user stack
     movq    8(%r11), %rsp   // switch to kernel stack
 
-    // 将 syscall 参数转成 C 调用约定：rax→rdi(第1参数), 其余寄存器顺延
-    movq    %rax, %rdi      // rdi = 调用号
-    movq    %r10, %rcx      // rcx = 第4参数（替代 r10）
+    // 将 syscall 参数转成 C 调用约定：rax→rcx(第1参数), 其余寄存器顺延
+    movq    %rax, %rcx      // rax = 第4参数（替代 rcx）
 
     // 执行系统调用，中间可能切换任务
     sti

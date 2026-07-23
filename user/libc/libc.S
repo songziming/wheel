@@ -11,11 +11,14 @@ _start:
     pushq   $0
     movq    %rsp, %rbp
     call    main
-    // TODO syscall exit task
 
-.text
-.code64
-
-_syscall:
+    movq    %rax, %rdi  // rdi = ret code
+    xorq    %rax, %rax  // rax = 0 (sys_exit)
     syscall
-    ret
+
+// .text
+// .code64
+
+// _syscall:
+//     syscall
+//     ret

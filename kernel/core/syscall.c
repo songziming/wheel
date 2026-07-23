@@ -12,6 +12,13 @@ int64_t do_syscall(int64_t num,
 {
     console_printf("handling syscall $zd\n", num);
 
+    (void)a1;
+    (void)a2;
+    (void)a3;
+    (void)a4;
+    (void)a5;
+    (void)a6;
+
     switch (num) {
     case SYS_exit:
         task_exit();
@@ -22,7 +29,7 @@ int64_t do_syscall(int64_t num,
         return 0;
 
     case SYS_write:
-        console_printf((const char*)a1);
+        console_printf("%s", (const char*)a1);
         // return (int64_t)a3;
         return 0;
 
