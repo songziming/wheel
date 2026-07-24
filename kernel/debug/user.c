@@ -3,6 +3,8 @@
 #include <proc.h>
 #include <elf.h>
 
+#include <heap.h>
+#include <format.h>
 #include <kstring.h>
 #include <debug.h>
 #include <kshell.h>
@@ -30,34 +32,12 @@ void user_task(proc_t *pid) {
 }
 
 
-//------------------------------------------------------------------------------
-// 解析 tar，其中包含用户态程序镜像
-//------------------------------------------------------------------------------
-
-static int tar_item(const char *name, const char *data, size_t len, void *user) {
-    (void)user;
-    console_printf("tar-entry name=`%s`, size=%zu, ptr=%p\n", name, len, data);
-    return 1;
-}
-
-void test_tar() {
-    size_t tar_size = (size_t)(&_binary_users_tar_end - &_binary_users_tar_start);
-    tar_iterate(&_binary_users_tar_start, tar_size, tar_item, NULL);
-}
-
-static int tar_start_app(const char *name, const char *data, size_t len, void *user) {
-    if (kstrcmp((const char *)user, name)) {
-        return 1;
-    }
-
-    // // 找到了user app，解析elf，创建任务
-    // console_printf("found user program %s at %p, size %zu\n", name, data, len);
-    // console_printf("file header is '%.4s'\n", data);
-
-    proc_t *pid = proc_make(name);
+static task_t *launch_user_task(const char *name, const char *data, size_t len) {
+    // name = kernel_heap_mkstr("p-%s", name);
+    proc_t *pid = proc_make(kernel_heap_mkstr("p-%s", name));
     if (NULL == pid) {
-        console_printf("error: cannot create process\n");
-        return 0;
+        logk("error: cannot create process\n");
+        return NULL;
     }
 
     // 当前处于 shell task，临时切换到新进程的地址空间
@@ -69,46 +49,107 @@ static int tar_start_app(const char *name, const char *data, size_t len, void *u
     // 解析 data 指向的 ELF 文件，加载到进程地址空间
     size_t entry = elf_load(pid, data, len);
     if (0 == entry) {
-        console_printf("error: failed to load ELF\n");
+        logk("error: failed to load ELF\n");
         task_leave_process();
         proc_drop(pid);
-        return 0;
+        return NULL;
     }
-    console_printf("ELF loaded, entry point: 0x%zx\n", entry);
+    logk("ELF loaded, entry point: 0x%zx\n", entry);
     pid->entry = entry;
 
     // 分配用户栈，可以分配多个栈
     pid->ustack = proc_valloc(pid, 0, PAGE_SIZE, MMU_WRITE|MMU_USER);
     if (NULL == pid->ustack) {
-        console_printf("error: failed to allocate user stack\n");
+        logk("error: failed to allocate user stack\n");
         task_leave_process();
         proc_drop(pid);
-        return 0;
+        return NULL;
     }
     pid->ustack->desc = "user stack";
     task_leave_process(); // refcnt=1
 
     // 创建一个新线程，入口为 entry，使用 pid
     logk("starting user program\n");
-    task_t *tuser = task_make("ring3", 10, user_task, pid);
+    task_t *tuser = task_make(kernel_heap_mkstr("t-%s", name), 10, user_task, pid);
     kobj_keep(tuser);
     task_start_now(tuser);
-    task_join_and_drop(tuser);
-    logk("user program stopped\n");
+    return tuser;
+}
+
+//------------------------------------------------------------------------------
+// 解析 tar，其中包含用户态程序镜像
+//------------------------------------------------------------------------------
+
+static int tar_item(const char *name, const char *data, size_t len, void *user) {
+    (void)user;
+    console_printf("tar-entry name=`%s`, size=%zu, ptr=%p\n", name, len, data);
+    return 1;
+}
+
+void show_tar() {
+    size_t tar_size = (size_t)(&_binary_users_tar_end - &_binary_users_tar_start);
+    tar_iterate(&_binary_users_tar_start, tar_size, tar_item, NULL);
+}
+
+typedef struct tar_result {
+    char filename[64];
+    const char *data;
+    size_t len;
+} tar_result_t;
+
+static int tar_find_cb(const char *name, const char *data, size_t len, void *user) {
+    tar_result_t *res = (tar_result_t*)user;
+    if (kstrcmp(res->filename, name)) {
+        return 1;
+    }
+
+    res->data = data;
+    res->len = len;
     return 0;
 }
 
-// 本函数在 kshell 线程里运行
-// 创建一个新任务，在新任务里面运行用户态代码
-void test_user(int argc, char *argv[]) {
+// 创建一个新任务，运行用户态代码，等待该进程结束
+void run_user(int argc, char *argv[]) {
     if (argc < 2) {
         console_printf("usage: %s USER_PROG_NAME\n", argv[0]);
         return;
     }
 
+    tar_result_t res;
+    kmemset(&res, 0, sizeof(res));
+    snprintk(res.filename, sizeof(res.filename), "%s.elf", argv[1]);
     size_t tar_size = (size_t)(&_binary_users_tar_end - &_binary_users_tar_start);
-    tar_iterate(&_binary_users_tar_start, tar_size, tar_start_app, argv[1]);
+    tar_iterate(&_binary_users_tar_start, tar_size, tar_find_cb, &res);
+
+    if (res.data && res.len) {
+        task_t *utid = launch_user_task(res.filename, res.data, res.len);
+        if (utid) {
+            task_join_and_drop(utid);
+        }
+    }
 }
 
-KSHELL_CMD("tar", test_tar);
-KSHELL_CMD("user", test_user);
+// 创建一个新任务，后台运行用户态代码
+void start_user(int argc, char *argv[]) {
+    if (argc < 2) {
+        console_printf("usage: %s USER_PROG_NAME\n", argv[0]);
+        return;
+    }
+
+    tar_result_t res;
+    kmemset(&res, 0, sizeof(res));
+    snprintk(res.filename, sizeof(res.filename), "%s.elf", argv[1]);
+    size_t tar_size = (size_t)(&_binary_users_tar_end - &_binary_users_tar_start);
+    tar_iterate(&_binary_users_tar_start, tar_size, tar_find_cb, &res);
+
+    if (res.data && res.len) {
+        task_t *utid = launch_user_task(res.filename, res.data, res.len);
+        if (utid) {
+            task_drop(utid);
+        }
+    }
+}
+
+KSHELL_CMD("tar", show_tar);
+KSHELL_CMD("run", run_user);
+KSHELL_CMD("start", start_user);

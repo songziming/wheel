@@ -41,7 +41,7 @@ KUNIT_OBJS  := $(patsubst $(KERNEL_BASE)/%,$(OUTDIR)/k/%.to,$(KXFILES))
 
 # user apps and outputs
 USER_BASE := user
-USER_APPS := test3 demo_float
+USER_APPS := test3 demo_float error
 USER_LD   := $(USER_BASE)/user.ld
 LIBC_LIB  := $(OUTDIR)/libc.o
 USER_ELFS := $(patsubst %,$(OUTDIR)/%.elf,$(USER_APPS))
