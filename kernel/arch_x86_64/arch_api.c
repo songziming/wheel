@@ -170,3 +170,16 @@ void arch_task_init(task_t *task, size_t entry, size_t stack_top,
 
     task->stack_top = (size_t)regs;
 }
+
+// 默认的 FPU 初始状态，启动时由 fpu_init() 捕获
+// 新任务创建时从这里 copy 初始状态
+CONST arch_fp_t g_fp_init_state;
+
+INIT_TEXT void fpu_init() {
+    ASMV("fninit");
+
+    // MXCSR default: all exceptions masked, round-to-nearest
+    uint32_t mxcsr = 0x1f80;
+    ASMV("ldmxcsr %0" :: "m"(mxcsr));
+    ASMV("fxsave (%0)" :: "r"(&g_fp_init_state));
+}

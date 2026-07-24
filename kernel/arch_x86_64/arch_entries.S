@@ -211,7 +211,7 @@ int_enter_nested:
     cmpl    $0, %gs:(g_preempt_depth)
     cmovne  %rsi, %rdi  // 禁用抢占，恢复前一个任务
     cmpq    %rsi, %rdi
-    je      iret_same_pgtbl
+    je      iret_same_task
 iret_to_task:
     movq    24(%rsi), %rcx  // tid_prev->pgtbl
     movq    24(%rdi), %rdx  // tid_next->pgtbl
@@ -219,13 +219,16 @@ iret_to_task:
     je      iret_same_pgtbl
     movq    %rdx, %cr3      // update page table
 iret_same_pgtbl:
+    fxsave  32(%rsi)
+    fxrstor 32(%rdi)
+iret_same_task:
     movq    8(%rdi), %rax           // rax = g_tid_next->stack0
     movq    %rax, %gs:(g_tss+4)     // tss->rsp0 = rax
     movq    (%rdi), %rsp            // rsp = g_tid_next->stack_top
     movq    %rdi, %gs:(g_tid_prev)  // prev_task = next_task
-    movq    %cr0, %rax
-    orq     $8, %rax    // CR0.TS = 1
-    movq    %rax, %cr0
+    // movq    %cr0, %rax
+    // orq     $8, %rax    // CR0.TS = 1
+    // movq    %rax, %cr0
 iret_nested:
     decl    %gs:(g_int_depth)
     pop_6_callee_saved_regs
@@ -287,7 +290,7 @@ syscall_entry:
     pushq   %r11
     swapgs
     movq    %gs:(g_tid_prev), %r11
-    movq    %rsp, 16(%r11)  // save user stack
+    movq    %rsp, 16(%r11)  // save stack3
     movq    8(%r11), %rsp   // switch to kernel stack
 
     // 将 syscall 参数转成 C 调用约定

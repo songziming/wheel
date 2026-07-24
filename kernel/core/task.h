@@ -28,17 +28,17 @@ typedef struct proc proc_t;
 // 这是内核线程所需的最小信息
 // 类似于 Linux kernel struct sched_entity
 typedef struct task {
-    size_t      stack_top;  // regs_t
-    size_t      stack0;     // stack_top when syscall
-    size_t      stack3;     // saved by syscall
-    size_t      pgtbl;      // 就是 process->vm.table，放在这里便于访问
+    size_t      stack_top;  // regs_t，任务切换时的栈顶位置（内核栈）
+    size_t      stack0;     // syscall 自动切换到这里（等于 stack.vend）
+    size_t      stack3;     // syscall 保存的用户栈位置
+    size_t      pgtbl;      // 页表（等于 process->vm.table）
+
+    arch_fp_t   fp_state;
 
     dlnode_t    dl;         // node in ready-queue OR wait-queue
     _Atomic uint32_t state;
     int16_t     affinity;
     int16_t     priority;
-
-    uint8_t    *fpu_state;
 
     // 阻塞相关字段：仅当 state 含 TS_PENDING 时有效
     // 由该任务所阻塞的 waitq 所属对象的锁保护（也就是 wait_lock）

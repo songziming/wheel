@@ -48,4 +48,15 @@ int arch_unwind(size_t *addrs, int max);
 
 INIT_TEXT void arch_pci_init();
 
+//------------------------------------------------------------------------------
+// task support
+//------------------------------------------------------------------------------
+
+typedef struct arch_fp {
+    uint8_t data[512];
+} ALIGNED(16) arch_fp_t;
+
+extern CONST arch_fp_t g_fp_init_state;
+INIT_TEXT void fpu_init();
+
 #endif // ARCH_X86_64_ARCH_API_H

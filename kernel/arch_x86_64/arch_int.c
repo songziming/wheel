@@ -63,35 +63,7 @@ static void handle_irq(int vec, regs_t *f) {
 }
 
 
-
-extern void vmspace_show();
-static PERCPU_DATA task_t *last_fpu_tid = NULL;
-
-// #NM 执行浮点指令时触发
-static void handle_nm(int vec UNUSED, regs_t *f UNUSED) {
-    task_t *prev = THISCPU_GET(last_fpu_tid);
-    task_t *curr = current_task();
-
-    logk("cpu-%d handling #NM for task %s, ss:rsp=%zx:%zx cs:rip=%zx:%zx\n",
-        cpu_index(), kobj_name(curr), f->ss, f->rsp, f->cs, f->rip);
-    vmspace_show();
-
-    if (prev != curr) {
-        if (prev) {
-            // save FPU-state to prev->fpu_state
-        }
-        if (curr->fpu_state) {
-            // load from fpu_state
-        } else {
-            // allocate fpu_state for this task
-        }
-        THISCPU_SET(last_fpu_tid, curr);
-    }
-
-    uint64_t cr0 = read_cr0();
-    cr0 &= ~(1UL << 3); // clear TS
-    write_cr0(cr0);
-}
+// void handle_nm(int vec UNUSED, regs_t *f UNUSED); // arch_fpu.c
 
 // #PF 页错误处理函数
 static void handle_pf(int vec UNUSED, regs_t *f) {
@@ -148,7 +120,7 @@ INIT_TEXT void int_init() {
         idt_set_isr(i, isr_entries[i], 0);
         irq_handlers[i] = handle_irq;
     }
-    irq_handlers[7] = handle_nm;
+    // irq_handlers[7] = handle_nm;
     irq_handlers[14] = handle_pf;
 
     // // 0x80 可以用于系统调用

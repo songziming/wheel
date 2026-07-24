@@ -185,6 +185,7 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     cpu_features_detect();
     cpu_features_enable();
+    fpu_init();
 
     // parse multiboot info
     g_rsdp = 0;

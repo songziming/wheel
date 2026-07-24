@@ -156,7 +156,7 @@ task_t *task_make(const char *name, int prio, void *func, void *arg) {
     atomic_store(&tid->state, TS_STOPPED);
     tid->priority = prio;
     tid->affinity = -1;
-    tid->fpu_state = NULL;
+    kmemcpy(&tid->fp_state, &g_fp_init_state, sizeof(arch_fp_t));
 
     // 阻塞相关字段初始化（timer.state 必须 WDOG_IDLE，否则 wdog_start 会断言失败）
     atomic_store(&tid->timer.state, WDOG_IDLE);
