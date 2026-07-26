@@ -13,10 +13,10 @@
 
 
 // embedded user programs tar
+// TODO tar 格式过于浪费，考虑改成 deflate
 extern char _binary_users_tar_start;
 extern char _binary_users_tar_end;
 
-// void vmspace_show();
 
 // 切换到进程的地址空间，开始执行 ring3 代码
 // 跳入 ring3 之后，内核栈仍然

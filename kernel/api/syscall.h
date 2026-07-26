@@ -26,30 +26,30 @@ enum {
 //==============================================================================
 
 // x86_64 syscall ABI:
-//   rdi = 调用编号
-//   rsi, rdx, rax, r8, r9, r10 = 参数 1–6
+//   rax = 调用编号
+//   rdi, rsi, rdx, r10, r8, r9 = 参数 1–6
 //   rcx = 返回 RIP（被 syscall 覆盖）
 //   r11 = 返回 RFLAGS（被 syscall 覆盖）
 //   返回值在 rax
 
 // x86_64 调用约定：rdi, rsi, rdx, rcx, r8, r9
-// 其中 rcx 会被 syscall 指令破坏，我们替换为 rax
+// 其中 rcx 会被 syscall 指令破坏，我们替换为 r10
 
 // 通用 syscall 调用（0–6 个参数），由具体包装函数调用
 static inline size_t __syscall6(size_t id,
         size_t a1, size_t a2, size_t a3,
         size_t a4, size_t a5, size_t a6) {
     size_t ret;
-    register size_t r8  __asm__("r8")  = a4;
-    register size_t r9  __asm__("r9")  = a5;
-    register size_t r10 __asm__("r10") = a6;
+    register size_t r10 __asm__("r10") = a4;
+    register size_t r8  __asm__("r8")  = a5;
+    register size_t r9  __asm__("r9")  = a6;
 
     // syscall 指令会破坏 rcx/r11 两个寄存器
     // 因此系统调用不能使用标准调用约定
     __asm__ volatile (
         "syscall"
-        : "+a"(ret)
-        : "D"(id), "S"(a1), "d"(a2), "a"(a3), "r"(r8), "r"(r9), "r"(r10)
+        : "=a"(ret)
+        : "a"(id), "D"(a1), "S"(a2), "d"(a3), "r"(r10), "r"(r8), "r"(r9)
         : "rcx", "r11", "memory"
     );
     return ret;

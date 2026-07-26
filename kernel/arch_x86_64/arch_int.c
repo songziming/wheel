@@ -104,8 +104,15 @@ static void handle_pf(int vec UNUSED, regs_t *f) {
         logk(" - frame[%02d] 0x%zx\n", i, frames[i]);
     }
 
-    // TODO 如果 page fault 来自任务，可以将引发异常的任务停止（kill）
+    // 如果 page fault 来自进程，可以将引发异常的任务停止（kill）
     // 从 ready-q 删除任务，便可以从异常返回（到其他任务），不必在这里死循环
+    task_t *self = current_task();
+    const char *pname = "(kernel)";
+    if (self->process) {
+        pname = kobj_name(self->process);
+    }
+    logk("from task-%s, proc-%s\n", kobj_name(self), pname);
+    task_exit();
 
     while (1) {
         cpu_pause();

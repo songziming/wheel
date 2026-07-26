@@ -2,51 +2,54 @@
 #include <wheel.h>
 #include <task.h>
 #include <proc.h>
+
+#include <kstring.h>
+#include <debug.h>
 #include <console.h>
 
-// 由 arch_entries.S 的 syscall_entry 调用
-// 遵循 x86_64 syscall ABI：num 来自 rax, a1–a6 来自 rdi,rsi,rdx,r10,r8,r9
-int64_t do_syscall(int64_t num,
-        int64_t a1, int64_t a2, int64_t a3,
-        int64_t a4, int64_t a5, int64_t a6) {
-    console_printf("handling syscall %zd\n", num);
-
-    (void)a1;
-    (void)a2;
-    (void)a3;
-    (void)a4;
-    (void)a5;
-    (void)a6;
-
-    switch (num) {
-    case SYS_exit:
-        task_exit();
-        return 0;
-
-    case 123:
-        console_printf("print: `%s`\n", (char*)a1);
-        return 0;
-
-    case SYS_write:
-        console_printf("%s", (const char*)a1);
-        // return (int64_t)a3;
-        return 0;
-
-    case SYS_yield:
-        arch_task_switch();
-        return 0;
-
-    case SYS_getpid: {
-        task_t *self = current_task();
-        if (self->process) {
-            return ((proc_t*)self->process)->id;
-        }
-        return 0;
-    }
-
-    default:
-        console_printf("syscall #%d (a1=%zx, a2=%zx, a3=%zx)\n",
-            (int)num, a1, a2, a3);
-        return -1;
-    }
+static void do_sys_exit(int64_t ret) {
+    logk("[sc] process exit with code %d\n", (int)ret);
+    task_exit();
 }
+
+static size_t do_sys_read(int fd, char *dst, size_t len) {
+    logk("[sc] writing fd=%d, len=%zu, s=%p\n", fd, len, dst);
+    if (0 == fd) {
+        console_readline(dst, len);
+    }
+    return 0;
+}
+
+static int64_t do_sys_write(int fd, const char *buf, size_t len) {
+    logk("[sc] writing fd=%d, len=%zu, s=%p\n", fd, len, buf);
+    if ((1 == fd) || (2 == fd)) {
+        console_puts(buf, len);
+    }
+    return 0;
+}
+
+static int64_t do_sys_getpid() {
+    task_t *self = current_task();
+    return (self->process) ? ((proc_t*)self->process)->id : 0;
+}
+
+static int64_t do_sys_yield() {
+    arch_task_switch();
+    return 0;
+}
+
+// NULL 表项 fallback
+void do_sys_unknown() {
+    logk("unknown syscall\n");
+}
+
+
+// 系统调用表，索引 = 调用编号
+// NULL 表项由 arch_entries.S 的 syscall_entry fallback 到 do_sys_unknown
+CONST void *syscall_tbl[256] = {
+    [SYS_exit]   = do_sys_exit,
+    [SYS_write]  = do_sys_write,
+    [SYS_read]   = do_sys_read,
+    [SYS_getpid] = do_sys_getpid,
+    [SYS_yield]  = do_sys_yield,
+};

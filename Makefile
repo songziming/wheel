@@ -40,19 +40,20 @@ LIBK_OBJS   := $(patsubst $(KERNEL_BASE)/%,$(OUTDIR)/k/%.to,$(KCFILES))
 KUNIT_OBJS  := $(patsubst $(KERNEL_BASE)/%,$(OUTDIR)/k/%.to,$(KXFILES))
 
 # user apps and outputs
-USER_BASE := user
-USER_APPS := test3 demo_float error
-USER_LD   := $(USER_BASE)/user.ld
+LIBC_BASE := user_libc
+APPS_BASE := user_apps
+USER_LD   := $(APPS_BASE)/user.ld
 LIBC_LIB  := $(OUTDIR)/libc.o
+USER_APPS := $(notdir $(patsubst %/,%,$(wildcard $(APPS_BASE)/*/)))
 USER_ELFS := $(patsubst %,$(OUTDIR)/%.elf,$(USER_APPS))
 USER_TAR  := $(OUTDIR)/users.tar
 USER_DAT  := $(OUTDIR)/users.tar.dat
 
 # user sources and objects
-LIBC_FILES := $(shell find $(USER_BASE)/libc -name "*.c" -o -name "*.S")
-USER_FILES := $(shell find $(USER_APPS:%=$(USER_BASE)/%) -name "*.c" -o -name "*.S")
-LIBC_OBJS  := $(patsubst $(USER_BASE)/%,$(OUTDIR)/u/%.o,$(LIBC_FILES))
-USER_OBJS  := $(patsubst $(USER_BASE)/%,$(OUTDIR)/u/%.o,$(USER_FILES))
+LIBC_FILES := $(shell find $(LIBC_BASE) -name "*.c" -o -name "*.S")
+USER_FILES := $(shell find $(USER_APPS:%=$(APPS_BASE)/%) -name "*.c" -o -name "*.S")
+LIBC_OBJS  := $(patsubst %,$(OUTDIR)/u/%.o,$(LIBC_FILES))
+USER_OBJS  := $(patsubst %,$(OUTDIR)/u/%.o,$(USER_FILES))
 
 # common compiler flags
 GENDEP = -MT $@ -MMD -MP -MF $@.d
@@ -62,6 +63,10 @@ GENDEP = -MT $@ -MMD -MP -MF $@.d
 #-------------------------------------------------------------------------------
 
 .PHONY: kernel kunit kcov users iso clean
+
+dbg:
+	@echo $(LIBC_OBJS)
+	@echo $(USER_OBJS)
 
 kernel: $(KERNEL_ELF)
 kunit: $(KUNIT_BIN)
@@ -129,7 +134,7 @@ include $(KERNEL_BASE)/arch_$(ARCH)/config.mk
 
 USER_CFLAGS := -target $(ARCH)-none-elf -ffreestanding -nostdlib
 USER_CFLAGS += -fno-stack-protector #-mgeneral-regs-only
-USER_CFLAGS += -I$(USER_BASE)/libc -I$(KERNEL_BASE)/api
+USER_CFLAGS += -Iuser_libc -I$(KERNEL_BASE)/api
 ifeq ($(DEBUG),1)
 	USER_CFLAGS += -g
 else
@@ -175,10 +180,10 @@ kcov: $(KUNIT_DAT)
 # 用户态程序编译规则
 #-------------------------------------------------------------------------------
 
-$(OUTDIR)/u/%.c.o: $(USER_BASE)/%.c
+$(OUTDIR)/u/%.c.o: %.c
 	$(KCC) -c -DC_FILE $(USER_CFLAGS) $(GENDEP) -o $@ $<
 
-$(OUTDIR)/u/%.S.o: $(USER_BASE)/%.S
+$(OUTDIR)/u/%.S.o: %.S
 	$(KCC) -c -DS_FILE $(USER_CFLAGS) $(GENDEP) -o $@ $<
 
 $(LIBC_LIB): $(LIBC_OBJS)
@@ -186,7 +191,7 @@ $(LIBC_LIB): $(LIBC_OBJS)
 
 # 链接用户态程序，需要按目录筛选属于该程序的目标文件
 define make_user_elf
-$(1)_OBJS := $$(filter $(OUTDIR)/u/$(1)/%,$(USER_OBJS))
+$(1)_OBJS := $$(filter $(OUTDIR)/u/$(APPS_BASE)/$(1)/%,$(USER_OBJS))
 $(OUTDIR)/$(1).elf: $$($(1)_OBJS) $$(LIBC_LIB) | $(USER_LD)
 	$$(KLD) -T $(USER_LD) -o $$@ $$^
 endef

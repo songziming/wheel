@@ -13,7 +13,8 @@
 .extern g_tid_next
 .extern irq_handlers
 .extern work_flush
-.extern do_syscall
+.extern syscall_tbl
+.extern do_sys_unknown
 
 .altmacro // 需要在 macro 和循环里使用变量
 
@@ -294,15 +295,17 @@ syscall_entry:
     movq    8(%r11), %rsp   // switch to kernel stack
 
     // 将 syscall 参数转成 C 调用约定
-    // syscall ABI: rdi=调用号, rsi=a1, rdx=a2, rax=a3, r8=a4, r9=a5, r10=a6
-    // C ABI:       rdi=num,   rsi=a1, rdx=a2, rcx=a3, r8=a4, r9=a5, [stack]=a6
-    movq    %rax, %rcx      // a3 → rcx
-    pushq   %r10            // a6 → stack (C 的第7个参数)
-
+    // syscall ABI: rax=调用号, rdi=a1, rsi=a2, rdx=a3, r10=a4, r8=a5, r9=a6
+    // C ABI:                   rdi=a1, rsi=a2, rdx=a3, rcx=a4, r8=a5, r9=a6
+    movq    %r10, %rcx      // a4 → rcx
+    andq    $0xff, %rax
+    movq    syscall_tbl(,%rax,8), %rax
+    testq   %rax, %rax
+    cmovzq  do_sys_unknown, %rax
+1:
     // 执行系统调用，中间可能切换任务
     sti
-    call    do_syscall
-    addq    $8, %rsp        // 清理栈上的 a6
+    call    *%rax
     cli
 
     // 回到用户栈，返回用户态
