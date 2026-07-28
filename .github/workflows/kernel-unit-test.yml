@@ -12,8 +12,8 @@ jobs:
       - name: cheskout repo
         uses: actions/checkout@v4
       - name: build unit test
-        run: make unit
+        run: make kunit
       - name: run unit test
-        run: build/unit
+        run: build/kunit
         env:
           LD_LIBRARY_PATH: build
