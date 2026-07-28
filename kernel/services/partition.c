@@ -56,14 +56,6 @@ static inline int chs_is_nonzero(mbr_chs_t *chs) {
 
 // 输入一个块设备，检查分区表是否存在，每个分区都创建一个块设备
 void partition_init(block_dev_t *raw) {
-    // 分配一个页，临时用来读扇区
-    // TODO 为了临时页操作页表，是不是太浪费了？
-    // TODO 直接直接映射就可以了？
-
-    // vmrange_t tmp_sec;
-    // char *blk = (char*)vmspace_alloc(&g_kernel_vm, &tmp_sec,
-    //     POOL_ZONE_START, POOL_ZONE_END, 0, PT_POOL, MMU_WRITE);
-
     if (512 != raw->sec_size) {
         // TODO 应该处理扇区大于 512 的情况
         logk("%s sec size is not 512\n", raw->name);

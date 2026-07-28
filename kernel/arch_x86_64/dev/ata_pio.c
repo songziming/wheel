@@ -52,7 +52,7 @@
 
 // 一个 channel 可以关联两个设备：master、slave
 typedef struct ata_channel {
-    mutex_t  mutex;
+    mutex_t *mutex;
     uint16_t io_base;       // io 端口
     uint16_t control_base;  // ctrl 端口
     uint8_t  irq;
@@ -277,7 +277,7 @@ static void ata_pio_read_sector(block_dev_t *blk, void *dst, uint64_t sector, ui
     ata_channel_t *ch = &g_channels[(ata->flags & ATA_SECONDARY) ? 1 : 0];
 
     // 多个 ATA 设备可能来自同一个通道，互斥锁应该放在 channel 里面
-    mutex_take(&ch->mutex, FOREVER);
+    mutex_take(ch->mutex, FOREVER);
 
     // bit 4 表示 slave
     // bit 6 表示 LBA
@@ -336,7 +336,7 @@ static void ata_pio_read_sector(block_dev_t *blk, void *dst, uint64_t sector, ui
 #endif
     }
 
-    mutex_give(&ch->mutex);
+    mutex_give(ch->mutex);
 }
 
 static void ata_pio_write_sector(block_dev_t *blk, const void *src, uint64_t sector, uint64_t num) {
@@ -345,7 +345,7 @@ static void ata_pio_write_sector(block_dev_t *blk, const void *src, uint64_t sec
 
     logk("ATA PIO writing sector %lx:%lx\n", sector, num);
 
-    mutex_take(&ch->mutex, FOREVER);
+    mutex_take(ch->mutex, FOREVER);
 
     uint8_t sel; // = (ata->flags & ATA_SLAVE) ? 0xf0 : 0xe0; // 开启 LBA
     uint8_t cmd;
@@ -394,7 +394,7 @@ static void ata_pio_write_sector(block_dev_t *blk, const void *src, uint64_t sec
 
     // 清缓存
     out8(ch->io_base + 7, 0xe7);
-    mutex_give(&ch->mutex);
+    mutex_give(ch->mutex);
 }
 
 // 初始化
@@ -404,8 +404,8 @@ INIT_TEXT void ata_init() {
     g_channels[1].io_base      = ATA_SECONDARY_IO;
     g_channels[1].control_base = ATA_SECONDARY_CTL;
 
-    mutex_init(&g_channels[0].mutex);
-    mutex_init(&g_channels[1].mutex);
+    g_channels[0].mutex = mutex_make("ata0");
+    g_channels[1].mutex = mutex_make("ata1");
 
     ata_detect(&ata_devs[0], 0, 0); // primary master
     ata_detect(&ata_devs[1], 0, 1); // primary slave

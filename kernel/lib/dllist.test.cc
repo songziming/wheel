@@ -144,9 +144,7 @@ TEST_F(DLListTest, Init) {
 TEST(DLList, RemoveLast) {
     dlnode_t myhead;
     dl_init_circular(&myhead);
-    dl_remove(&myhead);
-    EXPECT_EQ(NULL, myhead.prev);
-    EXPECT_EQ(NULL, myhead.next);
+    EXPECT_EQ(NULL, dl_remove(&myhead));
 }
 
 TEST_F(DLListTest, Remove) {
@@ -161,10 +159,8 @@ TEST_F(DLListTest, Remove) {
     EXPECT_TRUE(contains(&item2));
     EXPECT_TRUE(contains(&item3));
 
-    dlnode_t *out = dl_remove(&item2.dl);
-    // EXPECT_FALSE(contains(out));
-    EXPECT_EQ(&item1.dl, out->prev);
-    EXPECT_EQ(&item3.dl, out->next);
+    dlnode_t *next = dl_remove(&item2.dl);
+    EXPECT_EQ(&item3.dl, next);
 
     dl_remove(&item1.dl);
     dl_remove(&item3.dl);

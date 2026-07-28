@@ -22,9 +22,12 @@
 #include <pmlayout.h>
 
 #include <task.h>
+#include <proc.h>
 #include <work.h>
 #include <wdog.h>
 #include <sema.h>
+#include <mutex.h>
+#include <msgq.h>
 
 #include <kstring.h>
 #include <debug.h>
@@ -33,21 +36,26 @@
 #include <kshell.h>
 #include <console.h>
 #include <block.h>
+#include <pci.h>
 
 
 // layout.ld
 char _real_addr;
 char _real_end;
 
-static INIT_BSS uint32_t g_fgcolor;
 static INIT_BSS size_t   g_rsdp;
+static INIT_BSS uint32_t g_fbcolor;
+static INIT_BSS uint64_t g_fbaddr;
+static INIT_BSS uint32_t g_fbheight;
+static INIT_BSS uint32_t g_fbwidth;
+static INIT_BSS uint32_t g_fbpitch;
 
 // 根任务不能放在 init，需要在这里回收 init-section
-static task_t g_root_tcb;
+static task_t *g_root_tcb;
 static void root_proc();
 
 static INIT_DATA int g_cpu_started = 1;
-static INIT_BSS sema_t g_smp_sema;
+static sema_t *g_smp_sema;
 static INIT_BSS work_t g_smp_notifier;
 static INIT_TEXT NORETURN void ap_init(int idx);
 
@@ -105,11 +113,15 @@ static INIT_TEXT void mb1_init(uint32_t ebx) {
 
     if (MB1_INFO_FRAMEBUFFER_INFO & info->flags) {
         if (1 == info->fb_type && 32 == info->fb_bpp) {
-            g_fgcolor  = ((1U << info->r_size) - 1) << info->r_shift;
-            g_fgcolor |= ((1U << info->g_size) - 1) << info->g_shift;
-            g_fgcolor |= ((1U << info->b_size) - 1) << info->b_shift;
+            g_fbcolor  = ((1U << info->r_size) - 1) << info->r_shift;
+            g_fbcolor |= ((1U << info->g_size) - 1) << info->g_shift;
+            g_fbcolor |= ((1U << info->b_size) - 1) << info->b_shift;
+            g_fbaddr   = info->fb_addr;
+            g_fbheight = info->fb_height;
+            g_fbwidth  = info->fb_width;
+            g_fbpitch  = info->fb_pitch;
             logk("framebuf mapped at 0x%lx\n", info->fb_addr);
-            framebuf_init(info->fb_height, info->fb_width, info->fb_pitch, info->fb_addr);
+            // framebuf_init(info->fb_height, info->fb_width, info->fb_pitch, info->fb_addr);
         }
     }
 }
@@ -132,11 +144,15 @@ static INIT_TEXT void mb2_init(uint32_t ebx) {
         case MB2_TAG_TYPE_FRAMEBUFFER: {
             mb2_tag_framebuffer_t *fb = (mb2_tag_framebuffer_t*)tag;
             if (1 == fb->type && 32 == fb->bpp) {
-                g_fgcolor  = ((1U << fb->r_size) - 1) << fb->r_shift;
-                g_fgcolor |= ((1U << fb->g_size) - 1) << fb->g_shift;
-                g_fgcolor |= ((1U << fb->b_size) - 1) << fb->b_shift;
+                g_fbcolor  = ((1U << fb->r_size) - 1) << fb->r_shift;
+                g_fbcolor |= ((1U << fb->g_size) - 1) << fb->g_shift;
+                g_fbcolor |= ((1U << fb->b_size) - 1) << fb->b_shift;
+                g_fbaddr   = fb->addr;
+                g_fbheight = fb->height;
+                g_fbwidth  = fb->width;
+                g_fbpitch  = fb->pitch;
                 logk("framebuf mapped at 0x%lx\n", fb->addr);
-                framebuf_init(fb->height, fb->width, fb->pitch, fb->addr);
+                // framebuf_init(fb->height, fb->width, fb->pitch, fb->addr);
             }
             break;
         }
@@ -169,23 +185,15 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     cpu_features_detect();
     cpu_features_enable();
+    fpu_init();
 
     // parse multiboot info
-    g_fgcolor = 0;
     g_rsdp = 0;
+    g_fbcolor = 0;
     switch (eax) {
     case MB1_BOOTLOADER_MAGIC: mb1_init(ebx); break;
     case MB2_BOOTLOADER_MAGIC: mb2_init(ebx); break;
     }
-
-    // 选择输出设备，用于 console
-    if (g_fgcolor) {
-        framebuf_setfg(g_fgcolor);
-    } else {
-        vgatext_init();
-    }
-    console_init();
-    console_printf("Wheel Operating System (%s %s)\n", __DATE__, __TIME__);
 
     // parse ACPI tables
     if (0 == g_rsdp) {
@@ -197,6 +205,10 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     }
     acpi_rsdp_parse(g_rsdp);
 
+    // PCI (requires ACPI::MCFG)
+    arch_pci_init();
+    pci_probe();
+
     // parse APIC info
     madt_t *madt = (madt_t*)acpi_table_find("APIC", 0);
     if (NULL == madt) {
@@ -204,6 +216,17 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
         goto end;
     }
     parse_madt(madt);
+
+    // 选择输出设备，用于 console
+    if (g_fbcolor) {
+        // framebuf 需要用到 PCI（仅虚拟机），但此时 PCI 尚未初始化
+        framebuf_init(g_fbheight, g_fbwidth, g_fbpitch, g_fbaddr);
+        framebuf_setfg(g_fbcolor);
+    } else {
+        vgatext_init();
+    }
+    console_init();
+    console_printf("Wheel Operating System (%s %s)\n", __DATE__, __TIME__);
 
     // 内存中的关键数据已备份，可以放开 early-rw 增长限制
     early_rw_unlock();
@@ -219,9 +242,8 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
     thiscpu_init(0);
     ASSERT(cpu_index() == 0);
 
-    // 开启死锁检查（依赖 thiscpu 和 tid_prev）
-    // tid_prev 已经指向 dummy_tcb，且 TCB 里面的 lockdep 也已配置好
-    lockdep_enable();
+    // 开启死锁检查（依赖 thiscpu）
+    enable_lockdep();
 
     thistss_init_load(0); // 依赖 thiscpu，需要放在 thiscpu_init 之后
     int_init(); // 初始化中断管理机制
@@ -239,19 +261,23 @@ INIT_TEXT NORETURN void sys_init(uint32_t eax, uint32_t ebx) {
 
     // 加载正式页表，此后 CONST 变为只读
     write_cr3(g_kernel_vm.table);
-    if (g_fgcolor) {
+    if (g_fbcolor) {
         framebuf_remap_wc(); // 重映射为 Write-Combined，提升写显存速度
     }
 
     // 初始化任务调度
     work_init_this();
-    wdog_init();
+    // wdog_init();
     sched_init();
+    sema_init();
+    mutex_init();
+    msgq_init();
+    process_init();
 
     // 创建根任务并开始运行，优先级 30，仅高于 idle
-    task_create(&g_root_tcb, "root", 30, root_proc);
-    g_root_tcb.affinity = 0;
-    task_start_now(&g_root_tcb);
+    g_root_tcb = task_make("root", 30, root_proc, NULL);
+    g_root_tcb->affinity = 0;
+    task_start_now(g_root_tcb);
     // 之后的代码不再运行
 
 end:
@@ -268,11 +294,11 @@ end:
 static void root_proc() {
     // 将实模式代码复制到 1M 以下
     char *from = &_real_addr;
-    char *to = (char*)KERNEL_REAL_ADDR + DIRECT_MAP_ADDR;
+    char *to = idmap_at(KERNEL_REAL_ADDR);
     kmemcpy(to, from, &_real_end - from);
     logk("copy trampoline code from %p to %p\n", from, to);
 
-    sema_init(&g_smp_sema, 0, 1);
+    g_smp_sema = sema_make("smp", 0, 1);
 
     // 启动代码地址页号就是 startup-IPI 的向量号
     int vec = KERNEL_REAL_ADDR >> 12;
@@ -286,13 +312,14 @@ static void root_proc() {
 
         // 当 CPU 开始运行 task，说明初始化已经结束，不再使用 init stack
         // 前一个 CPU 初始化完成才能初始化下一个
-        sema_take(&g_smp_sema, FOREVER);
+        sema_take(g_smp_sema, FOREVER);
     }
+    sema_drop(g_smp_sema);
 
     // 系统中间件初始化（console 已经在启动早期初始化）
     // TODO 这部分代码与硬件平台无关，可以提取出来
     keyboard_init();
-    block_dev_init();
+    // block_dev_init();
 
     // 设备初始化（这些设备依赖前面的系统中间件）
     i8042_init();
@@ -303,6 +330,8 @@ static void root_proc() {
 
     // 回收 init section
     reclaim_init();
+
+    // TODO root task 不必退出，可以加载 ELF 进入 ring3，开始执行进程
 }
 
 //------------------------------------------------------------------------------
@@ -313,7 +342,7 @@ static void root_proc() {
 // BSP 可以启动下一个 AP，或者将 init-stack 回收
 static INIT_TEXT void notify_ap_started(work_t *work UNUSED) {
     ASSERT(cpu_int_depth() > 0);
-    sema_give(&g_smp_sema);
+    sema_give(g_smp_sema);
 }
 
 // AP 启动流程，使用 init-stack

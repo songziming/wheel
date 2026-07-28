@@ -3,15 +3,18 @@
 .global isr_entries
 .global syscall_entry
 .global arch_task_switch
-.global arch_task_entry
+.global arch_enter_ring3
 
 .extern g_int_depth
 .extern g_int_stack_top
 .extern g_preempt_depth
+.extern g_tss       // from gdt_idt_tss.c
 .extern g_tid_prev
 .extern g_tid_next
 .extern irq_handlers
 .extern work_flush
+.extern syscall_tbl
+.extern do_sys_unknown
 
 .altmacro // 需要在 macro 和循环里使用变量
 
@@ -124,43 +127,46 @@ isr_\vec:
 // 异常响应流程，不切换中断栈，不允许重入，不切换任务
 // 异常更像是被动的函数调用，无需保存 callee-save regs，因为调用 C 函数时会自动保存
 exception_stub:
-//     testl   $3, 0x18(%rsp)  // 检查 CS.CPL
-//     jz      exp_from_ring0  // 如果 CS.CPL=0，说明来自 ring0
-//     swapgs                  // 如果来自用户态，需要交换 gsbase
-// exp_from_ring0:
+    testl   $3, 0x18(%rsp)  // 检查 CS.CPL
+    jz      exp_from_ring0  // 如果 CS.CPL=0，说明来自 ring0
+    swapgs                  // 如果来自用户态，需要交换 gsbase
+exp_from_ring0:
 
-    push_8_caller_saved_regs // 这些函数会被 ISR 破坏，需要保存
-    subq    $48, %rsp       // 跳过 6 个 callee-saved regs，ISR 自己会保存
+    push_8_caller_saved_regs // 这些函数会被 ISR 破坏，需要保存（不含 rbp）
+    push_6_callee_saved_regs
+    // subq    $48, %rsp       // 跳过 6 个 callee-saved regs，ISR 自己会保存
     movq    %rsp, %rsi      // 参数：当前栈顶/寄存器文件
 
     // 建立一个新的函数栈，连接到发生异常的地方
     // 就像是从异常位置调用了本函数
-    push    0x80(%rsi)  // frame+160, RIP
-    push    %rbp
+    pushq   0x80(%rsi)  // frame+160, RIP
+    pushq   %rbp
     movq    %rsp, %rbp
 
     movq    irq_handlers(,%rdi,8), %rax
     call    *%rax
-    addq    $16, %rsp   // 跳过 dummy-stack-frame
+    popq    %rbp        // 恢复原始 rbp
+    addq    $8, %rsp    // 跳过 dummy-ret-addr
 
-    addq    $48, %rsp       // 跳过 6 个 callee-save regs
+    // addq    $48, %rsp       // 跳过 6 个 callee-save regs
+    pop_6_callee_saved_regs
     pop_9_caller_saved_regs
     addq    $8, %rsp        // 跳过错误码
 
-//     testl   $3, 8(%rsp)     // 检查 CS.RPL
-//     jz      exp_to_ring0    // 返回到内核态
-//     swapgs                  // 返回到用户态
-// exp_to_ring0:
+    testl   $3, 8(%rsp)     // 检查 CS.RPL
+    jz      exp_to_ring0    // 返回到内核态
+    swapgs                  // 返回到用户态
+exp_to_ring0:
     iretq
 
 // 中断响应流程，需要切换中断栈，可能切换任务
 // 需要保存全部寄存器（不含浮点寄存器）
 // 中断内部可能异常，但我们不允许中断重入（为了安全，还是检查一下）
 interrupt_stub:
-//     testl   $3, 0x18(%rsp)  // 检查 CS.CPL
-//     jz      int_from_ring0  // 如果 CS.CPL=0，说明来自 ring0
-//     swapgs                  // 如果来自用户态，需要交换 gsbase
-// int_from_ring0:
+    testl   $3, 0x18(%rsp)  // 检查 CS.CPL
+    jz      int_from_ring0  // 如果 CS.CPL=0，说明来自 ring0
+    swapgs                  // 如果来自用户态，需要交换 gsbase
+int_from_ring0:
 
     push_8_caller_saved_regs
     push_6_callee_saved_regs
@@ -199,27 +205,41 @@ int_enter_nested:
     call    work_flush
     addq    $16, %rsp
 
+    movq    %gs:(g_tid_prev), %rsi
+    movq    %gs:(g_tid_next), %rdi
+
     // 如果禁用抢占被禁用，跳过任务切换
     cmpl    $0, %gs:(g_preempt_depth)
-    cmovne  %gs:(g_tid_prev), %rdi
-    jne     iret_to_task
-
-    // 切换到新任务的栈顶（也可能是同一个任务）
-    movq    %gs:(g_tid_next), %rdi
+    cmovne  %rsi, %rdi  // 禁用抢占，恢复前一个任务
+    cmpq    %rsi, %rdi
+    je      iret_same_task
 iret_to_task:
-    movq    (%rdi), %rsp // rsp = g_tid_next->stack_top
-    movq    %rdi, %gs:(g_tid_prev) // prev_task = next_task
+    movq    24(%rsi), %rcx  // tid_prev->pgtbl
+    movq    24(%rdi), %rdx  // tid_next->pgtbl
+    cmpq    %rcx, %rdx
+    je      iret_same_pgtbl
+    movq    %rdx, %cr3      // update page table
+iret_same_pgtbl:
+    fxsave  32(%rsi)
+    fxrstor 32(%rdi)
+iret_same_task:
+    movq    8(%rdi), %rax           // rax = g_tid_next->stack0
+    movq    %rax, %gs:(g_tss+4)     // tss->rsp0 = rax
+    movq    (%rdi), %rsp            // rsp = g_tid_next->stack_top
+    movq    %rdi, %gs:(g_tid_prev)  // prev_task = next_task
+    // movq    %cr0, %rax
+    // orq     $8, %rax    // CR0.TS = 1
+    // movq    %rax, %cr0
 iret_nested:
     decl    %gs:(g_int_depth)
     pop_6_callee_saved_regs
     pop_9_caller_saved_regs
     addq    $8, %rsp        // 跳过错误码
 
-//     testl   $3, 8(%rsp)     // 检查 CS.RPL
-//     jz      iret_to_ring0    // 返回到内核态
-//     int $3
-//     swapgs                  // 返回到用户态
-// iret_to_ring0:
+    testl   $3, 8(%rsp)     // 检查 CS.RPL
+    jz      iret_to_ring0   // 返回到内核态
+    swapgs                  // 返回到用户态
+iret_to_ring0:
     iretq
 
 
@@ -251,25 +271,63 @@ arch_task_switch:
     pushq   $0x08           // cs
     pushq   $resume         // rip 从这里恢复
     subq    $80, %rsp       // errcode, rdi, and other 8 caller-saved regs
-    // subq    $16, %rsp       // errcode, rdi
-    // push_8_caller_saved_regs
     push_6_callee_saved_regs
     movq    %rsp, (%rsi)    // tid_prev->regs = rsp
 
     incl    %gs:(g_int_depth)
-    // movq    %gs:(g_int_stack_top), %rsp // 切换到中断栈，因为要执行 work_flush
-    // movl    $0, %gs:(g_preempt_depth) // arch_task_switch开抢占
-    // jmp     flush_and_switch
     jmp     iret_to_task
 
 noswitch:
-    // pushq   %rax
     popfq
 resume:
     ret
 
 
-// 系统调用入口，类似
-// 使用 syscall 命令跳转
+// 系统调用入口，使用 syscall 跳转而来，此时中断关闭，处于用户栈
+// rip 保存在 rcx，rflags 保存在 r11（这两个都是 scratch-regs，需要保存）
+// 参数按 syscall ABI：rax=调用号, rdi,rsi,rdx,r10,r8,r9=参数1~6
 syscall_entry:
-    sysret
+    pushq   %rcx
+    pushq   %r11
+    swapgs
+    movq    %gs:(g_tid_prev), %r11
+    movq    %rsp, 16(%r11)  // save stack3
+    movq    8(%r11), %rsp   // switch to kernel stack
+
+    // 将 syscall 参数转成 C 调用约定
+    // syscall ABI: rax=调用号, rdi=a1, rsi=a2, rdx=a3, r10=a4, r8=a5, r9=a6
+    // C ABI:                   rdi=a1, rsi=a2, rdx=a3, rcx=a4, r8=a5, r9=a6
+    movq    %r10, %rcx      // a4 → rcx
+    andq    $0xff, %rax
+    movq    syscall_tbl(,%rax,8), %rax
+    testq   %rax, %rax
+    cmovzq  do_sys_unknown, %rax
+1:
+    // 执行系统调用，中间可能切换任务
+    sti
+    call    *%rax
+    cli
+
+    // 回到用户栈，返回用户态
+    movq    %gs:(g_tid_prev), %r11
+    movq    16(%r11), %rsp
+    swapgs
+    popq    %r11
+    popq    %rcx
+    sysretq
+
+
+// 主动跳转到 ring3，用于新进程启动
+// rdi 表示目标用户态代码入口地址
+// rsi 表示用户栈的栈顶地址
+arch_enter_ring3:
+    // 也可以模拟中断返回（iretq）
+    // 但我们使用 sysret，自己切换到用户栈，建立新的 frame
+    pushfq
+    cli                 // 关中断，防止swapgs之后中断
+    popq    %r11        // r11 = ring3-rflags
+    movq    %rdi, %rcx  // rcx = ring3-rip
+    movq    %rsi, %rsp
+    pushq   $0          // dummy return addr
+    swapgs
+    sysretq

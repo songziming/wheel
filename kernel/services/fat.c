@@ -212,8 +212,8 @@ fat32_volumn_t *fat32_mount(block_dev_t *blk, const uint8_t *sec0) {
     }
 
     // 为 FAT 分配空间
-    vol->fat = (uint32_t*)vmspace_alloc_sparse(&g_kernel_vm, &vol->fat_cache,
-        POOL_ZONE_START, POOL_ZONE_END, fat_secs * sec_size, PT_FS, MMU_WRITE);
+    vol->fat = vmspace_alloc(&g_kernel_vm, &vol->fat_cache,
+        fat_secs * sec_size, PT_FS, MMU_WRITE);
     if (NULL == vol->fat) {
         logk("cannot allocate space for FAT table!\n");
         kernel_heap_free(vol);
@@ -245,9 +245,9 @@ fat32_handle_t *fat32_open(fat32_volumn_t *vol, const fs_entry_t *ent) {
     }
 
     size_t cluster_size = vol->blk->sec_size << vol->cluster_shift;
-    int rank = (cluster_size < PAGE_SIZE) ? 0 : __builtin_ctz(cluster_size >> PAGE_SHIFT);
-    h->cache = (uint8_t*)vmspace_alloc(&g_kernel_vm, &h->cluster_cache,
-        POOL_ZONE_START, POOL_ZONE_END, rank, PT_FS, MMU_WRITE);
+    // int rank = (cluster_size < PAGE_SIZE) ? 0 : __builtin_ctz(cluster_size >> PAGE_SHIFT);
+    h->cache = vmspace_alloc(&g_kernel_vm, &h->cluster_cache,
+        cluster_size, PT_FS, MMU_WRITE);
     if (0 == h->cache) {
         logk("warning: cannot allocate cache space for open file\n");
         kernel_heap_free(h);
@@ -267,6 +267,7 @@ fat32_handle_t *fat32_open(fat32_volumn_t *vol, const fs_entry_t *ent) {
 // 关闭文件，如果有尚未同步的缓存，此时应该写入磁盘
 void fat32_close(fat32_volumn_t *vol, fat32_handle_t *h) {
     (void)vol;
+    tlb_shootdown(h->cluster_cache.vaddr, h->cluster_cache.vend);
     vmspace_remove(&g_kernel_vm, &h->cluster_cache);
     kernel_heap_free(h);
 }
@@ -433,6 +434,8 @@ int fat32_find(fat32_volumn_t *vol, const fs_entry_t *d, const char *name, fs_en
 // 调试命令
 //------------------------------------------------------------------------------
 
+#ifndef UNIT_TEST
+
 static fat32_volumn_t *g_vol = NULL;
 
 static void fatmount(int argc, char *argv[]) {
@@ -520,7 +523,8 @@ static void fatfile(int argc, char *argv[]) {
     console_printf("file size %u\n", curr->size);
 }
 
-
 KSHELL_CMD("fatmount", fatmount);
 KSHELL_CMD("fatls", fatls);
 KSHELL_CMD("fatfile", fatfile);
+
+#endif // UNIT_TEST

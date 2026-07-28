@@ -6,7 +6,7 @@
 #include <arch_api.h>
 #include <cpu/rw.h>
 #include <kstring.h>
-#include <spin.h>
+#include <spinlock.h>
 #include <early_alloc.h>
 #include <vmspace.h>
 
@@ -199,7 +199,7 @@ INIT_TEXT void framebuf_init(uint32_t rows, uint32_t cols, uint32_t pitch, uint3
     g_pitch = pitch;
 
     // TODO 映射到 Write-Combined region
-    g_addr = (uint8_t*)(DIRECT_MAP_ADDR + addr);
+    g_addr = (uint8_t*)idmap_at(addr);
     g_disp_top = 0;
 
     // 如果没有 BGA，则需要另一个离屏缓冲区
@@ -224,12 +224,14 @@ INIT_TEXT void framebuf_init(uint32_t rows, uint32_t cols, uint32_t pitch, uint3
 INIT_TEXT void framebuf_remap_wc() {
     size_t va  = (size_t)g_addr;
     size_t vend = va + g_size;
-    size_t pa = va - DIRECT_MAP_ADDR;
+    size_t pa = va - IDENTITY_MAP_ADDR;
     vend += PAGE_SIZE - 1;
     vend &= ~(PAGE_SIZE - 1);
     logk("remapping 0x%zx~0x%zx as WC\n", va, vend);
 
-    mmu_unmap(g_kernel_vm.table, va, vend);
+    // 执行此函数时，尚未启动多核，刚刚创建正式页表
+    // 不能发送 TLB-shootdown，否则等不到其他 CPU 响应
+    // mmu_unmap(g_kernel_vm.table, va, vend);
     mmu_map(g_kernel_vm.table, va, vend, pa, MMU_WRITE|MMU_WC);
 }
 

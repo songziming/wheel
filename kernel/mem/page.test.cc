@@ -126,12 +126,12 @@ TEST_F(PageTest, Alloc) {
     add_free(1, 11); // 一共只有 10 个页
 
     for (int i = 0; i < 10; ++i) {
-        size_t pa = PAGE_ALLOC(0, PT_FS);
+        size_t pa = page_alloc(0, PT_FS);
         EXPECT_NE(pa, 0);
     }
 
     // 第 11 次分配应该失败
-    EXPECT_EQ(PAGE_ALLOC(0, PT_FS), 0);
+    EXPECT_EQ(page_alloc(0, PT_FS), 0);
 
     for (size_t i = 1; i < 11; ++i) {
         validate_block(i, i+1, 0);
@@ -151,15 +151,15 @@ TEST_F(PageTest, AllocSize) {
 
     // 分配 rank-7，前四次成功，后一次失败
     for (int i = 0; i < 4; ++i) {
-        EXPECT_NE(PAGE_ALLOC(7, PT_FS), 0);
+        EXPECT_NE(page_alloc(7, PT_FS), 0);
     }
-    EXPECT_EQ(PAGE_ALLOC(7, PT_FS), 0);
+    EXPECT_EQ(page_alloc(7, PT_FS), 0);
 
     // 分配 rank-5，前四次成功，后面八次拆分 rank-6 也可以成功，再分配则失败
     for (int i = 0; i < 4 + 8; ++i) {
-        EXPECT_NE(PAGE_ALLOC(5, PT_FS), 0);
+        EXPECT_NE(page_alloc(5, PT_FS), 0);
     }
-    EXPECT_EQ(PAGE_ALLOC(5, PT_FS), 0);
+    EXPECT_EQ(page_alloc(5, PT_FS), 0);
 }
 
 TEST_F(PageTest, AllocColor) {
@@ -169,7 +169,7 @@ TEST_F(PageTest, AllocColor) {
     // 要求起始地址是 n*0x10 + 5
     // 满足要求的页面总共有 4 个
     for (int i = 0; i < 4; ++i) {
-        size_t pa = page_alloc_color(0, PT_FS, 0x10, 5, __FILE__, __LINE__);
+        size_t pa = page_alloc_color(0, PT_FS, 0x10, 5);
         EXPECT_NE(pa, 0);
         EXPECT_EQ((pa >> PAGE_SHIFT) & 0x0f, 5);
     }
@@ -180,7 +180,7 @@ TEST_F(PageTest, AllocList) {
     add_free(1, 100);
 
     pglist_t pl;
-    pagelist_alloc(&pl, 63, PT_FS, __FILE__, __LINE__);
+    pagelist_alloc(&pl, 63, PT_FS);
 
     uint32_t page_num = 0;
     for (uint32_t blk = pl.head; blk; blk = g_pages[blk].next) {
@@ -212,7 +212,7 @@ TEST_F(PageTest, AllocListFragmented) {
     // 63 = 1 + 2 + 4 + 8 + 16 + 32
     // 其中 1~16 都是现有的 block，最后一个 32-page-block 需要拆分
     pglist_t pgl;
-    pagelist_alloc(&pgl, 63, PT_FS, __FILE__, __LINE__);
+    pagelist_alloc(&pgl, 63, PT_FS);
 
     uint32_t page_num = 0;
     for (uint32_t blk = pgl.head; blk; blk = g_pages[blk].next) {

@@ -81,7 +81,10 @@ INIT_TEXT size_t percpu_init(size_t va) {
     g_percpu_step += PAGE_SIZE + INT_STACK_SIZE; // #DF 异常栈
     g_percpu_step += PAGE_SIZE + INT_STACK_SIZE; // #MC 异常栈
 
-    // TODO 获取 L1 data cache size，将 percpu 总大小对齐到 L1
+    // 获取 L1 data cache size，将 percpu 总大小对齐到 L1
+    size_t l1_size = arch_cacheline_size();
+    g_percpu_step += l1_size - 1;
+    g_percpu_step &= ~(l1_size - 1);
 
     // 起始地址页对齐，插入一个 gap page
     va += PAGE_SIZE * 2 - 1;
@@ -92,9 +95,10 @@ INIT_TEXT size_t percpu_init(size_t va) {
     // 划分每个 CPU 的 percpu 区域，记录在 vmrange 里面
     int ncpu = cpu_count();
     for (int i = 0; i < ncpu; ++i) {
+        va = (size_t)&_percpu_addr + g_percpu_base + g_percpu_step * i;
         kmemcpy((uint8_t*)va, &_percpu_addr, copy_size); // 复制 percpu data
         kmemset((uint8_t*)va + copy_size, 0, zero_size); // percpu bss 清零
-        va = percpu_add(i, &g_percpu_vars, va, vars_size,      "percpu vars");
+        va = percpu_add(i, &g_percpu_vars, va, vars_size,      "data");
         va = percpu_add(i, &g_percpu_nmi,  va, INT_STACK_SIZE, "NMI stack");
         va = percpu_add(i, &g_percpu_pf,   va, INT_STACK_SIZE, "#PF stack");
         va = percpu_add(i, &g_percpu_df,   va, INT_STACK_SIZE, "#DF stack");

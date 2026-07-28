@@ -469,7 +469,10 @@ INIT_TEXT void cpu_features_detect() {
 INIT_TEXT void cpu_features_enable() {
     // 设置 cr0
     uint64_t cr0 = read_cr0();
-    cr0 |=  (1UL << 16); // WP 分页写保护
+    cr0 |=   1UL << 1;  // MP=1，wait/fwait 也要触发 #NM
+    cr0 &= ~(1UL << 2); // EM=0，允许浮点指令
+    cr0 |=   1UL << 5;  // NE=1，使用标准 x87 异常
+    cr0 |= 1UL << 16;   // WP 分页写保护
     write_cr0(cr0);
 
     // 设置 cr4
@@ -477,6 +480,7 @@ INIT_TEXT void cpu_features_enable() {
     cr4 |= 1UL << 2; // time stamp counter
     cr4 |= 1UL << 5; // PAE（应该已经开启了）
     cr4 |= 1UL << 7; // PGE 全局页（标记为 global 的页表项不会从 TLB 中清除）
+    cr4 |= 1UL << 9; // OSFXSR 启用 SSE
     if (CPU_FEATURE_FSGSBASE & g_cpu_features) {
         cr4 |= 1UL << 16; // FSGSBASE 启用读写 fs.base、gs.base 的指令
     }
@@ -499,11 +503,13 @@ INIT_TEXT void cpu_features_enable() {
 
     // 设置 efer
     uint64_t efer = read_msr(MSR_EFER);
-    efer |= (1UL <<  0); // SCE，启用快速系统调用指令 syscall/sysret
+    efer |= 1UL; // SCE，启用快速系统调用指令 syscall/sysret
     if (CPU_FEATURE_NX & g_cpu_features) {
         efer |= 1UL << 11;  // NXE
     }
     write_msr(MSR_EFER, efer);
+
+    // 系统调用相关的 MSR 在 arch_int.c 里面配置
 }
 
 // arch-api func
@@ -511,6 +517,11 @@ size_t arch_cacheline_size() {
     return g_l1d_info.line_size;
 }
 
+//------------------------------------------------------------------------------
+// 调试命令
+//------------------------------------------------------------------------------
+
+#ifndef UNIT_TEST
 
 static void cpu_features_show() {
     console_printf("cpu info:\n");
@@ -566,3 +577,5 @@ static void cpu_features_show() {
 }
 
 KSHELL_CMD("cpu", cpu_features_show);
+
+#endif // UNIT_TEST

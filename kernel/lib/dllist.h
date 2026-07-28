@@ -8,6 +8,8 @@ typedef struct dlnode {
     struct dlnode *next;
 } dlnode_t;
 
+#define DEFINE_DL_HEAD(dl) dlnode_t dl={.prev=&dl,.next=&dl}
+
 dlnode_t *dl_init_circular(dlnode_t *node);
 int dl_is_lastone(dlnode_t *node);
 int dl_contains(dlnode_t *head, dlnode_t *node);

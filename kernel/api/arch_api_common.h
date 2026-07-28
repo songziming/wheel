@@ -22,8 +22,8 @@ void *thiscpu_ptr(void *p);
 
 // 中断
 int cpu_int_depth();
-int cpu_int_lock();
-void cpu_int_unlock(int key);
+int cpu_int_disable();
+void cpu_int_restore(int key);
 void arch_send_ipi(int cpu, int vec);
 
 // 页表操作
@@ -38,8 +38,11 @@ typedef enum mmu_attr {
     MMU_WT      = 0x200,    // Write-Through
     MMU_UC      = 0x300,    // Uncacheable
 } mmu_attr_t;
+INIT_TEXT size_t mmu_create_kernel();
 size_t mmu_create();
 void   mmu_delete(size_t tbl);
+void   mmu_usetable(size_t tbl);
+void   mmu_copykernel(size_t tbl, size_t from);
 size_t mmu_translate(size_t tbl, size_t va, mmu_attr_t *attrs);
 void   mmu_map(size_t tbl, size_t va, size_t end, size_t pa, mmu_attr_t attrs);
 void   mmu_unmap(size_t tbl, size_t va, size_t end);
@@ -50,6 +53,9 @@ typedef struct task task_t;
 void arch_task_init(task_t *task, size_t entry, size_t stack_top,
     size_t arg1, size_t arg2, size_t arg3, size_t arg4);
 void arch_task_switch();
+void arch_enter_ring3(size_t entry, size_t stack_top);
+
+void arch_set_stack0(uint64_t rsp0);
 
 
 #endif // ARCH_API_COMMON_H

@@ -62,8 +62,8 @@ void dl_insert_after(dlnode_t *node, dlnode_t *ref) {
     node->next = next;
 }
 
-// 将 node 从双链表中取出，返回被删除的节点，节点仍引用删除前的前驱和后继
-// 如果 node 就是最后一个元素，则节点清空
+// 将 node 从双链表中取出，返回后继节点，节点仍引用删除前的前驱和后继
+// 如果 node 就是最后一个元素，则返回 NULL
 dlnode_t *dl_remove(dlnode_t *node) {
     ASSERT(NULL != node);
 
@@ -77,10 +77,8 @@ dlnode_t *dl_remove(dlnode_t *node) {
     if ((prev != node) && (next != node)) {
         prev->next = next;
         next->prev = prev;
+        return next;
     } else {
-        node->prev = NULL;
-        node->next = NULL;
+        return NULL;
     }
-
-    return node;
 }

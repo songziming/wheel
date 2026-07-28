@@ -14,12 +14,11 @@ extern "C" {
 #define M (1024L*K)
 #define G (1024L*M)
 
-class MmuTest : public PageMock {
+class MmuTest : public ::testing::Test {
 protected:
-    MmuTest() : PageMock(16 * K) {}
+    PageContext pc_{16 * K};
 
     void SetUp() override {
-        PageMock::SetUp();
         g_cpu_features |= CPU_FEATURE_1G | CPU_FEATURE_NX;
     }
 };
@@ -83,11 +82,6 @@ TEST_F(MmuTest, MapUnmapNormal) {
 
     mmu_delete(pgtbl);
 }
-
-
-// // 解除映射 2M-page，同时删除 PT
-// TEST_F(MmuTest, UnmapFreeSubtree2M) {
-// }
 
 
 // 建立映射，破环原本的 2M/1G-page，检查原 mapping 能否保留

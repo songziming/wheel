@@ -3,18 +3,17 @@
 #include <kstring.h>
 #include <format.h>
 
-#include <spin.h>
+#include <spinlock.h>
 #include <fifo.h>
 
 log_func_t g_log_func = NULL;
 
-static spin_t log_lock = SPIN_INIT;
+static spinlock_t log_lock = SPINLOCK_INIT;
 static fifo_t log_fifo;
 
 static char log_buff[PAGE_SIZE];
 
 INIT_TEXT void log_init() {
-    // TODO 改成动态申请页，这样才能有 guard page
     fifo_init(&log_fifo, log_buff, sizeof(log_buff));
 }
 
@@ -22,9 +21,10 @@ INIT_TEXT void log_init() {
 void logk(const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    int key = irq_spin_take(&log_lock);
-    fifo_vprint(&log_fifo, fmt, args, g_log_func);
-    irq_spin_give(&log_lock, key);
+    {
+        SPINLOCK_SCOPED(&log_lock);
+        fifo_vprint(&log_fifo, fmt, args, g_log_func);
+    }
     va_end(args);
 }
 
@@ -43,9 +43,10 @@ NORETURN void panic(const char *fmt, ...) {
 
     va_list args;
     va_start(args, fmt);
-    int key = irq_spin_take(&log_lock);
-    fifo_vprint(&log_fifo, fmt, args, g_log_func);
-    irq_spin_give(&log_lock, key);
+    {
+        SPINLOCK_SCOPED(&log_lock);
+        fifo_vprint(&log_fifo, fmt, args, g_log_func);
+    }
     va_end(args);
 
     log_stacktrace();

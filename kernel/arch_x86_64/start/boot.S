@@ -250,4 +250,4 @@ init_stack:
     .skip   INIT_STACK_SIZE
 init_stack_top:
 
-#endif // !UNIT_TEST
+#endif // UNIT_TEST

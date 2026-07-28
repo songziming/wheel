@@ -6,4 +6,6 @@ void test_smp_tasks();
 void test_sema();
 void test_msgq();
 
+void test_user();
+
 #endif // KTEST_H

@@ -39,9 +39,9 @@ typedef struct tbl_ptr {
 
 
 
-static CONST        uint64_t *g_gdt = NULL;
-static CONST        idt_ent_t g_idt[256];
-static PERCPU_DATA  tss_t     g_tss = {0};
+static CONST uint64_t *g_gdt = NULL;
+static CONST idt_ent_t g_idt[256];
+PERCPU_DATA  tss_t     g_tss = {0};
 
 // gdt_idt_tss.S
 void load_gdtr(tbl_ptr_t *ptr);
@@ -57,13 +57,15 @@ INIT_TEXT void gdt_init() {
     int ncpu = cpu_count();
     ASSERT(0 != ncpu);
 
+    // 每个 descriptor 都要设置 access=1，否则访问这个段会产生写内存操作
+    // 要么就把 GDT 放在可读可写内存中，但这样更危险
     g_gdt = (uint64_t*)early_alloc_ro((6 + ncpu * 2) * sizeof(uint64_t));
     g_gdt[0] = 0UL;                   // dummy
-    g_gdt[1] = 0x00a0980000000000UL;  // 内核代码段
-    g_gdt[2] = 0x00c0920000000000UL;  // 内核数据段
+    g_gdt[1] = 0x00a0990000000000UL;  // 内核代码段
+    g_gdt[2] = 0x00c0930000000000UL;  // 内核数据段
     g_gdt[3] = 0UL;                   // 保留
-    g_gdt[4] = 0x00c0f20000000000UL;  // 用户数据段
-    g_gdt[5] = 0x00a0f80000000000UL;  // 用户代码段
+    g_gdt[4] = 0x00c0f30000000000UL;  // 用户数据段
+    g_gdt[5] = 0x00a0f90000000000UL;  // 用户代码段
 }
 
 INIT_TEXT void gdt_load() {
@@ -124,23 +126,11 @@ INIT_TEXT void thistss_init_load(int cpu) {
 INIT_TEXT void thistss_set_ist(int ist, uint64_t addr) {
     ASSERT(ist > 0);
     ASSERT(ist < 8);
-
-    // tss_t *tss = PERCPU(cpu, &g_tss);
-    // tss->ist[ist].lower = addr & 0xffffffff;
-    // tss->ist[ist].upper = (addr >> 32) & 0xffffffff;
     THISCPU_SET(g_tss.ist[ist].lower, (uint32_t)addr & 0xffffffff);
     THISCPU_SET(g_tss.ist[ist].upper, (uint32_t)(addr >> 32) & 0xffffffff);
 }
 
-// 跨优先级中断时，自动切换到哪个栈
-// 一般设为当前进程的内核栈顶
-void thistss_set_rsp(int ring, uint64_t addr) {
-    ASSERT(ring >= 0);
-    ASSERT(ring < 3);
-
-    // tss_t *tss = PERCPU(cpu, &g_tss);
-    // tss->rsp[ring].lower = addr & 0xffffffff;
-    // tss->rsp[ring].upper = (addr >> 32) & 0xffffffff;
-    THISCPU_SET(g_tss.rsp[ring].lower, (uint32_t)addr & 0xffffffff);
-    THISCPU_SET(g_tss.rsp[ring].upper, (uint32_t)(addr >> 32) & 0xffffffff);
+void arch_set_stack0(uint64_t rsp0) {
+    THISCPU_SET(g_tss.rsp[0].lower, (uint32_t)rsp0 & 0xffffffff);
+    THISCPU_SET(g_tss.rsp[0].upper, (uint32_t)(rsp0 >> 32) & 0xffffffff);
 }

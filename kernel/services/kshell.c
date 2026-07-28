@@ -12,7 +12,7 @@
 extern const kcmd_t _kcmd_addr;
 extern const kcmd_t _kcmd_end;
 
-static task_t shell_tcb;
+static task_t *shell_tcb;
 #define PROMPT "kshell"
 
 static void show_help(int argc UNUSED, char *argv[] UNUSED) {
@@ -75,6 +75,6 @@ static void kshell_proc() {
 }
 
 INIT_TEXT void kshell_start() {
-    task_create(&shell_tcb, "shell", 30, kshell_proc);
-    task_start_now(&shell_tcb);
+    shell_tcb = task_make("shell", 30, kshell_proc, NULL);
+    task_start_now(shell_tcb);
 }

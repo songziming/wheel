@@ -1,6 +1,9 @@
 #include "pmlayout.h"
 #include <debug.h>
 
+#include <kshell.h>
+#include <console.h>
+
 
 CONST int        g_pmrange_num = 0;
 CONST pmrange_t *g_pmranges    = NULL;
@@ -17,8 +20,10 @@ pmrange_t *pmrange_at(size_t pa) {
     return NULL;
 }
 
+#ifndef UNIT_TEST
+
 void pmlayout_show() {
-    logk("physical memory layout:\n");
+    console_printf("physical memory layout:\n");
     for (int i = 0; i < g_pmrange_num; ++i) {
         pmrange_t *rng = &g_pmranges[i];
         char *type;
@@ -27,6 +32,10 @@ void pmlayout_show() {
         case PM_RECLAIMABLE: type = "reclaimable"; break;
         default:             type = "reserved";    break;
         }
-        logk("  - pm 0x%016lx~0x%016lx, %s\n", rng->start, rng->end, type);
+        console_printf("  - pm 0x%016lx~0x%016lx, %s\n", rng->start, rng->end, type);
     }
 }
+
+KSHELL_CMD("pm", pmlayout_show);
+
+#endif // UNIT_TEST

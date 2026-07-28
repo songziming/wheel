@@ -1,64 +1,79 @@
 #include "sema.h"
+#include <kobj.h>
+#include <task.h>
+#include <spinlock.h>
 #include <debug.h>
 
 
-void sema_init(sema_t *sema, int initial, int limit) {
-    sema->lock = SPIN_INIT;
+static kclass_t g_sema_class;
+
+// 信号量结构，作为 kobj 的 payload（kobj 头隐藏在前方，使用者不可见）
+typedef struct sema {
+    spinlock_t  lock;
+    prioq_t     wq;
+    int         value;  // guarded by lock
+    int         limit;  // guarded by lock
+} sema_t;
+
+
+INIT_TEXT void sema_init(void) {
+    kclass_register(&g_sema_class, "sema", sizeof(sema_t), NULL);
+}
+
+sema_t *sema_make(const char *name, int initial, int limit) {
+    sema_t *sema = (sema_t*)kobj_make(&g_sema_class, name);
+    if (NULL == sema) {
+        return NULL;
+    }
+    sema->lock = SPINLOCK_INIT;
     prioq_init(&sema->wq);
     sema->value = initial;
     sema->limit = limit;
-}
-
-static void sema_timeout(wdog_t *tmr) {
-    waiter_t *waiter = containerof(tmr, waiter_t, timer);
-    sema_t *sema = (sema_t*)waiter->user;
-    raw_spin_take(&sema->lock);
-    task_wake_timeout(&sema->wq, waiter);
-    raw_spin_give(&sema->lock);
+    return sema;
 }
 
 // 可能阻塞，不能在中断里调用
 int sema_take(sema_t *sema, int timeout) {
     ASSERT(0 == cpu_int_depth());
-
-    // 锁住 sema，持有 sema->lock 自旋锁
-    int key = irq_spin_take(&sema->lock);
-
-    if (sema->value > 0) {
-        sema->value--;
-        irq_spin_give(&sema->lock, key);
-        return 1; // 获取成功
+    {
+        SPINLOCK_SCOPED(&sema->lock);
+        if (sema->value > 0) {
+            sema->value--;
+            return 1; // 获取成功
+        }
+        if (NOWAIT == timeout) {
+            return 0; // 获取失败，立即返回
+        }
+        // 没有取得信号量，阻塞当前任务
+        task_pend(&sema->wq, &sema->lock, timeout);
     }
-
-    if (NOWAIT == timeout) {
-        irq_spin_give(&sema->lock, key);
-        return 0; // 获取失败，立即返回
-    }
-
-    // 没有取得信号量，需要阻塞
-    waiter_t pender;
-    pender.user = sema;
-    task_pend(&sema->wq, &pender, timeout, sema_timeout);
-    irq_spin_give(&sema->lock, key);
     arch_task_switch();
-
-    // 恢复运行，检查是否因为超时而唤醒
-    task_onresume(&pender);
-    return pender.got;
+    return current_task()->got;
 }
 
 // 不会阻塞，可以在中断里调用
 void sema_give(sema_t *sema) {
-    int key = irq_spin_take(&sema->lock);
-
-    // 尝试唤醒一个阻塞的线程
-    if (NULL == task_unpend_one(&sema->wq)) {
-        // 没有阻塞者，增加计数器
-        sema->value++;
-        if (sema->value > sema->limit) {
-            sema->value = sema->limit;
+    task_t *tid;
+    {
+        // 锁内原子地判断：有阻塞者则 claim，否则 value++
+        SPINLOCK_SCOPED(&sema->lock);
+        tid = task_unpend_one_nolock(&sema->wq);
+        if (NULL == tid) {
+            sema->value++;
+            if (sema->value > sema->limit) {
+                sema->value = sema->limit;
+            }
         }
     }
-    irq_spin_give(&sema->lock, key);
-    arch_task_switch();
+    // 锁外唤醒：避免 wdog_cancel 与超时回调死锁
+    if (tid) {
+        task_unpend_finish(tid);
+        arch_task_switch();
+    }
+}
+
+void sema_drop(sema_t *sema) {
+    // refcnt 归零时 kobj_drop 自动 dl_remove + pool_free
+    // 此时 waitq 必为空（阻塞者必持引用，refcnt 不会归零），无需唤醒
+    kobj_drop(&g_sema_class, sema);
 }

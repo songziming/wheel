@@ -6,13 +6,13 @@
 
 
 // 管理所有块设备
-static dlnode_t g_block_head;
+static DEFINE_DL_HEAD(g_block_head);
 
 
 
-INIT_TEXT void block_dev_init() {
-    dl_init_circular(&g_block_head);
-}
+// INIT_TEXT void block_dev_init() {
+//     dl_init_circular(&g_block_head);
+// }
 
 void add_block_dev(block_dev_t *dev) {
     dl_insert_before(&dev->dl, &g_block_head);
@@ -36,6 +36,9 @@ void block_write(block_dev_t *dev, const void *src, uint64_t sec, uint64_t nsecs
     dev->ops->write(dev, src, sec, nsecs);
 }
 
+//------------------------------------------------------------------------------
+
+#ifndef UNIT_TEST
 
 static void show_blocks() {
     console_printf("block devices:\n");
@@ -47,3 +50,5 @@ static void show_blocks() {
 }
 
 KSHELL_CMD("blocks", show_blocks);
+
+#endif // UNIT_TEST

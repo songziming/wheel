@@ -123,7 +123,7 @@ static void take_chunk_from_heap(heap_t *heap, chunk_t *chk) {
 
     // 检查 parent 指针，判断是否位于 sizetree（红黑树根节点为黑色，非零）
     if (chk->sizenode.parent_color) {
-        dlnode_t *next_dl = dl_remove(&chk->freenode)->next;
+        dlnode_t *next_dl = dl_remove(&chk->freenode);
         if (NULL == next_dl) {
             rb_remove(&heap->sizetree, &chk->sizenode);
         } else {
@@ -254,7 +254,7 @@ void heap_init(heap_t *heap, void *buff, size_t size) {
 
     kmemset(heap, 0, sizeof(heap_t));
     // spin_init(&heap->spin);
-    heap->spin = SPIN_INIT;
+    heap->spin = SPINLOCK_INIT;
     // heap->sizetree = RBTREE_INIT;
     heap->buff = (char*)start;
     heap->end  = (char*)end;
@@ -270,10 +270,11 @@ MALLOC void *heap_alloc(heap_t *heap, size_t size) {
     }
     size = ROUND_UP(size);
 
-    int key = irq_spin_take(&heap->spin);
-    chunk_t *chk = chunk_alloc(heap, size);
-    irq_spin_give(&heap->spin, key);
-
+    chunk_t *chk;
+    {
+        SPINLOCK_SCOPED(&heap->spin);
+        chk = chunk_alloc(heap, size);
+    }
     if (NULL == chk) {
         return NULL;
     }
@@ -291,9 +292,10 @@ void heap_free(heap_t *heap, void *ptr) {
         return;
     }
 
-    int key = irq_spin_take(&heap->spin);
-    chunk_free(heap, chk);
-    irq_spin_give(&heap->spin, key);
+    {
+        SPINLOCK_SCOPED(&heap->spin);
+        chunk_free(heap, chk);
+    }
 }
 
 
@@ -348,6 +350,8 @@ char *kernel_heap_mkstr(const char *fmt, ...) {
 // 调试命令，显示堆状态
 //------------------------------------------------------------------------------
 
+#ifndef UNIT_TEST
+
 static void dump_heap_state() {
     size_t used_cnt = 0;
     size_t used_size = 0;
@@ -377,3 +381,5 @@ static void dump_heap_state() {
 }
 
 KSHELL_CMD("heap", dump_heap_state);
+
+#endif // UNIT_TEST

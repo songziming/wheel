@@ -2,7 +2,7 @@
 #include "keyboard.h"
 #include <kstring.h>
 #include <format.h>
-#include <spin.h>
+#include <spinlock.h>
 #include <debug.h>
 
 
@@ -15,7 +15,7 @@
 //------------------------------------------------------------------------------
 
 CONST display_ops_t *g_display = NULL;
-static spin_t console_lock = SPIN_INIT;
+static spinlock_t console_lock = SPINLOCK_INIT;
 static int caret_x = 0;
 static int caret_y = 0;
 
@@ -55,11 +55,10 @@ static void _console_puts(const char *s, size_t n) {
 }
 
 void console_puts(const char *s, size_t n) {
-    int key = irq_spin_take(&console_lock);
+    SPINLOCK_SCOPED(&console_lock);
     g_display->draw_char(' ', caret_x, caret_y); // 清除当前光标
     _console_puts(s, n);
     g_display->draw_caret(caret_x, caret_y); // 绘制新的光标
-    irq_spin_give(&console_lock, key);
 }
 
 static void print_flush(void *user UNUSED, const char **s, size_t *len) {
@@ -71,7 +70,7 @@ static void print_flush(void *user UNUSED, const char **s, size_t *len) {
 void console_printf(const char *fmt, ...) {
     char tmp[256];
 
-    int key = irq_spin_take(&console_lock);
+    SPINLOCK_SCOPED(&console_lock);
     g_display->draw_char(' ', caret_x, caret_y); // 清除前一次的光标
 
     va_list va;
@@ -80,7 +79,6 @@ void console_printf(const char *fmt, ...) {
     va_end(va);
 
     g_display->draw_caret(caret_x, caret_y); // 绘制光标
-    irq_spin_give(&console_lock, key);
 }
 
 

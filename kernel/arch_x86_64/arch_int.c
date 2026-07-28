@@ -2,6 +2,7 @@
 #include "arch_api.h"
 #include "cpu/gdt_idt_tss.h"
 #include "mem/mem.h"
+#include <task.h>
 #include <debug.h>
 
 
@@ -22,13 +23,13 @@ inline int cpu_int_depth() {
     return THISCPU_GET(g_int_depth);
 }
 
-inline int cpu_int_lock() {
+inline int cpu_int_disable() {
     uint64_t key;
     ASMV("pushfq; cli; popq %0" : "=r"(key));
     return (key & 0x200) ? 1 : 0;
 }
 
-inline void cpu_int_unlock(int key) {
+inline void cpu_int_restore(int key) {
     if (key) {
         ASMV("sti");
     }
@@ -61,7 +62,10 @@ static void handle_irq(int vec, regs_t *f) {
     }
 }
 
-// page fault 处理函数
+
+// void handle_nm(int vec UNUSED, regs_t *f UNUSED); // arch_fpu.c
+
+// #PF 页错误处理函数
 static void handle_pf(int vec UNUSED, regs_t *f) {
     uint64_t va = read_cr2();
     const char *p  = (f->errcode & 1) ? "" : "non-";
@@ -77,12 +81,12 @@ static void handle_pf(int vec UNUSED, regs_t *f) {
         logk("page-entry reserved bit was set!!\n");
     }
 
-    vmrange_t *rng = vmspace_find(&g_kernel_vm, va);
+    vmrange_t *rng = vmspace_lookup(&g_kernel_vm, va);
     if (rng) {
         logk("trying to access range %s 0x%zx~0x%zx\n",
             rng->desc, rng->vaddr, rng->vend);
     } else {
-        rng = vmspace_find(&g_kernel_vm, va + PAGE_SIZE);
+        rng = vmspace_lookup(&g_kernel_vm, va + PAGE_SIZE);
         if (rng) {
             logk("right before range %s 0x%zx~0x%zx\n",
                 rng->desc, rng->vaddr, rng->vend);
@@ -100,8 +104,15 @@ static void handle_pf(int vec UNUSED, regs_t *f) {
         logk(" - frame[%02d] 0x%zx\n", i, frames[i]);
     }
 
-    // TODO 如果 page fault 来自任务，可以将引发异常的任务停止（kill）
+    // 如果 page fault 来自进程，可以将引发异常的任务停止（kill）
     // 从 ready-q 删除任务，便可以从异常返回（到其他任务），不必在这里死循环
+    task_t *self = current_task();
+    const char *pname = "(kernel)";
+    if (self->process) {
+        pname = kobj_name(self->process);
+    }
+    logk("from task-%s, proc-%s\n", kobj_name(self), pname);
+    task_exit();
 
     while (1) {
         cpu_pause();
@@ -116,7 +127,12 @@ INIT_TEXT void int_init() {
         idt_set_isr(i, isr_entries[i], 0);
         irq_handlers[i] = handle_irq;
     }
+    // irq_handlers[7] = handle_nm;
     irq_handlers[14] = handle_pf;
+
+    // // 0x80 可以用于系统调用
+    // idt_set_isr(0x80, isr_entries[0x80], 3);
+    // irq_handlers[0x80] = handle_syscall_80;
 
     idt_set_ist(2,  1); // NMI
     idt_set_ist(8,  2); // #DF
@@ -135,7 +151,12 @@ INIT_TEXT void int_init_local() {
     THISCPU_SET(g_int_stack_top, thiscpu_int_stack());
 
     // 设置系统调用相关 MSR（只允许 64-bit 模式下的系统调用入口）
-    write_msr(MSR_STAR, 0x001b0008UL << 32);    // STAR
-    write_msr(MSR_LSTAR, (uint64_t)syscall_entry); // LSTAR
-    write_msr(MSR_SFMASK, 0UL);
+    // syscall CS = STAR[47:32]
+    // syscall SS = STAR[47:32] + 8
+    // sysret CS = STAR[63:48] + 16
+    // sysret SS = STAR[63:48] + 8
+    write_msr(MSR_EFER, read_msr(MSR_EFER) | 1);    // enable syscall
+    write_msr(MSR_STAR, 0x001b0008UL << 32);        // STAR
+    write_msr(MSR_LSTAR, (uint64_t)syscall_entry);  // LSTAR
+    write_msr(MSR_SFMASK, 0x200UL); // clear IF
 }

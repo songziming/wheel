@@ -32,7 +32,7 @@ typedef struct acpi_xsdt {
 
 
 // 保存搜索到的 acpi 表
-// TODO 改造为双链表
+// TODO 改造为双链表，不用在启动时计算预留空间
 static CONST int g_table_num = 0;
 static CONST acpi_tbl_t **g_tables = NULL;
 
@@ -51,7 +51,7 @@ static INIT_TEXT uint8_t bytes_sum(const void *s, size_t n) {
 // 如果处于可用内存，则将表备份，防止内存被踩
 // 如果位于安全内存，则映射到 higher-half
 static INIT_TEXT acpi_tbl_t *check_table(uint64_t addr) {
-    acpi_tbl_t *tbl = (acpi_tbl_t*)(DIRECT_MAP_ADDR + addr);
+    acpi_tbl_t *tbl = (acpi_tbl_t*)idmap_at(addr);
     if (bytes_sum(tbl, tbl->length)) {
         logk("warning: ACPI-%.4s checksum failed!\n", tbl->signature);
         return NULL;
@@ -123,19 +123,19 @@ INIT_TEXT size_t acpi_rsdp_probe() {
     };
 
     // 获取 EBDA 地址
-    uint16_t ebda_base = *(uint16_t*)(DIRECT_MAP_ADDR + 0x40e);
+    uint16_t ebda_base = *(uint16_t*)idmap_at(0x40e);
     size_t   ebda_addr = (size_t)ebda_base << 4;
 
     // 搜索 EBDA 开头的 1KB，16 字节对齐
     for (size_t addr = ebda_addr; addr < ebda_addr + 1024; addr += 16) {
-        if (sig.u == *(uint64_t*)(DIRECT_MAP_ADDR + addr)) {
+        if (sig.u == *(uint64_t*)idmap_at(addr)) {
             return addr;
         }
     }
 
     // 搜索 1M 之前的 BIOS 数据区
     for (size_t addr = 0xe0000; addr < 0x100000; addr += 16) {
-        if (sig.u == *(uint64_t*)(DIRECT_MAP_ADDR + addr)) {
+        if (sig.u == *(uint64_t*)idmap_at(addr)) {
             return addr;
         }
     }
@@ -149,7 +149,7 @@ INIT_TEXT void acpi_rsdp_parse(size_t addr) {
     ASSERT(0 == g_table_num);
     ASSERT(NULL == g_tables);
 
-    acpi_rsdp_t *rsdp = (acpi_rsdp_t*)(DIRECT_MAP_ADDR + addr);
+    acpi_rsdp_t *rsdp = (acpi_rsdp_t*)idmap_at(addr);
     if (0 == rsdp->revision) {
         parse_rsdp_v1(rsdp);
     } else {

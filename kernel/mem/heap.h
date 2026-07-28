@@ -1,11 +1,11 @@
 #ifndef HEAP_H
 #define HEAP_H
 
-#include <spin.h>
+#include <spinlock.h>
 #include <rbtree.h>
 
 typedef struct heap {
-    spin_t spin;
+    spinlock_t spin;
     rbtree_t sizetree;
     char *buff;
     char *end;

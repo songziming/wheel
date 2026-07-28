@@ -1,14 +1,15 @@
 // UART 串口输出
+// 用于模拟器输出调试信息
 
 #include "serial.h"
 #include <arch_api.h>
-#include <spin.h>
+#include <spinlock.h>
 
 
 #define COM1_PORT 0x3f8
 #define BOCHS_PORT 0xe9 // Bochs 调试输出端口
 
-static spin_t g_serial_spin = SPIN_INIT;
+static spinlock_t g_serial_spin = SPINLOCK_INIT;
 
 INIT_TEXT void serial_init() {
     out8(COM1_PORT + 1, 0x00);      // disable all interrupts
@@ -23,15 +24,12 @@ INIT_TEXT void serial_init() {
 static void serial_putc(char c) {
     while ((in8(COM1_PORT + 5) & 0x20) == 0) {}
     out8(COM1_PORT, c);
-#if defined(DEBUG)
     out8(BOCHS_PORT, c);
-#endif
 }
 
 void serial_puts(const char *s, size_t n) {
-    int key = irq_spin_take(&g_serial_spin);
+    SPINLOCK_SCOPED(&g_serial_spin);
     for (size_t i = 0; i < n; ++i) {
         serial_putc(s[i]);
     }
-    irq_spin_give(&g_serial_spin, key);
 }
